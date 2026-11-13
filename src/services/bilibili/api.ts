@@ -17,7 +17,7 @@ const API_BASE = 'https://api.bilibili.com';
 const WBI_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
 
-interface ApiEnvelope<T> {
+export interface ApiEnvelope<T> {
     code: number;
     message?: string;
     data?: T;
@@ -41,7 +41,20 @@ const withTimeout = <T>(task: Promise<T>): Promise<T> => new Promise<T>((resolve
     );
 });
 
-const fetchJson = async <T>(url: string): Promise<ApiEnvelope<T>> => {
+export const fetchJsonWithHeaders = async <T>(
+    url: string,
+    headers: Record<string, string>,
+): Promise<ApiEnvelope<T>> => {
+    const response = await withTimeout(requestBilibiliUrl(url, { method: 'GET', headers }));
+    if (!response.bodyText) throw new BilibiliApiError(-1, `empty response (${response.status})`);
+    try {
+        return JSON.parse(response.bodyText) as ApiEnvelope<T>;
+    } catch {
+        throw new BilibiliApiError(-1, `unreadable response (${response.status})`);
+    }
+};
+
+export const fetchJson = async <T>(url: string): Promise<ApiEnvelope<T>> => {
     const response = await withTimeout(requestBilibiliUrl(url, { method: 'GET' }));
     if (!response.bodyText) {
         throw new BilibiliApiError(-1, `empty response (${response.status})`);
@@ -53,7 +66,7 @@ const fetchJson = async <T>(url: string): Promise<ApiEnvelope<T>> => {
     }
 };
 
-const unwrap = <T>(envelope: ApiEnvelope<T>): T => {
+export const unwrap = <T>(envelope: ApiEnvelope<T>): T => {
     if (envelope.code !== 0) {
         throw new BilibiliApiError(envelope.code, envelope.message || `bilibili error ${envelope.code}`);
     }
@@ -87,7 +100,7 @@ const readWbiKeys = async (force: boolean) => {
     return wbiKeys;
 };
 
-const signedUrl = async (path: string, params: Record<string, string | number>) => {
+export const signedUrl = async (path: string, params: Record<string, string | number>) => {
     const keys = await readWbiKeys(false);
     return `${API_BASE}${path}?${signWbiParams(params, keys.imgKey, keys.subKey)}`;
 };
@@ -196,6 +209,59 @@ interface RcmdPayload {
  * 只保留普通投稿（goto === 'av'）：列表里混着直播、番剧和广告位，那些没有稳定的
  * bvid / cid，点开也放不了。
  */
+/**
+ * 站内分区。界面上那一排「番剧 / 国创 / 综艺 / 动画 …」就是它们。
+ *
+ * `rid` 是分区号，接口认的是它；名字只是给界面用的。
+ */
+export interface BilibiliZone {
+    rid: number;
+    title: string;
+}
+
+/** 能直接出内容的分区（剩下的两类——番剧与电影——走 bangumi 那一套）。 */
+export const BILIBILI_ZONES: BilibiliZone[] = [
+    { rid: 1, title: '动画' },
+    { rid: 3, title: '音乐' },
+    { rid: 4, title: '游戏' },
+    { rid: 5, title: '娱乐' },
+    { rid: 36, title: '科技' },
+    { rid: 155, title: '时尚' },
+    { rid: 160, title: '生活' },
+    { rid: 119, title: '鬼畜' },
+    { rid: 129, title: '舞蹈' },
+    { rid: 181, title: '影视' },
+    { rid: 188, title: '数码' },
+    { rid: 211, title: '美食' },
+    { rid: 217, title: '动物' },
+    { rid: 223, title: '汽车' },
+    { rid: 234, title: '运动' },
+];
+
+/**
+ * 某个分区里当前在推什么。
+ *
+ * 走的是首页推荐那一条接口，带上 `rid` 就变成「这个分区的推荐」——
+ * 比排行榜那条宽容：排行榜对多数分区回 -352，这条不会。
+ */
+export const fetchBilibiliZoneFeed = async (rid: number, ps = 20): Promise<BilibiliSearchHit[]> => {
+    if (!isBilibiliAvailable()) {
+        throw new BilibiliApiError(BRIDGE_UNAVAILABLE_CODE, 'bilibili requests need the Android app');
+    }
+    const url = await signedUrl('/x/web-interface/wbi/index/top/feed/rcmd', { rid, ps });
+    const payload = unwrap(await fetchJson<RcmdPayload>(url));
+    return (payload.item ?? [])
+        .filter(item => item.goto === 'av' && typeof item.bvid === 'string' && item.bvid.length > 0)
+        .map(item => ({
+            bvid: item.bvid as string,
+            title: stripSearchHighlight(item.title ?? ''),
+            author: item.owner?.name ?? '',
+            durationSec: item.duration ?? 0,
+            coverUrl: toHttps(item.pic),
+            playCount: item.stat?.view ?? 0,
+        }));
+};
+
 export const fetchBilibiliRecommendations = async (): Promise<BilibiliSearchHit[]> => {
     if (!isBilibiliAvailable()) {
         throw new BilibiliApiError(BRIDGE_UNAVAILABLE_CODE, 'bilibili requests need the Android app');
@@ -369,7 +435,7 @@ export const fetchBilibiliSubtitle = async (
  */
 export const pickVideoTrack = (
     payload: PlayUrlDash,
-): { url: string; height: number } | null => {
+): { url: string; height: number; urls: string[] } | null => {
     const videos = payload.dash?.video ?? [];
     if (videos.length > 0) {
         const scored = videos
@@ -378,7 +444,10 @@ export const pickVideoTrack = (
                 const codecs = (video.codecs || '').toLowerCase();
                 // avc1 / h264 排前面，其它排后面。
                 const isAvc = codecs.includes('avc') || codecs.includes('h264');
-                return { url, height: video.height ?? 0, isAvc };
+                // 同一条流给的备用地址：主地址那台回 403 时换它们。
+                const urls = [url, ...(video.backupUrl ?? video.backup_url ?? [])]
+                    .filter(item => item.length > 0);
+                return { url, urls, height: video.height ?? 0, isAvc };
             })
             .filter(item => item.url.length > 0);
         if (scored.length > 0) {
@@ -386,11 +455,11 @@ export const pickVideoTrack = (
                 if (a.isAvc !== b.isAvc) return a.isAvc ? -1 : 1;
                 return b.height - a.height;
             });
-            return { url: scored[0].url, height: scored[0].height };
+            return { url: scored[0].url, urls: scored[0].urls, height: scored[0].height };
         }
     }
     const fallback = payload.durl?.find(item => typeof item.url === 'string' && item.url.length > 0);
-    if (fallback?.url) return { url: fallback.url, height: 0 };
+    if (fallback?.url) return { url: fallback.url, urls: [fallback.url], height: 0 };
     return null;
 };
 
@@ -412,11 +481,54 @@ const qualityToQn: Record<string, number> = {
  *
  * 拿不到独立音轨时（老投稿只有 durl）返回的 audioUrl 为空，调用方退回用歌曲发声。
  */
+/**
+ * 当前登录的人是谁。
+ *
+ * `nav` 是唯一一个「登录了就有昵称和头像」的接口；没登录时它回 isLogin=false。
+ * 大会员状态也在这里（vipStatus），清晰度那一栏据此说明是哪一档。
+ */
+export const fetchBilibiliNavProfile = async (): Promise<{
+    signedIn: boolean;
+    uid: string;
+    nickname: string;
+    avatarUrl: string;
+    vip: boolean;
+} | null> => {
+    if (!isBilibiliAvailable()) return null;
+    try {
+        const payload = unwrap(await fetchJson<{
+            isLogin?: boolean;
+            mid?: number;
+            uname?: string;
+            face?: string;
+            vipStatus?: number;
+        }>('https://api.bilibili.com/x/web-interface/nav'));
+        return {
+            signedIn: payload.isLogin === true,
+            uid: payload.mid ? String(payload.mid) : '',
+            nickname: payload.uname ?? '',
+            avatarUrl: toHttps(payload.face),
+            vip: (payload.vipStatus ?? 0) === 1,
+        };
+    } catch {
+        return null;
+    }
+};
+
 export const fetchBilibiliPlayUrl = async (
     bvid: string,
     cid: number,
     quality: string = 'standard',
-): Promise<{ url: string; height: number; audioUrl: string; subtitles: PlayUrlSubtitle[] }> => {
+): Promise<{
+    url: string;
+    height: number;
+    /** 画面的候选地址（主地址在前）。 */
+    urls: string[];
+    audioUrl: string;
+    /** 声音的候选地址（主地址在前）。 */
+    audioUrls: string[];
+    subtitles: PlayUrlSubtitle[];
+}> => {
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
         cid,
@@ -428,7 +540,13 @@ export const fetchBilibiliPlayUrl = async (
     const track = pickVideoTrack(payload);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
     // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。
-    return { ...track, audioUrl: pickAudioTrack(payload), subtitles: payload.subtitle?.subtitles ?? [] };
+    // 备用地址一起带回去：CDN 的一台节点回 403 时，原生中转靠它换下一台。
+    return {
+        ...track,
+        audioUrl: pickAudioTrack(payload),
+        audioUrls: pickAudioCandidates(payload),
+        subtitles: payload.subtitle?.subtitles ?? [],
+    };
 };
 
 /**
@@ -437,6 +555,25 @@ export const fetchBilibiliPlayUrl = async (
  * 声音只有一条内容，清晰度差异纯粹是码率，所以不用像画面那样挑编码 ——
  * DASH 的音频在这几个版本里统一是 AAC。
  */
+/**
+ * 声音的全部候选地址，码率高的在前。
+ *
+ * 第一条给 `getAudioSource` 用；整串交给原生中转 —— 这一站的 CDN 是一组节点，
+ * 有些节点对特定投稿回 403，换一台就好。
+ */
+export const pickAudioCandidates = (payload: PlayUrlDash): string[] => {
+    const audios = payload.dash?.audio ?? [];
+    return audios
+        .map(audio => ({
+            urls: [audio.baseUrl || audio.base_url || '', ...(audio.backupUrl ?? audio.backup_url ?? [])]
+                .filter(url => url.length > 0),
+            bandwidth: audio.bandwidth ?? audio.bandwith ?? 0,
+        }))
+        .filter(item => item.urls.length > 0)
+        .sort((a, b) => b.bandwidth - a.bandwidth)
+        .flatMap(item => item.urls);
+};
+
 export const pickAudioTrack = (payload: PlayUrlDash): string => {
     const audios = payload.dash?.audio ?? [];
     const scored = audios

@@ -1,5 +1,5 @@
 import type { BilibiliBridgeResponse } from '../../types/bilibili';
-import { isBilibiliNativeAvailable, requestBilibiliNative } from '../../platform/foliaNative';
+import { isBilibiliNativeAvailable, proxyBilibiliNative, requestBilibiliNative } from '../../platform/foliaNative';
 
 // src/services/bilibili/transport.ts
 //
@@ -27,6 +27,30 @@ export const BRIDGE_UNAVAILABLE_CODE = -2;
 const BRIDGE_UNAVAILABLE = 'bilibili requests need the Android app';
 
 export const isBilibiliAvailable = (): boolean => isBilibiliNativeAvailable();
+
+/**
+ * 把一条视频/音频流挂到原生中转上，回一个可以直接喂给 `<video>` / 播放器的地址。
+ *
+ * 为什么要中转：这些 CDN 的地址是一串候选（主地址 + 若干备用），其中**有些节点
+ * 会回 403** —— 直连时一旦抽到坏节点，这首歌就是放不出来。中转由原生按顺序试，
+ * 403 就换下一条，播放器那边完全不用知道。
+ *
+ * 中转起不来就回 null，调用方退回直连（至少还有一次机会）。
+ */
+export const proxyBilibiliStream = async (
+    urls: string[],
+    headers: Record<string, string> = {},
+): Promise<string | null> => {
+    if (!isBilibiliAvailable()) return null;
+    const usable = urls.filter(url => typeof url === 'string' && url.length > 0);
+    if (usable.length === 0) return null;
+    try {
+        const local = await proxyBilibiliNative(usable, headers);
+        return local || null;
+    } catch {
+        return null;
+    }
+};
 
 export const requestBilibiliUrl = async (
     url: string,

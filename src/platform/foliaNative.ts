@@ -707,6 +707,15 @@ interface FoliaBilibiliPlugin {
     /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
     authStatus(): Promise<{ signedIn: boolean; uid: string }>;
     /**
+     * 把一条流挂到本机中转上，回一个可直接播放的地址。
+     *
+     * `urls` 是候选地址（主地址在前）：中转按顺序试，一台回 403 就换下一台。
+     */
+    proxyStream(options: {
+        urls: string[];
+        headers?: Record<string, string>;
+    }): Promise<{ url: string | null }>;
+    /**
      * 把扫码登录拿到的 cookie 落进原生 CookieManager。
      *
      * 之后所有 request 都会自动带上 —— 插件自己不发登录请求，也不持有凭据。
@@ -728,6 +737,25 @@ export const isBilibiliNativeAvailable = (): boolean => (
  * 回 `{ ok, status, bodyText }`：`ok` 只表示 HTTP 通不通，业务码（code）由调用方解析。
  * 这样「bilibili 说没有这条视频」和「网络断了」在 JS 那边分得开。
  */
+/**
+ * 把一条流挂到原生中转上，回本机地址（`http://127.0.0.1:<port>/stream/<token>`）。
+ *
+ * `urls` 是同一个流的候选地址，主地址在前：中转会按顺序试，一台回 403 就换下一台。
+ * 起不来就回空串，调用方退回直连。
+ */
+export const proxyBilibiliNative = async (
+    urls: string[],
+    headers?: Record<string, string>,
+): Promise<string> => {
+    if (!isBilibiliNativeAvailable()) return '';
+    try {
+        const result = await FoliaBilibili.proxyStream({ urls, headers });
+        return result?.url ?? '';
+    } catch {
+        return '';
+    }
+};
+
 export const requestBilibiliNative = async (
     url: string,
     headers?: Record<string, string>,

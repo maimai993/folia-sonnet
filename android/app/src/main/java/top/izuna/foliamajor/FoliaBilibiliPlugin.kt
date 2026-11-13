@@ -99,6 +99,26 @@ class FoliaBilibiliPlugin : Plugin() {
     private fun prefs() =
         context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
 
+    /**
+     * 把一条视频流挂到本机中转上，回一个可直接喂给 `<video>` 的地址。
+     *
+     * 参数：`urls`（同一个流的候选地址，主地址在前）、`headers`（取它时要带的头）。
+     * 回 `{ url }`；起不来服务时回 `{ url: null }`，调用方退回直连。
+     */
+    @PluginMethod
+    fun proxyStream(call: PluginCall) {
+        val urls = call.getArray("urls")?.toList<String>()?.filterNotNull() ?: emptyList()
+        val headers = HashMap<String, String>()
+        call.getObject("headers")?.let { obj ->
+            for (key in obj.keys()) {
+                val value = obj.getString(key) ?: continue
+                headers[key] = value
+            }
+        }
+        val url = VideoStreamProxy.register(urls, headers)
+        call.resolve(JSObject().put("url", url))
+    }
+
     @PluginMethod
     fun request(call: PluginCall) {
         val url = call.getString("url")
@@ -112,11 +132,18 @@ class FoliaBilibiliPlugin : Plugin() {
             return
         }
 
+        // 调用方可以覆盖这几个头：站内搜索那一组接口认的是 search.bilibili.com 这个来源，
+        // 用 www 会直接回 412（风控）。不传就还是默认那一份。
+        val extraHeaders = call.getObject("headers")
+        fun headerOf(name: String, fallback: String): String =
+            extraHeaders?.getString(name) ?: fallback
+
         val builder = Request.Builder()
             .url(url)
             .get()
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", REFERER)
+            .header("User-Agent", headerOf("User-Agent", USER_AGENT))
+            .header("Referer", headerOf("Referer", REFERER))
+            .header("Origin", headerOf("Origin", REFERER.trimEnd('/')))
             .header("Accept", "application/json, text/plain, */*")
 
         /*

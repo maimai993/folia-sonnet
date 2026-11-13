@@ -1,7 +1,12 @@
-import type { OnlineMusicProvider, ProviderPage } from '../../types/onlineMusic';
+import type { OnlineMusicProvider, ProviderCollection, ProviderExploreItem, ProviderPage } from '../../types/onlineMusic';
+import { listBilibiliShelves } from './library';
+import { listBangumiEpisodes, listBangumiSeasons, searchBangumiSeasons, type BangumiSeason } from './bangumi';
 import type { BilibiliSearchHit } from '../../types/bilibili';
 import QRCode from 'qrcode';
 import {
+    BILIBILI_ZONES,
+    fetchBilibiliNavProfile,
+    fetchBilibiliZoneFeed,
     fetchBilibiliRecommendations,
     fetchBilibiliPlayUrl,
     fetchBilibiliVideoInfo,
@@ -13,7 +18,7 @@ import { pickSubtitleTracks } from './bilibiliLyrics';
 import { buildLyricsFromCues } from './bilibiliLyrics';
 import { bilibiliBvidOf, bilibiliCidOf, bilibiliSongId, normalizeBilibiliSong } from './bilibiliNormalize';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
-import { isBilibiliAvailable } from './transport';
+import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
 import { generateQrCode, pollQrCode, exchangeLogin } from './login';
 import { readBilibiliAuthNative, saveBilibiliCookiesNative as bilibiliSaveCookies, clearBilibiliCookiesNative as clearBilibiliCookies } from '../../platform/foliaNative';
 
@@ -64,12 +69,13 @@ export const bilibiliProvider: OnlineMusicProvider = {
         // 扫码登录走统一的平台登录设施（见 auth 那一段）：登录了就带 Cookie，
         // 推荐和取流都因此拿到大会员画质。
         auth: true,
-        userLibrary: false,
+        userLibrary: true,
         playlists: false,
-        albums: false,
+        albums: true,
         artists: false,
         // 推荐就是首页那一屏。
-        recommendations: true,
+        // 不提供「推荐」：这一家的首页就是分区，多一个推荐页只会让人多点一次。
+        recommendations: false,
         mutations: false,
         // 这两条让界面上的红心 / 收藏入口自动消失。
         likes: false,
@@ -104,7 +110,19 @@ export const bilibiliProvider: OnlineMusicProvider = {
             if (!isBilibiliAvailable()) return null;
             const status = await readBilibiliAuthNative();
             if (!status.signedIn) return null;
-            return { id: status.uid || 'bilibili', nickname: status.uid ? `UID ${status.uid}` : 'Bilibili' };
+            /*
+             * 原生那边只知道「有没有 SESSDATA、uid 是谁」。昵称和头像得问 nav ——
+             * 拿不到（网络不通、或那个接口正忙）就退回 UID，别因为一个装饰性的
+             * 信息就让登录态在界面上整个消失。
+             */
+            const profile = await fetchBilibiliNavProfile();
+            const uid = profile?.uid || status.uid;
+            return {
+                id: uid || 'bilibili',
+                nickname: profile?.nickname || (uid ? `UID ${uid}` : 'Bilibili'),
+                avatarUrl: profile?.avatarUrl || undefined,
+                vipType: profile?.vip ? 1 : undefined,
+            };
         },
 
         /** 退出：清掉原生那边的那组 cookie。 */
@@ -232,8 +250,21 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
             const track = await fetchBilibiliPlayUrl(bvid, cid, quality);
             // 拿不到独立音轨（老投稿只有 durl）时退回那条合成流，画面和声音在一起。
+            const candidates = track.audioUrls.length > 0 ? track.audioUrls : track.urls;
+            /*
+             * 走原生中转。
+             *
+             * 这一站的取流地址是**一组**候选地址（主地址 + 备用），其中总有几个节点
+             * 对某些投稿回 403。直连时抽到坏节点，这首歌就是一声都不出；主地址在名单
+             * 里的位置还是随机的。中转由原生按顺序试，403 就换下一台 —— 播放器那边
+             * 只看到一个本机地址，不必知道这一层。
+             */
+            const local = await proxyBilibiliStream(candidates, {
+                Referer: 'https://www.bilibili.com/',
+                Origin: 'https://www.bilibili.com',
+            });
             return {
-                url: track.audioUrl || track.url,
+                url: local ?? (track.audioUrl || track.url),
                 fetchedAt: Date.now(),
                 quality,
             };
@@ -255,18 +286,6 @@ export const bilibiliProvider: OnlineMusicProvider = {
         },
     },
 
-    recommendations: {
-        /** 首页推荐。登录了就带 Cookie，B 站自己会回个性化内容。 */
-        async getDailySongs() {
-            const hits = await fetchBilibiliRecommendations();
-            return hits.map(hit => normalizeBilibiliSong(hit));
-        },
-        async getRecommendedCollections() {
-            // 投稿没有「歌单 / 专辑」这种集合，推荐页只给一排视频。
-            return [];
-        },
-    },
-
     explore: {
         /** 探索页也是这一屏推荐：对视频来说「给你推荐」就是唯一的内容面。 */
         /**
@@ -276,19 +295,142 @@ export const bilibiliProvider: OnlineMusicProvider = {
          * （cookie 由原生带过去），这里不用管。
          */
         async getFeed() {
-            const hits = await fetchBilibiliRecommendations();
+            /*
+             * 探索页 = 这一家的分区。
+             *
+             * 番剧、电影是「一季 = 一个歌单（点开是分集）」，其余分区是「一条投稿 = 一首歌」，
+             * 所以两种 item 混在同一个列表里 —— 界面按 kind 分别摆。
+             *
+             * 分区一起并发取：一个一个来会让这一页等上好几秒，而每个分区都是独立请求，
+             * 谁先回来都不影响别的。取不到的分区直接不摆，而不是把整页判成失败。
+             */
+            const zoneFeeds = await Promise.all([
+                ...BILIBILI_ZONES.map(zone =>
+                    fetchBilibiliZoneFeed(zone.rid, 12)
+                        .then(hits => ({ id: `zone-${zone.rid}`, title: zone.title, hits }))
+                        .catch(() => ({ id: `zone-${zone.rid}`, title: zone.title, hits: [] })),
+                ),
+                listBangumiSeasons('bangumi')
+                    .then(seasons => ({ id: 'bangumi', title: '番剧', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'bangumi', title: '番剧', seasons: [], hits: [] as BilibiliSearchHit[] })),
+                listBangumiSeasons('movie')
+                    .then(seasons => ({ id: 'movie', title: '电影', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'movie', title: '电影', seasons: [], hits: [] as BilibiliSearchHit[] })),
+            ]);
+
+            const asCollection = (season: BangumiSeason): ProviderExploreItem => ({
+                kind: 'collection',
+                collection: seasonAsCollection(season),
+            });
+
+            const sections = zoneFeeds
+                .map(entry => {
+                    const items: ProviderExploreItem[] = 'seasons' in entry && entry.seasons.length > 0
+                        ? entry.seasons.map(asCollection)
+                        : entry.hits.map(hit => ({ kind: 'song' as const, song: normalizeBilibiliSong(hit) }));
+                    return { id: entry.id, title: entry.title, items };
+                })
+                .filter(section => section.items.length > 0);
+
+            return { sections, refreshReadsAnew: true };
+        },
+    },
+
+    /**
+     * 账号自己的歌单：收藏夹、稍后再看、投稿、追番追剧、投币、点赞。
+     *
+     * 每个收藏夹单独一个 —— B 站自己就是这个粒度，合成一个反而找不到东西。
+     * 没登录时回空表（这些本来就属于某个人），界面据此显示「先登录」。
+     */
+    library: {
+        async getUserPlaylists() {
+            const shelves = await listBilibiliShelves();
             return {
-                sections: [{
-                    id: 'recommend',
-                    title: '',
-                    items: hits.map(hit => ({ kind: 'song' as const, song: normalizeBilibiliSong(hit) })),
-                }],
-                // 没有翻页：这个接口一次就是一批，再要一次是另一批，接不上。
-                refreshReadsAnew: true,
+                items: shelves.map(shelf => ({
+                    providerId: 'bilibili' as const,
+                    // id 带上前缀：曲目要靠它认回来是哪个歌单。
+                    id: shelf.id,
+                    name: shelf.title,
+                    type: 'playlist' as const,
+                    coverUrl: shelf.coverUrl,
+                    trackCount: shelf.count,
+                })),
+                hasMore: false,
+                nextOffset: shelves.length,
+            };
+        },
+    },
+
+    /**
+     * 番剧季当专辑：一集一首歌。
+     *
+     * 走 album 那一条是因为它的语义正好对上 —— 一张专辑有一组曲目、有自己的
+     * 封面和标题，点开是曲目表。「下一集」于是就是播放器的下一首。
+     */
+    catalog: {
+        async getAlbumDetail(id) {
+            const seasonId = Number(id);
+            if (!Number.isFinite(seasonId)) return null;
+            const seasons = await listBangumiSeasons('bangumi').catch(() => []);
+            const hit = seasons.find(season => season.seasonId === seasonId);
+            if (!hit) return null;
+            return seasonAsCollection(hit);
+        },
+
+        /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */
+        async getPlaylistTracks(id) {
+            const shelves = await listBilibiliShelves();
+            const shelf = shelves.find(item => item.id === String(id));
+            if (!shelf) return { items: [], hasMore: false, nextOffset: 0 };
+            const videos = await shelf.load();
+            return {
+                items: videos.map(video => normalizeBilibiliSong({
+                    bvid: video.bvid,
+                    title: video.title,
+                    author: video.author,
+                    durationSec: video.durationSec,
+                    coverUrl: video.coverUrl,
+                    playCount: video.playCount,
+                })),
+                hasMore: false,
+                nextOffset: videos.length,
+            };
+        },
+
+        async getAlbumTracks(id, limit = 100, offset = 0) {
+            const seasonId = Number(id);
+            if (!Number.isFinite(seasonId)) return { items: [], hasMore: false, nextOffset: 0 };
+            const episodes = await listBangumiEpisodes(seasonId);
+            const artist = 'B站';
+            const page = episodes.slice(offset, offset + limit);
+            return {
+                items: page.map(episode => normalizeBilibiliSong(
+                    {
+                        bvid: episode.bvid,
+                        title: episode.title,
+                        author: artist,
+                        durationSec: episode.durationSec,
+                        coverUrl: '',
+                        playCount: 0,
+                    },
+                    { cid: episode.cid, title: episode.title, durationSec: episode.durationSec },
+                )),
+                hasMore: offset + limit < episodes.length,
+                nextOffset: offset + limit,
             };
         },
     },
 };
+
+/** 一季 → 应用里的一个「专辑」（点开是分集列表）。 */
+const seasonAsCollection = (season: BangumiSeason): ProviderCollection => ({
+    providerId: 'bilibili',
+    id: season.seasonId,
+    name: season.title,
+    type: 'album',
+    coverUrl: season.coverUrl || undefined,
+    description: season.indexShow || undefined,
+});
 
 /** 这个 id 是不是本平台的。别的模块拿它判「要不要走视频那条路」。 */
 export const isBilibiliSongId = (id: string | number | null | undefined): boolean => (
