@@ -12,6 +12,11 @@ const KIND_LABEL_KEYS: Record<SearchKind, string> = {
     song: 'search.kindSong',
     album: 'search.kindAlbum',
     playlist: 'search.kindPlaylist',
+    // 视频站那几档。音乐平台不会声明它们，所以这几个词条平时看不到。
+    video: 'search.kindVideo',
+    bangumi: 'search.kindBangumi',
+    movie: 'search.kindMovie',
+    user: 'search.kindUser',
 };
 
 const MARK_SPRING = { type: 'spring', stiffness: 420, damping: 34 } as const;

@@ -1,6 +1,6 @@
 import { fetchBilibiliPlayUrl, fetchBilibiliVideoInfo } from './api';
 import { bilibiliBvidOf } from './bilibiliNormalize';
-import { isBilibiliAvailable } from './transport';
+import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
 
 // src/services/bilibili/streamPrefetch.ts
 // 播放队列里那些投稿的取流地址，提前拿到手里。
@@ -53,7 +53,23 @@ export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => 
         try {
             const info = await fetchBilibiliVideoInfo(bvid);
             const track = await fetchBilibiliPlayUrl(bvid, info.cid);
-            const entry: PrefetchedStream = { videoUrl: track.url, fetchedAt: Date.now() };
+            /*
+             * 画面也走原生中转。
+             *
+             * 直链有风险：同一条流会给出主地址加若干备用，其中总有几个节点对某些投稿
+             * 回 403，抽到坏节点就是「画面出不来」。中转由原生按顺序试，403 换下一台 ——
+             * `<video>` 只看到一个本机地址，不必知道这一层。
+             *
+             * 中转起不来（比如插件没注册）就退回直链，至少还有一次机会。
+             */
+            const local = await proxyBilibiliStream(track.urls.length > 0 ? track.urls : [track.url], {
+                Referer: 'https://www.bilibili.com/',
+                Origin: 'https://www.bilibili.com',
+            });
+            const entry: PrefetchedStream = {
+                videoUrl: local ?? track.url,
+                fetchedAt: Date.now(),
+            };
             cache.set(bvid, entry);
             return entry;
         } catch (error) {

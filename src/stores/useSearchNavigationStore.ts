@@ -110,7 +110,7 @@ const getSearchCacheKey = (query: string, sourceTab: SearchSource, kind: SearchK
 export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
     // 这几种不是某一个平台：云缓存是按歌名去各家搜，「全部」是把各家掺起来 ——
     // 它们都没有「这家平台能搜什么」可问，问了会拿到 unsupported 而把整次搜索打断。
-    if (sourceTab === 'local' || sourceTab === 'navidrome' || sourceTab === 'cloud' || sourceTab === 'bilibili' || sourceTab === 'all') {
+    if (sourceTab === 'local' || sourceTab === 'navidrome' || sourceTab === 'cloud' || sourceTab === 'all') {
         return ['song'];
     }
     const kinds = omni.getProviderSearchKinds(sourceTab);
@@ -130,13 +130,12 @@ export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSour
     return DEFAULT_ONLINE_PROVIDER_ID;
 };
 
-/** 这条搜索来源对应的在线平台；本地 / Navidrome / 云缓存 / B 站 / 「全部」没有单一平台，返回 null。 */
+/** 这条搜索来源对应的在线平台；本地 / Navidrome / 云缓存 / 「全部」没有单一平台，返回 null。 */
 const providerIdOf = (tab: SearchSource): OnlineProviderId | null => {
     const resolved = resolveSearchSource(tab);
     return resolved === 'local'
         || resolved === 'navidrome'
         || resolved === 'cloud'
-        || resolved === 'bilibili'
         || resolved === 'all'
         ? null
         : resolved;
@@ -645,8 +644,6 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         if (
             searchSourceTab === 'local'
             || searchSourceTab === 'navidrome'
-            // B 站是视频结果，自己管翻页，不走歌曲那套 loadMore。
-            || searchSourceTab === 'bilibili'
             || !hasMore
             || isSearching
             || isLoadingMore

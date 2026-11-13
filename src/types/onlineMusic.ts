@@ -454,7 +454,15 @@ export interface ProviderSearchContext {
 }
 
 /** What a search looks for: songs, albums or playlists (`omni.getProviderSearchKinds`). */
-export type ProviderSearchKind = 'song' | 'album' | 'playlist';
+/**
+ * 搜索的种类。
+ *
+ * `video` / `bangumi` / `movie` / `user` 是视频站才有的几档（一条投稿、一季番剧、
+ * 一部电影、一个人名下的投稿）。它们进这一层是因为**界面上它就是同一个东西** ——
+ * 搜索页第二排那几个页签，和「单曲 / 专辑 / 歌单」共用一套渲染。音乐平台不声明它们，
+ * 自然也就不会出现。
+ */
+export type ProviderSearchKind = 'song' | 'album' | 'playlist' | 'video' | 'bangumi' | 'movie' | 'user';
 
 export interface OnlineSearchProvider {
     /**
@@ -467,6 +475,20 @@ export interface OnlineSearchProvider {
      * Left out where the platform has no album search: the search page then offers no album tab.
      */
     searchAlbums?(query: string, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
+    /**
+     * 视频站的「视频」那一档：一条投稿就是一首歌（`kind: 'song'`）。
+     * 音乐平台不实现，搜索页也就不画这一个页签。
+     */
+    searchVideos?(query: string, limit: number, offset: number): Promise<ProviderPage<UnifiedSong>>;
+    /**
+     * 视频站的「番剧 / 电影」：一季是一个集合（`kind: 'collection'`），点开是分集。
+     * 两档共用一个实现，`kind` 由调用方按页签选。
+     */
+    searchSeasons?(query: string, seasonKind: 'bangumi' | 'movie', limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
+    /**
+     * 视频站的「用户」：搜到一个人，列出他名下的投稿（当作这个人的歌单）。
+     */
+    searchPeople?(query: string, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>>;
     /**
      * Playlists found by the query, as collections of type 'playlist' that `catalog.getPlaylistTracks`
      * opens. Left out where the platform has no playlist search.

@@ -4,6 +4,7 @@ import {
     readBilibiliAuthNative,
     saveBilibiliCookiesNative,
 } from '../platform/foliaNative';
+import { fetchBilibiliNavProfile } from '../services/bilibili/api';
 import { isBilibiliAvailable } from '../services/bilibili/transport';
 import { exchangeLogin, generateQrCode, pollQrCode, type BilibiliQrState } from '../services/bilibili/login';
 
@@ -24,6 +25,11 @@ interface BilibiliAuthState {
     available: boolean;
     signedIn: boolean;
     uid: string;
+    /** 昵称与头像（问 nav 拿的）；拿不到就是空串，界面退回 UID。 */
+    nickname: string;
+    avatarUrl: string;
+    /** 大会员：决定清晰度能不能放开 1080P60 / 4K。 */
+    isVip: boolean;
     /** 二维码内容；非空表示正在等扫码。 */
     qrUrl: string;
     /** 轮询用的 key。 */
@@ -49,7 +55,7 @@ interface BilibiliAuthActions {
      * 扫码流程已经交给 provider 的 auth（services/bilibili/bilibiliProvider.ts），
      * 它落完 cookie 之后调这里，把这个 store 当成「谁是当前账号」的缓存。
      */
-    markSignedIn: (uid: string) => void;
+    markSignedIn: (uid: string, profile?: { nickname?: string; avatarUrl?: string; isVip?: boolean }) => void;
     /** 同上，反向：登录态没了。 */
     markSignedOut: () => void;
 }
@@ -77,6 +83,9 @@ export const useBilibiliAuthStore = create<BilibiliAuthStore>()((set, get) => ({
     available: false,
     signedIn: false,
     uid: '',
+    nickname: '',
+    avatarUrl: '',
+    isVip: false,
     qrUrl: '',
     qrKey: '',
     qrState: 'waiting',
@@ -91,6 +100,18 @@ export const useBilibiliAuthStore = create<BilibiliAuthStore>()((set, get) => ({
         }
         const status = await readBilibiliAuthNative();
         set({ available: true, signedIn: status.signedIn, uid: status.uid });
+        // 昵称 / 头像 / 大会员都在 nav 里，顺带取一次；取不到就保持空，界面用 UID。
+        if (status.signedIn) {
+            const profile = await fetchBilibiliNavProfile();
+            if (profile) {
+                set({
+                    nickname: profile.nickname,
+                    avatarUrl: profile.avatarUrl,
+                    isVip: profile.vip,
+                    uid: profile.uid || status.uid,
+                });
+            }
+        }
     },
 
     startLogin: async () => {
@@ -164,11 +185,20 @@ export const useBilibiliAuthStore = create<BilibiliAuthStore>()((set, get) => ({
     signOut: async () => {
         stopPoll();
         await clearBilibiliCookiesNative();
-        set({ signedIn: false, uid: '', ...emptyQr() });
+        set({ signedIn: false, uid: '', nickname: '', avatarUrl: '', isVip: false, ...emptyQr() });
     },
 
     // 扫码由 provider 的 auth 跑（见那个文件）。这两个方法让它在成功/退出之后
     // 把这个 store 更新到同一步，界面才有东西可看。
-    markSignedIn: (uid: string) => set({ signedIn: true, uid, ...emptyQr() }),
-    markSignedOut: () => set({ signedIn: false, uid: '', ...emptyQr() }),
+    markSignedIn: (uid, profile) => set({
+        signedIn: true,
+        uid,
+        nickname: profile?.nickname ?? '',
+        avatarUrl: profile?.avatarUrl ?? '',
+        isVip: profile?.isVip ?? false,
+        ...emptyQr(),
+    }),
+    markSignedOut: () => set({
+        signedIn: false, uid: '', nickname: '', avatarUrl: '', isVip: false, ...emptyQr(),
+    }),
 }));

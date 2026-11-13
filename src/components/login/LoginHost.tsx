@@ -129,6 +129,8 @@ const LoginHost: React.FC<LoginHostProps> = ({ account }) => {
             chosen={chosen}
             login={shownLogin}
             onChoose={host.choose}
+            // 列最上面那一行「全部」：范围由那一列自己切（见 window/PlatformColumn），这里只负责收窗 —— 好去看合并后的首页。
+            onAllProvidersChosen={closeLoginWindow}
             onStart={() => void account.retryLogin()}
             // 表单式登录提交：经 host 走账户 controller 的完整链路（provider 提交 → 读账号 → activate-after-login → 报完成），
             // 完成的一声由 host.completed 接到，和扫码确认一样放动画/关窗；读账号失败（refresh-failed）由

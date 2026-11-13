@@ -662,6 +662,10 @@ export const omni = {
             'song' as const,
             ...(search.searchAlbums && providerSupports(provider, 'albums') ? ['album' as const] : []),
             ...(search.searchPlaylists && providerSupports(provider, 'playlists') ? ['playlist' as const] : []),
+            // 视频站自己声明这几档；音乐平台不声明，页签就还是三个。
+            ...(search.searchVideos ? ['video' as const] : []),
+            ...(search.searchSeasons ? ['bangumi' as const, 'movie' as const] : []),
+            ...(search.searchPeople ? ['user' as const] : []),
         ];
     },
 
@@ -675,9 +679,17 @@ export const omni = {
     ): Promise<OmniPage<OmniCollection>> {
         if (!omni.getProviderSearchKinds(providerId).includes(kind)) return emptyPage(page.offset);
         const search = requireOnlineMusicProvider(providerId).search!;
+        /*
+         * 视频站那几档：番剧和电影共用一个实现（按页签选 kind），用户返回的是
+         * 「这个人的投稿」当歌单。它们都由平台自己声明，音乐平台走不到这里。
+         */
         const found = kind === 'album'
             ? await search.searchAlbums!(query, page.limit, page.offset)
-            : await search.searchPlaylists!(query, page.limit, page.offset);
+            : kind === 'bangumi' || kind === 'movie'
+                ? await search.searchSeasons!(query, kind, page.limit, page.offset)
+                : kind === 'user'
+                    ? await search.searchPeople!(query, page.limit, page.offset)
+                    : await search.searchPlaylists!(query, page.limit, page.offset);
         // A provider names its own collections: one that answers with another's would open nowhere.
         return { ...found, items: found.items.filter(collection => collection.providerId === providerId) };
     },

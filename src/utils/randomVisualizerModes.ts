@@ -5,6 +5,14 @@ import { BUILTIN_VISUALIZER_MODES } from '../types/visualizerModes';
 export type RandomVisualizerMode = typeof BUILTIN_VISUALIZER_MODES[number];
 
 /**
+ * The built-ins a random pick may land on.
+ *
+ * `blank` is left out: it draws no lyrics at all, so landing on it by chance reads as the
+ * visualizer being broken rather than as a style. Whoever wants no lyrics picks it outright.
+ */
+const RANDOM_ELIGIBLE_MODES = BUILTIN_VISUALIZER_MODES.filter(mode => mode !== 'blank');
+
+/**
  * The known modes a pool selection may name: the built-ins plus whatever mod visualizers are
  * registered right now (`mod:<modId>:<id>`). Leaf-layer safe: importing the live registry here
  * would drag the whole visualizer UI into stores and sync schema, so the caller hands the set in.
@@ -25,10 +33,10 @@ export const normalizeRandomVisualizerModesWith = (
             (mode): mode is VisualizerMode => typeof mode === 'string' && isKnown(mode),
         ),
     );
-    if (chosen.size === 0) return [...BUILTIN_VISUALIZER_MODES];
-    const ordered = BUILTIN_VISUALIZER_MODES.filter(mode => chosen.has(mode));
+    if (chosen.size === 0) return [...RANDOM_ELIGIBLE_MODES];
+    const ordered = RANDOM_ELIGIBLE_MODES.filter(mode => chosen.has(mode));
     // mod 样式不在内建表里，按它们第一次出现的顺序补在后面。
-    const extras = [...chosen].filter(mode => !(BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode));
+    const extras = [...chosen].filter(mode => !(RANDOM_ELIGIBLE_MODES as readonly string[]).includes(mode));
     return [...ordered, ...extras];
 };
 
@@ -38,7 +46,7 @@ export const normalizeRandomVisualizerModesWith = (
  * run the registry-aware check above.
  */
 export const normalizeRandomVisualizerModes = (value: unknown): RandomVisualizerMode[] => (
-    normalizeRandomVisualizerModesWith(value, mode => (BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode)) as RandomVisualizerMode[]
+    normalizeRandomVisualizerModesWith(value, mode => (RANDOM_ELIGIBLE_MODES as readonly string[]).includes(mode)) as RandomVisualizerMode[]
 );
 
 /** Picks within the saved selection, excluding the current style whenever another choice exists. */
@@ -47,7 +55,7 @@ export const pickRandomVisualizerMode = (
     current: VisualizerMode,
     random: () => number = Math.random,
 ): VisualizerMode => {
-    const selected = modes.length > 0 ? [...modes] : [...BUILTIN_VISUALIZER_MODES];
+    const selected = modes.length > 0 ? [...modes] : [...RANDOM_ELIGIBLE_MODES];
     const alternatives = selected.filter(mode => mode !== current);
     const candidates = alternatives.length > 0 ? alternatives : selected;
     return candidates[Math.floor(random() * candidates.length)];

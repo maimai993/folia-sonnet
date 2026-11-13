@@ -37,6 +37,8 @@ describe('visualizer registry', () => {
             'cappella',
             'diorama',
             'still',
+            // 「不要歌词」也是一个样式，order 900 排在最后。
+            'blank',
         ]);
     });
 

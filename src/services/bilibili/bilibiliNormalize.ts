@@ -35,6 +35,21 @@ export const bilibiliBvidOf = (song: { id?: string | number } | null | undefined
 };
 
 /** 从 id 里取回分P 的 cid；单P 的 id 没有这一段，回 null。 */
+/**
+ * 一个 UP 主在别的模块眼里的 id。
+ *
+ * 投稿里 UP 主是这首歌的 artist，所以歌手页也用同一个 id：`bilibili-artist:<mid>`。
+ * 前缀保证和歌曲 id（`bilibili:<bvid>[:<cid>]`）不会撞上，取 mid 时按前缀剥。
+ */
+export const bilibiliArtistId = (mid: string | number): string => `bilibili-artist:${mid}`;
+
+/** 从歌手 id 里取回 mid；不是这个平台的就回空串。 */
+export const bilibiliMidOfArtistId = (id: string | number | null | undefined): string => {
+    const text = String(id ?? '');
+    const prefix = 'bilibili-artist:';
+    return text.startsWith(prefix) ? text.slice(prefix.length) : '';
+};
+
 export const bilibiliCidOf = (song: { id?: string | number } | null | undefined): number | null => {
     const id = String(song?.id ?? '');
     if (!id.startsWith(BILIBILI_ID_PREFIX)) return null;
@@ -45,9 +60,20 @@ export const bilibiliCidOf = (song: { id?: string | number } | null | undefined)
     return Number.isFinite(cid) && cid > 0 ? cid : null;
 };
 
-/** 图片地址可能是 http（WebView 里会被拦），统一升成 https。 */
+/**
+ * 封面地址统一成完整的 https。
+ *
+ * 这一家的图片地址有三种写法，一种都不能漏：
+ *  · `http://i0.hdslb.com/...` —— 明文，WebView 里会被拦；
+ *  · `//i0.hdslb.com/...` —— 协议相对。`<img src>` 在页面里还能拼出来，但封面这条路
+ *    会先经过 `new URL()` 和 `Image()` 的预解码，那里 `//host` 不是合法地址，
+ *    解码直接失败并被记进「这个地址不会再成功」的表里 —— 墙上的卡片就永远空着。
+ *    这就是「播放栏有封面、海报墙没有」的真因。
+ *  · 完整 https —— 原样留着。
+ */
 export const upgradeCoverUrl = (url: string | undefined): string => {
     if (!url) return '';
+    if (url.startsWith('//')) return `https:${url}`;
     return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
 };
 

@@ -1,5 +1,12 @@
 import { fetchJson, fetchJsonWithHeaders, signedUrl, unwrap } from './api';
+import { upgradeCoverUrl } from './bilibiliNormalize';
 import { isBilibiliAvailable } from './transport';
+
+/** 站内搜索接口认的来源；用 www 会被风控成 412。 */
+const SEARCH_HEADERS = {
+    Referer: 'https://search.bilibili.com/',
+    Origin: 'https://search.bilibili.com',
+};
 
 // src/services/bilibili/library.ts
 // 账号自己的东西：收藏夹、稍后再看、投稿、追番追剧、投币、点赞。
@@ -29,11 +36,8 @@ export interface BilibiliShelfItem {
     playCount: number;
 }
 
-/** 接口里的地址可能是 http，统一升成 https。 */
-const https = (url: string | undefined): string => {
-    if (!url) return '';
-    return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
-};
+/** 封面地址统一成完整的 https（协议相对的写法这里也会遇到）。 */
+const https = (url: string | undefined): string => upgradeCoverUrl(url);
 
 /** 标题里可能带高亮标签，摆到界面上要去掉。 */
 const plain = (text: string | undefined): string => (text ?? '').replace(/<[^>]+>/g, '');
@@ -164,18 +168,123 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
     });
 
     shelves.push(
-        simple('toview', 'shelf.toview', 'https://api.bilibili.com/x/v2/history/toview'),
-        simple('coins', 'shelf.coins', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
-        simple('likes', 'shelf.likes', `https://api.bilibili.com/x/space/like/video?vmid=${uid}&pn=1&ps=30`, true),
-        simple('uploads', 'shelf.uploads', await signedUrl('/x/space/wbi/arc/search', {
+        simple('toview', 'shelfToview', 'https://api.bilibili.com/x/v2/history/toview'),
+        simple('coins', 'shelfCoins', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
+        simple('likes', 'shelfLikes', `https://api.bilibili.com/x/space/like/video?vmid=${uid}&pn=1&ps=30`, true),
+        simple('uploads', 'shelfUploads', await signedUrl('/x/space/wbi/arc/search', {
             mid: uid,
             pn: 1,
             ps: 30,
             order: 'pubdate',
         }), true),
-        simple('bangumi', 'shelf.bangumi', `https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
-        simple('tv', 'shelf.tv', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
+        simple('bangumi', 'shelfBangumi', `https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
+        simple('tv', 'shelfTv', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
     );
 
     return shelves;
+};
+
+/** 搜到的一个人。 */
+export interface BilibiliUserHit {
+    mid: number;
+    name: string;
+    avatarUrl: string;
+    sign: string;
+    videoCount: number;
+}
+
+/**
+ * 按名字搜人。
+ *
+ * 用的是站内的用户搜索。它和视频搜索一样要 wbi 签名，而且要 search 那个来源的
+ * Referer，否则一律 412。
+ */
+export const searchBilibiliUsers = async (keyword: string): Promise<BilibiliUserHit[]> => {
+    if (!isBilibiliAvailable()) return [];
+    const trimmed = keyword.trim();
+    if (!trimmed) return [];
+    try {
+        const url = await signedUrl('/x/web-interface/wbi/search/type', {
+            search_type: 'bili_user',
+            keyword: trimmed,
+            page: 1,
+        });
+        const payload = unwrap(await fetchJsonWithHeaders<{
+            result?: Array<{
+                mid?: number;
+                uname?: string;
+                upic?: string;
+                usign?: string;
+                videos?: number;
+            }>;
+        }>(url, SEARCH_HEADERS));
+        return (payload.result ?? [])
+            .filter(item => typeof item.mid === 'number')
+            .map(item => ({
+                mid: item.mid as number,
+                name: plain(item.uname),
+                avatarUrl: https(item.upic),
+                sign: plain(item.usign),
+                videoCount: item.videos ?? 0,
+            }));
+    } catch {
+        return [];
+    }
+};
+
+/**
+ * 某个人名下的投稿。
+ *
+ * 这是「用户」那一档点开之后的内容：一个人的投稿就是一份歌单。空间那条接口
+ * 要 space 的来源，用 www 的会被风控。
+ */
+export const loadBilibiliUserUploads = async (mid: string): Promise<BilibiliShelfItem[]> => {
+    if (!isBilibiliAvailable()) return [];
+    try {
+        const url = await signedUrl('/x/space/wbi/arc/search', {
+            mid,
+            pn: 1,
+            ps: 50,
+            order: 'pubdate',
+        });
+        const payload = unwrap(await fetchJsonWith<unknown>(url));
+        return listOf(payload).map(toItem).filter(item => item.bvid);
+    } catch {
+        return [];
+    }
+};
+
+/** 一个人的资料（歌手页的表头）。 */
+export interface BilibiliUserProfile {
+    mid: string;
+    name: string;
+    avatarUrl: string;
+    sign: string;
+    followerCount: number;
+}
+
+/**
+ * 某个 UP 主的资料。
+ *
+ * 空间那条接口一次给全：名字、头像、签名、粉丝数。拿不到就回 null，
+ * 歌手页退回用搜索时那点信息（名字和头像已经有了）。
+ */
+export const fetchBilibiliUserProfile = async (mid: string): Promise<BilibiliUserProfile | null> => {
+    if (!isBilibiliAvailable() || !mid) return null;
+    try {
+        const payload = unwrap(await fetchJsonWith<{
+            card?: { name?: string; face?: string; sign?: string; fans?: number };
+        }>(`https://api.bilibili.com/x/web-interface/card?mid=${mid}`));
+        const card = payload.card;
+        if (!card) return null;
+        return {
+            mid,
+            name: plain(card.name),
+            avatarUrl: https(card.face),
+            sign: plain(card.sign),
+            followerCount: card.fans ?? 0,
+        };
+    } catch {
+        return null;
+    }
 };

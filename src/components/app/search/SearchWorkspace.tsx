@@ -12,7 +12,6 @@ import {
     useSearchNavigationStore,
 } from '../../../stores/useSearchNavigationStore';
 import SearchResultsList from './SearchResultsList';
-import BilibiliVideoResults from './BilibiliVideoResults';
 import { usePlaybackStore, selectDisplaySong } from '../../../stores/usePlaybackStore';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { songKeyOf } from '../../bilibili/BilibiliMvLayer';
@@ -57,6 +56,11 @@ const PLACEHOLDER_KEYS: Record<SearchKind, string> = {
     song: 'search.placeholder',
     album: 'search.placeholderAlbum',
     playlist: 'search.placeholderPlaylist',
+    // 视频站那几档；音乐平台不会选中它们，取不到时用通用的那句。
+    video: 'search.placeholderVideo',
+    bangumi: 'search.placeholderBangumi',
+    movie: 'search.placeholderMovie',
+    user: 'search.placeholderUser',
 };
 
 const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
@@ -240,16 +244,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                     </header>
 
                     <div className="search-plane mx-auto mt-3 min-h-0 w-full max-w-5xl flex-1">
-                        {/*
-                          * B 站是视频结果，自己管加载 / 空态 / 错误，不走歌曲那套分页与 SearchResultsList。
-                          * 点一条就把视频钉到正在放的这首歌上，回播放页直接当背景放。
-                          */}
-                        {searchSourceTab === 'bilibili' ? (
-                            <BilibiliVideoResults
-                                query={submittedQuery}
-                                onPlayTrack={onPlayTrack}
-                            />
-                        ) : isSearching ? (
+                        {isSearching ? (
                             <div className="flex h-full items-center justify-center">
                                 <div className="search-loader" role="status" aria-label={t('localMusic.searching')}>
                                     <i />

@@ -222,21 +222,21 @@ export interface BilibiliZone {
 
 /** 能直接出内容的分区（剩下的两类——番剧与电影——走 bangumi 那一套）。 */
 export const BILIBILI_ZONES: BilibiliZone[] = [
-    { rid: 1, titleKey: 'zone.1' },
-    { rid: 3, titleKey: 'zone.3' },
-    { rid: 4, titleKey: 'zone.4' },
-    { rid: 5, titleKey: 'zone.5' },
-    { rid: 36, titleKey: 'zone.36' },
-    { rid: 155, titleKey: 'zone.155' },
-    { rid: 160, titleKey: 'zone.160' },
-    { rid: 119, titleKey: 'zone.119' },
-    { rid: 129, titleKey: 'zone.129' },
-    { rid: 181, titleKey: 'zone.181' },
-    { rid: 188, titleKey: 'zone.188' },
-    { rid: 211, titleKey: 'zone.211' },
-    { rid: 217, titleKey: 'zone.217' },
-    { rid: 223, titleKey: 'zone.223' },
-    { rid: 234, titleKey: 'zone.234' },
+    { rid: 1, titleKey: 'zone1' },
+    { rid: 3, titleKey: 'zone3' },
+    { rid: 4, titleKey: 'zone4' },
+    { rid: 5, titleKey: 'zone5' },
+    { rid: 36, titleKey: 'zone36' },
+    { rid: 155, titleKey: 'zone155' },
+    { rid: 160, titleKey: 'zone160' },
+    { rid: 119, titleKey: 'zone119' },
+    { rid: 129, titleKey: 'zone129' },
+    { rid: 181, titleKey: 'zone181' },
+    { rid: 188, titleKey: 'zone188' },
+    { rid: 211, titleKey: 'zone211' },
+    { rid: 217, titleKey: 'zone217' },
+    { rid: 223, titleKey: 'zone223' },
+    { rid: 234, titleKey: 'zone234' },
 ];
 
 /**
@@ -286,8 +286,10 @@ export const fetchBilibiliRecommendations = async (): Promise<BilibiliSearchHit[
 };
 
 /** 图片地址可能是 http（WebView 里会被拦），统一升成 https。 */
+/** 补成完整的 https。`//host/path` 这种协议相对写法也要认（搜索接口就是这么给的）。 */
 const toHttps = (url: string | undefined): string => {
     if (!url) return '';
+    if (url.startsWith('//')) return `https:${url}`;
     return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
 };
 

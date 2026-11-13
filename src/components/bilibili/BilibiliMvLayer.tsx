@@ -8,6 +8,7 @@ import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
+import { isBilibiliSongId } from '../../services/bilibili/bilibiliProvider';
 
 // src/components/bilibili/BilibiliMvLayer.tsx
 // 把「这首歌的 MV」接到播放页上。它自己不画任何东西。
@@ -68,7 +69,17 @@ const BilibiliMvLayer: React.FC = () => {
      * 这里只管「放的是别的平台的歌，给它找一条 MV」。两者分成两个组件，是因为
      * 合在一起时两条路抢同一个注入槽位，切歌会互相清掉对方的东西。
      */
-    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
+    /*
+     * 自己就是投稿的那首歌，这里一律不参与。
+     *
+     * 这一层管的是「放的是别的平台的歌，给它找一条 MV」。而一条 B 站投稿的画面和
+     * 声音都由 BilibiliVideoStage 负责 —— 两边同时上手，就是两条音轨一起响
+     * （用户听到的「放了两个声音」），画面也会互相抢同一个注入槽位。
+     *
+     * 所以按 id 判掉，不靠注释约定。
+     */
+    const isOwnPost = isBilibiliSongId((displaySong as { id?: string } | null)?.id);
+    const active = enabled && isBilibiliAvailable() && !isOwnPost && current.title.length > 0;
 
     // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
     React.useEffect(() => {

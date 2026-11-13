@@ -1,5 +1,10 @@
 import type { OnlineMusicProvider, ProviderCollection, ProviderExploreItem, ProviderPage } from '../../types/onlineMusic';
-import { listBilibiliShelves } from './library';
+import {
+    fetchBilibiliUserProfile,
+    listBilibiliShelves,
+    loadBilibiliUserUploads,
+    searchBilibiliUsers,
+} from './library';
 import { listBangumiEpisodes, listBangumiSeasons, searchBangumiSeasons, type BangumiSeason } from './bangumi';
 import type { BilibiliSearchHit } from '../../types/bilibili';
 import QRCode from 'qrcode';
@@ -14,9 +19,17 @@ import {
     fetchBilibiliSubtitles,
     searchBilibiliVideos,
 } from './api';
+import { hasRealLyrics, stripPlaceholderLines } from './subtitleFilter';
 import { pickSubtitleTracks } from './bilibiliLyrics';
 import { buildLyricsFromCues } from './bilibiliLyrics';
-import { bilibiliBvidOf, bilibiliCidOf, bilibiliSongId, normalizeBilibiliSong } from './bilibiliNormalize';
+import {
+    bilibiliArtistId,
+    bilibiliBvidOf,
+    bilibiliCidOf,
+    bilibiliMidOfArtistId,
+    bilibiliSongId,
+    normalizeBilibiliSong,
+} from './bilibiliNormalize';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
 import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
 import { generateQrCode, pollQrCode, exchangeLogin } from './login';
@@ -72,7 +85,8 @@ export const bilibiliProvider: OnlineMusicProvider = {
         userLibrary: true,
         playlists: false,
         albums: true,
-        artists: false,
+        // UP 主按歌手注册：歌手页、封面上的歌手、搜索跳转都用已有的那一套。
+        artists: true,
         // 推荐就是首页那一屏。
         // 不提供「推荐」：这一家的首页就是分区，多一个推荐页只会让人多点一次。
         recommendations: false,
@@ -101,6 +115,60 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const hits = await searchBilibiliVideos(query);
             // 搜索接口一次给一批，这里按 limit 切，保持和其它平台一样的契约。
             return pageOf(hits.slice(offset, offset + limit), offset);
+        },
+
+        /*
+         * 「视频」那一档。和单曲其实是同一份结果 —— 这一家搜出来的每条本来就是一条投稿，
+         * 点开就当一首歌放。分成两档是为了让搜索页那排页签和别处一致（01 视频 / 02 番剧
+         * / 03 电影 / 04 用户），而不是另画一套按钮。
+         */
+        async searchVideos(query, limit, offset) {
+            if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
+            const hits = await searchBilibiliVideos(query);
+            const window = hits.slice(offset, offset + limit);
+            return {
+                items: window.map(hit => normalizeBilibiliSong(hit)),
+                hasMore: hits.length > offset + limit,
+                nextOffset: offset + window.length,
+            };
+        },
+
+        /** 「番剧 / 电影」：一季是一个集合，点开是分集（一集一首歌）。 */
+        async searchSeasons(query, seasonKind, limit, offset) {
+            if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
+            const seasons = await searchBangumiSeasons(query, seasonKind);
+            const window = seasons.slice(offset, offset + limit);
+            return {
+                items: window.map(season => ({ ...seasonAsCollection(season), type: 'album' as const })),
+                hasMore: seasons.length > offset + limit,
+                nextOffset: offset + window.length,
+            };
+        },
+
+        /**
+         * 「用户」：搜到一个人，当作**歌手**。
+         *
+         * UP 主在别处就是这首歌的 artist（参见 normalizeBilibiliSong：投稿的 UP 主
+         * 填进 artists），所以这里也按歌手注册 —— 点进去是歌手页，不是一份叫「某某
+         * 的投稿」的歌单。已有的歌手页、歌手封面、跳转都用同一套，不必另做一个界面。
+         */
+        async searchPeople(query, limit, offset) {
+            if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
+            const people = await searchBilibiliUsers(query);
+            const window = people.slice(offset, offset + limit);
+            return {
+                items: window.map(person => ({
+                    providerId: 'bilibili' as const,
+                    id: bilibiliArtistId(person.mid),
+                    name: person.name,
+                    type: 'artist' as const,
+                    coverUrl: person.avatarUrl || undefined,
+                    description: person.sign || undefined,
+                    trackCount: person.videoCount,
+                })),
+                hasMore: people.length > offset + limit,
+                nextOffset: offset + window.length,
+            };
         },
     },
 
@@ -167,7 +235,13 @@ export const bilibiliProvider: OnlineMusicProvider = {
                     const exchange = await exchangeLogin(poll.redirectUrl);
                     const saved = await bilibiliSaveCookies(exchange.cookie);
                     if (!saved) return { state: 'error', message: '凭据没能存进设备' };
-                    useBilibiliAuthStore.getState().markSignedIn(exchange.uid);
+                    // 顺手把昵称 / 头像 / 大会员取回来：登录窗口和清晰度档位都要用。
+                    const profile = await fetchBilibiliNavProfile();
+                    useBilibiliAuthStore.getState().markSignedIn(exchange.uid, {
+                        nickname: profile?.nickname,
+                        avatarUrl: profile?.avatarUrl,
+                        isVip: profile?.vip,
+                    });
                     return { state: 'confirmed' };
                 }
                 case 'scanned':
@@ -208,11 +282,21 @@ export const bilibiliProvider: OnlineMusicProvider = {
                 const secondaryCues = secondary?.subtitle_url
                     ? await fetchBilibiliSubtitle(secondary.subtitle_url).catch(() => [])
                     : [];
-                const lyrics = buildLyricsFromCues(primaryCues, secondaryCues, {
+                const built = buildLyricsFromCues(primaryCues, secondaryCues, {
                     title: song.name,
                     artist: typeof song.artists?.[0]?.name === 'string' ? song.artists[0].name : undefined,
                 });
-                if (lyrics.lines.length === 0) return empty;
+                if (built.lines.length === 0) return empty;
+                /*
+                 * 这一家的字幕经常不是歌词：`♪音乐♪`、`[音乐]`、（前奏）这类占位行
+                 * 实测很常见，有的整份字幕就那一句。摆上去比没有更糟 —— 屏幕上会
+                 * 一直挂着同一句，看着像歌词卡住了。
+                 *
+                 * 所以先剔掉占位行，剩下的不足两行真歌词就当成「没有字幕」：
+                 * 交回 null，上层会去用原来那份歌词来源。
+                 */
+                const lyrics = stripPlaceholderLines(built);
+                if (!hasRealLyrics(lyrics)) return empty;
                 // 有译文就把它整段交出去，界面据此显示「翻译」那一栏。
                 const translationText = secondaryCues.length > 0
                     ? lyrics.lines.map(line => line.translation ?? '').filter(Boolean).join('\n')
@@ -234,7 +318,15 @@ export const bilibiliProvider: OnlineMusicProvider = {
     playback: {
         // 只声明三档：对视频来说这三个就是 480P / 720P / 1080P（未登录上限 480P）。
         // 界面上这几档会显示成清晰度而不是音质（见 AccountTab 的 VIDEO_QUALITY_LABEL_KEYS）。
-        audioQualityLevels: ['standard', 'high', 'ultra'],
+        /**
+         * 清晰度档位（这一家是「画质」，走的仍是声音那条通道）。
+         *
+         * 大会员才拿得到 1080P60 与 4K —— 非会员选了也只会回落到能拿到的那一档，
+         * 界面上摆一个点了没用的选项不如不摆。登录态里带了 vipStatus，据此放开。
+         */
+        audioQualityLevels: useBilibiliAuthStore.getState().isVip
+            ? ['standard', 'high', 'ultra', 'lossless', 'hires']
+            : ['standard', 'high', 'ultra'],
 
         /**
          * 这首歌要放什么：取 B 站 DASH 的那条**声音轨**。
@@ -311,11 +403,11 @@ export const bilibiliProvider: OnlineMusicProvider = {
                         .catch(() => ({ id: `zone-${zone.rid}`, titleKey: zone.titleKey, hits: [] })),
                 ),
                 listBangumiSeasons('bangumi')
-                    .then(seasons => ({ id: 'bangumi', titleKey: 'zone.bangumi', seasons, hits: [] as BilibiliSearchHit[] }))
-                    .catch(() => ({ id: 'bangumi', titleKey: 'zone.bangumi', seasons: [], hits: [] as BilibiliSearchHit[] })),
+                    .then(seasons => ({ id: 'bangumi', titleKey: 'zoneBangumi', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'bangumi', titleKey: 'zoneBangumi', seasons: [], hits: [] as BilibiliSearchHit[] })),
                 listBangumiSeasons('movie')
-                    .then(seasons => ({ id: 'movie', titleKey: 'zone.movie', seasons, hits: [] as BilibiliSearchHit[] }))
-                    .catch(() => ({ id: 'movie', titleKey: 'zone.movie', seasons: [], hits: [] as BilibiliSearchHit[] })),
+                    .then(seasons => ({ id: 'movie', titleKey: 'zoneMovie', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'movie', titleKey: 'zoneMovie', seasons: [], hits: [] as BilibiliSearchHit[] })),
             ]);
 
             const asCollection = (season: BangumiSeason): ProviderExploreItem => ({
@@ -379,8 +471,29 @@ export const bilibiliProvider: OnlineMusicProvider = {
 
         /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */
         async getPlaylistTracks(id) {
+            /*
+             * 「用户」那一档点开的是**某个人的投稿**（id 形如 `user:<mid>`）。
+             * 它不在账号自己的歌单列表里（那是自己名下的），所以先认这个前缀。
+             */
+            const raw = String(id);
+            const artistMid = bilibiliMidOfArtistId(raw);
+            if (artistMid) {
+                const videos = await loadBilibiliUserUploads(artistMid);
+                return {
+                    items: videos.map(video => normalizeBilibiliSong({
+                        bvid: video.bvid,
+                        title: video.title,
+                        author: video.author,
+                        durationSec: video.durationSec,
+                        coverUrl: video.coverUrl,
+                        playCount: video.playCount,
+                    })),
+                    hasMore: false,
+                    nextOffset: videos.length,
+                };
+            }
             const shelves = await listBilibiliShelves();
-            const shelf = shelves.find(item => item.id === String(id));
+            const shelf = shelves.find(item => item.id === raw);
             if (!shelf) return { items: [], hasMore: false, nextOffset: 0 };
             const videos = await shelf.load();
             return {
@@ -394,6 +507,56 @@ export const bilibiliProvider: OnlineMusicProvider = {
                 })),
                 hasMore: false,
                 nextOffset: videos.length,
+            };
+        },
+
+        /**
+         * 歌手页的「全部歌曲」：一个 UP 主名下的投稿。
+         *
+         * UP 主在这家就是这首歌的歌手（投稿的 author 填进 artists），所以歌手页
+         * 直接给投稿列表 —— 和音乐平台的歌手页是同一个东西，不另做界面。
+         */
+        async getArtistSongs(id) {
+            const mid = bilibiliMidOfArtistId(id);
+            if (!mid) return { items: [], hasMore: false, nextOffset: 0 };
+            const videos = await loadBilibiliUserUploads(mid);
+            return {
+                items: videos.map(video => normalizeBilibiliSong({
+                    bvid: video.bvid,
+                    title: video.title,
+                    author: video.author,
+                    durationSec: video.durationSec,
+                    coverUrl: video.coverUrl,
+                    playCount: video.playCount,
+                })),
+                hasMore: false,
+                nextOffset: videos.length,
+            };
+        },
+
+        /**
+         * 歌手页的「专辑」那一栏。
+         *
+         * 这一家没有专辑这个概念（投稿就是投稿），所以诚实地回空：页面上那一栏
+         * 不出现，比摆一堆假专辑好。
+         */
+        async getArtistAlbums() {
+            return { items: [], hasMore: false, nextOffset: 0 };
+        },
+
+        /** 歌手页的表头：名字、头像、简介。 */
+        async getArtistDetail(id) {
+            const mid = bilibiliMidOfArtistId(id);
+            if (!mid) return null;
+            const profile = await fetchBilibiliUserProfile(mid);
+            if (!profile) return null;
+            return {
+                providerId: 'bilibili' as const,
+                id: bilibiliArtistId(mid),
+                name: profile.name,
+                type: 'artist' as const,
+                coverUrl: profile.avatarUrl || undefined,
+                description: profile.sign || undefined,
             };
         },
 

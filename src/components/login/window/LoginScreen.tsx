@@ -40,6 +40,8 @@ export type LoginScreenProps = {
     /** 选中的这一行的登录（账户 controller 快照里的登录会话）；不在登录、或者还没开始时为 null。 */
     login: LibraryLoginSessionSnapshot | null;
     onChoose: (providerId: OnlineProviderId) => void;
+    /** 平台那一列最上面「全部」那一行：点了切首页在线那一屏的数据范围，之后由 host 收窗。 */
+    onAllProvidersChosen?: () => void;
     /** 开始（浏览器登录的那一下），或者重来，保留选过的登录方式。 */
     onStart: () => void;
     /** 表单式登录提交（走账户 controller 的完整链路：提交 → 读账号 → 报完成）；返回登录完成结局。 */
@@ -93,7 +95,7 @@ const useReached = (at: number): boolean => {
 };
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
-    isOpen, onClose, rows, activeProviderId, chosen, login, onChoose, onStart, onSubmitForm, onSelectMethod, onReopenBrowser, onRestartService, onSwitch, onSignOut,
+    isOpen, onClose, rows, activeProviderId, chosen, login, onChoose, onAllProvidersChosen, onStart, onSubmitForm, onSelectMethod, onReopenBrowser, onRestartService, onSwitch, onSignOut,
     onSync, syncingProviderId = null, buildReport, origin, done = false, onDoneLeave = nothing, onDoneEnd = nothing,
     setup = null, canOpenSetup = false, onOpenSetup = nothing, onSetupAction = nothingDone, onFinishSetup = nothing,
 }) => {
@@ -185,6 +187,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     } else if (scene === 'accountless') {
         headline = label;
         note = t('home.providerNoAccount');
+        // 免账号来源（洛雪、模组音源）只留「换一个平台」：洛雪点这一行就已经进工作台了，
+        // 底下再摆一个「打开洛雪」纯属重复。
         actions = switchAction;
     } else {
         const key = sceneHeadline(scene, inBrowser);
@@ -224,6 +228,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     const [detailsOpen, setDetailsOpen] = useState(false);
     useEffect(() => setDetailsOpen(false), [sceneKey]);
 
+    // 洛雪音源与其它平台同一套逻辑：点它的那一行选中 provider（首页的搜索、歌单广场与播放
+    // 都落到它上面）。它免登录，选中即用；音源管理入口在设置里（LxSourcePanel），不再在
+    // 选中时强弹独立工作台 —— 工作台只是设置里的一个视图，不是「洛雪模式」。
+    const handleChoose = (providerId: OnlineProviderId) => {
+        onChoose(providerId);
+    };
+
     return (
         <>
         <LoginWindow
@@ -251,7 +262,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     left={narrow ? 24 : 292}
                 />
             )}
-            column={lie => <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => onChoose(row.providerId)} lie={lie} />}
+            column={lie => <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => handleChoose(row.providerId)} onAllProvidersChosen={onAllProvidersChosen} lie={lie} />}
             tile={(
                 <LoginTile
                     tileRef={element => { doneParts.current.tile = element; }}
