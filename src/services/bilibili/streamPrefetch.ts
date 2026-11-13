@@ -71,6 +71,8 @@ export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => 
                 fetchedAt: Date.now(),
             };
             cache.set(bvid, entry);
+            // 地址到手就开始预热：切过去时第一帧已经在缓存里了。
+            void warmStreamCache(entry.videoUrl);
             return entry;
         } catch (error) {
             // 取不到就是取不到：切到这首时再试一次，不要在这里打断队列。
@@ -118,5 +120,30 @@ export const dropStreamsExcept = (songs: readonly unknown[]): void => {
     }
     for (const bvid of [...cache.keys()]) {
         if (!keep.has(bvid)) cache.delete(bvid);
+    }
+};
+
+/**
+ * 先替播放器把开头那一段取回来。
+ *
+ * 光把地址拿在手里还不够：`<video>` 换源之后仍要自己发起请求，从「拿到地址」到
+ * 「第一帧出来」这段时间就是切歌时那块黑屏 / 转圈。这里提前取开头一小段，让浏览器的
+ * 缓存里已经有货，切过去时立刻就有一帧可画。
+ *
+ * 只取开头，不取整条：一条 1080P 是几十上百兆，预取整条既费流量又没必要。播放器
+ * 自己会接着往后要，而那时画面已经出来了。
+ *
+ * 失败一律不管：预热只是快一点，不是能不能播的前提。
+ */
+export const warmStreamCache = async (url: string, bytes = 512 * 1024): Promise<void> => {
+    if (!url || !/^https?:/i.test(url)) return;
+    try {
+        await fetch(url, {
+            headers: { Range: `bytes=0-${bytes - 1}` },
+            // 要浏览器那份缓存，不要一个没人读的 Response。
+            cache: 'default',
+        });
+    } catch {
+        // 预热失败不影响播放。
     }
 };

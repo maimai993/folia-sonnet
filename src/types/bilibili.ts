@@ -1,3 +1,5 @@
+import type { LyricData } from '../types';
+
 // src/types/bilibili.ts
 //
 // bilibili MV 背景要用到的形状：一次搜索命中、为一首歌解析出来的画面流，
@@ -38,6 +40,13 @@ export interface BilibiliMvStream {
     audioUrl: string;
     /** 实际拿到的画面高度（360 / 480 / 720 / 1080）。未登录时上限 480。 */
     quality: number;
+    /**
+     * 这条投稿自己的字幕，已经过一遍「哪些算歌词」的筛。
+     *
+     * null 表示没有可用字幕 —— 没有字幕文件、或者字幕只是「纯音乐欣赏」这类占位。
+     * 只有设置里把 MV 歌词来源选成这一站时才会被播放页用上。
+     */
+    subtitles: LyricData | null;
 }
 
 export type BilibiliMvState = 'idle' | 'resolving' | 'ready' | 'missing' | 'error';

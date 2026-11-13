@@ -8,6 +8,7 @@ import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
+import { useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
 import { isBilibiliSongId } from '../../services/bilibili/bilibiliProvider';
 
 // src/components/bilibili/BilibiliMvLayer.tsx
@@ -145,6 +146,37 @@ const BilibiliMvLayer: React.FC = () => {
      * 不进任何持久化设置。
      */
     const setAudioSrc = usePlaybackStore(state => state.setAudioSrc);
+    /*
+     * 字幕用哪一边的（见 useLyricSettingsStore 的 mvLyricSource）。
+     *
+     * 默认 `platform`：这首歌自己平台的歌词不动，MV 只当画面。选 `bilibili` 时才把
+     * 这条投稿的字幕换上来 —— 字幕和画面同源，卡点更准，但那份字幕经常只是占位。
+     *
+     * 换歌词和换音源是同一件事的两半：都只在「这条 MV 真的在放」时才做，离开时还原。
+     */
+    const mvLyricSource = useLyricSettingsStore(state => state.mvLyricSource);
+    const subtitles = useBilibiliMvStore(state => (
+        active && mvLyricSource === 'video' ? state.bySongKey[songKey]?.stream?.subtitles ?? null : null
+    ));
+    const setLyrics = usePlaybackStore(state => state.setLyricsState);
+
+    /*
+     * 选 `bilibili` 时把这条投稿的字幕换上，离开时还原成原来那份。
+     *
+     * 只换「显示什么」，不动播放位置：字幕自己的时间轴和这首歌是同一条投稿，
+     * 两边对得上。拿不到字幕（null）就什么都不做 —— 保持原平台歌词，而不是把
+     * 屏幕清空。
+     */
+    React.useEffect(() => {
+        if (!subtitles) return undefined;
+        const previous = usePlaybackStore.getState().lyrics;
+        if (previous === subtitles) return undefined;
+        setLyrics(subtitles);
+        return () => {
+            if (usePlaybackStore.getState().lyrics === subtitles) setLyrics(previous);
+        };
+    }, [subtitles, setLyrics]);
+
     React.useEffect(() => {
         if (!audioUrl) return undefined;
         const previous = usePlaybackStore.getState().audioSrc;

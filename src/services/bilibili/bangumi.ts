@@ -150,20 +150,20 @@ export const searchBangumiSeasons = async (
 ): Promise<BangumiSeason[]> => {
     const trimmed = keyword.trim();
     if (!trimmed) return [];
-    const searchType = kind === 'movie' ? 'media_ft' : 'media_bangumi';
+    const resultType = kind === 'movie' ? 'media_ft' : 'media_bangumi';
     /*
-     * 这一组接口有两个讲究，缺一个就回 412：
-     *  · 要 wbi 签名（`signedUrl` 负责）；
-     *  · Referer / Origin 必须伪装成站内搜索页。用 www.bilibili.com 会被当成
-     *    爬虫拦下 —— 这也是之前「番剧搜索结果永远是空的」的真因。
+     * 走「一次问全部类型」的那个接口，不按类型分开问。
+     *
+     * 分开问（`search/type?search_type=media_bangumi`）实测很不可靠：同一个关键词连
+     * 打三次，会是「0 条 / 412 / 0 条」这样的组合。而 all/v2 一次就把番剧、影视、
+     * 视频、用户全带回来，同一个词稳定出结果 —— 用户看到的「除了视频和用户都搜不到」
+     * 就是前者造成的。
+     *
+     * 两个接口对头部的要求一样：Referer / Origin 必须是站内搜索页，否则按爬虫拦下。
      */
-    const url = await signedUrl('/x/web-interface/wbi/search/type', {
-        search_type: searchType,
-        keyword: trimmed,
-        page,
-    });
-    const payload = unwrap(await fetchJsonWithHeaders<SearchTypePayload>(url, SEARCH_HEADERS));
-    const result = payload.result ?? [];
+    const payload = await searchAll(trimmed, page);
+    const group = (payload.result ?? []).find(entry => entry.result_type === resultType);
+    const result = group?.data ?? [];
     return result
         .filter(item => typeof item.season_id === 'number')
         .map(item => {
@@ -180,21 +180,47 @@ export const searchBangumiSeasons = async (
         });
 };
 
+/**
+ * 问一次「全部类型」的搜索，拿回分组之后的结果。
+ *
+ * 412 是这一站的风控，跟内容无关，隔一会儿再问就好 —— 所以重试一次，两次都挂才
+ * 算真的失败（调用方会看到空列表，而不是一个错误）。
+ */
+const searchAll = async (keyword: string, page: number): Promise<SearchAllPayload> => {
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+            const url = await signedUrl('/x/web-interface/wbi/search/all/v2', { keyword, page });
+            return unwrap(await fetchJsonWithHeaders<SearchAllPayload>(url, SEARCH_HEADERS));
+        } catch (error) {
+            lastError = error;
+            if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 400));
+        }
+    }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
 /** 站内搜索接口认的那个来源；别的值会被风控。 */
 const SEARCH_HEADERS: Record<string, string> = {
     Referer: 'https://search.bilibili.com/',
     Origin: 'https://search.bilibili.com',
 };
 
-/** 搜索接口回来的一条。 */
-interface SearchTypePayload {
+/** all/v2 回来的一条（按类型分组，每组自己的 data）。 */
+interface SearchAllPayload {
     result?: Array<{
-        season_id?: number;
-        title?: string;
-        cover?: string;
-        index_show?: string;
-        first_ep?: { ep_id?: number };
+        result_type?: string;
+        data?: SearchTypeItem[];
     }>;
+}
+
+/** 组里的一条。番剧/影视那一组用 season_id 认人。 */
+interface SearchTypeItem {
+    season_id?: number;
+    title?: string;
+    cover?: string;
+    index_show?: string;
+    first_ep?: { ep_id?: number };
 }
 
 export const listBangumiEpisodes = async (

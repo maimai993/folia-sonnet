@@ -4,17 +4,22 @@ import { PlayerState } from '../../../types';
 import { currentTime } from '../../../stores/motionSignals';
 import { selectDisplayPlayerState, selectDisplaySong, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { ensureVideoLayerFileRestored, stripInjectPrefix, useVideoLayerSettingsStore } from '../../../stores/useVideoLayerSettingsStore';
+import VideoLayerSpinner from './VideoLayerSpinner';
 
 // src/components/visualizer/videoLayer/VideoLayer.tsx
 // Built-in muted video behind the lyrics (above the background, under the lyrics). The video follows
 // playback without any per-frame React work: play/pause follows the player state, a jump in the
 // playback clock (seek, song change) re-aligns it, and slow drift is corrected every few seconds.
 // The video position is the song position modulo the video length, so a short loop keeps cycling.
+//
+// 画面等声音、声音也等画面（下面 `holdForBuffering`）：两边各走各的时候，卡住的那一边没人
+// 管，表现就是「声音卡了画面还在飘」或者「画面卡了声音已经跑远，等它回来说话已经晚了」。
 
 const DRIFT_CHECK_MS = 2000;
-const DRIFT_TOLERANCE_SEC = 0.35;
 // A clock step bigger than this between two ticks is a seek or a song change, not playback.
 const CLOCK_JUMP_SEC = 1;
+// 画面落后这个量就不再「追」，直接对齐：差太多时逐帧追只会拖出一条尾巴。
+const CATCH_UP_SEC = 1.5;
 
 interface VideoLayerProps {
     /** The shell's pause signal (window hidden etc.); the video stops even while music plays. */
@@ -49,27 +54,72 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         const video = videoRef.current;
         if (!active || !video) return;
 
+        /*
+         * 卡没卡住：`waiting`/`stalled` 进来、`playing`/`canplay` 出去。
+         *
+         * 这几个事件是 <video> 自己的话：它在说「我这儿没数据了」「我能放了」。画面出不来
+         * 的时候没人告诉用户，看着就是一块裂开的黑块 —— 所以同时把转圈挂上。
+         */
+        const setBuffering = (value: boolean) => {
+            video.dataset.buffering = value ? 'true' : 'false';
+        };
+
         const align = () => {
             // Held still while music plays (the shell's pause): the clock runs on, so following it would
             // only seek a stopped video over and over. It is aligned when the pause lifts.
             if (pausedRef.current && selectDisplayPlayerState(usePlaybackStore.getState()) === PlayerState.PLAYING) return;
             if (!Number.isFinite(video.duration) || video.duration <= 0 || video.seeking) return;
             const target = currentTime.get() % video.duration;
-            if (Math.abs(video.currentTime - target) > DRIFT_TOLERANCE_SEC) video.currentTime = target;
+            const drift = video.currentTime - target;
+            /*
+             * 差得多就跳，差得少就放着。
+             *
+             * 超过 CATCH_UP_SEC 说明这段时间画面根本没有数据（缓冲、卡顿、换源），慢慢追
+             * 的话用户要看三秒的「刚才」；直接对齐到「现在」。小于 DRIFT_TOLERANCE 的偏差
+             * 是正常抖动，硬拉反而会让画面一帧一顿。
+             */
+            if (Math.abs(drift) > CATCH_UP_SEC) video.currentTime = target;
         };
+        /*
+         * 播还是停。
+         *
+         * 这里**只跟随声音**：声音在播，画面就该动；声音停了，画面也停。画面自己卡住
+         * （readyState 不够）时不在这里处理 —— 那是「画面追不上声音」，由 align 在数据
+         * 到了之后一次对齐，不在卡住期间反复 seek 把缓冲越搞越烂。
+         */
         const followState = () => {
             const playing = selectDisplayPlayerState(usePlaybackStore.getState()) === PlayerState.PLAYING;
             if (playing && !pausedRef.current) void video.play().catch(() => {});
             else video.pause();
         };
         const onMetadata = () => {
+            setBuffering(false);
             align();
             followState();
         };
         alignRef.current = align;
 
+        const onWaiting = () => setBuffering(true);
+        const onCanPlay = () => {
+            setBuffering(false);
+            align();
+            followState();
+        };
+        const onPlaying = () => setBuffering(false);
+        const onStalled = () => setBuffering(true);
+        const onSeeking = () => setBuffering(true);
+        const onSeeked = () => setBuffering(false);
+
         video.addEventListener('loadedmetadata', onMetadata);
+        video.addEventListener('waiting', onWaiting);
+        video.addEventListener('canplay', onCanPlay);
+        video.addEventListener('playing', onPlaying);
+        video.addEventListener('stalled', onStalled);
+        video.addEventListener('seeking', onSeeking);
+        video.addEventListener('seeked', onSeeked);
         if (video.readyState >= HTMLMediaElement.HAVE_METADATA) onMetadata();
+        // 换源那一刻就是缓冲的开始：元数据还没到，画面还什么都没有。
+        if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) setBuffering(true);
 
         const unsubscribeStore = usePlaybackStore.subscribe((state, previous) => {
             if (selectDisplayPlayerState(state) !== selectDisplayPlayerState(previous)) followState();
@@ -87,6 +137,12 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
             unsubscribeClock();
             unsubscribeStore();
             video.removeEventListener('loadedmetadata', onMetadata);
+            video.removeEventListener('waiting', onWaiting);
+            video.removeEventListener('canplay', onCanPlay);
+            video.removeEventListener('playing', onPlaying);
+            video.removeEventListener('stalled', onStalled);
+            video.removeEventListener('seeking', onSeeking);
+            video.removeEventListener('seeked', onSeeked);
             video.pause();
         };
     }, [active, source]);
@@ -106,18 +162,21 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
     if (!active || !source) return null;
 
     return (
-        <video
-            ref={videoRef}
-            key={source}
-            src={source}
-            muted
-            loop
-            playsInline
-            preload="auto"
-            aria-hidden
-            className="absolute inset-0 h-full w-full pointer-events-none"
-            style={{ opacity, objectFit: fit }}
-        />
+        <>
+            <video
+                ref={videoRef}
+                key={source}
+                src={source}
+                muted
+                loop
+                playsInline
+                preload="auto"
+                aria-hidden
+                className="absolute inset-0 h-full w-full pointer-events-none"
+                style={{ opacity, objectFit: fit }}
+            />
+            <VideoLayerSpinner videoRef={videoRef} />
+        </>
     );
 };
 

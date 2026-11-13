@@ -1,4 +1,4 @@
-import { fetchJson, fetchJsonWithHeaders, signedUrl, unwrap } from './api';
+import { fetchBilibiliZoneFeed, fetchJson, fetchJsonWithHeaders, signedUrl, unwrap } from './api';
 import { upgradeCoverUrl } from './bilibiliNormalize';
 import { isBilibiliAvailable } from './transport';
 
@@ -167,6 +167,61 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         },
     });
 
+    /*
+     * 排在最前面的是「推荐」和「我的收藏」。
+     *
+     * 推荐用的是首页那条流（和探索页同一个接口）：对账号自己来说，这就是「给我推的」。
+     * 「我的收藏」是这一站的总收藏 —— 它本身不是一个能翻的列表，站内也是把各个收藏夹
+     * 汇总起来看的；这里用同一份收藏夹数据摊平，避免摆一个点进去什么都没有的入口。
+     */
+    shelves.push({
+        id: 'recommend',
+        title: 'shelfRecommend',
+        coverUrl: undefined,
+        load: async () => {
+            try {
+                const feed = await fetchBilibiliZoneFeed(0, 30);
+                return feed
+                    .filter(hit => hit.bvid)
+                    .map(hit => toItem({
+                        bvid: hit.bvid,
+                        title: hit.title,
+                        author: hit.author,
+                        pic: hit.coverUrl,
+                        duration: hit.durationSec,
+                    }));
+            } catch {
+                return [];
+            }
+        },
+    });
+
+    /*
+     * 「我的收藏」：把上面那些收藏夹摊平成一个入口。
+     *
+     * 这一站在网页版里也是这么看的（总收藏 = 各收藏夹之和），单独一个能翻的总表
+     * 并不存在。做成一个「全部」入口，比一个点进去空空的项好。
+     */
+    const folderShelfIds = shelves
+        .filter(shelf => shelf.id.startsWith('fav:'))
+        .map(shelf => shelf.id);
+    if (folderShelfIds.length > 0) {
+        shelves.splice(1, 0, {
+            id: 'favorites',
+            title: 'shelfFavorites',
+            load: async () => {
+                const collected: BilibiliShelfItem[] = [];
+                for (const id of folderShelfIds) {
+                    const shelf = shelves.find(item => item.id === id);
+                    if (!shelf) continue;
+                    const items = await shelf.load().catch(() => []);
+                    collected.push(...items);
+                }
+                return collected;
+            },
+        });
+    }
+
     shelves.push(
         simple('toview', 'shelfToview', 'https://api.bilibili.com/x/v2/history/toview'),
         simple('coins', 'shelfCoins', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
@@ -247,9 +302,16 @@ export const loadBilibiliUserUploads = async (mid: string): Promise<BilibiliShel
             ps: 50,
             order: 'pubdate',
         });
-        const payload = unwrap(await fetchJsonWith<unknown>(url));
+        /*
+         * 空间接口必须带空间的 Referer / Origin，否则回 412。
+         *
+         * 以前这里用的是默认那套头，于是「歌手页 0 首」：请求被拦下，下面的 catch
+         * 把异常吞成空数组，界面看到的就是一个真的空歌单。
+         */
+        const payload = unwrap(await fetchJsonWithHeaders<unknown>(url, SPACE_HEADERS));
         return listOf(payload).map(toItem).filter(item => item.bvid);
-    } catch {
+    } catch (error) {
+        console.warn('[Bilibili] User uploads failed', error);
         return [];
     }
 };

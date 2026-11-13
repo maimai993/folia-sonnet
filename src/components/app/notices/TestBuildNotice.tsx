@@ -12,16 +12,50 @@ import { isOfficialBuildBranch } from '../../../utils/buildChannel';
 //
 // 判据用的是构建时钉进包里的 __GIT_BRANCH__（vite.config.ts 在 define 里写），不是运行时的 git：
 // 装到手机上的包没有仓库，也不该为了弹这个窗去问网络。什么算正式版见 utils/buildChannel。
+//
+// 「此版本不再提示」按**版本号**记：装了一个新的测试包还会再弹一次。这个提醒的意义是
+// 「你现在用的这个包是什么来路」，换了包就该重新说一遍；只按一个布尔关掉的话，之后每个
+// 测试包都会静默，等于把这个提醒删了。
+
+/** 记「这个版本已经确认过」的键。值是版本号，不是 true/false。 */
+const DISMISSED_KEY = 'test_build_notice_dismissed_version';
+
+const readDismissedVersion = (): string => {
+    try {
+        return localStorage.getItem(DISMISSED_KEY) ?? '';
+    } catch {
+        return '';
+    }
+};
+
+const rememberDismissed = (version: string): void => {
+    try {
+        localStorage.setItem(DISMISSED_KEY, version);
+    } catch {
+        // 存不进去就下次再弹一遍，不算错误。
+    }
+};
 
 export const TestBuildNotice: React.FC = () => {
     const { t } = useTranslation();
-    // 每次启动都弹：这版是什么来路，不该只提醒一次就被记成「已读」。
-    const [isOpen, setIsOpen] = useState(() => !isOfficialBuildBranch(__GIT_BRANCH__));
+    const isTestBuild = !isOfficialBuildBranch(__GIT_BRANCH__);
+    /*
+     * 开头就判一次版本：这一版确认过就不再弹。**不是**「确认过就永远不弹」——
+     * 换一个包，版本号变了，提醒照旧回来。
+     */
+    const [isOpen, setIsOpen] = useState(() => (
+        isTestBuild && readDismissedVersion() !== __APP_VERSION__
+    ));
 
     useEffect(() => {
-        if (isOfficialBuildBranch(__GIT_BRANCH__)) return;
+        if (!isTestBuild) return;
         console.info(`[TestBuild] 这一版从 ${__GIT_BRANCH__} 分支构建，不是 main / release/*，启动时提醒用户这是测试版`);
-    }, []);
+    }, [isTestBuild]);
+
+    const dismissForThisVersion = () => {
+        rememberDismissed(__APP_VERSION__);
+        setIsOpen(false);
+    };
 
     if (!isOpen) return null;
 
@@ -32,7 +66,16 @@ export const TestBuildNotice: React.FC = () => {
             size="s"
             title={t('testBuild.title', 'Test build')}
             titleLead={<TriangleAlert size={16} className="text-[color:var(--st-warn,var(--st-t2))]" />}
-            footer={<SheetButton onClick={() => setIsOpen(false)}>{t('testBuild.ok', 'Got it')}</SheetButton>}
+            footer={(
+                <>
+                    <SheetButton onClick={() => setIsOpen(false)}>
+                        {t('testBuild.ok', 'Got it')}
+                    </SheetButton>
+                    <SheetButton onClick={dismissForThisVersion}>
+                        {t('testBuild.dontShowAgain', 'Do not show for this version')}
+                    </SheetButton>
+                </>
+            )}
         >
             <p className="text-[13px] leading-6 text-[color:var(--st-t2)]">
                 {t('testBuild.body', {

@@ -9,7 +9,12 @@ import {
 import { buildSearchKeyword, pickBestMvHit } from '../services/bilibili/mvMatch';
 import { pickMvHitWithAi } from '../services/bilibili/aiMvPick';
 import { isAiTargetConfigured } from '../services/aiCompletion';
-import { isBilibiliAvailable } from '../services/bilibili/transport';
+import { isBilibiliAvailable, proxyBilibiliStream } from '../services/bilibili/transport';
+import { warmStreamCache } from '../services/bilibili/streamPrefetch';
+import { hasRealLyrics, stripPlaceholderLines } from '../services/bilibili/subtitleFilter';
+import { buildLyricsFromCues, pickSubtitleTracks } from '../services/bilibili/bilibiliLyrics';
+import { fetchBilibiliSubtitle, type PlayUrlSubtitle } from '../services/bilibili/api';
+import type { LyricData } from '../types';
 
 // src/stores/useBilibiliMvStore.ts
 //
@@ -145,6 +150,35 @@ export type BilibiliMvStore = BilibiliMvState & BilibiliMvActions;
  * AI 那条路**任何失败都降级**，且不往分辨率里写错误：用户没配 AI、Key 过期、
  * 网络抖动，都不该让「这首歌没有 MV」。降级之后的行为和以前完全一样。
  */
+/**
+ * 这条投稿的字幕，转成播放页认的歌词格式。
+ *
+ * 三步走：挑一轨（中文优先、跳过 AI 生成的那种）→ 拉它的 cues → 拼成歌词。
+ * 任何一步拿不到、或者拼出来只是「纯音乐欣赏」这种占位，就回 null —— 对播放页来说
+ * 那等于「这条投稿没有歌词」，它就不该把这份字幕换上去。
+ */
+const resolveMvSubtitles = async (
+    tracks: PlayUrlSubtitle[],
+    bvid: string,
+): Promise<LyricData | null> => {
+    if (!tracks || tracks.length === 0) return null;
+    try {
+        const picked = pickSubtitleTracks(tracks);
+        if (!picked.primary?.subtitle_url) return null;
+        const primaryCues = await fetchBilibiliSubtitle(picked.primary.subtitle_url);
+        if (!primaryCues || primaryCues.length === 0) return null;
+        const secondaryCues = picked.secondary?.subtitle_url
+            ? await fetchBilibiliSubtitle(picked.secondary.subtitle_url).catch(() => [])
+            : [];
+        const lyrics = buildLyricsFromCues(primaryCues, secondaryCues);
+        if (!hasRealLyrics(lyrics)) return null;
+        return stripPlaceholderLines(lyrics);
+    } catch (error) {
+        console.warn('[Bilibili] MV subtitles failed', bvid, error);
+        return null;
+    }
+};
+
 const pickBest = async (
     hits: readonly BilibiliSearchHit[],
     input: { title: string; artist: string; durationSec?: number },
@@ -269,16 +303,41 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
 
             const info = await fetchBilibiliVideoInfo(best.bvid);
             const track = await fetchBilibiliPlayUrl(best.bvid, info.cid);
+            /*
+             * 画面和声音都走原生中转。
+             *
+             * 直链是「一组候选」（主地址 + 若干备用），其中总有几台对某些投稿回 403。
+             * 这里以前直接把 track.url 喂给 <video>：抽到坏节点就是画面出不来 —— 正是
+             * 「别的平台匹配的 MV 放不出来、直接放这一站反而正常」的来源（那条路早就
+             * 走中转）。中转由原生按顺序试，403 换下一台。
+             *
+             * 中转起不来就退回直链，至少还留一次机会。
+             */
+            const streamHeaders = {
+                Referer: 'https://www.bilibili.com/',
+                Origin: 'https://www.bilibili.com',
+            };
+            const [localVideo, localAudio] = await Promise.all([
+                proxyBilibiliStream(track.urls.length > 0 ? track.urls : [track.url], streamHeaders),
+                track.audioUrls.length > 0 || track.audioUrl
+                    ? proxyBilibiliStream(track.audioUrls.length > 0 ? track.audioUrls : [track.audioUrl], streamHeaders)
+                    : Promise.resolve(null),
+            ]);
             const stream: BilibiliMvStream = {
                 bvid: best.bvid,
                 cid: info.cid,
                 title: info.title || best.title,
                 author: info.author || best.author,
                 durationSec: info.durationSec || best.durationSec,
-                videoUrl: track.url,
-                audioUrl: track.audioUrl,
+                videoUrl: localVideo ?? track.url,
+                audioUrl: localAudio ?? (track.audioUrl || track.url),
                 quality: track.height,
+                // 这条投稿自己的字幕，筛掉占位行之后才留着；不合格就是 null。
+                subtitles: await resolveMvSubtitles(track.subtitles, best.bvid),
             };
+            // 画面地址到手就预热开头，切过去时立刻有一帧。
+            void warmStreamCache(stream.videoUrl);
+            if (stream.audioUrl) void warmStreamCache(stream.audioUrl);
             finish({ state: 'ready', stream, keyword, manual: false });
         } catch (error) {
             const message = error instanceof BilibiliApiError

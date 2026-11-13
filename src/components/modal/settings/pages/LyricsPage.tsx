@@ -3,6 +3,7 @@ import { RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useLyricMatchSources } from '../../../../hooks/useLyricMatchSources';
+import MvLyricSourceSetting from '../MvLyricSourceSetting';
 import { resyncAllFolders } from '../../../../services/localMusicService';
 import { useLyricSettingsStore } from '../../../../stores/useLyricSettingsStore';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
@@ -100,6 +101,7 @@ const LyricsPage: React.FC = () => {
                 <Row option={O.keepProviderWordTiming} note={t('options.keepProviderWordTimingDesc')}>
                     <Toggle checked={lyric.keepProviderWordTiming} onChange={lyric.setKeepProviderWordTiming} />
                 </Row>
+                <MvLyricSourceSetting />
                 <Row
                     option={O.localPriority}
                     hint={t(lyric.localPriority === 'local' ? 'options.localLyricsPriorityLocalDesc' : 'options.localLyricsPriorityOnlineDesc')}

@@ -133,6 +133,22 @@ const readStoredLyricStaffAbsorbMode = (): LyricStaffAbsorbMode => {
     return saved === 'before' || saved === 'both' || saved === 'off' ? saved : DEFAULT_LYRIC_STAFF_ABSORB_MODE;
 };
 
+/** MV 字幕的来源：原平台歌词，还是这条投稿自己的字幕。 */
+export type MvLyricSource = 'platform' | 'video';
+
+const MV_LYRIC_SOURCE_KEY = 'mv_lyric_source';
+const DEFAULT_MV_LYRIC_SOURCE: MvLyricSource = 'platform';
+
+/** 存坏的、缺失的都退回默认（原平台歌词）。 */
+const readStoredMvLyricSource = (): MvLyricSource => {
+    try {
+        const saved = localStorage.getItem(MV_LYRIC_SOURCE_KEY);
+        return saved === 'video' || saved === 'platform' ? saved : DEFAULT_MV_LYRIC_SOURCE;
+    } catch {
+        return DEFAULT_MV_LYRIC_SOURCE;
+    }
+};
+
 export type LyricSettingsState = {
     autoUseBestLyric: boolean;
     preferredAlternativeLyricSource: LyricSourcePreference;
@@ -153,6 +169,14 @@ export type LyricSettingsState = {
     lyricStaffPattern: string;
     /** Run AI word segmentation by itself on a song that has none saved yet (issue #960). */
     autoAiLyricSegmentation: boolean;
+    /**
+     * 给「别的平台的歌配 MV」时，字幕用哪一边的。
+     *
+     * `platform`（默认）：用这首歌自己平台的歌词。MV 只是配一个画面，歌词该是听众认得的那份。
+     * `video`：用这条投稿自己的字幕 —— 字幕和画面同源，卡点对得更准，但那份字幕
+     * 常常只是「纯音乐欣赏」之类的占位，或者压根没有。
+     */
+    mvLyricSource: MvLyricSource;
     handleToggleAutoUseBestLyric: (enable: boolean) => void;
     handleSetPreferredAlternativeLyricSource: (source: LyricSourcePreference) => void;
     handleSetLocalLyricProviderSource: (source: LyricProviderSource) => void;
@@ -166,6 +190,7 @@ export type LyricSettingsState = {
     handleSetLyricStaffAbsorbMode: (mode: LyricStaffAbsorbMode) => void;
     handleSetLyricStaffPattern: (pattern: string) => void;
     handleToggleAutoAiLyricSegmentation: (enable: boolean) => void;
+    handleSetMvLyricSource: (source: MvLyricSource) => void;
 };
 
 export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
@@ -183,6 +208,7 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
     lyricStaffPattern: getStoredString('lyrics_staff_pattern', ''),
     // Off by default: every song it runs on is a paid model request.
     autoAiLyricSegmentation: getStoredBoolean(AUTO_AI_LYRIC_SEGMENTATION_KEY, false),
+    mvLyricSource: readStoredMvLyricSource(),
     handleToggleAutoUseBestLyric: (enable) => {
         setStoredBoolean('auto_use_best_lyric', enable);
         set({ autoUseBestLyric: enable });
@@ -296,6 +322,11 @@ export const useLyricSettingsStore = create<LyricSettingsState>((set, get) => ({
             localStorage.removeItem('lyrics_staff_pattern');
         }
     },
+    handleSetMvLyricSource: (source) => {
+        localStorage.setItem(MV_LYRIC_SOURCE_KEY, source);
+        set({ mvLyricSource: source });
+    },
+
     handleToggleAutoAiLyricSegmentation: (enable) => {
         setStoredBoolean(AUTO_AI_LYRIC_SEGMENTATION_KEY, enable);
         set({ autoAiLyricSegmentation: enable });
@@ -321,6 +352,7 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     lyricStaffAbsorbMode: state.lyricStaffAbsorbMode,
     lyricStaffPattern: state.lyricStaffPattern,
     autoAiLyricSegmentation: state.autoAiLyricSegmentation,
+    mvLyricSource: state.mvLyricSource,
     handleToggleAutoUseBestLyric: state.handleToggleAutoUseBestLyric,
     handleSetPreferredAlternativeLyricSource: state.handleSetPreferredAlternativeLyricSource,
     handleSetLocalLyricProviderSource: state.handleSetLocalLyricProviderSource,
@@ -334,5 +366,6 @@ export const selectLyricSettingsSnapshot = (state: LyricSettingsState) => ({
     handleSetLyricStaffAbsorbMode: state.handleSetLyricStaffAbsorbMode,
     handleSetLyricStaffPattern: state.handleSetLyricStaffPattern,
     handleToggleAutoAiLyricSegmentation: state.handleToggleAutoAiLyricSegmentation,
+    handleSetMvLyricSource: state.handleSetMvLyricSource,
     lyricStaffPatternError: getLyricStaffPatternError(state.lyricStaffPattern),
 });

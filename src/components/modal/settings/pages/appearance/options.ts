@@ -103,6 +103,8 @@ export const O = {
         available: () => !hasElectronBridge(),
     }),
     lyricFlat: option(VIEW, 'lyricFlat', 'options.lyricFlat', { noteKey: 'options.lyricFlatDesc' }),
+    // MV 字幕来源：配 MV 时歌词用原平台的还是这条投稿的。
+    mvLyricSource: option(VIEW, 'mvLyricSource', 'options.mvLyricSource', { noteKey: 'options.mvLyricSourceDesc' }),
     deviceType: option(VIEW, 'deviceType', 'options.deviceType', {
         noteKey: 'options.deviceTypeDesc',
         available: isCapacitorAndroid,

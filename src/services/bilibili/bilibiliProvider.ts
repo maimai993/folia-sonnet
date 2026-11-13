@@ -550,6 +550,13 @@ export const bilibiliProvider: OnlineMusicProvider = {
             if (!mid) return null;
             const profile = await fetchBilibiliUserProfile(mid);
             if (!profile) return null;
+            /*
+             * 投稿数一并带回去：歌手页的表头就是读这个显示「共 N 首」的。
+             *
+             * 没有它，页面只能显示成 0 —— 数据其实拿得到，只是没往上传。
+             * 取不到就留 undefined，让界面照旧不显示，而不是写一个 0。
+             */
+            const uploads = await loadBilibiliUserUploads(mid);
             return {
                 providerId: 'bilibili' as const,
                 id: bilibiliArtistId(mid),
@@ -557,6 +564,7 @@ export const bilibiliProvider: OnlineMusicProvider = {
                 type: 'artist' as const,
                 coverUrl: profile.avatarUrl || undefined,
                 description: profile.sign || undefined,
+                trackCount: uploads.length > 0 ? uploads.length : undefined,
             };
         },
 

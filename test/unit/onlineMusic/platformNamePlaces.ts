@@ -93,7 +93,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/visualizer/useVisualizerRendererModel.ts': { n: { bilibili: 5 }, kind: 'doc', why: 'the comment saying the video platform has no lyrics to feed the renderer' },
     'src/components/login/window/LoginScreen.tsx': { n: { lxmusic: 4 }, kind: 'file', why: 'the login window explains what each accountless source is; it names them in comments only' },
     'src/stores/useBilibiliAuthStore.ts': { n: { bilibili: 22 }, kind: 'file', why: 'that platform own sign-in state' },
-    'src/stores/useBilibiliMvStore.ts': { n: { bilibili: 30 }, kind: 'file', why: 'that platform own MV resolution and cache' },
+    'src/stores/useBilibiliMvStore.ts': { n: { bilibili: 41 }, kind: 'file', why: 'that platform own MV resolution and cache' },
     'src/stores/useSearchNavigationStore.ts': { n: { bilibili: 2 }, kind: 'file', why: 'the search source list, where the video platform is one more source' },
     'src/types/bilibili.ts': { n: { bilibili: 11 }, kind: 'file', why: 'that platform own types' },
     'src/components/panelTab/FmTab.tsx': { n: { qq: 1, bodian: 1 }, kind: 'doc' },   // comments only,
