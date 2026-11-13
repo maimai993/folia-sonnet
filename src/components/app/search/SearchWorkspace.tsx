@@ -247,8 +247,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                         {searchSourceTab === 'bilibili' ? (
                             <BilibiliVideoResults
                                 query={submittedQuery}
-                                currentSongKey={currentSongKey}
-                                onPinned={onOpenPlayerAfterPin}
+                                onPlayTrack={onPlayTrack}
                             />
                         ) : isSearching ? (
                             <div className="flex h-full items-center justify-center">

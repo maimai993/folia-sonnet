@@ -1,11 +1,15 @@
 import type { OnlineMusicProvider, ProviderPage } from '../../types/onlineMusic';
 import type { BilibiliSearchHit } from '../../types/bilibili';
+import QRCode from 'qrcode';
 import {
     fetchBilibiliRecommendations,
     fetchBilibiliPlayUrl,
     fetchBilibiliVideoInfo,
+    fetchBilibiliSubtitle,
     searchBilibiliVideos,
 } from './api';
+import { pickSubtitleTracks } from './bilibiliLyrics';
+import { buildLyricsFromCues } from './bilibiliLyrics';
 import { bilibiliBvidOf, bilibiliSongId, normalizeBilibiliSong } from './bilibiliNormalize';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
 import { isBilibiliAvailable } from './transport';
@@ -118,16 +122,21 @@ export const bilibiliProvider: OnlineMusicProvider = {
         },
 
         /**
-         * 第二步：把 key 变成能画出来的二维码内容。
+         * 第二步：把 key 变成能直接画出来的二维码图。
          *
-         * bilibili 这里给的是可以直接编码的 URL（不是图片），界面自己画码。
+         * bilibili 给的是二维码的**内容**（一串 URL），不是图；而 omni 这一层约定
+         * `createQr` 回的是**能塞进 <img src> 的图**（别的平台回 base64 / data URL）。
+         * 所以这里要自己编码一次 —— 直接把内容交出去，界面拿它当 src 就是一格裂图。
          */
         async createQr(key) {
-            if (pendingQr && pendingQr.qrcodeKey === key) return pendingQr.url;
-            // 拿不到那一次的结果（重进面板之类），重新要一张。
-            const code = await generateQrCode();
-            pendingQr = code;
-            return code.url;
+            let content = pendingQr && pendingQr.qrcodeKey === key ? pendingQr.url : '';
+            if (!content) {
+                // 拿不到那一次的结果（重进面板之类），重新要一张。
+                const code = await generateQrCode();
+                pendingQr = code;
+                content = code.url;
+            }
+            return QRCode.toDataURL(content, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
         },
 
         /** 第三步：问一次扫码状态；确认后换出 cookie 落进原生，再读回登录态。 */
@@ -150,6 +159,56 @@ export const bilibiliProvider: OnlineMusicProvider = {
                     return { state: 'error', message: poll.message ?? '' };
                 default:
                     return { state: 'waiting' };
+            }
+        },
+    },
+
+    lyrics: {
+        /**
+         * 这条视频的字幕就是它的歌词。
+         *
+         * 没有字幕就是没有歌词 —— 这里**不**去找别的平台借一份：B 站视频和别的平台的
+         * 歌曲没有对应关系，硬匹配只会给出一份不相干的词（见 provider 头部关于
+         * 「自动匹配」的说明）。
+         *
+         * 中英两条轨都在时，英文那条当翻译（见 bilibiliLyrics.ts）。
+         */
+        async getLyrics(song) {
+            const empty = { lyrics: null, isPureMusic: false };
+            const bvid = bilibiliBvidOf(song);
+            if (!bvid) return empty;
+            try {
+                const info = await fetchBilibiliVideoInfo(bvid);
+                // 字幕在取流那一次响应里，不在详情里。
+                const stream = await fetchBilibiliPlayUrl(bvid, info.cid);
+                const tracks = stream.subtitles;
+                if (tracks.length === 0) return empty;
+                const { primary, secondary } = pickSubtitleTracks(tracks);
+                if (!primary?.subtitle_url) return empty;
+                const primaryCues = await fetchBilibiliSubtitle(primary.subtitle_url);
+                if (primaryCues.length === 0) return empty;
+                const secondaryCues = secondary?.subtitle_url
+                    ? await fetchBilibiliSubtitle(secondary.subtitle_url).catch(() => [])
+                    : [];
+                const lyrics = buildLyricsFromCues(primaryCues, secondaryCues, {
+                    title: song.name,
+                    artist: typeof song.artists?.[0]?.name === 'string' ? song.artists[0].name : undefined,
+                });
+                if (lyrics.lines.length === 0) return empty;
+                // 有译文就把它整段交出去，界面据此显示「翻译」那一栏。
+                const translationText = secondaryCues.length > 0
+                    ? lyrics.lines.map(line => line.translation ?? '').filter(Boolean).join('\n')
+                    : null;
+                return {
+                    lyrics,
+                    mainText: lyrics.lines.map(line => line.fullText).join('\n'),
+                    translationText: translationText || null,
+                    isPureMusic: false,
+                };
+            } catch (error) {
+                // 字幕取不到不是播放失败：没有歌词而已，别把错抛到播放那边。
+                console.warn('[Bilibili] Subtitle read failed', error);
+                return empty;
             }
         },
     },

@@ -5,7 +5,9 @@ import {
     usePlaybackStore,
 } from '../../stores/usePlaybackStore';
 import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
-import { useVideoLayerSettingsStore } from '../../stores/useVideoLayerSettingsStore';
+import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
+import { bilibiliBvidOf } from '../../services/bilibili/bilibiliNormalize';
+import { fetchBilibiliPlayUrl, fetchBilibiliVideoInfo } from '../../services/bilibili/api';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
 
@@ -27,6 +29,8 @@ export const songKeyOf = (
     title: string | null | undefined,
     artist: string | null | undefined,
 ): string => `${(title ?? '').trim().toLowerCase()}|||${(artist ?? '').trim().toLowerCase()}`;
+
+
 
 /** 从一首歌里取 MV 需要的两个字段。 */
 const describe = (song: unknown): { title: string; artist: string } => {
@@ -60,7 +64,19 @@ const BilibiliMvLayer: React.FC = () => {
     }, [displaySong, playQueue]);
     const next = React.useMemo(() => describe(nextSong), [nextSong]);
 
-    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
+    /*
+     * 正在放的这首歌**本身就是一条 B 站视频**（用户从 B 站推荐页或搜索里点的它）。
+     *
+     * 这条路不走匹配：它就是视频，画面和声音都是它自己的。匹配那条路只用于
+     * 「放的是别的平台的歌、想给它找个 MV」。
+     */
+    const ownBvid = React.useMemo(
+        () => bilibiliBvidOf(displaySong as { id?: string } | null),
+        [displaySong],
+    );
+    const isOwnVideo = ownBvid.length > 0;
+
+    const active = enabled && isBilibiliAvailable() && current.title.length > 0 && !isOwnVideo;
 
     // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
     React.useEffect(() => {
@@ -84,25 +100,70 @@ const BilibiliMvLayer: React.FC = () => {
         );
     }, [active, next.title, next.artist, duration]);
 
-    const videoUrl = useBilibiliMvStore(state => (
+    // 匹配出来的那条（给别的平台的歌找的 MV）。自己就是视频时不看这里。
+    const matchedVideoUrl = useBilibiliMvStore(state => (
         active ? state.bySongKey[songKey]?.stream?.videoUrl ?? '' : ''
     ));
-    const audioUrl = useBilibiliMvStore(state => (
+    const matchedAudioUrl = useBilibiliMvStore(state => (
         active ? state.bySongKey[songKey]?.stream?.audioUrl ?? '' : ''
     ));
+
+    /*
+     * 自己就是视频时，画面和声音都现取。
+     *
+     * 播放器那一侧已经通过 provider 的 getAudioSource 把**声音**换成了这条视频的
+     * DASH 音轨，这里只需要再取一次画面地址注入视频层 —— 两端来自同一个 cid，
+     * 所以天然同步。
+     */
+    const [ownVideoUrl, setOwnVideoUrl] = React.useState('');
+    React.useEffect(() => {
+        if (!isOwnVideo) {
+            setOwnVideoUrl('');
+            return undefined;
+        }
+        let alive = true;
+        void (async () => {
+            try {
+                const info = await fetchBilibiliVideoInfo(ownBvid);
+                const track = await fetchBilibiliPlayUrl(ownBvid, info.cid);
+                if (alive) setOwnVideoUrl(track.url);
+            } catch (error) {
+                // 取不到画面就只是没有背景，声音照放，不要影响播放。
+                console.warn('[Bilibili] Video stream unavailable', error);
+                if (alive) setOwnVideoUrl('');
+            }
+        })();
+        return () => { alive = false; };
+    }, [isOwnVideo, ownBvid]);
+
+    const videoUrl = isOwnVideo ? ownVideoUrl : matchedVideoUrl;
+    // 自己就是视频时声音由播放器那边换（getAudioSource），这里不重复换。
+    const audioUrl = isOwnVideo ? '' : matchedAudioUrl;
 
     /*
      * 画面：注入到视频层。离开时清掉注入，用户原本选的视频（如果有）原样回来。
      *
      * 不落盘：injectedUrl 只在内存里，所以重启之后一定回到用户自己的选择。
+     *
+     * 切换时**先清空、下一帧再写新的**。直接换的话，`<video>` 上还挂着上一条的
+     * src，两个源抢同一个元素，表现就是画面裂开 / 放不出来。先清空让元素回到
+     * 「没有源」的状态，再把新的写进去，它才会重新走一次加载。
      */
     React.useEffect(() => {
         if (!videoUrl) return undefined;
-        useVideoLayerSettingsStore.getState().setInjectedUrl(videoUrl);
+        const store = useVideoLayerSettingsStore.getState();
+        // 上一条（如果还是注入的那条）先摘掉 —— 用户自己的视频不动。
+        if (store.injectedUrl && isInjectedVideoUrl(store.injectedUrl)) store.setInjectedUrl(null);
+        // 一帧之后再写：让 <video> 先把上一条彻底卸掉。写的这一条带上前缀，
+        // 之后才分得清「这条是注入的」和「用户自己选的」。
+        const frame = requestAnimationFrame(() => {
+            useVideoLayerSettingsStore.getState().setInjectedUrl(withInjectPrefix(videoUrl));
+        });
         return () => {
-            const store = useVideoLayerSettingsStore.getState();
-            // 只有「现在注入的还是这一条」才清：换歌时新的那条已经写进去了。
-            if (store.injectedUrl === videoUrl) store.setInjectedUrl(null);
+            cancelAnimationFrame(frame);
+            const current = useVideoLayerSettingsStore.getState();
+            // 只清自己写进去的那条；用户自己选的视频层永远不碰。
+            if (current.injectedUrl && isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
         };
     }, [videoUrl]);
 

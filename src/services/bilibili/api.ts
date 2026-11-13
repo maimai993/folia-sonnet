@@ -262,7 +262,55 @@ interface PlayUrlDash {
         }>;
     };
     durl?: Array<{ url?: string; backup_url?: string[] }>;
+    /**
+     * 字幕。
+     *
+     * 只有登录了才有内容，而且 UP 主可以一个都不上传 —— 所以这里随时可能是空的，
+     * 空就是「这条视频没有字幕」，不是出错。
+     */
+    subtitle?: {
+        subtitles?: PlayUrlSubtitle[];
+    };
 }
+
+/** 一条字幕轨：哪个语言、界面叫什么、文件在哪。 */
+export interface PlayUrlSubtitle {
+    /** 语言代码：ai-zh 是自动生成的中文，zh-CN / zh-Hans 是 UP 主上传的。 */
+    lan?: string;
+    /** 这个语言在界面上叫什么（「中文（自动生成）」之类）。 */
+    lan_doc?: string;
+    /** 字幕文件的地址，JSON。协议相对地址，前面要补 https:。 */
+    subtitle_url?: string;
+}
+
+/** 字幕文件里的 `body` 是一条条带时间的句子。 */
+interface SubtitleBody {
+    body?: Array<{ from?: number; to?: number; content?: string }>;
+}
+
+/**
+ * 取一条字幕的内容。
+ *
+ * 字幕地址不是 bilibili 的接口，是它 CDN 上的一个**裸 JSON 文件**（没有 code/message
+ * 那层信封），所以这里不能用 `unwrap`。地址还常常是协议相对的（`//aisubtitle...`），
+ * 不补 `https:` 在 WebView 里会被当成相对路径。
+ */
+export const fetchBilibiliSubtitle = async (
+    subtitleUrl: string,
+): Promise<Array<{ from?: number; to?: number; content?: string }>> => {
+    const absolute = subtitleUrl.startsWith('//') ? `https:${subtitleUrl}` : subtitleUrl;
+    const response = await requestBilibiliUrl(absolute, { method: 'GET' });
+    if (!response.ok) {
+        throw new BilibiliApiError(response.status, 'subtitle file not readable');
+    }
+    try {
+        const body = JSON.parse(response.bodyText) as SubtitleBody;
+        return Array.isArray(body?.body) ? body.body : [];
+    } catch {
+        // 有时候会拿到一大段 HTML（被拦住时），当成「没有字幕」比抛错好。
+        return [];
+    }
+};
 
 /**
  * 从 DASH 的画面轨里挑一条最合适的。
@@ -322,7 +370,7 @@ export const fetchBilibiliPlayUrl = async (
     bvid: string,
     cid: number,
     quality: string = 'standard',
-): Promise<{ url: string; height: number; audioUrl: string }> => {
+): Promise<{ url: string; height: number; audioUrl: string; subtitles: PlayUrlSubtitle[] }> => {
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
         cid,
@@ -333,7 +381,8 @@ export const fetchBilibiliPlayUrl = async (
     const payload = unwrap(await fetchJson<PlayUrlDash>(url));
     const track = pickVideoTrack(payload);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
-    return { ...track, audioUrl: pickAudioTrack(payload) };
+    // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。
+    return { ...track, audioUrl: pickAudioTrack(payload), subtitles: payload.subtitle?.subtitles ?? [] };
 };
 
 /**

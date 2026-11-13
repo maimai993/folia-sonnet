@@ -98,7 +98,6 @@ interface BilibiliMvState {
      * 挑过之后这首歌就放这一条，不再自动匹配（否则下一次解析又会被搜索结果盖掉）。
      * 点「重新匹配」清掉它，回到自动。
      */
-    pinned: Record<string, string>;
 }
 
 const initialState: BilibiliMvState = {
@@ -107,7 +106,6 @@ const initialState: BilibiliMvState = {
     useAiMatch: readStoredUseAi(),
     bySongKey: {},
     inflight: {},
-    pinned: {},
 };
 
 interface BilibiliMvActions {
@@ -119,7 +117,6 @@ interface BilibiliMvActions {
      *
      * 它自己解析播放地址并打开开关：用户点的是「看这个视频」，不该还要再回设置里开一次。
      */
-    pinVideo: (songKey: string, bvid: string) => Promise<void>;
     resolveForSong: (
         songKey: string,
         title: string,
@@ -189,68 +186,6 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
         set({ useAiMatch: use });
     },
 
-    pinVideo: async (songKey, bvid) => {
-        if (!songKey || !bvid) return;
-        // 钉住 + 打开开关：用户点的是「看这个视频」。
-        writeStoredEnabled(true);
-        set(current => ({
-            enabled: true,
-            pinned: { ...current.pinned, [songKey]: bvid },
-            inflight: { ...current.inflight, [songKey]: true },
-            bySongKey: {
-                ...current.bySongKey,
-                [songKey]: {
-                    state: 'resolving',
-                    songKey,
-                    stream: null,
-                    keyword: bvid,
-                    manual: true,
-                    resolvedAt: 0,
-                },
-            },
-        }));
-
-        const finish = (resolution: Omit<CachedResolution, 'songKey' | 'resolvedAt'>) => {
-            set(current => {
-                const { [songKey]: _gone, ...rest } = current.inflight;
-                return {
-                    inflight: rest,
-                    bySongKey: {
-                        ...current.bySongKey,
-                        [songKey]: { ...resolution, songKey, resolvedAt: Date.now() },
-                    },
-                };
-            });
-        };
-
-        try {
-            const info = await fetchBilibiliVideoInfo(bvid);
-            const track = await fetchBilibiliPlayUrl(bvid, info.cid);
-            finish({
-                state: 'ready',
-                stream: {
-                    bvid,
-                    cid: info.cid,
-                    title: info.title,
-                    author: info.author,
-                    durationSec: info.durationSec,
-                    videoUrl: track.url,
-                    audioUrl: track.audioUrl,
-                    quality: track.height,
-                },
-                keyword: bvid,
-                manual: true,
-            });
-        } catch (error) {
-            const message = error instanceof BilibiliApiError
-                ? error.message
-                : error instanceof Error
-                    ? error.message
-                    : String(error);
-            finish({ state: 'error', stream: null, keyword: bvid, manual: true, message });
-        }
-    },
-
     /**
      * 解析一首歌的 MV。
      *
@@ -264,7 +199,6 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
 
         const cached = state.bySongKey[songKey];
         // 这首歌被手动钉过某条 BV：除非 force（「重新匹配」会先清掉钉的那条），否则不自动搜。
-        if (!force && state.pinned[songKey]) return;
         if (!force && cached) {
             const fresh = Date.now() - cached.resolvedAt < RESOLUTION_TTL_MS;
             if (cached.state === 'ready' && cached.stream && fresh) return;
@@ -372,8 +306,7 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
         set(current => {
             const { [songKey]: _drop, ...rest } = current.bySongKey;
             // 手动钉的那条一起清掉：invalidated 的语义是「重新来过」，留着钉住就又自动不搜了。
-            const { [songKey]: _unpin, ...pinned } = current.pinned;
-            return { bySongKey: rest, pinned };
+                return { bySongKey: rest };
         });
     },
 

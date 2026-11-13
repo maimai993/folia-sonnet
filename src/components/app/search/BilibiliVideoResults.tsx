@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { searchBilibiliVideos } from '../../../services/bilibili/api';
 import type { BilibiliSearchHit } from '../../../types/bilibili';
 import { isBilibiliAvailable } from '../../../services/bilibili/transport';
-import { useBilibiliMvStore } from '../../../stores/useBilibiliMvStore';
+import type { UnifiedSong } from '../../../types';
+import { normalizeBilibiliSong } from '../../../services/bilibili/bilibiliNormalize';
 import { Button } from '../../ui/Button';
 
 // src/components/app/search/BilibiliVideoResults.tsx
@@ -17,9 +18,8 @@ import { Button } from '../../ui/Button';
 
 type Props = {
     query: string;
-    /** 当前正在放的那首歌的 songKey；点了要把视频钉给它。 */
-    currentSongKey: string;
-    onPinned?: () => void;
+    /** 点一条视频，就把它当成一首歌交给播放器（画面和声音都是它的）。 */
+    onPlayTrack: (song: UnifiedSong) => void;
 };
 
 const formatCount = (n: number): string => (
@@ -33,12 +33,11 @@ const formatDuration = (seconds: number): string => {
     return `${m}:${String(s).padStart(2, '0')}`;
 };
 
-const BilibiliVideoResults: React.FC<Props> = ({ query, currentSongKey, onPinned }) => {
+const BilibiliVideoResults: React.FC<Props> = ({ query, onPlayTrack }) => {
     const { t } = useTranslation();
     const [hits, setHits] = React.useState<BilibiliSearchHit[]>([]);
     const [loading, setLoading] = React.useState(false);
     const [error, setError] = React.useState<string | null>(null);
-    const [pinning, setPinning] = React.useState<string | null>(null);
 
     React.useEffect(() => {
         const trimmed = query.trim();
@@ -67,17 +66,11 @@ const BilibiliVideoResults: React.FC<Props> = ({ query, currentSongKey, onPinned
         };
     }, [query]);
 
-    const play = React.useCallback(async (hit: BilibiliSearchHit) => {
-        if (!currentSongKey) return;
-        setPinning(hit.bvid);
-        try {
-            // 钉给正在放的这首歌，并打开 MV 背景：用户点的就是「看这个视频」。
-            await useBilibiliMvStore.getState().pinVideo(currentSongKey, hit.bvid);
-            onPinned?.();
-        } finally {
-            setPinning(null);
-        }
-    }, [currentSongKey, onPinned]);
+    const play = React.useCallback((hit: BilibiliSearchHit) => {
+        // 点一条就直接播它：这条视频自己就是「一首歌」——播放栏的标题、封面、
+        // 时长全是它的，画面与声音也都来自它。不需要先有歌在放。
+        onPlayTrack(normalizeBilibiliSong(hit));
+    }, [onPlayTrack]);
 
     if (!isBilibiliAvailable()) {
         return (
@@ -118,8 +111,8 @@ const BilibiliVideoResults: React.FC<Props> = ({ query, currentSongKey, onPinned
                 <li key={hit.bvid}>
                     <Button
                         variant="bare"
-                        onClick={() => void play(hit)}
-                        disabled={!currentSongKey || pinning === hit.bvid}
+                        onClick={() => play(hit)}
+                        disabled={false}
                         className="flex w-full items-start gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/10 disabled:opacity-50"
                     >
                         {hit.coverUrl ? (
@@ -142,11 +135,6 @@ const BilibiliVideoResults: React.FC<Props> = ({ query, currentSongKey, onPinned
                                 {formatCount(hit.playCount)}
                             </p>
                         </div>
-                        {pinning === hit.bvid && (
-                            <span className="shrink-0 self-center text-xs opacity-60">
-                                {t('search.searching')}
-                            </span>
-                        )}
                     </Button>
                 </li>
             ))}

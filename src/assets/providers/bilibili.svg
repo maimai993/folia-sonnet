@@ -1,0 +1,19 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background: brand pink, rounded square (gets clipped to a circle where it is used as an avatar) -->
+  <rect x="16" y="16" width="480" height="480" rx="120" fill="#FB7299"/>
+
+  <!-- The television: two antennae on top, a rounded body, two eyes -->
+  <g stroke="white" stroke-width="26" stroke-linecap="round" fill="none">
+    <!-- Antennae -->
+    <path d="M188 132 L226 174"/>
+    <path d="M324 132 L286 174"/>
+    <!-- Body -->
+    <rect x="128" y="176" width="256" height="196" rx="44"/>
+  </g>
+
+  <!-- Eyes -->
+  <g fill="white">
+    <rect x="184" y="244" width="30" height="52" rx="15"/>
+    <rect x="298" y="244" width="30" height="52" rx="15"/>
+  </g>
+</svg>

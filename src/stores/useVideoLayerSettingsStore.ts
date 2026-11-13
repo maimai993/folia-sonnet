@@ -28,6 +28,31 @@ export type VideoLayerFit = 'cover' | 'contain';
 /** `needs-permission`: a stored pick exists but the browser wants a click to read it again. */
 export type VideoLayerLocalFileStatus = 'none' | 'ready' | 'needs-permission';
 
+/**
+ * 注入进这一层的地址带这个固定前缀。
+ *
+ * 它只做一件事：让「这一条是别处临时放进来的」和「这一条是用户自己选的」分得开。
+ * 注入方（播放页的 MV 层）写进来时加前缀，清理时只清带前缀的 —— 用户自己设的视频
+ * 永远不会被误删。真正交给 `<video>` 之前用 stripInjectPrefix 剥掉。
+ */
+export const INJECT_URL_PREFIX = 'folia-mv://';
+
+/** 这个地址是不是别处临时注入的。 */
+export const isInjectedVideoUrl = (url: string | null | undefined): boolean => (
+    typeof url === 'string' && url.startsWith(INJECT_URL_PREFIX)
+);
+
+/** 剥掉注入前缀，拿到真正要播的地址；不是注入的就原样返回。 */
+export const stripInjectPrefix = (url: string | null | undefined): string | null => {
+    if (typeof url !== 'string' || url.length === 0) return null;
+    return url.startsWith(INJECT_URL_PREFIX) ? url.slice(INJECT_URL_PREFIX.length) : url;
+};
+
+/** 给要注入的地址加上前缀。 */
+export const withInjectPrefix = (url: string): string => (
+    url.startsWith(INJECT_URL_PREFIX) ? url : `${INJECT_URL_PREFIX}${url}`
+);
+
 export const VIDEO_LAYER_OPACITY_BOUNDS = { min: 0.1, max: 1 } as const;
 const VIDEO_LAYER_OPACITY_DEFAULT = 0.6;
 

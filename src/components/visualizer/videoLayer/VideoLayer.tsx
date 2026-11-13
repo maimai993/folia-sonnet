@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { PlayerState } from '../../../types';
 import { currentTime } from '../../../stores/motionSignals';
 import { selectDisplayPlayerState, selectDisplaySong, usePlaybackStore } from '../../../stores/usePlaybackStore';
-import { ensureVideoLayerFileRestored, useVideoLayerSettingsStore } from '../../../stores/useVideoLayerSettingsStore';
+import { ensureVideoLayerFileRestored, stripInjectPrefix, useVideoLayerSettingsStore } from '../../../stores/useVideoLayerSettingsStore';
 
 // src/components/visualizer/videoLayer/VideoLayer.tsx
 // Built-in muted video behind the lyrics (above the background, under the lyrics). The video follows
@@ -35,7 +35,10 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         injectedUrl: state.injectedUrl,
     })));
     // 注入的那条排最前：它是「现在这一刻该看的东西」，用户自己选的那条只是它的备份。
-    const source = injectedUrl ?? localFileUrl ?? (url || null);
+    //
+    // 注入进来的地址带一个固定前缀（见 BilibiliMvLayer 的 MV_INJECT_PREFIX）：那份前缀
+    // 是给旁边那些「这条是我放的吗」的判断用的，不是地址本身。这里剥掉再交给 <video>。
+    const source = stripInjectPrefix(injectedUrl) ?? localFileUrl ?? (url || null);
     const active = enabled && Boolean(source);
 
     useEffect(() => {
