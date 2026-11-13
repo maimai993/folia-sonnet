@@ -1,17 +1,15 @@
 import React from 'react';
-import type { BilibiliMvResolution } from '../../../types/bilibili';
-import { useBilibiliMvStore } from '../../../stores/useBilibiliMvStore';
+import type { BilibiliMvResolution } from '../../types/bilibili';
+import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 
-// src/components/visualizer/bilibili/BilibiliMvBackground.tsx
-// 「B 站 MV」背景：把这首歌对应的 bilibili 投稿画面铺满播放页，声音仍然是歌曲本身。
+// src/components/bilibili/BilibiliMvBackground.tsx
+// 「B 站 MV」背景：把这首歌对应的 bilibili 投稿画面铺满播放页。
 //
-// 为什么只取画面：这样歌词、节奏、可视化都还跟着歌走，也不会因为 MV 的片头片尾
-// 比歌曲长而错位。代价是音画可能对不上，所以有了下面那套偏移调校。
+// 这一层**只出画面，永远静音**。声音由播放器放 —— 解析时把 bilibili DASH 里的声音轨
+// （BilibiliMvStream.audioUrl）交给播放器当这首歌的音源，画面这条流只 decode 视频。
 //
-// 同步策略：视频跟着歌曲时钟走。
-// - 播放中用 `currentTime` 追：视频时间 = 歌曲时间 + 偏移。
-// - 偏得多了（换歌、拖动进度、视频自己卡了一下）就跳过去，而不是慢慢磨。
-// - 暂停跟着暂停。
+// 为什么这样分：两端都来自同一个投稿、同一条 DASH，起点天然对齐，不需要任何音画偏移；
+// 而进度条、歌词、可视化仍旧读播放器的时钟，拖进度就是拖 MV，一处改动全跟着走。
 //
 // 视频直链有时效（bilibili 给的签名地址过一阵就失效），所以出错时由 store 重新解析。
 
@@ -19,17 +17,15 @@ interface BilibiliMvBackgroundProps {
     songKey: string;
     songTitle: string;
     songArtist: string;
-    /** 歌曲当前时间（秒）。 */
+    /** 播放器当前时间（秒）—— 画面跟着它走。 */
     currentTime: number;
     /** 歌曲总长（秒），0 表示不知道。 */
     duration: number;
     isPlaying: boolean;
 }
 
-/** 视频和歌曲时钟差多少就算「偏了」，直接跳过去。 */
+/** 画面和播放器时钟差多少就算「偏了」，直接跳过去。 */
 const RESYNC_THRESHOLD_SEC = 0.35;
-/** 慢速追的时候，每次最多挪多少（避免一顿一顿地跳）。 */
-const MAX_DRIFT_CORRECTION = 0.25;
 
 const BilibiliMvBackground: React.FC<BilibiliMvBackgroundProps> = ({
     songKey,
@@ -52,7 +48,6 @@ const BilibiliMvBackground: React.FC<BilibiliMvBackgroundProps> = ({
     }, [songKey, songTitle, songArtist, duration, resolveForSong]);
 
     const stream = resolution?.stream ?? null;
-    const offsetSec = useBilibiliMvStore(state => state.offsets[songKey] ?? 0);
 
     // 播放状态同步。
     React.useEffect(() => {
@@ -66,24 +61,27 @@ const BilibiliMvBackground: React.FC<BilibiliMvBackgroundProps> = ({
         }
     }, [isPlaying, stream]);
 
-    // 时间同步：每帧看一眼差多少。
+    /*
+     * 时间同步：画面跟着播放器时钟走。
+     *
+     * 声音已经由播放器在放（同一条 DASH 的声音轨），所以这里对齐的是「同一份时间的画面」，
+     * 不需要任何偏移。偏得多了（换歌、拖进度、视频卡了一下）就跳过去，差得少就慢慢挪。
+     */
     React.useEffect(() => {
         const video = videoRef.current;
         if (!video || !stream) return;
-        const target = currentTime + offsetSec;
+        const target = currentTime;
         if (!Number.isFinite(target) || target < 0) return;
         const drift = Math.abs(video.currentTime - target);
         if (drift > RESYNC_THRESHOLD_SEC) {
-            // 跳过去。video.currentTime 对超出范围的值会静默夹到可播范围里。
             video.currentTime = target;
             return;
         }
-        // 差得不多：稍微挪一点，别让画面看起来在抖。
         if (drift > 0.05) {
-            const step = Math.min(MAX_DRIFT_CORRECTION, target - video.currentTime);
+            const step = Math.min(0.25, target - video.currentTime);
             video.currentTime = Math.max(0, video.currentTime + step);
         }
-    }, [currentTime, offsetSec, stream]);
+    }, [currentTime, stream]);
 
     // 视频循环：MV 往往比歌曲短或长，播到头就绕回去。
     React.useEffect(() => {
@@ -105,6 +103,8 @@ const BilibiliMvBackground: React.FC<BilibiliMvBackgroundProps> = ({
                 src={stream.videoUrl}
                 className="absolute inset-0 h-full w-full object-cover"
                 playsInline
+                // 这一层只出画面：声音由播放器放同一条 DASH 的声音轨。
+                // 不静音的话同一条音轨会响两遍（差几十毫秒，听起来是回声）。
                 muted
                 preload="auto"
                 // 不给原生控件：这里只是一层背景，操作走歌曲的播放条。

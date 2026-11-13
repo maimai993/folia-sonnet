@@ -194,6 +194,18 @@ interface PlayUrlDash {
             bandwith?: number;
             bandwidth?: number;
         }>;
+        /**
+         * 声音轨。bilibili 的 DASH 把画面和声音拆成两条独立的流，
+         * 这里单独取声音，播放器直接拿它当音源（见 fetchBilibiliPlayUrl）。
+         */
+        audio?: Array<{
+            baseUrl?: string;
+            base_url?: string;
+            backupUrl?: string[];
+            backup_url?: string[];
+            bandwidth?: number;
+            bandwith?: number;
+        }>;
     };
     durl?: Array<{ url?: string; backup_url?: string[] }>;
 }
@@ -234,8 +246,19 @@ export const pickVideoTrack = (
     return null;
 };
 
-/** 取一条投稿的画面直链。 */
-export const fetchBilibiliPlayUrl = async (bvid: string, cid: number) => {
+/**
+ * 取一条投稿的画面直链与声音直链。
+ *
+ * bilibili 的 DASH 本来就把画面和声音拆成两条流。以前只取画面、声音还是歌曲本身，
+ * 于是要一套「音画偏移」去对两者。现在把**声音也拿过来**：播放器直接放这条音频，
+ * 视频只负责画面 —— 两端同源，天生同步，进度条、歌词、可视化全都照旧走播放器。
+ *
+ * 拿不到独立音轨时（老投稿只有 durl）返回的 audioUrl 为空，调用方退回用歌曲发声。
+ */
+export const fetchBilibiliPlayUrl = async (
+    bvid: string,
+    cid: number,
+): Promise<{ url: string; height: number; audioUrl: string }> => {
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
         cid,
@@ -246,5 +269,23 @@ export const fetchBilibiliPlayUrl = async (bvid: string, cid: number) => {
     const payload = unwrap(await fetchJson<PlayUrlDash>(url));
     const track = pickVideoTrack(payload);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
-    return track;
+    return { ...track, audioUrl: pickAudioTrack(payload) };
+};
+
+/**
+ * 从 DASH 里挑一条声音轨：取码率最高的那条。
+ *
+ * 声音只有一条内容，清晰度差异纯粹是码率，所以不用像画面那样挑编码 ——
+ * DASH 的音频在这几个版本里统一是 AAC。
+ */
+export const pickAudioTrack = (payload: PlayUrlDash): string => {
+    const audios = payload.dash?.audio ?? [];
+    const scored = audios
+        .map(audio => ({
+            url: audio.baseUrl || audio.base_url || '',
+            bandwidth: audio.bandwidth ?? audio.bandwith ?? 0,
+        }))
+        .filter(item => item.url.length > 0)
+        .sort((a, b) => b.bandwidth - a.bandwidth);
+    return scored[0]?.url ?? '';
 };

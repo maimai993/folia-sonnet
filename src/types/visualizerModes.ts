@@ -13,7 +13,6 @@ import type { VisualizerBackgroundMode, VisualizerMode } from '../types';
 // 悄悄少两个。
 
 export const BUILTIN_VISUALIZER_MODES = [
-    'bilibili',
     'cadenza',
     'cappella',
     'claddagh',

@@ -40,6 +40,7 @@ import { UserGuideModal } from '../modal/UserGuideModal';
 import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
 import SceneHost from '../scenes/engine/SceneHost';
+import BilibiliMvLayer from '../bilibili/BilibiliMvLayer';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
@@ -566,6 +567,9 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 <PlayerBottomBarLayoutContext.Provider value={currentView === 'player'}>
                     {shouldMountVisualizer && <SceneHost {...visualizerRendererModel} songThemePair={songThemePair} animateStyleSwitch />}
                 </PlayerBottomBarLayoutContext.Provider>
+                {/* B 站 MV 背景：铺在歌词样式之上（见 BilibiliMvLayer 的文件头）。
+                    只在开关打开时自己挂出来，没开就是 null，不占任何东西。 */}
+                <BilibiliMvLayer />
             </div>
 
             <StageSessionEmptyState

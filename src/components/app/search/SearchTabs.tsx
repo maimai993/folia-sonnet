@@ -23,6 +23,8 @@ export const useSearchSourceLabel = () => {
         if (source === 'local') return t('search.sourceLocal');
         if (source === 'cloud') return t('search.sourceCloudTheme');
         if (source === 'navidrome') return t('search.sourceNavidrome');
+        // B 站搜的是视频，点一条直接在播放页当背景放。
+        if (source === 'bilibili') return t('search.sourceBilibili');
         return omni.getProviderLabel(source);
     };
 };

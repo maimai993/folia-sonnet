@@ -16,7 +16,7 @@ import { resolveCloudThemeSong } from '../library/core/collection/resource/cloud
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
-export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'all';
+export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'bilibili' | 'all';
 export type SearchReturnView = 'home' | 'player';
 /** 搜什么：单曲、专辑或歌单。专辑和歌单只有在线平台搜得到（omni.getProviderSearchKinds），本地与 Navidrome 只搜单曲。 */
 export type SearchKind = OmniSearchKind;
@@ -110,7 +110,7 @@ const getSearchCacheKey = (query: string, sourceTab: SearchSource, kind: SearchK
 export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
     // 这几种不是某一个平台：云缓存是按歌名去各家搜，「全部」是把各家掺起来 ——
     // 它们都没有「这家平台能搜什么」可问，问了会拿到 unsupported 而把整次搜索打断。
-    if (sourceTab === 'local' || sourceTab === 'navidrome' || sourceTab === 'cloud' || sourceTab === 'all') {
+    if (sourceTab === 'local' || sourceTab === 'navidrome' || sourceTab === 'cloud' || sourceTab === 'bilibili' || sourceTab === 'all') {
         return ['song'];
     }
     const kinds = omni.getProviderSearchKinds(sourceTab);
@@ -123,19 +123,20 @@ export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): Se
 );
 
 export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSource => {
-    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'all') {
+    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'bilibili' || tab === 'all') {
         return tab;
     }
     if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio' && tab !== 'explore') return tab as OnlineProviderId;
     return DEFAULT_ONLINE_PROVIDER_ID;
 };
 
-/** 这条搜索来源对应的在线平台；本地 / Navidrome / 云缓存 / 「全部」没有单一平台，返回 null。 */
+/** 这条搜索来源对应的在线平台；本地 / Navidrome / 云缓存 / B 站 / 「全部」没有单一平台，返回 null。 */
 const providerIdOf = (tab: SearchSource): OnlineProviderId | null => {
     const resolved = resolveSearchSource(tab);
     return resolved === 'local'
         || resolved === 'navidrome'
         || resolved === 'cloud'
+        || resolved === 'bilibili'
         || resolved === 'all'
         ? null
         : resolved;
@@ -644,6 +645,8 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         if (
             searchSourceTab === 'local'
             || searchSourceTab === 'navidrome'
+            // B 站是视频结果，自己管翻页，不走歌曲那套 loadMore。
+            || searchSourceTab === 'bilibili'
             || !hasMore
             || isSearching
             || isLoadingMore

@@ -6,7 +6,7 @@ import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChrome
 import { useStageSettingsStore } from '../../../../stores/useStageSettingsStore';
 import { Button, CopyValue, Group, Reveal, Row, Status, Toggle, Value, type SettingsOptionDef } from '../kit';
 import NavidromeRows from './integration/NavidromeRows';
-import { O, SERVICES, STREAMING, SYSTEM_LYRICS } from './integration/options';
+import { O, BILIBILI, LX_SOURCE, SERVICES, STREAMING, SYSTEM_LYRICS } from './integration/options';
 import { MARKET, M } from './integration/market';
 import MarketPage from './integration/MarketPage';
 import { openMarketPanel } from './integration/market/MarketEntryButton';
@@ -17,6 +17,7 @@ import { DesktopStageRows, WebStageRows } from './integration/StageModeRows';
 import SyncServerRows from './integration/SyncServerRows';
 import { useSettingsPage } from './settingsPageContext';
 import { LxSourcePanel } from '../../../lxmusic/LxSourcePanel';
+import BilibiliMvSettingsPanel from '../../../bilibili/BilibiliMvSettingsPanel';
 
 // src/components/modal/settings/pages/IntegrationPage.tsx
 // The 连接与集成 page: what Folia connects to and what it shows to other programs. Services first
@@ -48,11 +49,6 @@ const IntegrationPage: React.FC = () => {
             <Group def={SERVICES}>
                 <NavidromeRows />
                 <SyncServerRows />
-                {/*
-                 * 洛雪音源：导入 / 启停音源脚本。选中洛雪（免登录）后首页的搜索、歌单广场、榜单
-                 * 与其它平台走同一套主页流程，音源管理在这里，不再依赖那个独立工作台。
-                 */}
-                <LxSourcePanel />
                 {isElectron && (
                     <>
                         <Row option={O.discord} hint={t('options.discordRichPresenceDesc')}>
@@ -78,6 +74,29 @@ const IntegrationPage: React.FC = () => {
                     <Toggle checked={scrobbleEnabled} onChange={setScrobbleEnabled} />
                 </Row>
             </Group>
+
+            {/*
+             * 音源脚本：单独一块。
+             *
+             * 导入 / 启停音源脚本。选中之后首页的搜索、歌单广场、榜单与其它平台走同一套主页流程，
+             * 音源管理在这里，不再依赖那个独立工作台。以前它混在「服务」里，用户找音源
+             * 得先越过 navidrome 那六七行。
+             */}
+            <Group def={LX_SOURCE}>
+                <LxSourcePanel />
+            </Group>
+
+            {/*
+             * B 站：MV 背景与登录。
+             *
+             * MV 现在铺在播放页当背景（一个开关），不再是「歌词样式」里的一项 —— 之前它混在
+             * 流光 / 心象那些样式中间，用户根本找不到，也不该在那里。整组只在安卓画。
+             */}
+            {isCapacitorAndroid() && (
+                <Group def={BILIBILI}>
+                    <BilibiliMvSettingsPanel />
+                </Group>
+            )}
 
             <Group def={STREAMING}>
                 <Row option={O.transparentBackground} hint={t('options.transparentPlayerBackgroundDesc')}>

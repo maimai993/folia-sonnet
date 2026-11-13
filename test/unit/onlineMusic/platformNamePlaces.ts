@@ -81,7 +81,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/modal/lyric-match/LocalSongLyricMatch.tsx': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/lyric-match/navidromeSongMatch.ts': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/settings/pages/HelpPage.tsx': { n: { qq: 5 }, kind: 'namesake', why: 'the QQ chat app\'s community group, not QQ Music: its number and its i18n key' },
-    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 2 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
+    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
     'src/components/modal/settings/pages/LyricsPage.tsx': { n: { spotify: 1 }, kind: 'lyric', why: 'which of two hand-written descriptions of the lyric sources is shown' },
     'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7 }, kind: 'stored', why: 'an i18n key' },
     'src/components/panelTab/FmTab.tsx': { n: { qq: 1, bodian: 1 }, kind: 'doc' },   // comments only,

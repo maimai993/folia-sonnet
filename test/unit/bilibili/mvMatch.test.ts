@@ -93,3 +93,55 @@ describe('buildSearchKeyword', () => {
         expect(buildSearchKeyword('稻香', '')).toBe('稻香');
     });
 });
+
+
+/**
+ * 模糊匹配：以前要求歌名一字不差地连着出现在标题里，
+ * 弯引号、&、冒号这些写法差异就把明明是同一首歌的结果挡在外面。
+ * 这组用例钉住「该放宽的放宽、该拒的仍拒」。
+ */
+describe('模糊匹配', () => {
+    const song = (title: string, artist: string) => ({ title, artist, durationSec: 220 });
+
+    it('弯引号不再影响命中', () => {
+        const picked = pickBestMvHit(
+            [hit({ title: "Queen - Don’t Stop Me Now (Official Video)", author: 'Queen Official' })],
+            song("Don't Stop Me Now", 'Queen'),
+        );
+        expect(picked).not.toBeNull();
+    });
+
+    it('& 与 and 写法差异不再影响命中', () => {
+        const picked = pickBestMvHit(
+            [hit({ title: 'Led Zeppelin - Rock and Roll (Live)', author: 'LedZeppelin' })],
+            song('Rock & Roll', 'Led Zeppelin'),
+        );
+        expect(picked).not.toBeNull();
+    });
+
+    it('标题带副标题也能命中', () => {
+        const picked = pickBestMvHit(
+            [hit({ title: 'Lady Gaga - The Cure 【中文字幕】官方MV', author: 'GagaChannel' })],
+            song('The Cure', 'Lady Gaga'),
+        );
+        expect(picked).not.toBeNull();
+    });
+
+    it('单词歌名不放宽：不能因为碰到一个词就中', () => {
+        // 标题里根本没有连着的 "hello"，只有拆开的字母：
+        // 若放宽到分词命中，这条会被当成同一首歌。
+        const picked = pickBestMvHit(
+            [hit({ title: 'Hel lo Kitty 主题曲合集', author: 'someone' })],
+            song('Hello', 'Adele'),
+        );
+        expect(picked).toBeNull();
+    });
+
+    it('翻唱仍然被拒', () => {
+        const picked = pickBestMvHit(
+            [hit({ title: 'The Cure 钢琴翻唱 cover by someone', author: 'pianist' })],
+            song('The Cure', 'Lady Gaga'),
+        );
+        expect(picked).toBeNull();
+    });
+});

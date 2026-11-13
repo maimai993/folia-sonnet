@@ -12,6 +12,10 @@ import {
     useSearchNavigationStore,
 } from '../../../stores/useSearchNavigationStore';
 import SearchResultsList from './SearchResultsList';
+import BilibiliVideoResults from './BilibiliVideoResults';
+import { usePlaybackStore, selectDisplaySong } from '../../../stores/usePlaybackStore';
+import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
+import { songKeyOf } from '../../bilibili/BilibiliMvStage';
 import SearchComposition from './SearchComposition';
 import SearchTabs, { useSearchSourceLabel } from './SearchTabs';
 import { useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';
@@ -113,6 +117,19 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     const isCollectionKind = searchKind !== 'song';
     const resultCount = isCollectionKind ? collections.length : results.length;
     const { sources, activeProviderId } = useSearchSources(hasLocalSongs);
+    // B 站那一栏要「把视频钉到正在放的这首歌」：从播放器取当前歌，拼成 songKey。
+    const displaySong = usePlaybackStore(selectDisplaySong);
+    const currentSongKey = useMemo(() => {
+        if (!displaySong) return '';
+        const name = (displaySong as { name?: string }).name ?? '';
+        const artist = getSongArtistLabel(displaySong as never) || '';
+        return songKeyOf(name, artist);
+    }, [displaySong]);
+    // 钉好之后退出搜索：用户点的是「看这个视频」，不该还停在结果里。
+    // onClose 就是「关搜索回主界面」，在播放页上发起搜索时回去正好是播放页。
+    const onOpenPlayerAfterPin = useCallback(() => {
+        onClose();
+    }, [onClose]);
     const kinds = useMemo(() => getSearchKinds(searchSourceTab), [searchSourceTab]);
     const hasCollection = useCollectionNavigationStore(state => Boolean(state.snapshot?.stack.length));
     const getSourceLabel = useSearchSourceLabel();
@@ -223,7 +240,17 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
                     </header>
 
                     <div className="search-plane mx-auto mt-3 min-h-0 w-full max-w-5xl flex-1">
-                        {isSearching ? (
+                        {/*
+                          * B 站是视频结果，自己管加载 / 空态 / 错误，不走歌曲那套分页与 SearchResultsList。
+                          * 点一条就把视频钉到正在放的这首歌上，回播放页直接当背景放。
+                          */}
+                        {searchSourceTab === 'bilibili' ? (
+                            <BilibiliVideoResults
+                                query={submittedQuery}
+                                currentSongKey={currentSongKey}
+                                onPinned={onOpenPlayerAfterPin}
+                            />
+                        ) : isSearching ? (
                             <div className="flex h-full items-center justify-center">
                                 <div className="search-loader" role="status" aria-label={t('localMusic.searching')}>
                                     <i />

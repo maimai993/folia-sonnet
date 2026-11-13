@@ -15,10 +15,11 @@ export interface BilibiliSearchHit {
 }
 
 /**
- * 一首歌的 MV：是哪条 BV、画面从哪儿拉。
+ * 一首歌的 MV：是哪条 BV、画面和声音分别从哪儿拉。
  *
- * 只有画面 —— 声音永远是歌曲本身的，这样歌词、节奏、可视化都还跟着歌走，
- * 而且不会因为 MV 的音轨长短不一而错位。
+ * bilibili 的 DASH 把画面与声音拆成两条流，这里两条都留着：
+ * 声音交给播放器当音源，画面铺在播放页上。两端来自同一次解析、同一条投稿，
+ * 所以不需要任何音画偏移 —— 播放器的进度就是 MV 的进度。
  */
 export interface BilibiliMvStream {
     bvid: string;
@@ -28,6 +29,13 @@ export interface BilibiliMvStream {
     durationSec: number;
     /** 带签名的画面直链，只够这一小段时间用，所以只活在这一次播放里。 */
     videoUrl: string;
+    /**
+     * 带签名的声音直链，播放器拿它当这首歌的音源。
+     *
+     * 空字符串表示这次解析没拿到独立音轨（老投稿只有 durl）：那种情况退回用歌曲
+     * 自己的音频发声，画面照旧。
+     */
+    audioUrl: string;
     /** 实际拿到的画面高度（360 / 480 / 720 / 1080）。未登录时上限 480。 */
     quality: number;
 }

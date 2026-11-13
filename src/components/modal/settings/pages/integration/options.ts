@@ -27,6 +27,33 @@ export const SYSTEM_LYRICS: SettingsGroupDef = {
     available: () => isCapacitorAndroid(),
 };
 
+/**
+ * 音源脚本那一块：单独成组，不再混在「服务」里。
+ *
+ * 它跟 Navidrome / 同步服务不是一类东西 —— 那两个是「连到别处」，这一块是「换掉音乐从哪来」，
+ * 一进去就是脚本的导入与启停，管的东西完全独立。跟服务组并排放着，用户得先越过 navidrome
+ * 的六七行才看得到它。
+ */
+export const LX_SOURCE: SettingsGroupDef = {
+    id: 'lxSource',
+    titleKey: 'options.settingsHeadingLxSource',
+};
+
+/**
+ * B 站（fork 独有）：MV 背景开关与登录。
+ *
+ * MV **不再是一个歌词样式**：它铺在播放页当背景，跟「流光 / 心象」那些样式互不相关，
+ * 所以入口搬到这里，而不是从歌词样式列表里选。
+ *
+ * 只在安卓 App 内可用：api.bilibili.com 不给 CORS 头，WebView 直连一定被拦，
+ * 靠 FoliaBilibili 插件用 OkHttp 代发。别的平台整组不画。
+ */
+export const BILIBILI: SettingsGroupDef = {
+    id: 'bilibili',
+    titleKey: 'options.settingsHeadingBilibili',
+    available: () => isCapacitorAndroid(),
+};
+
 
 export const O = {
     navidrome: option(SERVICES, 'navidrome', 'navidrome.enable'),
@@ -38,6 +65,11 @@ export const O = {
     syncToken: option(SERVICES, 'r2SyncToken', 'options.r2SyncToken'),
     discord: option(SERVICES, 'discordRichPresence', 'options.discordRichPresence', { electronOnly: true }),
     scrobble: option(SERVICES, 'scrobbleSettings', 'options.neteaseScrobble'),
+    // B 站那块的两行：MV 背景开关、登录（登录卡片自画，这里只为设置搜索登记）。
+    bilibiliMv: option(BILIBILI, 'bilibiliMv', 'options.bilibiliMv'),
+    bilibiliMvHideLyrics: option(BILIBILI, 'bilibiliMvHideLyrics', 'options.bilibiliMvHideLyrics'),
+    bilibiliMvUseAi: option(BILIBILI, 'bilibiliMvUseAi', 'options.bilibiliMvUseAi'),
+    bilibiliLogin: option(BILIBILI, 'bilibiliLogin', 'options.bilibiliLogin'),
     transparentBackground: option(STREAMING, 'transparentPlayerBackground', 'options.transparentPlayerBackground'),
     obs: option(STREAMING, 'obsBrowserSource', 'options.obsBrowserSource', { electronOnly: true }),
     obsKeepAnimation: option(STREAMING, 'obsKeepMainWindowAnimation', 'options.obsKeepMainWindowAnimation', { electronOnly: true }),

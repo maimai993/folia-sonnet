@@ -1,8 +1,8 @@
 import React from 'react';
 import QRCode from 'qrcode';
-import { Group, type SettingsGroupDef } from '../../modal/settings/kit';
-import { ToggleRow } from '../panelRows';
-import { useBilibiliAuthStore } from '../../../stores/useBilibiliAuthStore';
+import { Group, type SettingsGroupDef } from '../modal/settings/kit';
+import { ToggleRow } from '../visualizer/panelRows';
+import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
 
 // src/components/visualizer/bilibili/BilibiliAuthCard.tsx
 // 「B 站 MV」的登录卡片。
