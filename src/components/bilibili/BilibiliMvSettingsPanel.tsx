@@ -24,8 +24,6 @@ const BilibiliMvSettingsPanel: React.FC = () => {
     const hydrateAuth = useBilibiliAuthStore(state => state.hydrate);
     const enabled = useBilibiliMvStore(state => state.enabled);
     const setEnabled = useBilibiliMvStore(state => state.setEnabled);
-    const hideLyrics = useBilibiliMvStore(state => state.hideLyrics);
-    const setHideLyrics = useBilibiliMvStore(state => state.setHideLyrics);
     const useAiMatch = useBilibiliMvStore(state => state.useAiMatch);
     const setUseAiMatch = useBilibiliMvStore(state => state.setUseAiMatch);
     // 每次渲染读一次：AI 配置在别处改，这页不订阅那份设置。
@@ -46,10 +44,19 @@ const BilibiliMvSettingsPanel: React.FC = () => {
     }, [bySongKey]);
     const resolution = currentKey ? bySongKey[currentKey] : undefined;
 
+    /*
+     * 重新匹配。
+     *
+     * 只传 force 是不够的：用户手动钉过某条 BV 时，钉住的那条要先清掉，否则解析回来
+     * 还是它；正在解析中的那一单也要先作废（store 里对 inflight 是直接 return 的，
+     * 点了会像没反应）。两件事都做完再重新搜。
+     */
     const rematch = () => {
         if (!currentKey) return;
+        const store = useBilibiliMvStore.getState();
+        store.invalidate(currentKey);
         const [title, artist] = currentKey.split('|||');
-        void useBilibiliMvStore.getState().resolveForSong(currentKey, title, artist, 0, true);
+        void store.resolveForSong(currentKey, title, artist, 0, true);
     };
 
     return (
@@ -57,11 +64,6 @@ const BilibiliMvSettingsPanel: React.FC = () => {
             <Row option={O.bilibiliMv} hint={t('options.bilibiliMvDesc')}>
                 <Toggle checked={enabled} onChange={setEnabled} />
             </Row>
-            {enabled && (
-                <Row option={O.bilibiliMvHideLyrics} hint={t('options.bilibiliMvHideLyricsDesc')}>
-                    <Toggle checked={hideLyrics} onChange={setHideLyrics} />
-                </Row>
-            )}
             {enabled && (
                 <Row
                     option={O.bilibiliMvUseAi}

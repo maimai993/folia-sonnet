@@ -118,10 +118,6 @@ export const useVisualizerRendererModel = ({
     // 后台节流 holds the lyric animation while the window is minimised or hidden: drawn as if paused,
     // which every style and background already settles into, and moving again once it is back on screen.
     const backgroundLyricHeld = useBackgroundLyricHoldStore(state => state.held);
-    // 「MV 时只留视频」：开关在设置页的 B 站板块里，MV 没开时这个值不生效。
-    const mvEnabled = useBilibiliMvStore(state => state.enabled);
-    const mvHidesLyrics = useBilibiliMvStore(state => state.hideLyrics);
-    const hideLyricsForMv = mvEnabled && mvHidesLyrics;
     // The theme too: the live one is the incoming song's once it comes (useShownTheme).
     const liveThemes = useMemo(() => ({ theme, subtitleTheme }), [theme, subtitleTheme]);
     const shownThemes = useShownTheme(liveThemes, usePlaybackStore(selectIsShowingTail), displaySong?.id);
@@ -167,10 +163,10 @@ export const useVisualizerRendererModel = ({
         songArtist,
         songAlbum,
         coverUrl: displayCoverUrl,
-        // B 站 MV 铺在播放页上时，可以只留视频、把歌词动画关掉（设置里那个开关）：
-        // 那时候画面就是投稿本身，歌词压在上面既看不清也挡着看。
-        showText: !hideLyricsForMv
-            && resolveVisualizerShowText({ currentView, isSettingsModalOpen, isPanelOpen, backdropLyrics }),
+        // 歌词一直画。曾经有个「MV 时只留视频」的开关会把它关掉，但那件事现在由
+        // 「强制 MV」这一款背景自己表达 —— 想要只有画面的视频，选那一款就行，
+        // 不必再单独记一个和背景打架的开关。
+        showText: resolveVisualizerShowText({ currentView, isSettingsModalOpen, isPanelOpen, backdropLyrics }),
         seed,
         songHandoff,
         staticMode,

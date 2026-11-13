@@ -67,7 +67,6 @@ export const O = {
     scrobble: option(SERVICES, 'scrobbleSettings', 'options.neteaseScrobble'),
     // B 站那块的两行：MV 背景开关、登录（登录卡片自画，这里只为设置搜索登记）。
     bilibiliMv: option(BILIBILI, 'bilibiliMv', 'options.bilibiliMv'),
-    bilibiliMvHideLyrics: option(BILIBILI, 'bilibiliMvHideLyrics', 'options.bilibiliMvHideLyrics'),
     bilibiliMvUseAi: option(BILIBILI, 'bilibiliMvUseAi', 'options.bilibiliMvUseAi'),
     bilibiliLogin: option(BILIBILI, 'bilibiliLogin', 'options.bilibiliLogin'),
     transparentBackground: option(STREAMING, 'transparentPlayerBackground', 'options.transparentPlayerBackground'),

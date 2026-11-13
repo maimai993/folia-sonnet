@@ -170,7 +170,14 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
                 muted
                 loop
                 playsInline
-                preload="auto"
+                /*
+                 * 别写 auto。
+                 *
+                 * `preload="auto"` 的意思是「尽量把整条都拉下来」，而这条流是一整支 MV
+                 * —— 一首几十分钟的投稿就是几百兆，连着听一晚上几 GB 起步（用户实测
+                 * 跑掉 20 GB）。这里只需要开头一点点来出画面，后面的由播放器按需去要。
+                 */
+                preload="metadata"
                 aria-hidden
                 className="absolute inset-0 h-full w-full pointer-events-none"
                 style={{ opacity, objectFit: fit }}

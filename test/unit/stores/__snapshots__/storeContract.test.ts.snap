@@ -9,7 +9,6 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "background_silent_skip",
   "background_throttling",
   "bilibili_mv_enabled",
-  "bilibili_mv_hide_lyrics",
   "bilibili_mv_use_ai",
   "cadenza_tuning",
   "cadenze_tuning",

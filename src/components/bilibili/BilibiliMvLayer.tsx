@@ -8,6 +8,7 @@ import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
+import { registerMvRequirementSink } from '../../services/mvRequirement';
 import { useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
 import { isBilibiliSongId } from '../../services/bilibili/bilibiliProvider';
 
@@ -44,6 +45,14 @@ const describe = (song: unknown): { title: string; artist: string } => {
 
 const BilibiliMvLayer: React.FC = () => {
     const enabled = useBilibiliMvStore(state => state.enabled);
+    /*
+     * 背景样式要求画面时从这里进来（见 services/mvRequirement）。
+     *
+     * 挂载时登记一次：样式那边只写一个布尔值，不知道是谁在听。
+     */
+    React.useEffect(() => registerMvRequirementSink(
+        required => useBilibiliMvStore.getState().setForcedByStyle(required),
+    ), []);
     const displaySong = usePlaybackStore(selectDisplaySong);
     const playQueue = usePlaybackStore(state => state.playQueue);
     const duration = usePlaybackStore(selectDisplayDuration);

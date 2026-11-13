@@ -1,4 +1,5 @@
 import type { BilibiliSearchHit } from '../../types/bilibili';
+import { readBilibiliAuthNative } from '../../platform/foliaNative';
 import { signWbiParams, wbiKeyFromUrl } from './wbi';
 import { BRIDGE_UNAVAILABLE_CODE, isBilibiliAvailable, requestBilibiliUrl } from './transport';
 
@@ -549,6 +550,34 @@ export const fetchBilibiliNavProfile = async (): Promise<{
     }
 };
 
+/**
+ * 当前有没有登录。
+ *
+ * 读的是本机 cookie，不联网，很便宜；仍然记一小会儿 —— 取流是按首歌调的，一次播放
+ * 会问很多遍。登录 / 登出会走 clearCookies / setCookies，那时清掉即可，所以这个缓存
+ * 卡不住状态。
+ */
+let signedInCache: { value: boolean; at: number } | null = null;
+const SIGNED_IN_TTL_MS = 5_000;
+
+export const isBilibiliSignedIn = async (): Promise<boolean> => {
+    const now = Date.now();
+    if (signedInCache && now - signedInCache.at < SIGNED_IN_TTL_MS) return signedInCache.value;
+    let value = false;
+    try {
+        value = Boolean((await readBilibiliAuthNative())?.signedIn);
+    } catch {
+        // 问不到就当成没登录：那样只是少要几个高清格式，不会出错。
+    }
+    signedInCache = { value, at: now };
+    return value;
+};
+
+/** 登录态变了（写入 / 清掉 cookie）之后调一下。 */
+export const forgetBilibiliSignedIn = (): void => {
+    signedInCache = null;
+};
+
 export const fetchBilibiliPlayUrl = async (
     bvid: string,
     cid: number,
@@ -573,7 +602,18 @@ export const fetchBilibiliPlayUrl = async (
      *
      * ourk 同理：只要没选到 4K 档就不开。
      */
-    const wants4k = (qualityMaxHeight[quality] ?? 720) > 1080;
+    /*
+     * 没登录时最高只到 480P。
+     *
+     * 这不是我们设的限 —— 站内对未登录给的本来就只有这些，问 1080P 也不会给。
+     * 所以档位在这里先压下去：否则请求里带着高清参数、回来的却是 480P 的流，
+     * 挑轨那一步会以为「没找到要的清晰度」，白绕一圈。
+     *
+     * 登录之后仍然按用户选的那一档（默认 720P，见 pickBilibiliQuality）。
+     */
+    const signedIn = await isBilibiliSignedIn();
+    const effectiveQuality = signedIn ? quality : 'standard';
+    const wants4k = (qualityMaxHeight[effectiveQuality] ?? 720) > 1080;
     const fnval = wants4k ? 4048 : 2 + 1 + 4; // dash + mp4 + hdr（2=dash, 1=mp4, 4=hdr）
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
@@ -583,7 +623,7 @@ export const fetchBilibiliPlayUrl = async (
         fourk: wants4k ? 1 : 0,
     });
     const payload = unwrap(await fetchJson<PlayUrlDash>(url));
-    const track = pickVideoTrack(payload, quality);
+    const track = pickVideoTrack(payload, effectiveQuality);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
     // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。
     // 备用地址一起带回去：CDN 的一台节点回 403 时，原生中转靠它换下一台。

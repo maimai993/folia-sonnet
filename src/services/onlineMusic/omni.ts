@@ -658,12 +658,20 @@ export const omni = {
         const provider = getOnlineMusicProvider(providerId);
         if (!provider || !providerSupports(provider, 'search') || !provider.search) return [];
         const search = provider.search;
+        /*
+         * 视频站有 searchVideos 的时候，**不摆「单曲」那一档**。
+         *
+         * 那一站搜出来的每条本来就是一条投稿，单曲和视频是同一份结果 —— 两个页签摆
+         * 出来只会让人以为其中一个坏了（用户看到的正是「视频里啥也搜不出来」）。
+         * 所以有 video 就只要 video，一档顶两档。
+         */
+        const hasVideo = Boolean(search.searchVideos);
         return [
-            'song' as const,
+            ...(hasVideo ? [] : ['song' as const]),
             ...(search.searchAlbums && providerSupports(provider, 'albums') ? ['album' as const] : []),
             ...(search.searchPlaylists && providerSupports(provider, 'playlists') ? ['playlist' as const] : []),
             // 视频站自己声明这几档；音乐平台不声明，页签就还是三个。
-            ...(search.searchVideos ? ['video' as const] : []),
+            ...(hasVideo ? ['video' as const] : []),
             ...(search.searchSeasons ? ['bangumi' as const, 'movie' as const] : []),
             ...(search.searchPeople ? ['user' as const] : []),
         ];
@@ -1278,6 +1286,16 @@ export const omni = {
     // `getAudioSource` asks the provider for.
     resolveAudioQuality(providerId: OmniProviderId, preference: AudioQualityPreference): AudioQualityPreference {
         return audioQualityFor(providerId, preference);
+    },
+
+    /**
+     * 这首的地址要不要由 Web 先取好交给原生。
+     *
+     * 原生播放器的取流只认识音乐平台那几家，其余平台拿不到地址就一声不出；
+     * 这些平台在自己的 provider 上标了 `audioResolvedByWeb`。
+     */
+    needsWebResolvedAudio(song: SongResult): boolean {
+        return Boolean(providerForSong(song).playback?.audioResolvedByWeb);
     },
 
     async getAudioSource(song: SongResult, quality: AudioQualityPreference): Promise<OmniAudioSource | null> {

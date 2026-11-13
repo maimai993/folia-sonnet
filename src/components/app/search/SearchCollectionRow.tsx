@@ -29,6 +29,15 @@ const SearchCollectionRow: React.FC<SearchCollectionRowProps> = ({ collection, i
         ? artistNames
         : collection.creator?.nickname || artistNames;
     const compact = new Intl.NumberFormat(i18n.language, { notation: 'compact', maximumFractionDigits: 1 });
+    /*
+     * 名字可能是一个词条 key（分区、账号里那几个固定歌单），也可能就是内容本身。
+     * 词条在 home 那一组里，所以带前缀查；查不到原样显示。
+     */
+    const collectionName = (() => {
+        const key = `home.${collection.name}`;
+        const keyed = t(key);
+        return keyed === key ? collection.name : keyed;
+    })();
     const details = [
         isAlbum ? yearOf(collection.publishedAt) : null,
         !isAlbum && typeof collection.playCount === 'number' && collection.playCount > 0
@@ -60,7 +69,7 @@ const SearchCollectionRow: React.FC<SearchCollectionRowProps> = ({ collection, i
                 </span>
                 <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold" style={{ color: 'var(--text-primary)' }}>
-                        {collection.name}
+                        {collectionName}
                     </span>
                     <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
                         {byline && <span className="min-w-0 truncate">{byline}</span>}

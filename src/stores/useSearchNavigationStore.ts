@@ -106,7 +106,13 @@ const getSearchCacheKey = (query: string, sourceTab: SearchSource, kind: SearchK
     `${sourceTab}:${kind}:${query.trim().toLowerCase()}`
 );
 
-/** 这个来源能搜的种类：在线平台问 omni，本地 / Navidrome / 云缓存 /「全部」只有单曲。单曲总在第一个。 */
+/**
+ * 这个来源能搜的种类：在线平台问 omni，本地 / Navidrome / 云缓存 /「全部」只有单曲。
+ *
+ * 以前无论平台声明了什么都会把单曲补到最前面。视频站不能这么补：它搜出来的每条本来就
+ * 是一条投稿，「单曲」和「视频」是同一份结果，补上去就多一个点开全是重复内容的页签。
+ * 现在只在这个平台**什么种类都没声明**时才退回单曲。
+ */
 export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
     // 这几种不是某一个平台：云缓存是按歌名去各家搜，「全部」是把各家掺起来 ——
     // 它们都没有「这家平台能搜什么」可问，问了会拿到 unsupported 而把整次搜索打断。
@@ -114,13 +120,14 @@ export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
         return ['song'];
     }
     const kinds = omni.getProviderSearchKinds(sourceTab);
-    return kinds.includes('song') ? kinds : ['song', ...kinds];
+    return kinds.length > 0 ? kinds : (['song'] as SearchKind[]);
 };
 
-/** 来源搜不到要的那一种（换到了没有专辑搜索的平台）就搜单曲。 */
-export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): SearchKind => (
-    getSearchKinds(sourceTab).includes(kind) ? kind : 'song'
-);
+/** 来源搜不到要的那一种（换到了没有专辑搜索的平台）就退到这个来源的第一种。 */
+export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): SearchKind => {
+    const kinds = getSearchKinds(sourceTab);
+    return kinds.includes(kind) ? kind : (kinds[0] ?? 'song');
+};
 
 export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSource => {
     if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'bilibili' || tab === 'all') {

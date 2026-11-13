@@ -33,9 +33,6 @@ const RESOLUTION_TTL_MS = 30 * 60 * 1000;
 /** 开关落盘的键：用户开了 MV 背景，下次进播放页还是开着。 */
 const ENABLED_STORAGE_KEY = 'bilibili_mv_enabled';
 
-/** 「MV 时只留视频」落盘的键。 */
-const HIDE_LYRICS_STORAGE_KEY = 'bilibili_mv_hide_lyrics';
-
 /** 「让 AI 判断哪条是 MV」落盘的键。默认开：配了 AI 就该用它。 */
 const USE_AI_MATCH_STORAGE_KEY = 'bilibili_mv_use_ai';
 
@@ -66,22 +63,6 @@ const writeStoredEnabled = (enabled: boolean) => {
     }
 };
 
-const readStoredHideLyrics = (): boolean => {
-    try {
-        return localStorage.getItem(HIDE_LYRICS_STORAGE_KEY) === '1';
-    } catch {
-        return false;
-    }
-};
-
-const writeStoredHideLyrics = (hide: boolean) => {
-    try {
-        localStorage.setItem(HIDE_LYRICS_STORAGE_KEY, hide ? '1' : '0');
-    } catch {
-        // 同上。
-    }
-};
-
 interface CachedResolution extends BilibiliMvResolution {
     /** 解析完成的时间；resolving 时为 0。 */
     resolvedAt: number;
@@ -91,9 +72,16 @@ interface BilibiliMvState {
     /** 播放页是否把 MV 当背景铺上。 */
     enabled: boolean;
     /** MV 铺上时把歌词动画整个关掉，只留视频。 */
-    hideLyrics: boolean;
     /** 配了 AI 时，让它判断哪条投稿才是这首歌的 MV（关掉就用打分规则）。 */
     useAiMatch: boolean;
+    /**
+     * 被背景样式强制打开（见 visualizer 的 mv 样式）。
+     *
+     * 和用户那个开关分开记：样式要求「这一款背景必须有画面」，用户那个开关表达
+     * 「我愿不愿意用视频」。两者任一成立就开 —— 但只有用户能关他自己那个，
+     * 切走这一款背景时也不会把用户的开关改成开。
+     */
+    forcedByStyle: boolean;
     bySongKey: Record<string, CachedResolution>;
     /** 正在解析的 key，防止同一首并发触发多次搜索。 */
     inflight: Record<string, true>;
@@ -107,15 +95,16 @@ interface BilibiliMvState {
 
 const initialState: BilibiliMvState = {
     enabled: readStoredEnabled(),
-    hideLyrics: readStoredHideLyrics(),
     useAiMatch: readStoredUseAi(),
+    forcedByStyle: false,
     bySongKey: {},
     inflight: {},
 };
 
 interface BilibiliMvActions {
     setEnabled: (enabled: boolean) => void;
-    setHideLyrics: (hide: boolean) => void;
+    /** 背景样式要求强制打开（它自己不写用户的开关）。 */
+    setForcedByStyle: (forced: boolean) => void;
     setUseAiMatch: (use: boolean) => void;
     /**
      * 把某条 BV 直接钉给这首歌当背景（搜索结果里点一条时用）。
@@ -184,18 +173,24 @@ const pickBest = async (
     input: { title: string; artist: string; durationSec?: number },
 ): Promise<BilibiliSearchHit | null> => {
     if (hits.length === 0) return null;
+    const scored = pickBestMvHit(hits, input);
     if (useBilibiliMvStore.getState().useAiMatch && isAiTargetConfigured()) {
         try {
             const picked = await pickMvHitWithAi(hits, input);
-            // 模型说「都不是」时**不降级**：它看懂了候选，结论就是没有。
-            // 只有它答不上来（抛错 / 回答看不懂）才交给打分。
             if (picked.hit) return picked.hit;
-            if (picked.reason && picked.reason !== '模型回答看不懂') return null;
+            /*
+             * 模型说「都不是」的时候仍然看一眼打分。
+             *
+             * 以前这里是直接收工（理由是「它看懂了候选」），结果就是：模型偏保守、或者
+             * 歌名对不上它的口味时，**每一首都被判成没有 MV**，而打分其实挑得出一个
+             * 很像的 —— 用户看到的就是「完全不匹配 MV，开不开 AI 都一样」。
+             * 打分那条路本来就要求标题命中且分数为正，它挑出来的不会是乱配。
+             */
         } catch {
             // 降级。
         }
     }
-    return pickBestMvHit(hits, input);
+    return scored;
 };
 
 export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
@@ -206,9 +201,9 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
         set({ enabled });
     },
 
-    setHideLyrics: (hide) => {
-        writeStoredHideLyrics(hide);
-        set({ hideLyrics: hide });
+    setForcedByStyle: (forced) => {
+        if (get().forcedByStyle === forced) return;
+        set({ forcedByStyle: forced });
     },
 
     setUseAiMatch: (use) => {
@@ -229,7 +224,8 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
     resolveForSong: async (songKey, title, artist, durationSec = 0, force = false) => {
         if (!songKey) return;
         const state = get();
-        if (state.inflight[songKey]) return;
+        // force 是「重新匹配」，它要能打断正在飞的那一单 —— 否则按钮看起来没反应。
+        if (state.inflight[songKey] && !force) return;
 
         const cached = state.bySongKey[songKey];
         // 这首歌被手动钉过某条 BV：除非 force（「重新匹配」会先清掉钉的那条），否则不自动搜。
@@ -364,8 +360,10 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
     invalidate: (songKey) => {
         set(current => {
             const { [songKey]: _drop, ...rest } = current.bySongKey;
+            const { [songKey]: _flying, ...flyingRest } = current.inflight;
             // 手动钉的那条一起清掉：invalidated 的语义是「重新来过」，留着钉住就又自动不搜了。
-                return { bySongKey: rest };
+            // 正在飞的那一单也一起清：不清的话紧接着的重新匹配会被 inflight 挡回去。
+            return { bySongKey: rest, inflight: flyingRest };
         });
     },
 

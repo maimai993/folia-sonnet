@@ -270,6 +270,22 @@ type StagePlayerQueueDiffDraft = {
 };
 
 // Owns queue navigation, online playback loading, and search-triggered playback.
+/**
+ * 某一首的现成播放地址，取不到就是 null。
+ *
+ * 只给原生自己取不了流的那几家（现在就是视频站）：原生会取流的平台不必走这里，
+ * 白白多问一次接口。判据放在 omni 里，这一层不认识具体是哪一家。
+ */
+const audioSourceUrlOf = async (song: SongResult | undefined): Promise<string | null> => {
+    if (!song || !omni.needsWebResolvedAudio(song)) return null;
+    try {
+        const source = await omni.getAudioSource(song, 'standard');
+        return source?.url ?? null;
+    } catch {
+        return null;
+    }
+};
+
 export function usePlaybackQueueController({
     isNowPlayingStageActive,
     shouldNavigateToPlayerOnTrackChange,
@@ -694,9 +710,18 @@ export function usePlaybackQueueController({
                             ? nativePrefetched.audioUrl
                             : null;
                         const mirrorEntries = buildQueueMirrorEntries(mirrorQueue, nativeLikeStateOf ?? (() => undefined));
-                        const dispatchEntries = nativeAudioUrl
+                        /*
+                         * 原生自己取不了流的平台（现在是视频站），地址要在这一边取好。
+                         *
+                         * 原生只认识音乐平台那几家，遇到别的平台拿不到地址就判成「身份不全」，
+                         * 一声不出、界面上也看不出来 —— 日志里只有一行「解析地址失败：队列
+                         * 条目身份不全」。那条路还要过登录态和本机中转，这边的实现是完备的。
+                         */
+                        const webResolvedUrl = nativeAudioUrl
+                            ?? await audioSourceUrlOf(mirrorQueue[mirrorIndex]);
+                        const dispatchEntries = webResolvedUrl
                             ? mirrorEntries.map((entry, entryIndex) => (
-                                entryIndex === mirrorIndex ? { ...entry, url: nativeAudioUrl } : entry
+                                entryIndex === mirrorIndex ? { ...entry, url: webResolvedUrl } : entry
                             ))
                             : mirrorEntries;
                         const { ok } = await FoliaPlayback.playFromQueue({

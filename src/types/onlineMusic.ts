@@ -529,6 +529,12 @@ export interface OnlinePlaybackProvider {
      */
     audioQualityLevels?: readonly AudioQualityPreference[];
     /**
+     * 原生播放器自己取不到这一家的流（它只认识音乐平台那几家）。
+     *
+     * 标了它的平台，歌在交给原生之前要由 Web 把地址取好一起送过去；不标就是原生自己取。
+     */
+    audioResolvedByWeb?: boolean;
+    /**
      * The i18n key of the notice shown when a preview clip of this provider's song plays
      * (`ProviderAudioSource.preview`), for a provider whose clips mean something else than
      * "this account may only preview it". Without it, `status.songPreviewOnly`.

@@ -1,6 +1,13 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background: brand pink, rounded square (gets clipped to a circle where it is used as an avatar) -->
-  <rect x="16" y="16" width="480" height="480" rx="120" fill="#FB7299"/>
+  <!--
+    Background: brand pink, filling the whole canvas.
+    It used to be a 480x480 rounded square inset by 16 on every side, which left a
+    transparent ring around the edge. Everywhere this is used as an avatar the ring was
+    clipped to a circle, so the colour stopped short of the rim and the surface behind it
+    showed through as a pale edge. Filling the canvas and letting the container clip it
+    keeps the colour all the way to the rim.
+  -->
+  <rect x="0" y="0" width="512" height="512" fill="#FB7299"/>
 
   <!-- The television: two antennae on top, a rounded body, two eyes -->
   <g stroke="white" stroke-width="26" stroke-linecap="round" fill="none">

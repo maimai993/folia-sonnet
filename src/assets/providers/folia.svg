@@ -18,7 +18,11 @@
   </defs>
   
   <!-- Background Container: Soft Rounded Square with Gradient -->
-  <rect x="32" y="32" width="448" height="448" rx="120" fill="url(#folia_gradient)" />
+    <!--
+    Fills the whole canvas so a circular clip reaches the rim. An inset background used to
+    leave a transparent ring that read as a pale edge around the icon.
+  -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#folia_gradient)" />
   
   <!-- Stylized F Logo -->
   <g filter="url(#dropShadow)">

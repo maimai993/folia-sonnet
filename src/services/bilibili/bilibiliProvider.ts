@@ -1,4 +1,5 @@
 import type { OnlineMusicProvider, ProviderCollection, ProviderExploreItem, ProviderPage } from '../../types/onlineMusic';
+import i18n from '../../i18n/config';
 import {
     fetchBilibiliUserProfile,
     listBilibiliShelves,
@@ -97,6 +98,19 @@ const rememberSeason = (season: BangumiSeason): void => {
     }
 };
 
+/**
+ * 歌单名：固定的那几个是词条 key，收藏夹是真名字。
+ *
+ * 词条在 home 那一组里（和探索页的分区名同一处），查不到就原样返回 —— 收藏夹的
+ * 名字是用户起的，不能当成 key 去翻。
+ */
+const shelfTitle = (title: string): string => {
+    const key = `home.${title}`;
+    // i18next 查不到时会把 key 原样吐回来，那样就等于没查到。
+    const text = i18n.t(key) as string;
+    return text === key ? title : text;
+};
+
 export const bilibiliProvider: OnlineMusicProvider = {
     id: 'bilibili',
     displayName: 'Bilibili',
@@ -152,7 +166,14 @@ export const bilibiliProvider: OnlineMusicProvider = {
          * 分页，界面认不出来，表现就是「视频搜得到、单曲搜不到」。
          */
         async searchSongs(query, limit, offset) {
-            return this.searchVideos!(query, limit, offset);
+            if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
+            const hits = await searchBilibiliVideos(query);
+            const window = hits.slice(offset, offset + limit);
+            return {
+                items: window.map(hit => normalizeBilibiliSong(hit)),
+                hasMore: hits.length > offset + limit,
+                nextOffset: offset + window.length,
+            };
         },
 
         /*
@@ -356,6 +377,11 @@ export const bilibiliProvider: OnlineMusicProvider = {
     },
 
     playback: {
+        /*
+         * 原生播放器的取流表里没有这一家（它只认识音乐平台那几家），拿不到地址就
+         * 一声不出。标了它，Web 会先把地址取好、随队列一起交给原生。
+         */
+        audioResolvedByWeb: true,
         // 只声明三档：对视频来说这三个就是 480P / 720P / 1080P（未登录上限 480P）。
         // 界面上这几档会显示成清晰度而不是音质（见 AccountTab 的 VIDEO_QUALITY_LABEL_KEYS）。
         /**
@@ -488,7 +514,12 @@ export const bilibiliProvider: OnlineMusicProvider = {
                     providerId: 'bilibili' as const,
                     // id 带上前缀：曲目要靠它认回来是哪个歌单。
                     id: shelf.id,
-                    name: shelf.title,
+                    /*
+                     * 收藏夹的名字是用户自己起的，照抄；其余几个是固定的，存的是词条
+                     * key（`shelfToview` 之类），在这里就翻成当前语言 —— 摆出去的名字
+                     * 不该是变量名。
+                     */
+                    name: shelfTitle(shelf.title),
                     type: 'playlist' as const,
                     coverUrl: shelf.coverUrl,
                     trackCount: shelf.count,

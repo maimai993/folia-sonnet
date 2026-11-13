@@ -150,22 +150,51 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         // 这个分类取不到就不摆它，别把整个歌单页判成失败。
     }
 
+    /**
+     * 一条「点开才去要」的歌单。
+     *
+     * 取到一次就记着：列列表时要条数、点进去要曲目，是同一份东西，不该问两遍。
+     * 条数不填的话列表上那几个歌单一个数字都没有，看着就像空的。
+     */
     const simple = (
         id: string,
         title: string,
         url: string,
         /** 空间那几个要换来源，否则 412。 */
         space = false,
-    ): BilibiliShelf => ({
-        id,
-        title,
-        load: async () => {
-            const payload = space
-                ? unwrap(await fetchJsonWith(url))
-                : unwrap(await fetchJson<unknown>(url));
-            return listOf(payload).map(toItem).filter(item => item.bvid);
-        },
-    });
+    ): BilibiliShelf => {
+        let cached: BilibiliShelfItem[] | null = null;
+        let inflight: Promise<BilibiliShelfItem[]> | null = null;
+        const items = async (): Promise<BilibiliShelfItem[]> => {
+            if (cached) return cached;
+            if (!inflight) {
+                inflight = (async () => {
+                    const payload = space
+                        ? unwrap(await fetchJsonWith(url))
+                        : unwrap(await fetchJson<unknown>(url));
+                    const list = listOf(payload).map(toItem).filter(item => item.bvid);
+                    cached = list;
+                    return list;
+                })().catch(error => {
+                    // 失败不留缓存，下次点还能重试。
+                    inflight = null;
+                    throw error;
+                });
+            }
+            return inflight;
+        };
+        return { id, title, load: items };
+    };
+
+    /** 列歌单时把每一条的条数补上：取不到就留空，不编一个 0。 */
+    const countOf = async (shelf: BilibiliShelf): Promise<BilibiliShelf> => {
+        try {
+            shelf.count = (await shelf.load()).length;
+        } catch {
+            // 这一条取不到就不带数字，列表照常摆。
+        }
+        return shelf;
+    };
 
     /*
      * 排在最前面的是「推荐」和「我的收藏」。
@@ -236,7 +265,8 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         simple('tv', 'shelfTv', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
     );
 
-    return shelves;
+    // 条数一次问全，而且并着问：它们是同一个账号下的几个小列表。
+    return Promise.all(shelves.map(countOf));
 };
 
 /** 搜到的一个人。 */

@@ -59,8 +59,14 @@ const Shelf: React.FC<ShelfProps> = ({ section, form, batch, arrival, base, leav
      * 平台给的 title 现在是一个 i18n key（分区名要跟着界面语言走），但也可能是
      * 一段现成的文字（老平台、或标题本身就是内容）。有对应词条就取词条，没有就
      * 原样显示 —— 不要把一个看起来像 key 的东西摆到界面上。
+     *
+     * 查的时候还要带上 `home.` 前缀：分区那几个词条在 home 那一组里，裸查 `zone1`
+     * 找不到，界面上就直接显示成变量名。
      */
-    const sectionTitle = (title: string): string => (i18n.exists(title) ? t(title) : title);
+    const sectionTitle = (title: string): string => {
+        const key = `home.${title}`;
+        return i18n.exists(key) ? t(key) : title;
+    };
     const keys = useMemo(() => keysOf(section.items), [section.items]);
     // The element that scrolls sideways (a band has none), and which of its ends hide further entries.
     const row = useRef<HTMLDivElement | null>(null);

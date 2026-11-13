@@ -21,6 +21,18 @@ export interface Face {
     durationMs: number;
 }
 
+/**
+ * 一个可能带词条的名字。
+ *
+ * 先按 `home.` 那一组查（分区名、账号里那几个固定歌单都放在那里），查到就用词条；
+ * 查不到就当作内容本身原样返回 —— 这一站的收藏夹名字是用户自己起的，不该被当成 key。
+ */
+const titleOf = (name: string, t: (key: string) => string): string => {
+    const keyed = t(`home.${name}`);
+    // i18next 查不到时会把 key 原样吐回来，那样就等于没查到。
+    return keyed === `home.${name}` ? name : keyed;
+};
+
 export const faceOf = (item: OmniExploreItem, t: (key: string) => string): Face => {
     if (item.kind === 'song') {
         const coverUrl = item.song.album.coverUrl ?? '';
@@ -42,9 +54,10 @@ export const faceOf = (item: OmniExploreItem, t: (key: string) => string): Face 
     const wideCoverUrl = isArtist ? undefined : item.wideCoverUrl;
     return {
         kind: collection.type,
-        // 歌单名可能是 i18n key（平台自己的那几个歌单）。i18n 找不到词条时原样返回 key，
-        // 所以「默认收藏夹」这种真实名字也照常显示，不需要另外判一次。
-        title: collection.name ? t(collection.name) : collection.name,
+        // 歌单名可能是 i18n key（分区名、账号里那几个固定歌单），也可能就是内容本身
+        // （「默认收藏夹」这种真实名字）。词条在 home 那一组里，所以带上前缀查；
+        // 查不到就原样显示，不要把一个像变量名的东西摆到界面上。
+        title: collection.name ? titleOf(collection.name, t) : collection.name,
         subtitle: item.subtitle ?? ((isArtist ? '' : getProviderCollectionArtistLabel(collection)) || kindLabel),
         pictureUrl: wideCoverUrl ?? coverUrl,
         coverUrl,
