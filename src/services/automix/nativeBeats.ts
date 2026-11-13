@@ -12,6 +12,7 @@
 import { registerPlugin } from '@capacitor/core';
 import { isCapacitorAndroid } from '../../platform/runtime';
 import { cancelNativeSeparation } from './nativeModels';
+import { reportBeatAnalysisProgress } from '../beatFx/beatProgress';
 
 /** 与 Kotlin 侧 BeatThisRunner.SAMPLE_RATE 一致。 */
 export const BEAT_THIS_SAMPLE_RATE = 22050;
@@ -48,6 +49,25 @@ type NativeBeatsPlugin = {
      * 能给出路径或地址时一律走这条，`analyzeBeats` 只留给「PCM 已经在手里」的短片段。
      */
     analyzeBeatsFromUrl?(options: { url: string }): Promise<NativeBeatGrid>;
+    /**
+     * 原生报来的阶段与进度（decode / mel / infer）。
+     *
+     * 可选：旧 APK 的插件没有这个事件，`typeof plugin.addListener` 那句就是为它留的。
+     */
+    addListener?(
+        eventName: 'beatAnalysisProgress',
+        listener: (event: { stage?: string; percent?: number }) => void,
+    ): Promise<{ remove: () => Promise<void> }>;
+    /**
+     * 分段交付：每算完一块发一次累积的拍点表（从头到 `until` 秒）。
+     *
+     * 这是「秒出」的关键：整曲要二十秒以上，而前 45 秒那一块一两秒就算完了。
+     * 界面先拿去用，后面每块到了再替换 —— 表只会变长。
+     */
+    addListener?(
+        eventName: 'beatAnalysisChunk',
+        listener: (event: { beats?: NativeBeat[]; until?: number; final?: boolean }) => void,
+    ): Promise<{ remove: () => Promise<void> }>;
 };
 
 const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels');
@@ -146,7 +166,12 @@ export const analyzeBeatsNative = async (samples: Float32Array): Promise<NativeB
  * 调用参数，四分钟的歌就是 28MB，桥和堆都撑不住 —— 真机上表现是分析永远失败、
  * 智能动感一直没有拍点。这条路只传一个字符串，原生用 MediaExtractor 直接解码。
  */
-export const analyzeBeatsNativeFromUrl = async (url: string, timeoutMs = 3 * 60 * 1000): Promise<NativeBeatGrid> => {
+export const analyzeBeatsNativeFromUrl = async (
+    url: string,
+    timeoutMs = 3 * 60 * 1000,
+    /** 每算完一块来的累积拍点表（`seconds` 是这块覆盖到的位置）。 */
+    onPartial?: (beats: NativeBeat[], seconds: number) => void,
+): Promise<NativeBeatGrid> => {
     if (!isNativeBeatAnalysisAvailable()) {
         throw new Error('原生节拍分析只支持安卓 App');
     }
@@ -163,7 +188,35 @@ export const analyzeBeatsNativeFromUrl = async (url: string, timeoutMs = 3 * 60 
      * 界面上看起来只是「智能动感一直没反应」。超时后请求取消，让队列能往前走。
      */
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let listener: { remove: () => Promise<void> } | null = null;
+    let chunkListener: { remove: () => Promise<void> } | null = null;
     try {
+        /*
+         * 先挂上进度与分段：原生在 decode / mel / infer 三个点上各报一次进度，
+         * 每算完一块再报一次拍点表。界面照着说「在解码」「推理 62%」，
+         * 并且第一块（45 秒）到了就能让特效动起来，不必等整曲。
+         * 挂失败（旧 APK）不影响分析本身，只是没有进度、没有分段。
+         */
+        if (typeof plugin.addListener === 'function') {
+            try {
+                listener = await plugin.addListener('beatAnalysisProgress', (event) => {
+                    const stage = event?.stage;
+                    if (stage === 'decode' || stage === 'mel' || stage === 'infer') {
+                        reportBeatAnalysisProgress(stage, Number(event.percent) || 0);
+                    }
+                });
+                if (onPartial) {
+                    chunkListener = await plugin.addListener('beatAnalysisChunk', (event) => {
+                        const beats = Array.isArray(event?.beats) ? event.beats : [];
+                        if (!beats.length) return;
+                        onPartial(beats, Number(event?.until) || 0);
+                    });
+                }
+            } catch {
+                listener = null;
+                chunkListener = null;
+            }
+        }
         const grid = await Promise.race([
             plugin.analyzeBeatsFromUrl({ url }),
             new Promise<never>((_, reject) => {
@@ -179,5 +232,7 @@ export const analyzeBeatsNativeFromUrl = async (url: string, timeoutMs = 3 * 60 
         return grid;
     } finally {
         if (timer !== null) clearTimeout(timer);
+        if (listener) void listener.remove().catch(() => {});
+        if (chunkListener) void chunkListener.remove().catch(() => {});
     }
 };

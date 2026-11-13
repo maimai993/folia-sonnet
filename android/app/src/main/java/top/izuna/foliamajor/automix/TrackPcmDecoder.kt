@@ -74,10 +74,21 @@ internal object TrackPcmDecoder {
      * @param maxSeconds 最多解这么久（默认 8 分钟）。超长的现场版截断，避免内存爆掉。
      */
     @Synchronized
-    fun decodeMono(context: Context, pathOrUrl: String, maxSeconds: Int = 480): FloatArray? {
+    fun decodeMono(
+        context: Context,
+        pathOrUrl: String,
+        maxSeconds: Int = 480,
+        /**
+         * 用不用、写不写那份 20 秒缓存。
+         *
+         * 「先解前 45 秒 » 那一趟必须是 false：它是截断，一旦写进缓存，
+         * 紧接着的整曲分析会命中它，后半首就没有拍点了。
+         */
+        allowCache: Boolean = true,
+    ): FloatArray? {
         val now = System.currentTimeMillis()
         val cached = cachedMono
-        if (cached != null &&
+        if (allowCache && cached != null &&
             cachedMonoUrl == pathOrUrl &&
             now - cachedMonoAt in 0..MONO_CACHE_TTL_MS
         ) {
@@ -88,7 +99,7 @@ internal object TrackPcmDecoder {
         val pcm = decodePcm(context, pathOrUrl, MONO_RATE, monoOnly = true, maxSeconds = maxSeconds) ?: return null
         val mono = pcm.left
         // 后台时不留：这一份只是给下一次分析备的，而下次多半是回前台之后。
-        if (!AutomixLoad.inBackground) {
+        if (allowCache && !AutomixLoad.inBackground) {
             cachedMonoUrl = pathOrUrl
             cachedMonoAt = now
             cachedMono = mono

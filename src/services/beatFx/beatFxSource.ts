@@ -4,7 +4,8 @@ import { getTrackBeatAccents, getTrackBeatGrid } from '../analysis/beatGrid';
 import { getDrumHits, loadStoredDrumHits, loadTrackDrumHits, setWantedDrumTrack } from '../analysis/drumHits';
 import { getVocalEnvelope, loadStoredVocalEnvelope } from '../analysis/vocalEnvelope';
 import { loadTrackVocalEnvelope, releaseTrackVocals } from '../analysis/vocalStemRun';
-import { getBeatFxLastHeard } from './beatFxLive';
+import { getBeatFxHeard, getBeatFxLastHeard, updateBeatFxEvents } from './beatFxLive';
+import { beginBeatAnalysisProgress, endBeatAnalysisProgress } from './beatProgress';
 import { BEAT_THIS_SAMPLE_RATE, canRunBeatThis } from '../analysis/beatThis';
 import { decodeAtRate, readLocalTrackBytes, toMidSide } from '../analysis/trackAudio';
 import { decodeTrackAtRate, loadTrackBytes, type TrackBytesSource } from '../analysis/trackBytes';
@@ -196,6 +197,41 @@ const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> =
     }
 };
 
+/**
+ * 给一次查找加截止时间。
+ *
+ * 这条链路上有几处等的是「原生某一步回来」：取音频（在线曲目要把整首落到本地缓存）、
+ * 解码、推理。取音频那一端没有连接超时，一个不回包的直链能让它挂到天荒地老 ——
+ * 而界面上唯一的显示是「正在分析」，于是看起来就是永远分析不出来（真机反馈 2026-11-13）。
+ * 到点就当作没有结果：状态落到 `none` 并写出原因，下次播放还能重试，
+ * 而不是一句不变的话挂在那里。
+ */
+const BEAT_LOOKUP_TIMEOUT_MS = 200_000;
+
+const withDeadline = <T>(work: Promise<T>, ms: number, what: string): Promise<T> =>
+    new Promise<T>((resolve, reject) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error(`${what}超过 ${Math.round(ms / 1000)} 秒没有结果`));
+        }, ms);
+        work.then(
+            (value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
+
 const resolveTrackBeats = async (
     song: SongResult,
     key: string,
@@ -273,13 +309,38 @@ const resolveTrackBeats = async (
         }
         return readNativeMediaCacheUrl(cacheKey);
     };
+    beginBeatAnalysisProgress();
     try {
         // The picture on screen waits on these: ahead of automix's background profiles on the GPU.
-        grid = await getTrackBeatGrid(key, readMid, { storedOnly, urgency: 'onScreen', nativeSourceUrl });
+        grid = await withDeadline(
+            getTrackBeatGrid(key, readMid, {
+                storedOnly,
+                urgency: 'onScreen',
+                nativeSourceUrl,
+                onPartial: (partialBeats, seconds) => {
+                    /*
+                     * 安卓原生按块交付：第一块（前 45 秒）一两秒就到，先让画面动起来。
+                     *
+                     * 用户按下的那一刻起，整曲要二十秒以上才算完 —— 等它，等于前半分钟
+                     * 什么反应都没有。这里拿到就先装上，后面的块逐次替换，表只会变长。
+                     */
+                    if (key !== getBeatFxHeard().key) return;
+                    const times = partialBeats.map(beat => beat.time);
+                    if (!times.length) return;
+                    const downbeats = partialBeats.filter(beat => beat.downbeat).map(beat => beat.time);
+                    updateBeatFxEvents(key, mergeBeatFxEvents(times, downbeats));
+                    console.info(`[BeatFx] partial beats: ${times.length} up to ${seconds.toFixed(0)}s (key=${key})`);
+                },
+            }),
+            BEAT_LOOKUP_TIMEOUT_MS,
+            '节拍分析',
+        );
     } catch (error) {
         // A throw here (a cache read, a worker, a GPU device lost mid-run) is "no beats" like any
         // other: answered, so the caller's frame falls back, and not remembered, so a later play retries.
         return { events: [], source: 'none', note: `beat lookup failed: ${String(error)}`, trackScale: 1 };
+    } finally {
+        endBeatAnalysisProgress();
     }
     if (grid?.beats.length) {
         const found = grid;

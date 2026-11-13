@@ -29,6 +29,15 @@ import java.util.concurrent.Executors
 @CapacitorPlugin(name = "FoliaAutomixModels")
 class FoliaAutomixModelsPlugin : Plugin() {
 
+    /** 拍点分析进度的事件名，与 Web 侧 nativeBeats.ts 的监听一致。 */
+    private val beatProgressEvent = "beatAnalysisProgress"
+
+    /** 分段交付的拍点表，同样是 nativeBeats.ts 在听。 */
+    private val beatChunkEvent = "beatAnalysisChunk"
+
+    /** 首段多长（秒）：这一段先算先交，让画面在播放开始后一两秒就有反应。 */
+    private val fastSeconds = 45
+
     /**
      * 模型拷贝与推理都很重，一律放在单线程池上顺序跑。
      *
@@ -196,6 +205,42 @@ class FoliaAutomixModelsPlugin : Plugin() {
      * 要么被拒（"Native HTTP response exceeds the bridge size limit"），
      * 要么把 base64 + JSON 序列化的 8 倍放大撞进 256MB 堆。
      */
+    /**
+     * 拍点分析的进度：阶段 + 这一段自己的完成度。
+     *
+     * 为什么要报：界面上原来只有一句不变的「正在分析这首歌的节拍…」，几十秒里一个字不动，
+     * 和卡死在用户眼里没有区别，也没法判断是慢还是坏了（真机反馈 2026-11-13）。
+     * 只在阶段边界与每 1024 帧报一次，整曲最多二三十条消息。
+     */
+    private fun reportBeatProgress(stage: String, percent: Float) {
+        val payload = JSObject().put("stage", stage).put("percent", percent.toDouble())
+        val emit = Runnable { notifyListeners(beatProgressEvent, payload) }
+        val host = activity
+        if (host != null) host.runOnUiThread(emit) else emit.run()
+    }
+
+    /**
+     * 交一段「到这里为止」的拍点表。
+     *
+     * 表是**累积**的（每次都是从头到 `until` 的全量），因为界面那边的时钟只需要一份完整列表；
+     * 整曲四分钟也就四五百个拍点，重复发的代价可以忽略，换来的是界面不用自己做合并去重。
+     */
+    private fun emitBeatChunk(beats: List<BeatThisRunner.Beat>, upToSec: Double, final: Boolean) {
+        val array = JSArray()
+        for (beat in beats) {
+            array.put(
+                JSObject()
+                    .put("time", beat.time)
+                    .put("downbeat", beat.isDownbeat)
+                    .put("confidence", beat.confidence.toDouble()),
+            )
+        }
+        val payload = JSObject().put("beats", array).put("until", upToSec).put("final", final)
+        val emit = Runnable { notifyListeners(beatChunkEvent, payload) }
+        val host = activity
+        if (host != null) host.runOnUiThread(emit) else emit.run()
+    }
+
     @PluginMethod
     fun analyzeBeatsFromUrl(call: PluginCall) {
         val url = call.getString("url")
@@ -206,18 +251,45 @@ class FoliaAutomixModelsPlugin : Plugin() {
                 cancelRequested.set(false)
                 AutomixLoad.applyThreadPriority()
                 val started = System.currentTimeMillis()
+                val file = AutomixModels.ensureLocal(context, AutomixModels.BEAT_THIS)
+                BeatThisRunner.ensureLoaded(file)
+
                 /*
-                 * 直接解成 22050 单声道，不再「先解 44.1k 双声道再降混抽取」。
+                 * 第一段：只解前 45 秒，先让画面动起来。
                  *
-                 * beat_this 要的就是这一条，而双声道那条路为它多分配了 3/4 的内存
-                 * （四分钟的歌 170MB 对 21MB），解码也更久。解码结果还会被
-                 * 紧接着的鼓点分析复用（TrackPcmDecoder 的短时缓存）。
+                 * 为什么值得多花这一次：整曲「解码 + 频谱 + 六块推理」在手机上要二十秒以上，
+                 * 而 45 秒（约 22 拍）的解码、频谱、单块推理加起来两秒上下 ——
+                 * 用户按下播放后第一次看到镜面/鼓面响应，就在这个量级。
+                 *
+                 * `allowCache = false` 是关键：这一份是截断，一旦写进 20 秒缓存，
+                 * 紧接着的整曲分析会命中它，后半首就永远没有拍点了。
+                 */
+                val head = TrackPcmDecoder.decodeMono(
+                    context,
+                    url,
+                    maxSeconds = fastSeconds,
+                    allowCache = false,
+                )
+                if (head != null && !cancelRequested.get()) {
+                    BeatThisRunner.analyze(
+                        mono = head,
+                        cancelled = { cancelRequested.get() },
+                        onChunk = { beats, upTo -> emitBeatChunk(beats, upTo, final = false) },
+                    )
+                }
+
+                /*
+                 * 整曲。解码结果还会被紧接着的鼓点分析复用（TrackPcmDecoder 的短时缓存）。
                  */
                 val mono = TrackPcmDecoder.decodeMono(context, url)
                     ?: return@execute call.reject("无法解码音频: $url")
-                val file = AutomixModels.ensureLocal(context, AutomixModels.BEAT_THIS)
-                BeatThisRunner.ensureLoaded(file)
-                val result = BeatThisRunner.analyze(mono) { cancelRequested.get() }
+                reportBeatProgress("decode", 1f)
+                val result = BeatThisRunner.analyze(
+                    mono = mono,
+                    cancelled = { cancelRequested.get() },
+                    onProgress = { stage, percent -> reportBeatProgress(stage, percent) },
+                    onChunk = { beats, upTo -> emitBeatChunk(beats, upTo, final = false) },
+                )
                 android.util.Log.i(
                     "Automix",
                     "beat_this(url): ${mono.size} 样本 -> ${result.beats.size} 个拍点，" +

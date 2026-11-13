@@ -1,7 +1,9 @@
 package top.izuna.foliamajor.automix
 
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
+import kotlin.math.min
 import top.izuna.foliamajor.FoliaPlaybackService
 
 /**
@@ -31,6 +33,9 @@ internal object AutomixLoad {
     /** 当前线程上一次设置的优先级；`Int.MIN_VALUE` 表示还没设置过。 */
     private var appliedPriority = Int.MIN_VALUE
 
+    /** 上一次让路的时刻（`elapsedRealtime`），用来估这一段的实际耗时。 */
+    private var lastYieldAt = 0L
+
     /**
      * App 是否在后台。
      *
@@ -57,13 +62,33 @@ internal object AutomixLoad {
     /**
      * 一个分块做完了，让一次。
      *
-     * 前台立刻返回（只做一次优先级检查）；后台先降优先级再睡一小段。
+     * 后台降优先级并睡 60ms；前台按上一段耗时的 12% 让出（上限 120ms）。
      */
     fun yieldPoint() {
         applyThreadPriority()
-        if (!inBackground) return
+        val now = SystemClock.elapsedRealtime()
+        val since = if (lastYieldAt == 0L) 0L else now - lastYieldAt
+        lastYieldAt = now
+        if (inBackground) {
+            sleepFor(BACKGROUND_SLEEP_MS)
+            return
+        }
+        /*
+         * 前台也让一点 —— 但只按上一段的耗时让出 12%，上限 120 毫秒。
+         *
+         * 为什么前台也要让：整曲推理是「一块两三秒、连着六块」的形态，
+         * 这块机器同时还在解音频、画可视化。让出这一小截，平均占用降一档，
+         * 而整首歌只多花不到一秒 —— 用户感觉不到慢，只会觉得不那么烫、不卡顿。
+         * 上限 120ms 是为了让首段（只有一块）几乎不受影响：这块算完就让 100 多毫秒，
+         * 画面还是在一两秒内动起来。
+         */
+        val give = min(120L, since * 12 / 100)
+        if (give > 0) sleepFor(give)
+    }
+
+    private fun sleepFor(ms: Long) {
         try {
-            Thread.sleep(BACKGROUND_SLEEP_MS)
+            Thread.sleep(ms)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
