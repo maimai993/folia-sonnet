@@ -359,6 +359,8 @@ describe('the texts the window can ask for', () => {
             netease: null, kugou: null, bodian: null, qishui: null, appleMusic: null, feiniu: null,
             // 洛雪自定义音源不登录，也就没有为某一种失败另写的一句话。
             lxmusic: null,
+            // B 站扫码登录走通用的那套失败文案，没有为某一种失败另写一句。
+            bilibili: null,
             // 扫错 App 的那一句按后端有没有 QQ 音乐 App 扫码说（这里还没问到后端）。
             qq: { 'local-service-unavailable': 'home.loginCaseQqRestart', 'wrong-scan-app': 'home.loginCaseQqWrongScanAppMobileOnly', 'device-limit': 'home.loginCaseQqDeviceLimit' },
             ytm: { 'browser-unfinished': 'home.loginCaseYtmUnfinished', 'no-browser': 'home.loginNoBrowserYtm' },

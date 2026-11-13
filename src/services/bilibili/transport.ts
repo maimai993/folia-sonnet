@@ -30,10 +30,21 @@ export const isBilibiliAvailable = (): boolean => isBilibiliNativeAvailable();
 
 export const requestBilibiliUrl = async (
     url: string,
-    init: { method?: string; body?: string; headers?: Record<string, string> } = {},
+    init: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+        /**
+         * 停在第一跳，不跟随 3xx。
+         *
+         * 扫码登录最后一步请求的是个跨域跳转地址，SESSDATA 就在 302 那一跳的
+         * Set-Cookie 里；跟着跳过去，最终响应里什么也没有。
+         */
+        noRedirect?: boolean;
+    } = {},
 ): Promise<BilibiliTransportResponse> => {
     if (isBilibiliNativeAvailable()) {
-        return requestBilibiliNative(url, init.headers) as Promise<BilibiliBridgeResponse>;
+        return requestBilibiliNative(url, init.headers, init.noRedirect) as Promise<BilibiliBridgeResponse>;
     }
 
     // 没有原生桥：试着直连。失败时把话说清楚。

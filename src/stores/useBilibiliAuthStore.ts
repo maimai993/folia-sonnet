@@ -43,6 +43,15 @@ interface BilibiliAuthActions {
     cancelLogin: () => void;
     /** 注销：清掉原生 cookie。 */
     signOut: () => Promise<void>;
+    /**
+     * 记下「登录成功了，uid 是这一个」。
+     *
+     * 扫码流程已经交给 provider 的 auth（services/bilibili/bilibiliProvider.ts），
+     * 它落完 cookie 之后调这里，把这个 store 当成「谁是当前账号」的缓存。
+     */
+    markSignedIn: (uid: string) => void;
+    /** 同上，反向：登录态没了。 */
+    markSignedOut: () => void;
 }
 
 export type BilibiliAuthStore = BilibiliAuthState & BilibiliAuthActions;
@@ -157,4 +166,9 @@ export const useBilibiliAuthStore = create<BilibiliAuthStore>()((set, get) => ({
         await clearBilibiliCookiesNative();
         set({ signedIn: false, uid: '', ...emptyQr() });
     },
+
+    // 扫码由 provider 的 auth 跑（见那个文件）。这两个方法让它在成功/退出之后
+    // 把这个 store 更新到同一步，界面才有东西可看。
+    markSignedIn: (uid: string) => set({ signedIn: true, uid, ...emptyQr() }),
+    markSignedOut: () => set({ signedIn: false, uid: '', ...emptyQr() }),
 }));

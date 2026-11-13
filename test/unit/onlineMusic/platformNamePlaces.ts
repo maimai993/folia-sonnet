@@ -21,7 +21,7 @@ export const PLACE_KINDS = {
 export type PlaceKind = keyof typeof PLACE_KINDS;
 
 export interface PlatformNamePlace {
-    n: Partial<Record<'netease' | 'qq' | 'kugou' | 'bodian' | 'ytm' | 'spotify' | 'qishui' | 'fnmusic' | 'appleMusic' | 'feiniu' | 'lxmusic', number>>;
+    n: Partial<Record<'netease' | 'qq' | 'kugou' | 'bodian' | 'ytm' | 'spotify' | 'qishui' | 'fnmusic' | 'appleMusic' | 'feiniu' | 'lxmusic' | 'bilibili', number>>;
     // The kind of the file's lines of code; its comment lines are counted as comments.
     kind: PlaceKind;
     // What the lines are, where the kind alone does not say it.
@@ -60,7 +60,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/app/appWiring/useAppAccountsAndStage.ts': { n: { netease: 5 }, kind: 'file', why: 'the account/stage wiring: it opens the sign-in window and names 网易云 as the account that is always there' },
     'src/components/app/command-palette-context/buildSettingsCommandContext.ts': { n: { netease: 2 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
     'src/components/app/home/explore/recentPlays.ts': { n: { ytm: 1 }, kind: 'doc' },   // comments only,
-    'src/components/app/search/searchSources.ts': { n: { netease: 1 }, kind: 'doc', why: 'a comment that names where the old「已登录才列」rule left the source bar' },   // comments only,
+    'src/components/app/search/searchSources.ts': { n: { netease: 1, bilibili: 8 }, kind: 'doc', why: 'a comment that names where the old「已登录才列」rule left the source bar' },   // comments only,
     'src/components/app/home/gridViewCollectionAdapters.ts': { n: { netease: 1 }, kind: 'doc' },   // comments only,
     'src/components/app/playback/bridges/usePlaybackReporter.ts': { n: { netease: 1 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled' },
     'src/components/app/playback/createLyricsSetter.ts': { n: { netease: 13, qq: 1 }, kind: 'lyric', why: 'the stored lyric source id and the chorus ranges that source gives' },
@@ -81,9 +81,21 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/modal/lyric-match/LocalSongLyricMatch.tsx': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/lyric-match/navidromeSongMatch.ts': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/settings/pages/HelpPage.tsx': { n: { qq: 5 }, kind: 'namesake', why: 'the QQ chat app\'s community group, not QQ Music: its number and its i18n key' },
-    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
+    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1, bilibili: 5 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
     'src/components/modal/settings/pages/LyricsPage.tsx': { n: { spotify: 1 }, kind: 'lyric', why: 'which of two hand-written descriptions of the lyric sources is shown' },
-    'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7 }, kind: 'stored', why: 'an i18n key' },
+    'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7, bilibili: 11 }, kind: 'stored', why: 'an i18n key' },
+    'src/components/panelTab/AccountTab.tsx': { n: { bilibili: 3 }, kind: 'doc', why: 'the comment saying that on a video platform the same three levels are named 480P/720P/1080P instead of audio qualities' },
+    'src/services/lyricDirector/catalog.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
+    'src/stores/useVideoLayerSettingsStore.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
+    'src/components/app/AppSurface.tsx': { n: { bilibili: 3 }, kind: 'file', why: 'the app surface mounts the video platform own MV layer next to the existing video layer' },
+    'src/components/app/search/BilibiliVideoResults.tsx': { n: { bilibili: 16 }, kind: 'file', why: 'that platform own search results inside the search workspace' },
+    'src/components/app/search/SearchTabs.tsx': { n: { bilibili: 2 }, kind: 'doc', why: 'the comment saying the video platform has a tab of its own' },
+    'src/components/app/search/SearchWorkspace.tsx': { n: { bilibili: 6 }, kind: 'file', why: 'the workspace shows that platform own result list when its source tab is chosen' },
+    'src/components/visualizer/useVisualizerRendererModel.ts': { n: { bilibili: 5 }, kind: 'doc', why: 'the comment saying the video platform has no lyrics to feed the renderer' },
+    'src/stores/useBilibiliAuthStore.ts': { n: { bilibili: 20 }, kind: 'file', why: 'that platform own sign-in state' },
+    'src/stores/useBilibiliMvStore.ts': { n: { bilibili: 33 }, kind: 'file', why: 'that platform own MV resolution and cache' },
+    'src/stores/useSearchNavigationStore.ts': { n: { bilibili: 7 }, kind: 'file', why: 'the search source list, where the video platform is one more source' },
+    'src/types/bilibili.ts': { n: { bilibili: 11 }, kind: 'file', why: 'that platform own types' },
     'src/components/panelTab/FmTab.tsx': { n: { qq: 1, bodian: 1 }, kind: 'doc' },   // comments only,
     'src/components/shared/CoverSizeAuditPanel.tsx': { n: { netease: 6 }, kind: 'question', why: 'a developer panel: a filter for the cover requests that go to one picture host' },
     'src/components/shared/JoinCommunityButton.tsx': { n: { qq: 19 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
@@ -121,7 +133,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/nativeBridge/api/qq-wechat-login.js': { n: { qq: 44 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/nativeBridge/api/qq.js': { n: { qq: 481 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the explore routes 2026-10-19' },
     'src/nativeBridge/api/weapi.js': { n: { netease: 1 }, kind: 'doc' },   // comments only,
-    'src/platform/foliaNative.ts': { n: { qishui: 19, fnmusic: 2 }, kind: 'file', why: 'the bridge entry of this fork\'s 汽水 adapter (flat layout, outside the qishui folder)' },
+    'src/platform/foliaNative.ts': { n: { qishui: 19, fnmusic: 2, bilibili: 28 }, kind: 'file', why: 'the bridge entry of this fork\'s 汽水 adapter (flat layout, outside the qishui folder)' },
     'src/services/aiCloudCache.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc' },   // comments only,
     'src/services/aiStage.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc' },   // comments only,
     'src/services/automix/trackProfile.ts': { n: { spotify: 1 }, kind: 'doc' },   // comments only,
@@ -169,7 +181,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/onlineMusic/omni/providerMethods.ts': { n: { netease: 2, kugou: 2, fnmusic: 1 }, kind: 'doc', why: 'raised by the upstream merge 2026-10-17' },   // comments only,
     'src/services/onlineMusic/onlineCoverFallback.ts': { n: { netease: 2, qq: 1, kugou: 2, fnmusic: 4, feiniu: 20 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/services/onlineMusic/providerAccountCache.ts': { n: { kugou: 1 }, kind: 'doc' },   // comments only,
-    'src/services/onlineMusic/providerRegistry.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 2, spotify: 4, qishui: 6, appleMusic: 2, fnmusic: 7, feiniu: 4, lxmusic: 3 }, kind: 'list', why: 'the list of platforms: where a platform is added. fnmusic appears only in the note explaining why this fork registers its own 飞牛 adapter instead of the upstream one' },
+    'src/services/onlineMusic/providerRegistry.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 2, spotify: 4, qishui: 6, appleMusic: 2, fnmusic: 7, feiniu: 4, lxmusic: 3, bilibili: 3 }, kind: 'list', why: 'the list of platforms: where a platform is added. fnmusic appears only in the note explaining why this fork registers its own 飞牛 adapter instead of the upstream one' },
     'src/services/onlineMusic/qishuiCatalog.ts': { n: { qishui: 39 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: the catalogue and the feed' },
     'src/services/onlineMusic/qishuiLibrary.ts': { n: { qishui: 16 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: the account library' },
     'src/services/onlineMusic/qishuiMutations.ts': { n: { qishui: 19 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: likes and playlist edits' },
@@ -233,7 +245,6 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'worker/qqQrChannel.ts': { n: { qq: 6 }, kind: 'main', why: 'a Durable Object the worker binds by name' },
     'src/components/app/overlays/AppOverlays.tsx': { n: { lxmusic: 2 }, kind: 'stored', why: 'the overlay that hosts the 洛雪 workspace: it mounts LxWorkspace and reads useLxWorkspaceStore' },
     'src/components/app/overlays/buildAppOverlaysModel.ts': { n: { lxmusic: 2 }, kind: 'doc', why: 'the comment that says the overlay model carries the 洛雪 workspace' },
-    'src/components/login/window/LoginScreen.tsx': { n: { lxmusic: 4 }, kind: 'doc', why: 'the comment that says the 洛雪 source needs no account, so the login column leaves it out' },
     'src/library/core/home/online/useLxSquareCollections.ts': { n: { lxmusic: 2 }, kind: 'stored', why: 'the 洛雪 歌单广场 collections the home page lists' },
     'src/library/core/suite/suite.contract.ts': { n: { lxmusic: 1 }, kind: 'doc', why: 'the comment that says a suite may declare a 洛雪 tab' },
     'src/library/registry.ts': { n: { lxmusic: 1 }, kind: 'doc', why: 'the comment that names the 洛雪 suite among the registered ones' },

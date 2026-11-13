@@ -62,6 +62,20 @@ class FoliaBilibiliPlugin : Plugin() {
     }
 
     /**
+     * 不跟随重定向的那一份，只给扫码登录的「换 cookie」用。
+     *
+     * 那一步请求的是一个跨域跳转地址：SESSDATA 就在 **302 那一跳**的 Set-Cookie 头上。
+     * 跟着跳过去，最终响应里什么都没有 —— 前端于是报「the login response carried no
+     * SESSDATA」。所以这一条路必须停在第一跳，把它的头原样带回去。
+     */
+    private val noRedirectClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .build()
+    }
+
+    /**
      * 发一次 GET，把状态码和响应体原文带回去。
      *
      * 参数：
@@ -121,8 +135,10 @@ class FoliaBilibiliPlugin : Plugin() {
 
         // 等待交给 OkHttp 的线程池，别占着桥线程（见 FoliaNativePlugin 那条教训）。
         call.setKeepAlive(true)
+        // 换 cookie 那一步要求停在第一跳（见 noRedirectClient），其余请求照常跟随。
+        val httpClient = if (call.getBoolean("noRedirect", false) == true) noRedirectClient else client
         try {
-            client.newCall(builder.build()).enqueue(object : Callback {
+            httpClient.newCall(builder.build()).enqueue(object : Callback {
                 override fun onFailure(httpCall: Call, error: IOException) {
                     Log.w(TAG, "request failed: ${error.message}")
                     call.reject(error.message ?: "network error", error)

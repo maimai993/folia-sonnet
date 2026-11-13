@@ -162,8 +162,61 @@ interface ViewPayload {
     title?: string;
     duration?: number;
     owner?: { name?: string };
+    /** 封面图；可能是 http，用的时候要升成 https。 */
+    pic?: string;
     pages?: Array<{ cid: number; duration?: number }>;
 }
+
+/** 推荐接口回来的一条。字段和搜索那边不太一样，所以单独解析。 */
+interface RcmdPayload {
+    item?: Array<{
+        bvid?: string;
+        title?: string;
+        duration?: number;
+        owner?: { name?: string };
+        pic?: string;
+        stat?: { view?: number };
+        /** 直播、番剧、广告位这些也在同一个列表里，用 goto 区分。 */
+        goto?: string;
+    }>;
+}
+
+/**
+ * 首页推荐。
+ *
+ * 登录了就带上 Cookie（transport 走原生 CookieManager），B 站回的是这个人自己的推荐；
+ * 没登录它回的是平台默认推荐 —— 两件事用同一个接口，不需要在这里分开写。
+ *
+ * 只保留普通投稿（goto === 'av'）：列表里混着直播、番剧和广告位，那些没有稳定的
+ * bvid / cid，点开也放不了。
+ */
+export const fetchBilibiliRecommendations = async (): Promise<BilibiliSearchHit[]> => {
+    if (!isBilibiliAvailable()) {
+        throw new BilibiliApiError(BRIDGE_UNAVAILABLE_CODE, 'bilibili requests need the Android app');
+    }
+    const url = await signedUrl('/x/web-interface/wbi/index/top/feed/rcmd', {
+        fresh_type: 3,
+        ps: 20,
+    });
+    const payload = unwrap(await fetchJson<RcmdPayload>(url));
+    return (payload.item ?? [])
+        .filter(item => item.goto === 'av' && typeof item.bvid === 'string' && item.bvid.length > 0)
+        .map(item => ({
+            bvid: item.bvid as string,
+            title: stripSearchHighlight(item.title ?? ''),
+            author: item.owner?.name ?? '',
+            // 推荐接口给的是秒，和搜索那边一致。
+            durationSec: item.duration ?? 0,
+            coverUrl: toHttps(item.pic),
+            playCount: item.stat?.view ?? 0,
+        }));
+};
+
+/** 图片地址可能是 http（WebView 里会被拦），统一升成 https。 */
+const toHttps = (url: string | undefined): string => {
+    if (!url) return '';
+    return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
+};
 
 /** 取一条投稿的 cid（第一个分 P）与元信息。 */
 export const fetchBilibiliVideoInfo = async (bvid: string) => {
@@ -178,6 +231,7 @@ export const fetchBilibiliVideoInfo = async (bvid: string) => {
         title: payload.title ?? '',
         author: payload.owner?.name ?? '',
         durationSec: page.duration ?? payload.duration ?? 0,
+        coverUrl: toHttps(payload.pic),
     };
 };
 
@@ -246,6 +300,15 @@ export const pickVideoTrack = (
     return null;
 };
 
+/** 音质档位 → bilibili 的 qn（清晰度编号）。未登录时高码率那几档会被它自己压到 480。 */
+const qualityToQn: Record<string, number> = {
+    standard: 64,   // 720P（bilibili 的 64 就是 720P；未登录会落到 32=480P）
+    high: 80,       // 1080P
+    ultra: 112,     // 1080P+
+    lossless: 116,  // 1080P60
+    hires: 120,     // 4K
+};
+
 /**
  * 取一条投稿的画面直链与声音直链。
  *
@@ -258,11 +321,12 @@ export const pickVideoTrack = (
 export const fetchBilibiliPlayUrl = async (
     bvid: string,
     cid: number,
+    quality: string = 'standard',
 ): Promise<{ url: string; height: number; audioUrl: string }> => {
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
         cid,
-        qn: 1080,
+        qn: qualityToQn[quality] ?? 64,
         fnval: 4048,
         fourk: 1,
     });

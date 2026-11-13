@@ -51,6 +51,9 @@ describe('what each platform declares for the sign-in window', () => {
             appleMusic: { letter: 'A', color: '#fa243c' },
             // 洛雪免登录，但登录窗口仍要画出它这一行的记号（点它直接打开音源工作台）。
             lxmusic: { letter: '雪', color: '#e11d48' },
+            // B 站是视频平台，capabilities.auth 为 false：它没有登录文本、不进这份名单的
+            // texts 那一段，但记号仍然要画 —— 它的扫码登录就落在平台列末尾那一行。
+            bilibili: { letter: 'B', color: '#fb7299' },
         });
     });
 

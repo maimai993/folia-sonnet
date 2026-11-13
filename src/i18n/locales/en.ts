@@ -1862,6 +1862,9 @@ export default {
     "qualityUltra": "Ultra High",
     "qualityLossless": "Lossless",
     "qualityHires": "Hi-Res",
+    "quality480p": "480P",
+    "quality720p": "720P",
+    "quality1080p": "1080P",
     "vipOnly": "VIP Only"
   },
   "playlist": {
@@ -2498,6 +2501,7 @@ export default {
     "qishui": "Qishui",
     "feiniu": "fnOS",
     "lxmusic": "LX Music",
+      "bilibili": "Bilibili",
   },
   "globalLyricOffset": {
     "title": "Global Timing Offset",

@@ -1875,6 +1875,9 @@ export default {
     "qualityUltra": "超高",
     "qualityLossless": "无损",
     "qualityHires": "Hi-Res",
+    "quality480p": "480P",
+    "quality720p": "720P",
+    "quality1080p": "1080P",
     "vipOnly": "VIP 专属"
   },
   "playlist": {
@@ -2510,6 +2513,7 @@ export default {
     "qishui": "汽水",
     "feiniu": "飞牛",
 "lxmusic": "洛雪",
+      "bilibili": "B站",
   },
   "globalLyricOffset": {
     "title": "全局时间偏移",
