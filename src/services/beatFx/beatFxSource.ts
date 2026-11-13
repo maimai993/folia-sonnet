@@ -15,6 +15,7 @@ import { getPrefetchedData, isUrlValid } from '../prefetchService';
 import { isNativeModelsAvailable } from '../automix/nativeModels';
 import { cacheNativeMediaFromUrl, hasNativeMediaCache, readNativeMediaCacheUrl } from '../mediaCacheStore';
 import { getSongResourceCacheKey } from '../onlineMusic/resourceKeys';
+import { nativeAudioUrlForRef } from '../nativeLocalMusic';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
 import type { PlaybackRepresentation } from '../../types/playbackRecovery';
 
@@ -167,6 +168,34 @@ const readTrackBytes = async (song: SongResult, key: string, representation: Pla
     return { bytes: null, note: note ?? 'track not cached yet, and no stream URL resolved', source };
 };
 
+/**
+ * 这首歌的音频地址，交给**原生**解码（drumHits.ts 的混音频带）。
+ *
+ * 和 `readStreamedTrackBytes` 前半段是同一件事：在线曲目先让原生把音频落到媒体缓存里，
+ * 回来的只是一个回环地址。区别是这里不 fetch 成 ArrayBuffer —— 原生解码器自己去读那个
+ * 地址，整曲 PCM 一个字节都不过桥（8MiB 的桥上过不去，见那边的注释）。
+ *
+ * 已经缓存过就直接返回地址，几毫秒。本地曲目返回 null：它们的路径在 Web 层拿不到，
+ * 仍旧走 WebView 那条解码路（fast enough for a file already on the phone's flash）。
+ */
+const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> => {
+    if (!isNativeModelsAvailable()) return null;
+    if (getPlaybackSourceRef(song).kind !== 'online') return null;
+    const prefetched = getPrefetchedData(song);
+    const url = prefetched?.audioUrl;
+    if (!url || url === 'CACHED_IN_DB' || !isUrlValid(prefetched.audioUrlFetchedAt) || !/^https?:/.test(url)) return null;
+    if (!(await hasNativeMediaCache())) return null;
+    try {
+        const cacheKey = getSongResourceCacheKey('audio', song);
+        const stored = await cacheNativeMediaFromUrl(cacheKey, url, MAX_STREAM_CACHE_BYTES, song.durationMs);
+        if (!stored) return null;
+        return await readNativeMediaCacheUrl(cacheKey);
+    } catch (error) {
+        console.warn('[BeatFx] could not prepare the audio for native drum bands', error);
+        return null;
+    }
+};
+
 const resolveTrackBeats = async (
     song: SongResult,
     key: string,
@@ -185,8 +214,12 @@ const resolveTrackBeats = async (
         return read;
     };
     const readMid = async () => {
-        // Asked before the read and the decode, which are seconds of work for nobody without one.
-        if (typeof navigator === 'undefined' || !('gpu' in navigator)) {
+        /*
+         * 没有 WebGPU 就不解码 —— 除了安卓：那边的原生推理要的是一段 PCM 的退路，
+         * 而它本来就不靠 GPU（权重和推理都在原生侧）。这条判断写在这里会把原生
+         * 这条唯一的退路也一起挡掉，真机上就是「设置里开着，画面上什么都不动」。
+         */
+        if (!isNativeModelsAvailable() && (typeof navigator === 'undefined' || !('gpu' in navigator))) {
             note = 'no WebGPU in this renderer';
             return null;
         }
@@ -199,9 +232,50 @@ const resolveTrackBeats = async (
         }
         return toMidSide(buffer).mid;
     };
+    /*
+     * 安卓原生推理的音频地址：给地址，整首歌就不过桥。
+     *
+     * 本地曲目走原生那台 127.0.0.1 的音频服务；在线曲目先落到原生媒体缓存，再给
+     * 那份的回环地址 —— 直接把裸的远端地址交过去，很多平台会因为缺 Referer/Cookie 拒绝。
+     * 都拿不到时返回 null，调用方退回「JS 解码 + 传样本」。
+     */
+    const nativeSourceUrl = async (): Promise<string | null> => {
+        if (!isNativeModelsAvailable()) return null;
+        const ref = (song as { nativeAudioRef?: string }).nativeAudioRef;
+        if (ref) {
+            const localUrl = await nativeAudioUrlForRef(ref);
+            if (localUrl) return localUrl;
+            console.warn('[BeatFx] native: local audio server has no port, cannot hand the track over by url');
+        }
+        /*
+         * 已经在原生媒体缓存里的先问一句。
+         *
+         * 这一条是「装了包还是没效果」的根因：prefetcher 对已经缓存过的曲子会把
+         * audioUrl 报成 'CACHED_IN_DB'（prefetchService.ts 里的哨兵值），下面的远端
+         * 分支见到它就 return null —— 于是整首歌退回「JS 解码 + 传样本」，而那条路
+         * 只放 45 秒以内的音频（桥的 8MiB），一首四分钟的歌必然放弃：分析从没跑过，
+         * 智能动感自然一动不动。缓存里的那份本来就有回环地址，直接给它。
+         */
+        const cacheKey = getSongResourceCacheKey('audio', song);
+        const cachedUrl = await readNativeMediaCacheUrl(cacheKey);
+        if (cachedUrl) return cachedUrl;
+        const prefetched = getPrefetchedData(song);
+        const url = prefetched?.audioUrl;
+        if (!url || url === 'CACHED_IN_DB' || !isUrlValid(prefetched.audioUrlFetchedAt) || !/^https?:/.test(url)) {
+            console.warn(`[BeatFx] native: no audio source for this track (audioUrl=${url ?? '(none)'})`);
+            return null;
+        }
+        if (!await hasNativeMediaCache()) return null;
+        const stored = await cacheNativeMediaFromUrl(cacheKey, url, MAX_STREAM_CACHE_BYTES, song.durationMs);
+        if (!stored) {
+            console.warn('[BeatFx] native: could not cache the stream for analysis');
+            return null;
+        }
+        return readNativeMediaCacheUrl(cacheKey);
+    };
     try {
         // The picture on screen waits on these: ahead of automix's background profiles on the GPU.
-        grid = await getTrackBeatGrid(key, readMid, { storedOnly, urgency: 'onScreen' });
+        grid = await getTrackBeatGrid(key, readMid, { storedOnly, urgency: 'onScreen', nativeSourceUrl });
     } catch (error) {
         // A throw here (a cache read, a worker, a GPU device lost mid-run) is "no beats" like any
         // other: answered, so the caller's frame falls back, and not remembered, so a later play retries.
@@ -228,7 +302,16 @@ const resolveTrackBeats = async (
             .catch(() => null);
         return { events: mergeBeatFxEvents(found.beats, found.downbeats), source: 'beat_this', trackScale: 1, accented };
     }
-    if (!storedOnly && !canRunBeatThis()) return { events: [], source: 'none', note: 'not the desktop app', trackScale: 1 };
+    if (!storedOnly && !canRunBeatThis()) {
+        return {
+            events: [],
+            source: 'none',
+            // 安卓这条路不该再落到这里：原生分支在 canRunBeatThis 之前就返回了。真到了，
+            // 说明原生那一步没给出结果，日志里的 [BeatGrid] 那几行才是原因。
+            note: isNativeModelsAvailable() ? 'native beat analysis produced no beats (see [BeatGrid] log)' : 'not the desktop app',
+            trackScale: 1,
+        };
+    }
     return { events: [], source: 'none', note, trackScale: 1, ...(retry ? { retry } : {}) };
 };
 
@@ -295,7 +378,11 @@ export const loadBeatFxTrackDrums = (song: SongResult, { storedOnly = false, voc
     const askedAt = getBeatFxLastHeard(key);
     if (!vocals) releaseTrackVocals(key);
     const voice = vocals ? loadTrackVocalEnvelope(key, readBytes, { at: () => Math.min(askedAt, getBeatFxLastHeard(key)), seconds: (song.durationMs || 0) / 1000 }) : null;
-    const drums = Promise.all([loadTrackDrumHits(key, readBytes), voice])
-        .then(([analysis, envelope]): BeatFxTrackDrums => ((analysis || envelope) && found() ? 'hits' : missing ? 'retry' : 'none'));
+    const drums = (async (): Promise<BeatFxTrackDrums> => {
+        // 原生的整曲解码先要一个地址（见 `resolveNativeAudioUrl`）；拿不到就走老路。
+        const nativeUrl = await resolveNativeAudioUrl(song);
+        const [analysis, envelope] = await Promise.all([loadTrackDrumHits(key, readBytes, nativeUrl), voice]);
+        return (analysis || envelope) && found() ? 'hits' : missing ? 'retry' : 'none';
+    })();
     return { key, drums };
 };

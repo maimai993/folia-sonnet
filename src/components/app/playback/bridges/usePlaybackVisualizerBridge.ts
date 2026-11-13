@@ -449,8 +449,24 @@ export function usePlaybackVisualizerBridge({
         }
 
         if (beatFxWantedRef.current && !backgroundHold) {
-            // 原生与 HiFi 一样，声音不走 WebView 里那块元素：别把空元素当节拍源。
-            tickBeatFx(isActuallyPlaying && !usesNativeClock ? audioElement : null, analyserRef.current?.context);
+            /*
+             * 节拍时钟要的是「此刻听到的位置」，不是「那块 <audio>」。
+             *
+             * 原生播放（安卓）和 HiFi（mpv）的声音都不进 WebView，那块元素的 currentTime
+             * 恒为 0。原来这里只把空元素传进去，`stepBeatFxClock` 收到 null 就整帧返回 ——
+             * 不推进、不触发。于是分析是否成功都不影响结果：手机上一次拍点都没 fire 过，
+             * 所有吃拍点的歌词效果一动不动。位置一直都在，歌词与进度条用的就是它。
+             */
+            const beatFxPosition = usesNativeClock
+                ? (isActuallyPlaying ? nativeTime : null)
+                : isHifiActive
+                    ? (playerState === PlayerState.PLAYING ? getHifiPosition() : null)
+                    : undefined;
+            tickBeatFx(
+                usesNativeClock || isHifiActive ? null : (isActuallyPlaying ? audioElement : null),
+                analyserRef.current?.context,
+                beatFxPosition,
+            );
         }
 
         // While a blend holds the picture, the active deck is the incoming track: its hand-off, clock

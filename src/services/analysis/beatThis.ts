@@ -2,6 +2,7 @@ import { hasWebGpu, runBeatThisGpu, type PercussiveEnergyFrames } from './beatTh
 import type { Urgency } from './scheduler';
 
 import { modelCanRun, noteModelFailed } from './modelAvailability';
+import { isNativeBeatAnalysisAvailable } from '../automix/nativeBeats';
 import { fft } from '../automix/signalAnalysis';
 import { YIELD_BUDGET_MS, yieldToUi } from '../automix/uiYield';
 
@@ -462,6 +463,14 @@ export const gridFromBeats = (
  */
 export const canRunBeatThis = (): boolean => {
     if (typeof window === 'undefined') return false;
+    /*
+     * 安卓：权重在 APK 里，推理在原生线程上（automix/nativeBeats.ts）。
+     *
+     * 它既没有 `window.electron.runBeatThis`，也不依赖 WebGPU —— 下面那两问对它是
+     * 两个「没有」，于是整条原生路在入口就被判死。这里先问它。
+     * 「权重还没落盘」不算不能跑：第一次分析时 installModel 会从 assets 拷过来。
+     */
+    if (isNativeBeatAnalysisAvailable()) return true;
     if (!modelCanRun('beat_this')) return false;
     // Weights that are there still need something to run them on: the desktop app's CPU worker, or
     // this renderer's own WebGPU (analyseBeatGrid tries the GPU first and falls back to the CPU).

@@ -9,7 +9,7 @@ import { beginBeatFxTrack, getBeatFxHeard, setBeatFxEvents, setBeatFxIntensities
 import { loadBeatFxTrackBeats, loadBeatFxTrackDrums } from '../services/beatFx/beatFxSource';
 import { getPlaybackAnalysisKey, getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 import { modelsPresent, subscribeModelAvailability } from '../services/analysis/modelAvailability';
-import { isNativeModelsAvailable, modelCanRun, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
+import { isNativeModelsAvailable, modelWillBeAvailable, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
 import { drumHitsSettled, setWantedDrumTrack } from '../services/analysis/drumHits';
 import { setStemDrumsWanted } from '../services/analysis/stemRange';
 
@@ -74,7 +74,7 @@ export function useBeatFxTrack(): boolean {
      */
     const nativeDrumModel = useSyncExternalStore(
         subscribeNativeModels,
-        () => (isNativeModelsAvailable() ? modelCanRun('htdemucs') : false),
+        () => (isNativeModelsAvailable() ? modelWillBeAvailable('htdemucs') : false),
         () => false,
     );
 
@@ -112,6 +112,14 @@ export function useBeatFxTrack(): boolean {
     useEffect(() => {
         if (!wanted) {
             stopBeatFx();
+            /*
+             * 一条日志，因为「什么都没发生」在任何地方都看不出来。
+             *
+             * 智能动感开着却没效果时，最常见的两种原因（当前画面没开吃拍点的特效、静态模式）
+             * 会让整条链路一开始就不启动 —— 没有这行，日志里连一条 [BeatFx] 都不会有，
+             * 看日志的人无法区分「没启动」和「看不到那几行」。
+             */
+            console.info(`[BeatFx] idle: nothing on screen wants beats (staticMode=${staticMode}, transparent=${pageTransparent}, beats=${beatsWanted}, drums=${separationWanted})`);
             return;
         }
         if (!identity || !song) {
@@ -141,8 +149,10 @@ export function useBeatFxTrack(): boolean {
                     retryTimer = setTimeout(() => load(attempt + 1), RETRY_DELAY_MS);
                     return;
                 }
-                // Only the case that needs explaining; a track with beats shows them.
-                if (result.source === 'none') console.info(`[BeatFx] no beats for this track: ${result.note}`);
+                // 两种结果都留一行：成功时也要能确认「链路跑过、拍点是多少」，否则用户翻到的
+                // 永远只有失败那半边，分不清「没跑」和「跑了没成」。
+                if (result.source === 'none') console.info(`[BeatFx] no beats for this track: ${result.note} (key=${key})`);
+                else console.info(`[BeatFx] beats ready: ${result.events.length} (key=${key})`);
                 // A list stored before accents existed: the same beats with them, once measured.
                 void result.accented?.then((accented) => {
                     if (cancelled || !accented) return;

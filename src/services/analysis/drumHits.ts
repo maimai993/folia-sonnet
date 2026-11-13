@@ -3,7 +3,8 @@ import { getFromCache, saveToCache } from '../db';
 import { BEAT_THIS_FPS, BEAT_THIS_SAMPLE_RATE } from './beatThis';
 import {
     DRUM_HAT, DRUM_KICK, DRUM_SNARE, DRUMLESS_COVERAGE, drumBandTracks, drumCoverage, ENERGY_HOP, energyFrames, isDrumAnalysis,
-    LIVE_EVERY_MS, LIVE_MIN_SECONDS, liveTailFrames, pickBandHits, SHARE_WINDOW, type DrumAnalysis, type DrumHits,
+    LIVE_EVERY_MS, LIVE_MIN_SECONDS, liveTailFrames, MIX_DRUM_REGULARIZE, pickBandHits, regularizeDrumHits, SHARE_WINDOW,
+    type DrumAnalysis, type DrumHits,
 } from './drumHitPicking';
 import { DRUM_HITS_PREFIX } from './beatGridKeys';
 import { createDrumBandStream, streamNeedsFrom, type DrumBands } from './drumHitStream';
@@ -13,7 +14,10 @@ import { runTrackStems, setWantedStemTrack, stemTrackWanted, type StemTask } fro
 import { dropStemDrums, setStemDrumsKeptListener } from './stemRange';
 import { HTDEMUCS_GPU_SEGMENT } from './beatThisGpu';
 import { modelCanRun } from './modelAvailability';
-import { isNativeModelsAvailable } from '../automix/nativeModels';
+import { decodeAtRate } from './trackAudio';
+import { decodeTrackAtRate } from './trackBytes';
+import { analyzeDrumBandsNativeFromUrl, isNativeModelsAvailable } from '../automix/nativeModels';
+import { waitForForeground } from '../../utils/foregroundYield';
 
 // src/services/analysis/drumHits.ts
 // A whole track's drum hits, read off htdemucs' drum stem (drumStem.ts, the renderer's GPU) and kept:
@@ -60,18 +64,17 @@ const STEM_RATE = 44100;
 export const DRUM_HITS_TASK = 'drum hits';
 
 /**
- * Whether a drum stem can be had here.
+ * Whether a drum **stem** can be had here: the real htdemucs separation.
  *
- * 两条路：
- *   · 安卓 App —— htdemucs 权重在 APK 里，推理走 onnxruntime-android（原生，不碰 WebGPU）；
- *   · 桌面 —— htdemucs_gpu 已安装，且有可用的 WebGPU。
+ * 只有桌面有：htdemucs_gpu 已安装，且有可用的 WebGPU。
  *
- * 原来这里只有第二条，`getHtdemucsGpuWeights` 是主进程的桥，
- * 安卓上不存在，于是每个吃鼓点的效果都判定为「跑不了」。
- * 仿真鼓面（时计）就是靠这条才动起来的。
+ * 安卓不算 —— 那边的原生 onnxruntime 能跑 htdemucs，但一段 3.9 秒的音频要 4～8 秒，
+ * 比播放慢，分离永远追不上播放头（详见 `loadMixDrumHits` 的头注释）。安卓的鼓点
+ * 因此改从混音的频带取，不走分轨；这里回答 false，连带让人声分轨（雾笺）也不再
+ * 在手机上启动一条追不上的慢路径。
  */
 export const canRunDrumStem = (): boolean => {
-    if (isNativeModelsAvailable()) return true;
+    if (isNativeModelsAvailable()) return false;
     return typeof window !== 'undefined'
         && typeof window.electron?.getHtdemucsGpuWeights === 'function'
         && typeof navigator !== 'undefined' && 'gpu' in navigator
@@ -97,6 +100,78 @@ const hitLists = new Map<string, DrumHits>();
 const runs = new Map<string, Promise<DrumAnalysis | null>>();
 /** Hit lists kept in memory; the analyses themselves are on disk. */
 const MAX_TRACKS = 24;
+
+/*
+ * 给设置页那一行状态用的订阅。
+ *
+ * 「时计不动」在画面上只有一种表现，原因却有五六种。状态行已经能说「只吃鼓点」，
+ * 但用户看不出鼓点到底是**还没读**、**读到一半**还是**读完了**。这三个都能从
+ * 下面这个快照同步读出来，于是不必再让用户去翻日志。
+ */
+const hitListeners = new Set<() => void>();
+
+/** Subscribes to the hit lists changing (a live pick, a completed analysis). */
+export const subscribeDrumHits = (listener: () => void): (() => void) => {
+    hitListeners.add(listener);
+    return () => {
+        hitListeners.delete(listener);
+    };
+};
+
+const notifyDrumHits = (): void => {
+    for (const listener of hitListeners) listener();
+};
+
+/**
+ * 鼓点读到哪一步了。
+ *
+ * 这一行存在的理由：`正在从混音里读鼓点…` 在界面上是一个**静止**的状态 —— 取音频（在线曲目
+ * 要先拿直链、整曲下载）、解码（一首四分钟的歌在 WebView 里要几秒到几十秒）、挑鼓点，三段
+ * 加起来新手机会等半分钟，而这半分钟里一个字都不变，用户只会以为卡死了。
+ * 分开说之后，至少知道它在哪一段、有没有往前走。
+ */
+export type DrumStage = 'bytes' | 'decode' | 'pick' | 'no-bytes';
+
+const stages = new Map<string, DrumStage>();
+
+/** 进入某一段；`null` 清掉（分析完成或放弃）。 */
+export const setDrumStage = (key: string, stage: DrumStage | null): void => {
+    if (stage === null) {
+        if (!stages.delete(key)) return;
+    } else {
+        if (stages.get(key) === stage) return;
+        stages.set(key, stage);
+    }
+    notifyDrumHits();
+};
+
+/** The step `key`'s drum hits are at, if a read is running. */
+export const getDrumStage = (key: string | null): DrumStage | null => (key ? stages.get(key) ?? null : null);
+
+/**
+ * A stable string for `key`'s hits: how many, how far they reach (`until`, empty once the whole track
+ * is picked), and the step a read is at when there are none yet. A string so `useSyncExternalStore`
+ * sees the same value until something changes.
+ */
+export const drumHitsSnapshot = (key: string | null): string => {
+    const hits = key ? hitLists.get(key) : undefined;
+    const stage = key ? stages.get(key) : undefined;
+    const base = hits
+        ? `${hits.times.length}|${hits.until === undefined ? '' : hits.until.toFixed(1)}`
+        : '0|';
+    return stage ? `${base}|${stage}` : base;
+};
+
+/** Reads a `drumHitsSnapshot` back. */
+export const parseDrumHitsSnapshot = (snapshot: string): { count: number; until: number | null; stage: DrumStage | null } => {
+    const [count, until, stage] = snapshot.split('|');
+    const known: DrumStage[] = ['bytes', 'decode', 'pick', 'no-bytes'];
+    return {
+        count: Number(count) || 0,
+        until: until ? Number(until) : null,
+        stage: known.includes(stage as DrumStage) ? (stage as DrumStage) : null,
+    };
+};
 
 
 /**
@@ -154,13 +229,21 @@ export const forgetSettledDrumHits = (): void => {
 };
 
 const keep = (key: string, hits: DrumHits) => {
+    /*
+     * 混音的鼓点在这里收一遍（见 drumHitPicking.ts 的 `regularizeDrumHits`）：
+     * 混音里贝斯与人声的起音也会落进 kick / snare 的频带，不收敛的话鼓面被敲得
+     * 比拍点密好几倍，听感上就是「鼓点和动感模式一个快一个慢」。
+     * 真分轨（桌面 htdemucs）不经过这里：它本来就是鼓，规整只会抹平演奏。
+     */
+    const shaped = usesMixBands() ? regularizeDrumHits(hits, MIX_DRUM_REGULARIZE) : hits;
     hitLists.delete(key);
-    hitLists.set(key, hits);
+    hitLists.set(key, shaped);
     while (hitLists.size > MAX_TRACKS) {
         const oldest = hitLists.keys().next().value;
         if (oldest === undefined) break;
         hitLists.delete(oldest);
     }
+    notifyDrumHits();
 };
 
 const remember = (key: string, analysis: DrumAnalysis, note: string) => {
@@ -170,8 +253,10 @@ const remember = (key: string, analysis: DrumAnalysis, note: string) => {
     const drumless = coverage < DRUMLESS_COVERAGE;
     console.info(`[DrumHits] ${key}: ${drumless ? 'drumless' : `${analysis.hits.times.length} hits`} | drum coverage ${coverage.toFixed(3)} | kick ${counted[DRUM_KICK]} snare ${counted[DRUM_SNARE]} hat ${counted[DRUM_HAT]} | ${note}`);
     // A track whose head looked drummed may still be judged drumless as a whole: its live hits go.
-    if (drumless) hitLists.delete(key);
-    else keep(key, analysis.hits);
+    if (drumless) {
+        hitLists.delete(key);
+        notifyDrumHits();
+    } else keep(key, analysis.hits);
     settled.delete(key);
     settled.add(key);
     while (settled.size > MAX_SETTLED) {
@@ -259,6 +344,7 @@ const drumHitsTask = (key: string, resume: DrumResume | null): StemTask<DrumAnal
             const windows = Math.floor(final / ENERGY_HOP / SHARE_WINDOW) * SHARE_WINDOW;
             if (drumCoverage(drumEnergy.subarray(0, windows), mixEnergy.subarray(0, windows)) < DRUMLESS_COVERAGE) {
                 hitLists.delete(key);
+                notifyDrumHits();
                 return;
             }
             const until = Math.max(0, stream.done - liveTailFrames()) / BEAT_THIS_FPS;
@@ -366,13 +452,153 @@ const stopForLater = async (
 };
 
 /**
+ * 安卓：不跑 htdemucs，直接拿**混音**的三个频带当鼓点。
+ *
+ * 为什么必须换一条路（真机实测的结论，不是猜的）：
+ *   · htdemucs 一段 3.9 秒的音频，桌面 8 核 CPU 上 0.85 秒；手机上（2 线程、大核更少）
+ *     要 4～8 秒。一首四分钟的歌 60 多段，合计 4～8 分钟；
+ *   · 而分离是**边播边分**的：播放头 3.9 秒走完一段，分离却要 4～8 秒才出一段，
+ *     于是 `until`（已分到的时间）永远落在播放头后面，`getDrumHits` 里没有一个
+ *     落在"当前时间"上的 hit —— 仿真鼓面一动不动。用户看到的就是「时计没效果」。
+ *
+ * 混音上直接取频带没有这个问题：整曲解码一次（不到一秒），每 10 秒做一次 mel
+ * （worker 里，几十到几百毫秒），第一个 10 秒的 hits 半秒内就到手，全程快于播放。
+ *
+ * 代价是准确度：混音的低频带里有贝斯，中频带里有人声和钢琴，高频带里有镲和齿音 ——
+ * 这些起音都会被记成 kick / snare / hat。鼓面因此比真分轨"忙"一些，但**跟着音乐动**，
+ * 而且桌面（真 htdemucs_gpu）的行为一点没变：这条只在安卓生效，缓存在独立的前缀下。
+ *
+ * 桌面那条路（`drumHitsTask` + `runTrackStems`）原样保留。
+ */
+const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix_`;
+/** 每读这么多秒，重挑一次 hits 交出去（见上面：第一个 10 秒半秒内就到手）。 */
+const MIX_CHUNK_SECONDS = 10;
+
+/** 等这首歌的音频最多这么久（见 `readWithTimeout`）：在线直链失效时不再无限等。 */
+const READ_BYTES_TIMEOUT_MS = 90_000;
+
+/** 安卓的混音频带分析：读字节、解码、分块取 mel、边算边交（见上面）。 */
+const loadMixDrumHits = async (
+    key: string,
+    readBytes: () => Promise<ArrayBuffer | null>,
+    nativeUrl: string | null = null,
+): Promise<DrumAnalysis | null> => {
+    const started = performance.now();
+    /*
+     * ★ 先试原生：解码 + mel 都在 Kotlin 里做，一两秒出整曲的频带。
+     *
+     * WebView 的 `decodeAudioData` 解一首四分钟的歌要几秒到几十秒，那段时间鼓面只能停着；
+     * 而原生用 MediaCodec（播放器本来就在用），四分钟的歌一两秒。
+     * 只回传三条频带，挑点仍是下面的 `pickBandHits` —— 起音判据只有一份。
+     * 原生不可用（旧 APK、非在线曲目、解码失败）就落到下面那条 WebView 的路。
+     */
+    if (nativeUrl) {
+        setDrumStage(key, 'decode');
+        const native = await analyzeDrumBandsNativeFromUrl(nativeUrl);
+        if (native && stemTrackWanted(key)) {
+            setDrumStage(key, 'pick');
+            /*
+             * `drumCoverage` 要的两条能量在这里没有：原生只回传频带。
+             * 给一对相等的 1 —— 覆盖率因此是 1（「有鼓」），这和混音路径本来的结论一致：
+             * 混音里总能挑出鼓点，从来没有「这首歌没有鼓」这个分支。
+             */
+            const analysis: DrumAnalysis = {
+                hits: pickBandHits(native.bands, native.frames),
+                drumEnergy: Float32Array.of(1),
+                mixEnergy: Float32Array.of(1),
+            };
+            remember(key, analysis, `native bands in ${((performance.now() - started) / 1000).toFixed(1)}s (${native.seconds.toFixed(1)}s of audio)`);
+            await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+            return analysis;
+        }
+        console.info(`[DrumHits] ${key}: native drum bands unavailable, falling back to the WebView decode`);
+    }
+    const bytes = await readBytes();
+    if (!bytes) {
+        console.info(`[DrumHits] ${key}: mix bands need the track's bytes, none read yet`);
+        return null;
+    }
+    if (!stemTrackWanted(key)) return null;
+    setDrumStage(key, 'decode');
+    const buffer = await decodeTrackAtRate(key, STEM_RATE, bytes, decodeAtRate, 'drum-mix', 'own');
+    if (!buffer) {
+        console.info(`[DrumHits] ${key}: mix bands could not decode the track`);
+        setDrumStage(key, 'no-bytes');
+        return null;
+    }
+    const left = buffer.getChannelData(0);
+    const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+    const total = left.length;
+    // 单声道解码（WebView 常见）就不必再复制一份：一首四分钟的歌那是 42MB。
+    let mix = left;
+    if (buffer.numberOfChannels > 1) {
+        const mono = new Float32Array(total);
+        for (let at = 0; at < total; at += 1) mono[at] = (left[at] + right[at]) / 2;
+        mix = mono;
+    }
+    const mixEnergy = energyFrames(mix);
+    const stream = createDrumBandStream(total, { resample: resampleStem, mel: melSpectrogramOffThread, bands: drumBandTracks });
+    const step = MIX_CHUNK_SECONDS * STEM_RATE;
+    let announced = false;
+    setDrumStage(key, 'pick');
+    for (let at = 0; at < total; at += step) {
+        /*
+         * The track (or the picture) was left: the rest is not read.
+         *
+         * 后台也一样：没人看着画面时，这一整首歌的 mel 没有理由继续算 ——
+         * 桌面端关掉了后台节流，不定在这里就会在兜里把四分钟的活干完。
+         * 等回前台接着算，结果完全相同。
+         */
+        const wanted = await waitForForeground(() => stemTrackWanted(key));
+        if (!wanted) {
+            console.info(`[DrumHits] ${key}: mix bands stopped at ${(at / STEM_RATE).toFixed(1)}s, the track or the picture was left`);
+            return null;
+        }
+        const final = Math.min(total, at + step);
+        const end = final >= total;
+        await stream.advance(mix, final, end);
+        const until = end ? total / STEM_RATE : Math.max(0, stream.done - liveTailFrames()) / BEAT_THIS_FPS;
+        const hits = pickBandHits(stream.bands, stream.done);
+        // 与真分轨的 live pick 同样的截断：末尾几帧的峰可能被下一帧盖过，先不交出去。
+        const head = (() => {
+            const count = hits.times.findIndex(time => time >= until);
+            return count < 0 ? hits.times.length : count;
+        })();
+        keep(key, {
+            times: hits.times.slice(0, head),
+            strengths: hits.strengths.slice(0, head),
+            kinds: hits.kinds.slice(0, head),
+            until,
+        });
+        if (!announced) {
+            announced = true;
+            console.info(`[DrumHits] ${key}: mix bands, first ${head} hits ${((performance.now() - started) / 1000).toFixed(1)}s in, to ${until.toFixed(1)}s of the track`);
+        }
+        // 让出主线程：一个 10 秒块算完立刻进下一块，会把画面帧挤掉。
+        await new Promise<void>(resolve => { setTimeout(resolve, 0); });
+    }
+    const analysis: DrumAnalysis = {
+        hits: pickBandHits(stream.bands, stream.frames),
+        drumEnergy: mixEnergy,
+        mixEnergy,
+    };
+    remember(key, analysis, `mix bands in ${((performance.now() - started) / 1000).toFixed(1)}s`);
+    await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+    return analysis;
+};
+
+/** 安卓上鼓点从混音频带取（见 `loadMixDrumHits`），缓存也分开存，免得和真分轨的结果混用。 */
+const usesMixBands = (): boolean => isNativeModelsAvailable();
+
+/**
  * A track's drum analysis from the cache only, never separated (智能动感模式's `cached`). Once it is
  * in, `getDrumHits(key)` answers its hits. Null when none is stored. A run in flight is not joined:
  * only `on` starts one, and leaving `on` stops it (`setWantedDrumTrack(null)`).
  */
 export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | null> => {
     try {
-        const stored = await getFromCache<DrumAnalysis>(`${DRUM_HITS_PREFIX}${key}`);
+        const cacheKey = usesMixBands() ? `${MIX_HITS_PREFIX}${key}` : `${DRUM_HITS_PREFIX}${key}`;
+        const stored = await getFromCache<DrumAnalysis>(cacheKey);
         if (!isDrumAnalysis(stored)) return null;
         remember(key, stored, 'from the cache');
         return stored;
@@ -388,35 +614,70 @@ export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | nu
  * hits. Null when none can be had now, which is not remembered: a later play may find the bytes.
  * Separates only while `key` is the wanted track (`setWantedDrumTrack`).
  */
-export const loadTrackDrumHits = (key: string, readBytes: () => Promise<ArrayBuffer | null>): Promise<DrumAnalysis | null> => {
+export const loadTrackDrumHits = (
+    key: string,
+    readBytes: () => Promise<ArrayBuffer | null>,
+    nativeUrl: string | null = null,
+): Promise<DrumAnalysis | null> => {
     const existing = runs.get(key);
     // Joined - but a run whose track was left and is wanted again before it reached its next segment
     // is stopping, and answers null: then one fresh run, rather than no hits for the rest of the play.
     // Only on null: a drumless track answers an analysis, and is not separated again.
-    if (existing) return existing.then(found => (found === null && stemTrackWanted(key) && !runs.has(key) ? loadTrackDrumHits(key, readBytes) : found));
+    if (existing) return existing.then(found => (found === null && stemTrackWanted(key) && !runs.has(key) ? loadTrackDrumHits(key, readBytes, nativeUrl) : found));
     const run = (async (): Promise<DrumAnalysis | null> => {
-        const stored = await getFromCache<DrumAnalysis>(`${DRUM_HITS_PREFIX}${key}`);
+        const mixBands = usesMixBands();
+        const stored = await getFromCache<DrumAnalysis>(`${mixBands ? MIX_HITS_PREFIX : DRUM_HITS_PREFIX}${key}`);
         if (isDrumAnalysis(stored)) {
             remember(key, stored, 'from the cache');
             return stored;
         }
-        if (!canRunDrumStem() || !stemTrackWanted(key)) return null;
+        if (!stemTrackWanted(key)) return null;
+        setDrumStage(key, 'bytes');
+        /*
+         * 取音频这一步也要有上限：在线曲目要先拿直链再整曲下载，直链失效或者网络卡住时
+         * 这里会**一直**不回来 —— 界面上就是「正在从混音里读鼓点…」永远不变。
+         * 90 秒还没到手就当作取不到，让界面说出「取不到这首歌的音频」而不是装作在忙。
+         */
+        const readWithTimeout = async (): Promise<ArrayBuffer | null> => {
+            const bytes = await Promise.race([
+                readBytes(),
+                new Promise<null>((resolve) => { setTimeout(() => resolve(null), READ_BYTES_TIMEOUT_MS); }),
+            ]);
+            if (!bytes) setDrumStage(key, 'no-bytes');
+            return bytes;
+        };
+        /*
+         * 安卓走混音频带，桌边走真的 htdemucs 分轨（见 `loadMixDrumHits` 的头注释）：
+         * 手机上的 htdemucs 比播放慢，鼓点永远追不上播放头，鼓面就一动不动。
+         * 这条要在 `canRunDrumStem` 之前问：那个函数在安卓上回答 false。
+         */
+        if (mixBands) return loadMixDrumHits(key, readWithTimeout, nativeUrl);
+        if (!canRunDrumStem()) return null;
+        setDrumStage(key, 'pick');
         // A separation stopped earlier: its hits play at once, while the track decodes again.
         const resume = resumes.get(key) ?? null;
         if (resume?.hits) keep(key, resume.hits);
         let analysis: DrumAnalysis | null = null;
         try {
-            analysis = await runTrackStems(key, readBytes, drumHitsTask(key, resume));
+            analysis = await runTrackStems(key, readWithTimeout, drumHitsTask(key, resume));
             return analysis;
         } finally {
             // Hits put back from a stop, or picked live, and no analysis came (no bytes, no decode, a
             // separation left or failed part way): taken off again - a later play would read them as whole.
             if (!analysis && getDrumHits(key)?.until !== undefined) hitLists.delete(key);
         }
-    })().catch((error) => {
-        console.warn(`[DrumHits] ${key}: failed`, error);
-        return null;
-    });
+    })().then(
+        (result): DrumAnalysis | null => {
+            // 分析结束（成功、无鼓、被放弃）都清掉阶段：界面上「在忙」的提示必须能停下来。
+            setDrumStage(key, null);
+            return result;
+        },
+        (error): DrumAnalysis | null => {
+            console.warn(`[DrumHits] ${key}: failed`, error);
+            setDrumStage(key, 'no-bytes');
+            return null;
+        },
+    );
     runs.set(key, run);
     // Only the run in flight is kept: an answer lives on in `hitLists` and on disk, a null is retried.
     void run.then(() => {

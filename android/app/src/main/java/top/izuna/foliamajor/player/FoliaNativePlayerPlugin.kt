@@ -403,6 +403,20 @@ class FoliaNativePlayerPlugin : Plugin() {
                 payload.put("type", type)
                 payload.put("positionMs", positionMs.toDouble())
                 payload.put("durationMs", durationMs.toDouble())
+                /*
+                 * ⭐ 这一下在**什么时候**发生的。
+                 *
+                 * `positionMs` 是生成这一刻的位置，而这个 payload 要排到主线程、再进
+                 * WebView 的 JS 上下文，才轮到 `nativePlaybackEngine.apply()` 记基准。
+                 * 队列一忙（起播那一瞬间正好在铺歌词、换封面、切视觉器），这一段就是
+                 * 几百毫秒 —— 而 Web 侧原来拿**收到**的时刻当基准，时钟从这以后就整首
+                 * 歌落后那么多，歌词看着永远比声音晚，且只在原生这一路（安卓）出现。
+                 *
+                 * 两边读的是同一个系统时钟（`System.currentTimeMillis()` 与 JS 的
+                 * `Date.now()`），所以 Web 侧拿 `Date.now() - wallMs` 就能算出这段过桥
+                 * 耗时，再把基准退回去，位置才是「此刻真的在播到哪」。
+                 */
+                payload.put("wallMs", System.currentTimeMillis().toDouble())
                 // ended / error 用事件发出时真实装着的那首（见 FoliaNativePlayer.emit），不用已被下一单提前改写的 lastMediaId。
                 val eventKey = if ("ended" == type || "error" == type) player?.lastEventMediaId() ?: "" else player?.currentMediaId() ?: ""
                 payload.put("songKey", eventKey)

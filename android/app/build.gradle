@@ -286,3 +286,45 @@ tasks.register('ensureCapacitorPluginsJson') {
 }
 
 tasks.named('preBuild').configure { dependsOn 'ensureCapacitorPluginsJson' }
+
+/*
+ * 内置分析权重必须真的在包里。
+ *
+ * Kotlin 侧的 AutomixModels 只认 assets/models/beat_this.onnx 与 htdemucs-v2.onnx
+ * （合计约 182MB，.gitignore 里不进 git）。缺了它们 gradle 照样能打出 APK ——
+ * 但那是「装上以后智能动感永远没效果、分轨永远失败」的包，而失败发生在用户手机上，
+ * 构建日志里一个字都没有。所以在这里当硬错误：要么先跑 `npm run models:android`，
+ * 要么显式 `-PskipAutomixModelsCheck=true` 跳过（只给明确不要这两项功能的构建用）。
+ */
+tasks.register('verifyAutomixModels') {
+    doLast {
+        if (project.hasProperty('skipAutomixModelsCheck')) {
+            logger.warn('verifyAutomixModels skipped (skipAutomixModelsCheck)')
+            return
+        }
+        def dir = file('src/main/assets/models')
+        def expected = [
+            'beat_this.onnx'   : 83077778L,
+            'htdemucs-v2.onnx' : 107902864L,
+        ]
+        def problems = []
+        expected.each { name, bytes ->
+            def model = new File(dir, name)
+            if (!model.isFile()) {
+                problems << "${name}: 缺失".toString()
+            } else if (model.length() != bytes) {
+                problems << "${name}: ${model.length()} 字节，应为 ${bytes}".toString()
+            }
+        }
+        if (!problems.isEmpty()) {
+            throw new GradleException(
+                "分析权重不在 assets/models 下，打出来的 APK 里智能动感与分轨会是死的：\n  "
+                + problems.join('\n  ')
+                + "\n先跑 `npm run models:android`（会从镜像下载并按 sha256 校验），"
+                + "或加 -PskipAutomixModelsCheck=true 明确跳过。"
+            )
+        }
+    }
+}
+
+tasks.named('preBuild').configure { dependsOn 'verifyAutomixModels' }

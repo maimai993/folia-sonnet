@@ -17,6 +17,20 @@ import type { AutoAlignSkipReason } from './autoAlignOffset';
 const STORAGE_KEY = 'lyric_auto_calibration_results';
 const MAX_ENTRIES = 1000;
 
+/**
+ * 估计器的版本。换了判据就加一：旧记录一律当「没算过」。
+ *
+ * 自动校准写进去的是**本曲永久偏移**，判据错一次，那首歌以后每次播放都错同样的量。
+ * v2 之前只认「最大的能量跃升」，鼓点比人声响的歌经常锁在鼓上（整首偏一个反拍），
+ * 而且没有持续性判据 —— 这些记录留着只会让用户觉得「校准坏了」。
+ *
+ * v3：符号修正。`estimateAutoAlign` 原来把偏移写反了（正的 offset 在播放端是「歌词更晚」，
+ * 而它拿来表示「歌词该更晚」），于是自动校准把每一首歌的偏差**放大一倍**。v2 及以前的
+ * 自动记录全都是反向的，必须作废重算；手动偏移不受影响（useAutoLyricCalibration 只清
+ * 「当前值 == 记录值」的那一种）。
+ */
+export const CALIBRATION_VERSION = 3;
+
 export interface LyricCalibrationRecord {
     /** What the last scan concluded. */
     phase: 'applied' | 'skipped' | 'too-long' | 'decode-failed';
@@ -24,6 +38,8 @@ export interface LyricCalibrationRecord {
     offsetMs: number;
     /** Why it skipped; null for an applied verdict. */
     reason: AutoAlignSkipReason | null;
+    /** Which estimator produced it (`CALIBRATION_VERSION`); absent on pre-v2 records. */
+    version?: number;
     /** When it was concluded, for the LRU trim. */
     at: number;
 }
@@ -91,6 +107,15 @@ export const readCalibrationRecord = (songKey: SongKey): LyricCalibrationRecord 
     return key ? hydrate().get(key) ?? null : null;
 };
 
+/** Drops this song's verdict: the next play scans it again (an old estimator's word is not kept). */
+export const forgetCalibrationRecord = (songKey: SongKey): void => {
+    const key = normalizeKey(songKey);
+    if (!key) return;
+    const map = hydrate();
+    if (!map.delete(key)) return;
+    persist(map);
+};
+
 /** Remember this song's verdict. Re-keying keeps the map in least-recently-written order. */
 export const writeCalibrationRecord = (
     songKey: SongKey,
@@ -102,7 +127,7 @@ export const writeCalibrationRecord = (
     }
     const map = hydrate();
     map.delete(key);
-    map.set(key, { ...record, at: Date.now() });
+    map.set(key, { ...record, version: CALIBRATION_VERSION, at: Date.now() });
     while (map.size > MAX_ENTRIES) {
         const oldest = map.keys().next().value as string | undefined;
         if (oldest === undefined) {

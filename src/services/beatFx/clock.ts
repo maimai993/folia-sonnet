@@ -158,11 +158,18 @@ export const mergeBeatFxEvents = (
  * wall-clock frame interval and drives the decay, so a pause lets the punch settle instead of
  * freezing it mid-flight. Events crossed since the previous step fire; a seek only re-positions the
  * cursor, so jumping into the middle of a song never triggers a burst.
+ *
+ * `frameSec` is the frame interval as it really was, before any clamping (defaults to `dtSec`).
+ * The seek test is measured against it: a phone that drops to 5 fps advances the playhead by 200 ms
+ * per frame, which the fixed 300 ms threshold still counts as a seek on a slightly worse frame -
+ * and a seek fires nothing, so the whole bar of beats is silently skipped. 时计's drum face kept
+ * moving (its hits are read by index), which is exactly how "一个慢一个快" starts.
  */
 export const stepBeatFxClock = (
     state: BeatFxClockState,
     heardTime: number | null,
     dtSec: number,
+    frameSec?: number,
 ): BeatFxClockState => {
     const dtMs = Math.max(0, dtSec) * 1000;
     state.beatImpact *= Math.exp(-dtMs / BEAT_FX_BEAT_DECAY_MS * 2.3);
@@ -179,7 +186,9 @@ export const stepBeatFxClock = (
     const previous = state.lastTime;
     state.lastTime = heardTime;
     const delta = previous === null ? Number.NaN : heardTime - previous;
-    if (previous === null || delta < 0 || delta > BEAT_FX_SEEK_THRESHOLD_SEC) {
+    // A late frame is not a seek: allow the time it really took, plus half a frame of slack.
+    const seekAfter = Math.max(BEAT_FX_SEEK_THRESHOLD_SEC, Math.max(0, frameSec ?? dtSec) * 1.5);
+    if (previous === null || delta < 0 || delta > seekAfter) {
         state.cursor = findNextBeatFxEvent(state.events, heardTime);
         return state;
     }

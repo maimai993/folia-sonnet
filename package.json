@@ -8,7 +8,7 @@
     "email": "hjm184563@gmail.com"
   },
   "private": true,
-  "version": "0.7.28.2",
+  "version": "0.7.28.3",
   "license": "AGPL-3.0",
   "type": "module",
   "main": "electron/main.cjs",
@@ -22,7 +22,7 @@
     "build:capacitor": "cross-env FOLIA_BUILD_TARGET=capacitor vite build",
     "build:vercel-api": "tsc -p api-ts/tsconfig.json",
     "preview": "vite preview",
-    "cap:sync:android": "npm run build:capacitor && cap sync android",
+    "cap:sync:android": "npm run build:capacitor && npm run models:android && cap sync android",
     "cap:assets:android": "node scripts/generate-android-assets.mjs",
     "cap:open:android": "cap open android",
     "cap:run:android": "npm run build:capacitor && cap run android",
@@ -88,6 +88,7 @@
     "contributors:add": "npx all-contributors-cli add",
     "contributors:generate": "npx all-contributors-cli generate",
     "models:fetch": "node build/fetchModels.mjs",
+    "models:android": "node scripts/fetchAndroidModels.mjs",
     "steam-audio:fetch": "node build/fetchSteamAudio.mjs",
     "manual:ai-probe": "node test/manual/ai_probe.mjs"
   },

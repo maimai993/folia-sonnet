@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { PlayerState } from '../../../types';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { readLyricOffset, writeLyricOffset } from '../../../utils/lyrics/lyricOffsetMemory';
-import { readCalibrationRecord, writeCalibrationRecord } from '../../../utils/lyrics/lyricCalibrationMemory';
+import { readCalibrationRecord, writeCalibrationRecord, forgetCalibrationRecord, CALIBRATION_VERSION } from '../../../utils/lyrics/lyricCalibrationMemory';
 import { useLyricCalibrationStore } from '../../../stores/useLyricCalibrationStore';
 import { calibrateLyricsForSong } from '../../../services/lyrics/autoLyricCalibration';
 import { onAudioCached } from '../../../services/audioCache';
@@ -72,6 +72,21 @@ const markAttempt = (key: string): void => {
     }
 };
 
+/** Forgets that this song was scanned: an old estimator's attempt must not keep a new one out. */
+const forgetAttempt = (key: string): void => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+    try {
+        const attempts = readAttempts();
+        if (!(key in attempts)) return;
+        delete attempts[key];
+        localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(attempts));
+    } catch {
+        // Same as above: an unreadable store only costs a rescan.
+    }
+};
+
 export function useAutoLyricCalibration(): void {
     const songId = usePlaybackStore(state => state.currentSong?.id);
     const playerState = usePlaybackStore(state => state.playerState);
@@ -107,6 +122,26 @@ export function useAutoLyricCalibration(): void {
         const record = readCalibrationRecord(songId);
         const currentOffset = readLyricOffset(songId);
 
+        /*
+         * 旧估计器（v2 之前）写下来的结论不再作数。
+         *
+         * 它锁「最大的能量跃升」，鼓点响的歌常常锁到鼓上，于是整首歌词被推后一个反拍
+         * （300~400 ms）—— 而且这个偏移是**本曲永久**的，用户只会看到「这首歌词曲不同步」。
+         * 手动调过的（当前偏移与记录不一致）一律不动；自动写下的那一个清掉，并且把
+         * 「分析过」的记账一并抹掉，让这一轮用新判据重算。
+         */
+        if (record && record.version !== CALIBRATION_VERSION) {
+            const ours = currentOffset === record.offsetMs;
+            if (ours && currentOffset !== 0) {
+                writeLyricOffset(songId, 0);
+                console.info(`[AutoCalibrate] ${String(songId)}: dropping ${record.offsetMs}ms from the old estimator`);
+            }
+            forgetCalibrationRecord(songId);
+            forgetAttempt(attemptKey(songId, lineCount, firstStart));
+            setResult('idle');
+            return;
+        }
+
         // 自动对齐过的歌：值还在就照实说；被手动改成了别的数，就说「手动优先」。
         if (record?.phase === 'applied') {
             if (currentOffset === record.offsetMs) {
@@ -125,7 +160,7 @@ export function useAutoLyricCalibration(): void {
             return;
         }
         setResult(record.phase, 0, record.reason);
-    }, [resetResult, setResult, songId]);
+    }, [firstStart, lineCount, resetResult, setResult, songId]);
 
     useEffect(() => {
         if (!autoEnabled || songId === undefined || songId === null || lineCount === 0) {

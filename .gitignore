@@ -60,6 +60,7 @@ plan/
 # Model weights: fetched and hash-verified by build/fetchModels.mjs, shipped in the installer,
 # never committed - 83MB that never changes does not belong in every clone's history.
 models/
+android/app/src/main/assets/models/
 build/windowtolayer
 build/windowtolayer-COPYING
 build/ffmpeg/
