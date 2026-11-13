@@ -21,6 +21,14 @@ export type NativePlaybackEvent = {
     type: NativePlaybackEventType;
     positionMs?: number;
     durationMs?: number;
+    /**
+     * 事件在原生侧生成的时刻（Unix 毫秒，与 JS 的 `Date.now()` 同一个钟）。
+     *
+     * `positionMs` 是**那一刻**的位置，而事件要过桥才到 WebView。少了这个字段，Web 侧只能
+     * 把「收到的时刻」当作那一刻，于是时钟永远落后一段过桥耗时（起播时最明显：正好在铺
+     * 歌词、换封面、切视觉器），歌词整首歌都比声音晚 —— 安卓原生播放独有。
+     */
+    wallMs?: number;
     message?: string;
     songKey?: string;
     /** 原生实际出声/缓冲状态，seeked 不再凭位置跳变推断已恢复播放。 */

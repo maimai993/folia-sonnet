@@ -59,12 +59,14 @@ object HtdemucsRunner {
      */
     val STEMS = listOf("drums", "bass", "other", "vocals")
 
-    /** 分离结果：每个轨一条单声道波形（已降混），长度与输入一致时最有用。 */
+    /** 分离结果：每个轨两条声道的波形，长度是请求的那一段。 */
     data class Result(
         /** 键是 STEMS 里的名字，值是 [声道数][样本数] 的波形。 */
         val stems: Map<String, Array<FloatArray>>,
         /** 实际处理的采样率。 */
         val sampleRate: Int,
+        /** 这段波形在整首歌里的起点（样本）。 */
+        val fromSample: Int = 0,
     )
 
     private const val MODEL_INPUT_MIX = "mix"
@@ -113,50 +115,77 @@ object HtdemucsRunner {
     }
 
     /**
-     * 分离整首歌。
+     * 分离一段音频。
      *
      * @param left  左声道，44.1kHz
      * @param right 右声道，44.1kHz（单声道输入时传和 left 相同的数组）
+     * @param stems 要哪几个轨（`STEMS` 的下标）；默认四个都要。只要一两轨时内存与过桥的数据量
+     *              都跟着减半 —— 一首四分钟的歌四轨全长是 340MB，手机吃不下整曲，见
+     *              FoliaAutomixModelsPlugin 里关于「按段喂」的说明。
+     * @param fromSample 从哪个样本开始（含）
+     * @param toSample   到哪个样本结束（不含）
      * @param onProgress 每处理完一个窗口回调一次 (已处理样本, 总样本)
+     * @param cancelled  每个窗口之前问一次；true 就停在这里返回已经完成的部分
      */
     fun separate(
         left: FloatArray,
         right: FloatArray,
+        stems: List<Int> = STEMS.indices.toList(),
+        fromSample: Int = 0,
+        toSample: Int = min(left.size, right.size),
         onProgress: ((Int, Int) -> Unit)? = null,
+        cancelled: (() -> Boolean)? = null,
     ): Result {
         val active = session ?: error("htdemucs 还没加载")
         val env = environment ?: error("ORT 环境未初始化")
-        val total = min(left.size, right.size)
-        require(total > 0) { "音频是空的" }
+        val wanted = stems.filter { it in STEMS.indices }.distinct()
+        require(wanted.isNotEmpty()) { "没有要分离的轨" }
+        val start0 = fromSample.coerceIn(0, min(left.size, right.size))
+        val end0 = toSample.coerceIn(start0, min(left.size, right.size))
+        val length = end0 - start0
+        require(length > 0) { "音频是空的" }
 
         /*
-         * 输出缓冲：[轨][声道][样本数]。
+         * 输出缓冲：[请求的轨][声道][样本数]。
          *
          * 一次把四个轨全长都开出来会很大（4 × 2 × 44.1k × 240s ≈ 340MB），
-         * 所以这里只留**我们要的**：四个轨各一条立体声。
-         * 真正的省内存手段是下面按窗口流式累加，不保留中间结果。
+         * 所以只开**要的**那几个；真正的省内存手段是下面按窗口流式累加，不保留中间结果。
          */
-        val out = Array(STEMS.size) { Array(2) { FloatArray(total) } }
+        val out = Array(wanted.size) { Array(2) { FloatArray(length) } }
         // 重叠区用加权累加，最后除以权重，避免窗口接缝处的爆音。
-        val weight = FloatArray(total)
+        val weight = FloatArray(length)
 
-        var start = 0
-        while (start < total) {
-            val end = min(total, start + SEGMENT)
-            val length = end - start
+        /*
+         * 这三块缓冲每个窗口都要用，抬到循环外复用。
+         *
+         * 一个窗口要 1.4MB（packed）+ 5.6MB（spec），一首四分钟的歌六十多个窗口 ——
+         * 每窗口新分配一次，GC 会在推理之间插进来，手机上表现为「分析到一半卡一下」。
+         */
+        val packed = FloatArray(2 * SEGMENT)
+        val spec = FloatArray(FRAMES * 2 * BINS * 2)
+        val re = FloatArray(N_FFT)
+        val im = FloatArray(N_FFT)
+        val mixLeft = FloatArray(SEGMENT)
+        val mixRight = FloatArray(SEGMENT)
 
-            val mixLeft = FloatArray(SEGMENT)
-            val mixRight = FloatArray(SEGMENT)
-            System.arraycopy(left, start, mixLeft, 0, length)
-            System.arraycopy(right, start, mixRight, 0, length)
+        var start = start0
+        while (start < end0) {
+            // 取消：在窗口边界停，已经算完的那一段照常返回（调用方按 fromSample 拼回去）。
+            if (cancelled?.invoke() == true) break
+            val end = min(end0, start + SEGMENT)
+            val take = end - start
 
-            val spec = stftStereo(mixLeft, mixRight)
+            java.util.Arrays.fill(mixLeft, 0f)
+            java.util.Arrays.fill(mixRight, 0f)
+            System.arraycopy(left, start, mixLeft, 0, take)
+            System.arraycopy(right, start, mixRight, 0, take)
+
+            stftStereo(mixLeft, mixRight, spec, re, im)
 
             val mixShape = longArrayOf(1, 2, SEGMENT.toLong())
             val specShape = longArrayOf((FRAMES * 2).toLong(), BINS.toLong(), 2)
 
             // [1, 2, SEGMENT]：先整段左声道，再整段右声道（连续写，不用交错）
-            val packed = FloatArray(2 * SEGMENT)
             System.arraycopy(mixLeft, 0, packed, 0, SEGMENT)
             System.arraycopy(mixRight, 0, packed, SEGMENT, SEGMENT)
 
@@ -167,17 +196,21 @@ object HtdemucsRunner {
                          * stems_time 的形状是 [1, 4, 2, 172032] —— 取 [0] 拿到
                          * Array<Array<Array<FloatArray>>>，再 [轨道][声道]。
                          * 用名字取而不是下标：模型有两个输出，靠位置假设迟早出错。
+                         *
+                         * 未请求的轨照样在张量里（模型总是输出四个），只是不往外拷。
                          */
                         val timeValue = output.get(MODEL_OUTPUT_TIME).orElse(null)
                             ?: error("模型没有输出 $MODEL_OUTPUT_TIME")
                         @Suppress("UNCHECKED_CAST")
                         val stemValues = timeValue.value as Array<Array<Array<FloatArray>>>
-                        for (stem in STEMS.indices) {
+                        for (slot in wanted.indices) {
+                            val stem = wanted[slot]
                             for (channel in 0..1) {
                                 val source = stemValues[0][stem][channel]
-                                val target = out[stem][channel]
-                                for (index in 0 until length) {
-                                    target[start + index] += source[index]
+                                val target = out[slot][channel]
+                                val base = start - start0
+                                for (index in 0 until take) {
+                                    target[base + index] += source[index]
                                 }
                             }
                         }
@@ -185,22 +218,22 @@ object HtdemucsRunner {
                 }
             }
 
-            for (index in start until end) weight[index] += 1f
-            onProgress?.invoke(end, total)
+            for (index in (start - start0) until (end - start0)) weight[index] += 1f
+            onProgress?.invoke(end - start0, length)
 
-            if (end >= total) break
+            if (end >= end0) break
             /*
              * 窗口之间留 1/8 的重叠（~0.5 秒）。留得太多是白算，
              * 不留则在接缝处会有明显的相位跳变（iSTFT 的边界效应）。
              */
-            start = end - SEGMENT / 8
+            start = maxOf(start0, end - SEGMENT / 8)
         }
 
         // 归一化重叠区
-        for (stem in STEMS.indices) {
+        for (slot in wanted.indices) {
             for (channel in 0..1) {
-                val track = out[stem][channel]
-                for (index in 0 until total) {
+                val track = out[slot][channel]
+                for (index in 0 until length) {
                     val w = weight[index]
                     if (w > 0f) track[index] /= w
                 }
@@ -208,8 +241,9 @@ object HtdemucsRunner {
         }
 
         return Result(
-            stems = STEMS.indices.associate { STEMS[it] to out[it] },
+            stems = wanted.indices.associate { STEMS[wanted[it]] to out[it] },
             sampleRate = SAMPLE_RATE,
+            fromSample = start0,
         )
     }
 
@@ -219,12 +253,17 @@ object HtdemucsRunner {
      * 布局：首维是 (声道, 帧) 展平 —— 声道 0 的 172 帧在前，声道 1 在后；
      * 末维是 (实部, 虚部)。这个顺序是从图里的 Slice 轴推出来的，写反了模型不报错，
      * 只会输出一堆噪声 —— 那是最难查的一类错。
+     *
+     * `out` / `re` / `im` 由调用方给：它们每个窗口都要一模一样地重算一遍，
+     * 一个 5.6MB 的数组乘六十多个窗口，就是手机上一卡一顿的来源。
      */
-    private fun stftStereo(left: FloatArray, right: FloatArray): FloatArray {
-        val out = FloatArray(FRAMES * 2 * BINS * 2)
-        val re = FloatArray(N_FFT)
-        val im = FloatArray(N_FFT)
-
+    private fun stftStereo(
+        left: FloatArray,
+        right: FloatArray,
+        out: FloatArray,
+        re: FloatArray,
+        im: FloatArray,
+    ): FloatArray {
         for (channel in 0..1) {
             val samples = if (channel == 0) left else right
             for (frame in 0 until FRAMES) {

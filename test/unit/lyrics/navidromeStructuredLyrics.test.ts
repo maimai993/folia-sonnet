@@ -163,7 +163,11 @@ describe('parseNavidromeStructuredLyrics', () => {
         expect(parsed?.lines.map(line => line.words.map(word => word.text))).toEqual(
             lrc.lines.map(line => line.words.map(word => word.text))
         );
-        expect(parsed?.lines[0].words).toHaveLength(27);
+        // 27 characters, two of them punctuation: 「、」 and 「。」 now ride on the word before them
+        // instead of flashing as a word of their own (buildTimedWords, estimatedLineTiming.ts).
+        expect(parsed?.lines[0].words).toHaveLength(25);
+        expect(parsed?.lines[0].words.map(word => word.text)).toContain('り、');
+        expect(parsed?.lines[0].words.map(word => word.text)).toContain('る。');
         expect(parsed?.lines[1].words.map(word => word.text)).toEqual(['Line', 'two', 'goes', 'here']);
         // A line before a long gap ends after its reading time, like an LRC line, instead of at the next start.
         expect(parsed?.lines[1].endTime).toBeCloseTo(lrc.lines[1].endTime);

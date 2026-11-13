@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { CROSSFADE_CURVES, CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC, type CrossfadeCurve } from '../../../../services/automix/crossfadePlanner';
 import { modelsPresent, subscribeModelAvailability } from '../../../../services/analysis/modelAvailability';
-import { isNativeModelsAvailable, modelCanRun, subscribeModelAvailability as subscribeNativeModels } from '../../../../services/automix/nativeModels';
+import { isNativeModelsAvailable, modelWillBeAvailable, subscribeModelAvailability as subscribeNativeModels } from '../../../../services/automix/nativeModels';
 import { ANALYSIS_MODELS_ENABLED, modelStoreSnapshot, subscribeModelStore, importModelFile, type DownloadableModel } from '../../../../services/analysis/modelStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { useAnalysisModelStore } from '../../../../stores/useAnalysisModelStore';
@@ -268,7 +268,7 @@ const PlaybackPage: React.FC = () => {
      */
     const nativeStems = React.useSyncExternalStore(
         subscribeNativeModels,
-        () => (isNativeModelsAvailable() ? modelCanRun('htdemucs') : false),
+        () => (isNativeModelsAvailable() ? modelWillBeAvailable('htdemucs') : false),
         () => false,
     );
     const wgslStems = React.useSyncExternalStore(subscribeModelAvailability, modelsPresent, modelsPresent).htdemucs_gpu;

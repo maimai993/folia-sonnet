@@ -66,6 +66,37 @@ describe('nativePlaybackEngine clock', () => {
         expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(61, 5);
     });
 
+    /*
+     * 事件是「过去」发生的：`positionMs` 标的是生成那一刻的位置，不是收到那一刻。
+     * 少了这一步，起播时过桥排队的那几百毫秒会变成整首歌的恒定滞后 —— 歌词永远比声音晚，
+     * 换哪副耳机都一样（跟音频输出延迟无关）。
+     */
+    it('rebases to when the event was emitted rather than when it was received', () => {
+        const wall = 1_700_000_000_000;
+        const wallClock = vi.spyOn(Date, 'now').mockReturnValue(wall);
+        nowMs = 0;
+
+        emit({ type: 'playing', positionMs: 1000, durationMs: 200_000, wallMs: wall - 300 });
+        expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(1.3, 5);
+
+        nowMs = 1000;
+        expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(2.3, 5);
+
+        wallClock.mockRestore();
+    });
+
+    it('ignores a wall-clock stamp that cannot be a bridge delay', () => {
+        const wall = 1_700_000_000_000;
+        const wallClock = vi.spyOn(Date, 'now').mockReturnValue(wall);
+        nowMs = 0;
+
+        // 三小时前的戳（时钟被拽过 / 不是这一下的位置）：按收到的那一刻算，不整首推走。
+        emit({ type: 'playing', positionMs: 1000, durationMs: 200_000, wallMs: wall - 3 * 3600 * 1000 });
+        expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(1, 5);
+
+        wallClock.mockRestore();
+    });
+
     it('freezes while buffering and resumes from the position the player reports', () => {
         emit({ type: 'playing', positionMs: 1000, durationMs: 200_000 });
 

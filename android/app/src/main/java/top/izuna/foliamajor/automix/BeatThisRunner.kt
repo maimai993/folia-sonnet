@@ -67,6 +67,8 @@ object BeatThisRunner {
         val beatLogits: FloatArray,
         /** 每帧对应的时间步长，便于调用方换算。 */
         val fps: Double,
+        /** 是不是被中途取消的：是的话 beats 只覆盖前一段，调用方不该当成整曲结果。 */
+        val cancelled: Boolean = false,
     )
 
     private var env: OrtEnvironment? = null
@@ -106,8 +108,11 @@ object BeatThisRunner {
      * 分析一段单声道 PCM（-1..1，[sampleRate] 必须已经是 22050）。
      *
      * 阻塞调用，可能跑几十秒（四分钟的歌在手机上约 10~30 秒），必须在后台线程。
+     *
+     * `cancelled` 在每一块之前问一次：切歌、退出时正在跑的这一次不该继续占着单线程队列，
+     * 后面的分析全会被它堵住（界面上就是「智能动感一直没反应」）。
      */
-    fun analyze(mono: FloatArray): Result {
+    fun analyze(mono: FloatArray, cancelled: (() -> Boolean)? = null): Result {
         val model = session ?: error("beat_this 还没载入")
         val mel = melSpectrogram(mono)
         if (mel.frames <= 0) return Result(emptyList(), FloatArray(0), FPS)
@@ -120,6 +125,10 @@ object BeatThisRunner {
 
         var start = 0
         while (start < mel.frames) {
+            if (cancelled?.invoke() == true) {
+                // 只交回已经算完的那一截；调用方看 `cancelled` 决定是否采用。
+                return Result(pickPeaks(beatLogits, downbeatLogits), beatLogits.copyOfRange(0, start), FPS, true)
+            }
             val end = min(mel.frames, start + CHUNK_FRAMES)
             val length = end - start
             // 这一块要喂的切片：[1, length, 128]
