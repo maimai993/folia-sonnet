@@ -38,10 +38,23 @@ const SmartBeatSettingsCard: React.FC<SmartBeatSettingsCardProps> = ({ t }) => {
                 return t('options.smartBeatStatusNoTrack');
             case 'noEffect':
                 return t('options.smartBeatStatusNoEffect');
-            case 'drumsOnly':
-                // 时计只吃鼓点：把「读到哪了」一并说出来，否则「没效果」和「在分析」在界面上一样。
-                if (!status.drums) return `${t('options.smartBeatStatusDrumsOnly')} · ${t('options.smartBeatStatusDrumsReading')}`;
-                return `${t('options.smartBeatStatusDrumsHits')} ${status.drums.count}${status.drums.until === null ? '' : ` · ${Math.floor(status.drums.until)}s`}`;
+            case 'drumsOnly': {
+                /*
+                 * 时计只吃鼓点：把「读到哪了」一并说出来，否则「没效果」和「在分析」在界面上一样。
+                 * 还要说出**哪一段**：取音频（在线曲目整曲下载）、解码、挑鼓点，新手机会走半分钟，
+                 * 这半分钟里字不变的话，和卡死没有区别。
+                 */
+                const drums = status.drums;
+                if (drums && drums.count > 0) {
+                    return `${t('options.smartBeatStatusDrumsOnly')} · ${t('options.smartBeatStatusDrumsHits')}${drums.count}${drums.until === null ? '' : ` · ${Math.floor(drums.until)}s`}`;
+                }
+                const step = drums?.stage === 'bytes' ? t('options.smartBeatStageBytes')
+                    : drums?.stage === 'decode' ? t('options.smartBeatStageDecode')
+                        : drums?.stage === 'pick' ? t('options.smartBeatStagePick')
+                            : drums?.stage === 'no-bytes' ? t('options.smartBeatStageNoBytes')
+                                : t('options.smartBeatStatusDrumsReading');
+                return `${t('options.smartBeatStatusDrumsOnly')} · ${step}`;
+            }
             case 'loading':
                 return t('options.smartBeatStatusLoading');
             case 'ready':

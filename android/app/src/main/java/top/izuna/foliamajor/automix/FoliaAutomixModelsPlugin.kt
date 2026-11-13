@@ -50,6 +50,8 @@ class FoliaAutomixModelsPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         cancelRequested.set(true)
+        // 那 20MB 的单声道缓存只是给「同一首歌的下一次分析」备的，插件都没了就还回去。
+        TrackPcmDecoder.clearMonoCache()
         worker.shutdownNow()
         super.handleOnDestroy()
     }
@@ -58,6 +60,8 @@ class FoliaAutomixModelsPlugin : Plugin() {
     @PluginMethod
     fun cancelAutomix(call: PluginCall) {
         cancelRequested.set(true)
+        // 取消基本总跟着切歌：这首歌的 PCM 不会再用了，先释放。
+        TrackPcmDecoder.clearMonoCache()
         call.resolve(JSObject().put("ok", true))
     }
 
@@ -200,14 +204,17 @@ class FoliaAutomixModelsPlugin : Plugin() {
         worker.execute {
             try {
                 cancelRequested.set(false)
+                AutomixLoad.applyThreadPriority()
                 val started = System.currentTimeMillis()
-                val decoded = TrackPcmDecoder.decode(context, url)
-                    ?: return@execute call.reject("无法解码音频: $url")
                 /*
-                 * beat_this 要 22050Hz 单声道。这里从 44100 双声道降到单声道
-                 * 再按 2:1 抽取 —— 正好是整数倍，不需要插值。
+                 * 直接解成 22050 单声道，不再「先解 44.1k 双声道再降混抽取」。
+                 *
+                 * beat_this 要的就是这一条，而双声道那条路为它多分配了 3/4 的内存
+                 * （四分钟的歌 170MB 对 21MB），解码也更久。解码结果还会被
+                 * 紧接着的鼓点分析复用（TrackPcmDecoder 的短时缓存）。
                  */
-                val mono = downmixToMono22k(decoded)
+                val mono = TrackPcmDecoder.decodeMono(context, url)
+                    ?: return@execute call.reject("无法解码音频: $url")
                 val file = AutomixModels.ensureLocal(context, AutomixModels.BEAT_THIS)
                 BeatThisRunner.ensureLoaded(file)
                 val result = BeatThisRunner.analyze(mono) { cancelRequested.get() }
@@ -239,6 +246,52 @@ class FoliaAutomixModelsPlugin : Plugin() {
                 )
             } catch (error: Exception) {
                 call.reject("节拍分析失败: ${error.message}", error)
+            }
+        }
+    }
+
+    /**
+     * 混音的三条鼓点频带（kick / snare / hats），**音频由原生自己按地址取**。
+     *
+     * 这是「时计」在手机上真正需要的那个东西。它原先要么等 htdemucs 分离（比播放慢，永远追不上），
+     * 要么在 WebView 里 `decodeAudioData` 整曲再逐块算 mel（四分钟的歌几十秒），两个都会让
+     * 仿真鼓面在很长一段时间里一动不动。这里把解码与 mel 都搬到原生：一两秒出整曲的频带，
+     * 过桥的只有 3 × 帧数 个 float（四分钟约 150KB），挑鼓点仍在 Web 侧做，算法只有一份。
+     *
+     * 参数：url —— 本地绝对路径，或 http(s) 地址（媒体缓存的回环地址也算本地）。
+     * 返回：bands 三条 base64 float32、frames、fps（50）、seconds（实际解码到的长度）。
+     */
+    @PluginMethod
+    fun analyzeDrumBandsFromUrl(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) return call.reject("缺少 url")
+        val context: Context = context
+        worker.execute {
+            try {
+                cancelRequested.set(false)
+                AutomixLoad.applyThreadPriority()
+                val started = System.currentTimeMillis()
+                // 与节拍分析共用同一条 22.05k 单声道：同一首歌紧跟在前者之后调用时直接命中缓存。
+                val mono = TrackPcmDecoder.decodeMono(context, url)
+                    ?: return@execute call.reject("无法解码音频: $url")
+                val bands = BeatThisRunner.drumBands(mono) { cancelRequested.get() }
+                val frames = if (bands.isEmpty()) 0 else bands[0].size
+                android.util.Log.i(
+                    "Automix",
+                    "drum bands: ${mono.size} 样本 -> $frames 帧，" +
+                        "耗时 ${System.currentTimeMillis() - started}ms",
+                )
+                val payload = JSArray()
+                for (band in bands) payload.put(encodeFloats(band))
+                call.resolve(
+                    JSObject()
+                        .put("bands", payload)
+                        .put("frames", frames)
+                        .put("fps", BeatThisRunner.FPS)
+                        .put("seconds", mono.size.toDouble() / BeatThisRunner.SAMPLE_RATE),
+                )
+            } catch (error: Exception) {
+                call.reject("鼓点频带分析失败: ${error.message}", error)
             }
         }
     }
@@ -358,22 +411,6 @@ class FoliaAutomixModelsPlugin : Plugin() {
                 .put("fromSample", result.fromSample)
                 .put("cancelled", cancelRequested.get()),
         )
-    }
-
-    /**
-     * 44100 双声道 → 22050 单声道。
-     *
-     * 先左右平均（居中的人声与乐器会保留，这正是节拍检测要的），
-     * 再每两个样本取一个 —— 44100/2 = 22050，整数倍抽取不需要重采样。
-     */
-    private fun downmixToMono22k(decoded: TrackPcmDecoder.Result): FloatArray {
-        val frames = decoded.samples
-        val out = FloatArray(frames / 2)
-        for (i in out.indices) {
-            val srcIndex = i * 2
-            out[i] = (decoded.left[srcIndex] + decoded.right[srcIndex]) * 0.5f
-        }
-        return out
     }
 
     /**

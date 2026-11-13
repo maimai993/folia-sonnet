@@ -227,6 +227,12 @@ object HtdemucsRunner {
              * 不留则在接缝处会有明显的相位跳变（iSTFT 的边界效应）。
              */
             start = maxOf(start0, end - SEGMENT / 8)
+            /*
+             * 一个窗口的推理刚结束（手机上通常 0.5~3 秒）：这里让一次。
+             * 分离是后台最重的一项，退后台后还与音频解码抢同一个核时，
+             * 用户听到的就是断音、整机就是卡。
+             */
+            AutomixLoad.yieldPoint()
         }
 
         // 归一化重叠区

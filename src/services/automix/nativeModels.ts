@@ -448,6 +448,59 @@ export const separateStemsNative = async (
     }
 };
 
+/** 原生算出的三条鼓点频带（kick / snare / hats），以及它们的帧率。 */
+export type NativeDrumBands = {
+    bands: [Float32Array, Float32Array, Float32Array];
+    frames: number;
+    fps: number;
+    /** 实际解码到的长度；解码器对超长的现场版会截断。 */
+    seconds: number;
+};
+
+/**
+ * 用原生解码 + mel 取一首歌的**混音**鼓点频带。
+ *
+ * 为什么要有这条路（两台上真机的结论，不是猜的）：
+ *   · htdemucs 在手机上一段 3.9 秒要 4~8 秒，比播放慢，`until` 永远追不上播放头；
+ *   · 退到 WebView 里 `decodeAudioData` 整曲再逐块算 mel，四分钟的歌要几秒到几十秒，
+ *     这段时间仿真鼓面只能停着（界面上就是「正在从混音里读鼓点…」一动不动）。
+ * 原生 MediaCodec 解码 + Kotlin 的 mel 一两秒就能出整曲，过桥的只有三条频带
+ * （四分钟约 150KB，桌面那条 htdemucs 结果也是这么回来的）。挑点仍在 Web 侧
+ * （`pickBandHits`），起音判据只有一份。
+ *
+ * @param url 本地绝对路径，或 http(s) 地址（媒体缓存的回环地址也算本地）。
+ */
+export const analyzeDrumBandsNativeFromUrl = async (url: string): Promise<NativeDrumBands | null> => {
+    if (!isNativeModelsAvailable()) return null;
+    if (!url) return null;
+    const plugin = NativeAutomix as unknown as {
+        analyzeDrumBandsFromUrl?: (options: { url: string }) => Promise<{
+            bands?: string[];
+            frames?: number;
+            fps?: number;
+            seconds?: number;
+        }>;
+    };
+    // 旧 APK 的插件没有这个方法：返回 null 让调用方走 WebView 解码那条（慢但不至于不能用）。
+    if (typeof plugin.analyzeDrumBandsFromUrl !== 'function') return null;
+    try {
+        const result = await plugin.analyzeDrumBandsFromUrl({ url });
+        const encoded = result.bands ?? [];
+        if (encoded.length < 3) return null;
+        const bands: [Float32Array, Float32Array, Float32Array] = [
+            decodeChunk(encoded[0]),
+            decodeChunk(encoded[1]),
+            decodeChunk(encoded[2]),
+        ];
+        const frames = result.frames ?? bands[0].length;
+        if (frames <= 0) return null;
+        return { bands, frames, fps: result.fps ?? 50, seconds: result.seconds ?? 0 };
+    } catch (error) {
+        console.warn('[AutomixModels] native drum bands failed', error);
+        return null;
+    }
+};
+
 /*
  * 启动时问一次原生：模型在不在。
  *

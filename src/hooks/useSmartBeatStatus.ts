@@ -5,7 +5,7 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 import { visualizerWantsBeats, visualizerWantsDrumHits } from '../components/visualizer/beatClockTargets';
 import { smartBeatActive, smartBeatMayAnalyse } from '../services/beatFx/beatEffects';
 import { getBeatFxStatus, subscribeBeatFxStatus } from '../services/beatFx/beatFxLive';
-import { drumHitsSnapshot, parseDrumHitsSnapshot, subscribeDrumHits } from '../services/analysis/drumHits';
+import { drumHitsSnapshot, parseDrumHitsSnapshot, subscribeDrumHits, type DrumStage } from '../services/analysis/drumHits';
 import { getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 
 // src/hooks/useSmartBeatStatus.ts
@@ -35,8 +35,9 @@ export interface SmartBeatStatusView {
     beats: number;
     /** Why there are none (only meaningful for `none`). */
     note: string | null;
-    /** 时计's drum hits: how many are in, and how far they reach (`null` once the whole track is picked). */
-    drums: { count: number; until: number | null } | null;
+    /** 时计's drum hits: how many are in, how far they reach (`null` once the whole track is picked),
+     *  and which step a read is at while there are none yet. */
+    drums: { count: number; until: number | null; stage: DrumStage | null } | null;
 }
 
 export function useSmartBeatStatus(): SmartBeatStatusView {
@@ -53,7 +54,6 @@ export function useSmartBeatStatus(): SmartBeatStatusView {
         () => '0|',
     );
     const drums = drumKey ? parseDrumHitsSnapshot(drumSnapshot) : null;
-    const drumsIn = drums !== null && drums.count > 0;
 
     const wantsBeats = visualizerWantsBeats({ ...settings, pageTransparent });
     const wantsDrums = visualizerWantsDrumHits({ ...settings, pageTransparent });
@@ -62,7 +62,8 @@ export function useSmartBeatStatus(): SmartBeatStatusView {
     if (!song) return { kind: 'noTrack', beats: 0, note: null, drums: null };
     if (!wantsBeats) {
         // 只有 drum hits 也值得说一句：这时候永远不会跑 beat_this，也就永远没有拍点日志。
-        return { kind: wantsDrums ? 'drumsOnly' : 'noEffect', beats: 0, note: null, drums: drumsIn ? drums : null };
+        // 一个 hit 都还没有时也要把 `drums` 递出去：卡片靠它的 `stage` 说「在取音频 / 在解码」。
+        return { kind: wantsDrums ? 'drumsOnly' : 'noEffect', beats: 0, note: null, drums };
     }
     if (!snapshot.key) return { kind: 'noTrack', beats: 0, note: null, drums };
     if (snapshot.source === 'loading') return { kind: 'loading', beats: 0, note: null, drums };

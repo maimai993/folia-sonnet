@@ -168,6 +168,34 @@ const readTrackBytes = async (song: SongResult, key: string, representation: Pla
     return { bytes: null, note: note ?? 'track not cached yet, and no stream URL resolved', source };
 };
 
+/**
+ * 这首歌的音频地址，交给**原生**解码（drumHits.ts 的混音频带）。
+ *
+ * 和 `readStreamedTrackBytes` 前半段是同一件事：在线曲目先让原生把音频落到媒体缓存里，
+ * 回来的只是一个回环地址。区别是这里不 fetch 成 ArrayBuffer —— 原生解码器自己去读那个
+ * 地址，整曲 PCM 一个字节都不过桥（8MiB 的桥上过不去，见那边的注释）。
+ *
+ * 已经缓存过就直接返回地址，几毫秒。本地曲目返回 null：它们的路径在 Web 层拿不到，
+ * 仍旧走 WebView 那条解码路（fast enough for a file already on the phone's flash）。
+ */
+const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> => {
+    if (!isNativeModelsAvailable()) return null;
+    if (getPlaybackSourceRef(song).kind !== 'online') return null;
+    const prefetched = getPrefetchedData(song);
+    const url = prefetched?.audioUrl;
+    if (!url || url === 'CACHED_IN_DB' || !isUrlValid(prefetched.audioUrlFetchedAt) || !/^https?:/.test(url)) return null;
+    if (!(await hasNativeMediaCache())) return null;
+    try {
+        const cacheKey = getSongResourceCacheKey('audio', song);
+        const stored = await cacheNativeMediaFromUrl(cacheKey, url, MAX_STREAM_CACHE_BYTES, song.durationMs);
+        if (!stored) return null;
+        return await readNativeMediaCacheUrl(cacheKey);
+    } catch (error) {
+        console.warn('[BeatFx] could not prepare the audio for native drum bands', error);
+        return null;
+    }
+};
+
 const resolveTrackBeats = async (
     song: SongResult,
     key: string,
@@ -350,7 +378,11 @@ export const loadBeatFxTrackDrums = (song: SongResult, { storedOnly = false, voc
     const askedAt = getBeatFxLastHeard(key);
     if (!vocals) releaseTrackVocals(key);
     const voice = vocals ? loadTrackVocalEnvelope(key, readBytes, { at: () => Math.min(askedAt, getBeatFxLastHeard(key)), seconds: (song.durationMs || 0) / 1000 }) : null;
-    const drums = Promise.all([loadTrackDrumHits(key, readBytes), voice])
-        .then(([analysis, envelope]): BeatFxTrackDrums => ((analysis || envelope) && found() ? 'hits' : missing ? 'retry' : 'none'));
+    const drums = (async (): Promise<BeatFxTrackDrums> => {
+        // 原生的整曲解码先要一个地址（见 `resolveNativeAudioUrl`）；拿不到就走老路。
+        const nativeUrl = await resolveNativeAudioUrl(song);
+        const [analysis, envelope] = await Promise.all([loadTrackDrumHits(key, readBytes, nativeUrl), voice]);
+        return (analysis || envelope) && found() ? 'hits' : missing ? 'retry' : 'none';
+    })();
     return { key, drums };
 };
