@@ -94,6 +94,15 @@ export const joinStemRun = (
     // 原生只在块边界看取消标记，而一块是 30 秒音频（几十秒推理）：这里提前让它停，
     // 用户切歌后不必再等风扇转一分钟。
     run.cancelCheck = setInterval(() => {
+        /*
+         * 退到后台就停：htdemucs 是满核几分钟的活，在后台跑等于把「听歌时发烫」找回来。
+         * 已经收到的块留在内存、每 30 秒落的那份留在库里，回到前台从那里接着分离。
+         * 放在这里而不是各个调用方：鼓点和四条包络共用这一次分离，谁忘了判断都不该让它烧后台。
+         */
+        if (typeof document !== 'undefined' && document.hidden) {
+            stopRun(run);
+            return;
+        }
         for (const entry of [...run.listeners]) {
             if (!entry.wanted()) run.listeners.delete(entry);
         }
