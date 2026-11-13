@@ -26,14 +26,16 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
     const pausedRef = useRef(paused);
     pausedRef.current = paused;
     const alignRef = useRef<() => void>(() => {});
-    const { enabled, url, opacity, fit, localFileUrl } = useVideoLayerSettingsStore(useShallow(state => ({
+    const { enabled, url, opacity, fit, localFileUrl, injectedUrl } = useVideoLayerSettingsStore(useShallow(state => ({
         enabled: state.videoLayerEnabled,
         url: state.videoLayerUrl,
         opacity: state.videoLayerOpacity,
         fit: state.videoLayerFit,
         localFileUrl: state.localFileUrl,
+        injectedUrl: state.injectedUrl,
     })));
-    const source = localFileUrl ?? (url || null);
+    // 注入的那条排最前：它是「现在这一刻该看的东西」，用户自己选的那条只是它的备份。
+    const source = injectedUrl ?? localFileUrl ?? (url || null);
     const active = enabled && Boolean(source);
 
     useEffect(() => {

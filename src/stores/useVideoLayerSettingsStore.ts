@@ -57,6 +57,14 @@ export type VideoLayerSettingsState = {
     localFileStatus: VideoLayerLocalFileStatus;
     /** False where the pick falls back to <input type=file> and is forgotten on restart. */
     canPersistLocalFile: boolean;
+    /**
+     * 别人临时塞进来的一条画面流，优先于用户自己选的视频。
+     *
+     * 只活在这次运行里：不落盘、不进设置，重启就没了，用户原本选的视频随后原样回来。
+     * B 站 MV 走的就是这条路 —— 它不是什么新的一层背景，只是这一层临时换了源。
+     */
+    injectedUrl: string | null;
+    setInjectedUrl: (url: string | null) => void;
     setVideoLayerEnabled: (enabled: boolean) => void;
     setVideoLayerUrl: (url: string) => void;
     setVideoLayerOpacity: (opacity: number) => void;
@@ -141,6 +149,13 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
         localFileName: null,
         localFileStatus: 'none',
         canPersistLocalFile: canPersistVideoLayerFile(),
+        // 运行时注入的那条：不读盘，所以重启一定是 null。
+        injectedUrl: null,
+        setInjectedUrl: (url) => {
+            set({ injectedUrl: url });
+            // 注入了就把它露出来：用户点了「看这个视频」，看不到才是怪事。
+            if (url) set({ videoLayerEnabled: true });
+        },
         setVideoLayerEnabled: (enabled) => {
             set({ videoLayerEnabled: enabled });
             setStoredBoolean(VIDEO_LAYER_ENABLED_KEY, enabled);

@@ -1,21 +1,32 @@
 import React from 'react';
-import { usePlaybackStore, selectDisplaySong, selectDisplayDuration, selectDisplayPlayerState } from '../../stores/usePlaybackStore';
+import {
+    selectDisplayDuration,
+    selectDisplaySong,
+    usePlaybackStore,
+} from '../../stores/usePlaybackStore';
 import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
-import { lyricCurrentTime } from '../../stores/motionSignals';
+import { useVideoLayerSettingsStore } from '../../stores/useVideoLayerSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
-import { PlayerState } from '../../types';
-import { songKeyOf } from './BilibiliMvStage';
-
-const BilibiliMvStage = React.lazy(() => import('./BilibiliMvStage'));
 
 // src/components/bilibili/BilibiliMvLayer.tsx
-// 播放页上的 MV 背景层（挂在 AppSurface 的视觉层里、SceneHost 之上）。
+// 把「这首歌的 MV」接到播放页上。它自己不画任何东西。
 //
-// 三件事：开关打开且放着歌才挂；这首歌解析好之后铺上画面；顺手把下一首也解析好。
+// 画面交给现成的视频层（visualizer/videoLayer）—— 那一层本来就是静音的、跟着播放走的
+// 一块视频背景。这里只做一件事：把 B 站的画面流**临时注入**到那一层的运行时槽位里
+// （useVideoLayerSettingsStore.injectedUrl，不落盘，重启就没了）。
 //
-// 预取放在这里而不是 store 内部：要知道「下一首是哪一首」只有播放队列知道，
-// store 不该反过来依赖队列。同一时刻只预取一首由 store 自己保证。
+// 声音交给播放器：把 audioSrc 换成 B 站 DASH 的那条声音轨。两端来自同一个投稿，
+// 所以进度条、歌词、可视化全部照旧，不需要任何音画偏移。
+//
+// 预取也放在这里而不是 store 内部：要知道「下一首是哪一首」只有播放队列知道，
+// store 不该反过来依赖队列。
+
+/** 一首歌的 MV 缓存键。标题和歌手都规整过，免得大小写 / 空格差异算成两首。 */
+export const songKeyOf = (
+    title: string | null | undefined,
+    artist: string | null | undefined,
+): string => `${(title ?? '').trim().toLowerCase()}|||${(artist ?? '').trim().toLowerCase()}`;
 
 /** 从一首歌里取 MV 需要的两个字段。 */
 const describe = (song: unknown): { title: string; artist: string } => {
@@ -31,10 +42,13 @@ const BilibiliMvLayer: React.FC = () => {
     const enabled = useBilibiliMvStore(state => state.enabled);
     const displaySong = usePlaybackStore(selectDisplaySong);
     const playQueue = usePlaybackStore(state => state.playQueue);
-    const playerState = usePlaybackStore(selectDisplayPlayerState);
     const duration = usePlaybackStore(selectDisplayDuration);
 
     const current = React.useMemo(() => describe(displaySong), [displaySong]);
+    const songKey = React.useMemo(
+        () => songKeyOf(current.title, current.artist),
+        [current.title, current.artist],
+    );
 
     // 队列里当前这首的下一条就是「下一首」。
     const nextSong = React.useMemo(() => {
@@ -46,65 +60,73 @@ const BilibiliMvLayer: React.FC = () => {
     }, [displaySong, playQueue]);
     const next = React.useMemo(() => describe(nextSong), [nextSong]);
 
+    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
+
+    // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
+    React.useEffect(() => {
+        if (!active) return;
+        void useBilibiliMvStore.getState().resolveForSong(
+            songKey,
+            current.title,
+            current.artist,
+            Number.isFinite(duration) ? duration : 0,
+        );
+    }, [active, songKey, current.title, current.artist, duration]);
+
     // 下一首提前解析：只在开关打开时做，store 里再判一次。
     React.useEffect(() => {
-        if (!enabled || !next.title) return;
+        if (!active || !next.title) return;
         useBilibiliMvStore.getState().prefetchNext(
             songKeyOf(next.title, next.artist),
             next.title,
             next.artist,
             Number.isFinite(duration) ? duration : 0,
         );
-    }, [enabled, next.title, next.artist, duration]);
+    }, [active, next.title, next.artist, duration]);
+
+    const videoUrl = useBilibiliMvStore(state => (
+        active ? state.bySongKey[songKey]?.stream?.videoUrl ?? '' : ''
+    ));
+    const audioUrl = useBilibiliMvStore(state => (
+        active ? state.bySongKey[songKey]?.stream?.audioUrl ?? '' : ''
+    ));
 
     /*
-     * 声音：把播放器的音源换成 bilibili 那条 DASH 音频流。
+     * 画面：注入到视频层。离开时清掉注入，用户原本选的视频（如果有）原样回来。
      *
-     * 这是整个 MV 方案的关键一步。换成它之后，播放器放的是 MV 的原声，
-     * 而进度条、歌词、可视化、拖动 —— 全都还在读播放器自己的时钟，一个字不用改。
-     * 画面那条流只是静音的视频，跟着同一个时钟走（见 BilibiliMvBackground）。
-     * 两端同源，所以不存在音画偏移。
-     *
-     * 什么时候换回去：关掉 MV、换歌、解析失败、拿不到独立音轨（老投稿）。
-     * 靠 effect 的 cleanUp 做还原，保证任何一条路径离开都会还回歌曲本身。
+     * 不落盘：injectedUrl 只在内存里，所以重启之后一定回到用户自己的选择。
      */
-    const songKey = React.useMemo(
-        () => songKeyOf(current.title, current.artist),
-        [current.title, current.artist],
-    );
-    const mvAudioUrl = useBilibiliMvStore(state => {
-        if (!enabled) return '';
-        return state.bySongKey[songKey]?.stream?.audioUrl ?? '';
-    });
-    const setAudioSrc = usePlaybackStore(state => state.setAudioSrc);
-
     React.useEffect(() => {
-        if (!mvAudioUrl) return undefined;
-        const previous = usePlaybackStore.getState().audioSrc;
-        if (previous === mvAudioUrl) return undefined;
-        setAudioSrc(mvAudioUrl);
+        if (!videoUrl) return undefined;
+        useVideoLayerSettingsStore.getState().setInjectedUrl(videoUrl);
         return () => {
-            // 只有「现在放的还是 MV 那条」才还原：中途换歌时播放器已经自己换了新的。
-            if (usePlaybackStore.getState().audioSrc === mvAudioUrl) {
+            const store = useVideoLayerSettingsStore.getState();
+            // 只有「现在注入的还是这一条」才清：换歌时新的那条已经写进去了。
+            if (store.injectedUrl === videoUrl) store.setInjectedUrl(null);
+        };
+    }, [videoUrl]);
+
+    /*
+     * 声音：把播放器的音源换成 B 站那条 DASH 声音轨。
+     *
+     * 换掉之后播放器放的就是 MV 原声，而进度条、歌词、可视化、拖动都还在读播放器
+     * 自己的时钟 —— 一行都不用改。离开时还原成换之前那条，仍然只动运行时的那一个值，
+     * 不进任何持久化设置。
+     */
+    const setAudioSrc = usePlaybackStore(state => state.setAudioSrc);
+    React.useEffect(() => {
+        if (!audioUrl) return undefined;
+        const previous = usePlaybackStore.getState().audioSrc;
+        if (previous === audioUrl) return undefined;
+        setAudioSrc(audioUrl);
+        return () => {
+            if (usePlaybackStore.getState().audioSrc === audioUrl) {
                 setAudioSrc(previous ?? '');
             }
         };
-    }, [mvAudioUrl, setAudioSrc]);
+    }, [audioUrl, setAudioSrc]);
 
-    // 没有原生桥、没开开关、没歌：都不挂。
-    if (!enabled || !isBilibiliAvailable() || !current.title) return null;
-
-    return (
-        <React.Suspense fallback={null}>
-            <BilibiliMvStage
-                songTitle={current.title}
-                songArtist={current.artist}
-                currentTime={lyricCurrentTime}
-                duration={Number.isFinite(duration) ? duration : 0}
-                paused={playerState !== PlayerState.PLAYING}
-            />
-        </React.Suspense>
-    );
+    return null;
 };
 
 export default BilibiliMvLayer;

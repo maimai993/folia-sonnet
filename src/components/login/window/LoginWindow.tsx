@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import type { OnlineProviderId } from '../../../types/onlineMusic';
 import { KIT_EASE, KIT_MOTION, useKitReducedMotion } from '../../modal/settings/kit/motion';
 import Sheet from '../../shared/Sheet';
-import { Button } from '../../ui/Button';
-import BilibiliLoginEntry from '../../bilibili/BilibiliLoginEntry';
 import type { LoginOrigin } from '../loginWindowStore';
 import { PlatformMark, platformMarkOf } from '../PlatformMark';
 import '../login.css';
@@ -142,23 +140,7 @@ export const LoginWindow: React.FC<LoginWindowProps> = ({
                 ) : undefined}
                 aside={narrow ? undefined : (
                     <div className="relative w-[212px] shrink-0 bg-[var(--st-side)] shadow-[inset_-1px_0_0_var(--st-line)]" style={{ '--login-edge': 'var(--st-side)' } as React.CSSProperties}>
-                        <div className={`absolute inset-0 flex flex-col p-2 ${fades}`}>
-                            {column('column')}
-                            {/* B 站：只保存登录状态，不切换过去（见 BilibiliLoginEntry 的文件头）。
-                                它不属于平台列里的任何一行 —— 那一列选中就换了取流的地方。 */}
-                            <BilibiliLoginEntry>
-                                {open => (
-                                    <Button
-                                        variant="bare"
-                                        onClick={open}
-                                        className="mt-1 flex min-h-[40px] w-full items-center gap-2 rounded-lg px-2 text-left text-[13px] text-[var(--text-secondary)] transition-colors hover:bg-white/5 hover:text-[var(--text-primary)]"
-                                    >
-                                        B 站
-                                        <span className="text-[11px] opacity-60">仅保存登录</span>
-                                    </Button>
-                                )}
-                            </BilibiliLoginEntry>
-                        </div>
+                        <div className={`absolute inset-0 flex flex-col p-2 ${fades}`}>{column('column')}</div>
                     </div>
                 )}
                 underlay={mark && (

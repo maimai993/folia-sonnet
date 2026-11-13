@@ -1,6 +1,5 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import BilibiliAuthCard from './BilibiliAuthCard';
 import { Button } from '../ui/Button';
 import { Row, Status, Toggle } from '../modal/settings/kit';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
@@ -20,6 +19,8 @@ import { O } from '../modal/settings/pages/integration/options';
 const BilibiliMvSettingsPanel: React.FC = () => {
     const { t } = useTranslation();
     const available = useBilibiliAuthStore(state => state.available);
+    const signedIn = useBilibiliAuthStore(state => state.signedIn);
+    const uid = useBilibiliAuthStore(state => state.uid);
     const hydrateAuth = useBilibiliAuthStore(state => state.hydrate);
     const enabled = useBilibiliMvStore(state => state.enabled);
     const setEnabled = useBilibiliMvStore(state => state.setEnabled);
@@ -89,7 +90,20 @@ const BilibiliMvSettingsPanel: React.FC = () => {
                     </Button>
                 </Row>
             )}
-            <BilibiliAuthCard t={t} />
+            {/*
+              * 登录不在这里 —— 它在通用登录面板里（首页「登录到 xxx」那颗入口，
+              * 平台列末尾单独一条）。这里只说一句状态，点一下过去。
+              */}
+            <Row
+                option={O.bilibiliLogin}
+                hint={signedIn ? t('options.bilibiliLoginHintSignedIn') : t('options.bilibiliLoginHint')}
+            >
+                <Status tone={signedIn ? 'ok' : undefined}>
+                    {signedIn
+                        ? (uid ? t('options.bilibiliSignedInAs').replace('{uid}', uid) : t('options.bilibiliSignedIn'))
+                        : t('options.bilibiliSignedOut')}
+                </Status>
+            </Row>
             {!available && (
                 <Row sub label={<Status>{t('options.bilibiliUnsupported')}</Status>} />
             )}

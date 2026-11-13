@@ -15,7 +15,7 @@ import SearchResultsList from './SearchResultsList';
 import BilibiliVideoResults from './BilibiliVideoResults';
 import { usePlaybackStore, selectDisplaySong } from '../../../stores/usePlaybackStore';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
-import { songKeyOf } from '../../bilibili/BilibiliMvStage';
+import { songKeyOf } from '../../bilibili/BilibiliMvLayer';
 import SearchComposition from './SearchComposition';
 import SearchTabs, { useSearchSourceLabel } from './SearchTabs';
 import { useCollectionNavigationStore } from '../../../stores/useCollectionNavigationStore';

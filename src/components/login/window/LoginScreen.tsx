@@ -21,6 +21,7 @@ import { accountView, failureNoteKey, failureQuote, loginScene, sceneHeadline, s
 import FormLogin from './FormLogin';
 import LoginWindow from './LoginWindow';
 import PlatformColumn from './PlatformColumn';
+import BilibiliLoginRow from './BilibiliLoginRow';
 import SetupChecklist from './SetupChecklist';
 
 // src/components/login/window/LoginScreen.tsx
@@ -262,7 +263,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     left={narrow ? 24 : 292}
                 />
             )}
-            column={lie => <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => handleChoose(row.providerId)} onAllProvidersChosen={onAllProvidersChosen} lie={lie} />}
+            column={lie => (
+                <div className="flex min-h-0 flex-col">
+                    <div className="min-h-0 flex-1">
+                        <PlatformColumn rows={rows} chosenId={providerId} onChoose={row => handleChoose(row.providerId)} onAllProvidersChosen={onAllProvidersChosen} lie={lie} />
+                    </div>
+                    {/*
+                      * B 站不是平台：它不进 rows，也不参与切换。放在平台列末尾单独一条，
+                      * 只做扫码登录 / 退出（见 BilibiliLoginRow 的文件头）。
+                      */}
+                    {lie === 'column' && <BilibiliLoginRow />}
+                </div>
+            )}
             tile={(
                 <LoginTile
                     tileRef={element => { doneParts.current.tile = element; }}
