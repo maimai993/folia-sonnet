@@ -41,6 +41,7 @@ import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
 import SceneHost from '../scenes/engine/SceneHost';
 import BilibiliMvLayer from '../bilibili/BilibiliMvLayer';
+import BilibiliVideoStage from '../bilibili/BilibiliVideoStage';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
@@ -570,6 +571,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 {/* B 站 MV 背景：铺在歌词样式之上（见 BilibiliMvLayer 的文件头）。
                     只在开关打开时自己挂出来，没开就是 null，不占任何东西。 */}
                 <BilibiliMvLayer />
+                {/* 歌本身就是一条投稿时，把它的画面铺上来（与上面那条 MV 匹配互不相干）。 */}
+                <BilibiliVideoStage />
             </div>
 
             <StageSessionEmptyState

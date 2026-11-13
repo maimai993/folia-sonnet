@@ -6,8 +6,6 @@ import {
 } from '../../stores/usePlaybackStore';
 import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
-import { bilibiliBvidOf } from '../../services/bilibili/bilibiliNormalize';
-import { fetchBilibiliPlayUrl, fetchBilibiliVideoInfo } from '../../services/bilibili/api';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
 
@@ -65,18 +63,12 @@ const BilibiliMvLayer: React.FC = () => {
     const next = React.useMemo(() => describe(nextSong), [nextSong]);
 
     /*
-     * 正在放的这首歌**本身就是一条 B 站视频**（用户从 B 站推荐页或搜索里点的它）。
+     * 「歌本身就是视频」那一条不在这里，见 BilibiliVideoStage。
      *
-     * 这条路不走匹配：它就是视频，画面和声音都是它自己的。匹配那条路只用于
-     * 「放的是别的平台的歌、想给它找个 MV」。
+     * 这里只管「放的是别的平台的歌，给它找一条 MV」。两者分成两个组件，是因为
+     * 合在一起时两条路抢同一个注入槽位，切歌会互相清掉对方的东西。
      */
-    const ownBvid = React.useMemo(
-        () => bilibiliBvidOf(displaySong as { id?: string } | null),
-        [displaySong],
-    );
-    const isOwnVideo = ownBvid.length > 0;
-
-    const active = enabled && isBilibiliAvailable() && current.title.length > 0 && !isOwnVideo;
+    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
 
     // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
     React.useEffect(() => {
@@ -100,45 +92,12 @@ const BilibiliMvLayer: React.FC = () => {
         );
     }, [active, next.title, next.artist, duration]);
 
-    // 匹配出来的那条（给别的平台的歌找的 MV）。自己就是视频时不看这里。
-    const matchedVideoUrl = useBilibiliMvStore(state => (
+    const videoUrl = useBilibiliMvStore(state => (
         active ? state.bySongKey[songKey]?.stream?.videoUrl ?? '' : ''
     ));
-    const matchedAudioUrl = useBilibiliMvStore(state => (
+    const audioUrl = useBilibiliMvStore(state => (
         active ? state.bySongKey[songKey]?.stream?.audioUrl ?? '' : ''
     ));
-
-    /*
-     * 自己就是视频时，画面和声音都现取。
-     *
-     * 播放器那一侧已经通过 provider 的 getAudioSource 把**声音**换成了这条视频的
-     * DASH 音轨，这里只需要再取一次画面地址注入视频层 —— 两端来自同一个 cid，
-     * 所以天然同步。
-     */
-    const [ownVideoUrl, setOwnVideoUrl] = React.useState('');
-    React.useEffect(() => {
-        if (!isOwnVideo) {
-            setOwnVideoUrl('');
-            return undefined;
-        }
-        let alive = true;
-        void (async () => {
-            try {
-                const info = await fetchBilibiliVideoInfo(ownBvid);
-                const track = await fetchBilibiliPlayUrl(ownBvid, info.cid);
-                if (alive) setOwnVideoUrl(track.url);
-            } catch (error) {
-                // 取不到画面就只是没有背景，声音照放，不要影响播放。
-                console.warn('[Bilibili] Video stream unavailable', error);
-                if (alive) setOwnVideoUrl('');
-            }
-        })();
-        return () => { alive = false; };
-    }, [isOwnVideo, ownBvid]);
-
-    const videoUrl = isOwnVideo ? ownVideoUrl : matchedVideoUrl;
-    // 自己就是视频时声音由播放器那边换（getAudioSource），这里不重复换。
-    const audioUrl = isOwnVideo ? '' : matchedAudioUrl;
 
     /*
      * 画面：注入到视频层。离开时清掉注入，用户原本选的视频（如果有）原样回来。
