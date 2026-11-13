@@ -128,6 +128,31 @@ internal object TrackPcmDecoder {
     }
 
     /**
+     * 只解 [fromSec] 起的 [seconds] 秒，44.1k 双声道。
+     *
+     * 分离鼓轨是按 30 秒一段跑的：整曲常驻 170MB、推理峰值再 500MB，手机上很容易被推进
+     * 内存压力区；分块之后常驻只有十几 MB。htdemucs 本来就是按 3.9 秒窗口做的，
+     * 分块不多算一遍，只是把「解整曲」换成「解这一段」。
+     *
+     * 起点用 MediaExtractor 的关键帧对齐，实际会略微早于 [fromSec]；
+     * 早出来的样本在写入时按时间差丢掉，所以返回的波形仍然从 [fromSec] 开始。
+     */
+    fun decodeRange(context: Context, pathOrUrl: String, fromSec: Double, seconds: Double): Result? {
+        if (seconds <= 0) return null
+        val pcm = decodePcm(
+            context,
+            pathOrUrl,
+            TARGET_RATE,
+            monoOnly = false,
+            maxSeconds = 480,
+            fromSec = fromSec,
+            rangeSeconds = seconds,
+        ) ?: return null
+        val right = pcm.right ?: return null
+        return Result(left = pcm.left, right = right, sampleRate = pcm.sampleRate)
+    }
+
+    /**
      * 真正的解码循环。
      *
      * `monoOnly` 只影响**落点**：降混在写之前就做掉，不先解出两路再降混 ——
@@ -139,6 +164,8 @@ internal object TrackPcmDecoder {
         targetRate: Int,
         monoOnly: Boolean,
         maxSeconds: Int,
+        fromSec: Double = 0.0,
+        rangeSeconds: Double = 0.0,
     ): Pcm? {
         if (pathOrUrl.isBlank()) return null
         var extractor: MediaExtractor? = null
@@ -181,7 +208,17 @@ internal object TrackPcmDecoder {
             } else {
                 maxSeconds * 1_000_000L
             }
-            val limitUs = minOf(durationUs, maxSeconds * 1_000_000L)
+            val fromUs = (fromSec * 1_000_000.0).toLong().coerceAtLeast(0L)
+            val limitUs = if (rangeSeconds > 0) {
+                minOf(durationUs, fromUs + (rangeSeconds * 1_000_000.0).toLong())
+            } else {
+                minOf(durationUs, maxSeconds * 1_000_000L)
+            }
+            /*
+             * 区间解码：seek 到最近的关键帧。音频的同步帧通常是每帧一个，
+             * 差出来的那一点在下面按时间丢掉，返回的波形仍然从 fromSec 开始。
+             */
+            if (fromUs > 0) extractor.seekTo(fromUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
             codec = MediaCodec.createDecoderByType(mime)
             codec.configure(format, null, null, 0)
@@ -193,7 +230,8 @@ internal object TrackPcmDecoder {
              * 但那已经是极端情况（且推理本身要 500MB）；常规 4 分钟歌约 85MB。
              * 单声道那条路是它的一半再一半：22050*480*4B ≈ 42MB，常规 4 分钟约 21MB。
              */
-            val estimate = (targetRate.toLong() * minOf(limitUs / 1_000_000.0, maxSeconds.toDouble())).toInt() + targetRate
+            val spanSeconds = if (rangeSeconds > 0) rangeSeconds else minOf(limitUs / 1_000_000.0, maxSeconds.toDouble())
+            val estimate = (targetRate.toLong() * spanSeconds).toInt() + targetRate
             var left = FloatArray(estimate)
             var right: FloatArray? = if (monoOnly) null else FloatArray(estimate)
             var written = 0
@@ -218,6 +256,10 @@ internal object TrackPcmDecoder {
              */
             var idleSpins = 0
             val idleLimit = 2000
+            /** seek 落到关键帧上时，第一个包的采样时刻（微秒）；-1 表示还没入队过。 */
+            var firstInputUs = -1L
+            /** 还要丢掉多少个输出样本，才对到 fromUs。 */
+            var skipOutput = -1
 
             /*
              * 重采样比例：源采样率 / 目标采样率。
@@ -239,6 +281,7 @@ internal object TrackPcmDecoder {
                             codec.queueInputBuffer(inIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                             inputDone = true
                         } else {
+                            if (firstInputUs < 0) firstInputUs = extractor.sampleTime
                             codec.queueInputBuffer(inIndex, 0, size, extractor.sampleTime, 0)
                             extractor.advance()
                         }
@@ -298,6 +341,17 @@ internal object TrackPcmDecoder {
                                     resampleRemainder += 1.0
                                     while (resampleRemainder >= ratio) {
                                         resampleRemainder -= ratio
+                                        if (skipOutput < 0) {
+                                            skipOutput = if (firstInputUs > fromUs) {
+                                                (((firstInputUs - fromUs) / 1_000_000.0) * targetRate).toInt().coerceAtLeast(0)
+                                            } else {
+                                                0
+                                            }
+                                        }
+                                        if (skipOutput > 0) {
+                                            skipOutput -= 1
+                                            continue
+                                        }
                                         if (written >= left.size) {
                                             left = left.copyOf(left.size + estimate)
                                             val current = right

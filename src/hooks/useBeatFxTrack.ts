@@ -3,10 +3,10 @@ import { selectDisplaySong, usePlaybackStore } from '../stores/usePlaybackStore'
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore';
 import { usePlayerChromeSettingsStore } from '../stores/usePlayerChromeSettingsStore';
-import { liveBeatEffects, liveBeatEffectStrength, visualizerWantsBeats, visualizerWantsDrumHits, visualizerWantsStems } from '../components/visualizer/beatClockTargets';
+import { liveBeatEffects, liveBeatEffectStrength, visualizerWantsBeats, visualizerWantsDrumHits, visualizerWantsEnvelopes, visualizerWantsStems } from '../components/visualizer/beatClockTargets';
 import { anyDrumBeatEffectOn, beatEffectPartId, resolveBeatEffectPartStrength, resolveBeatEffectSetting, smartBeatMayAnalyse } from '../services/beatFx/beatEffects';
 import { beginBeatFxTrack, getBeatFxHeard, setBeatFxEvents, setBeatFxIntensities, setBeatFxLiveEffects, stopBeatFx } from '../services/beatFx/beatFxLive';
-import { loadBeatFxTrackBeats, loadBeatFxTrackDrums } from '../services/beatFx/beatFxSource';
+import { loadBeatFxTrackBeats, loadBeatFxTrackDrums, loadBeatFxTrackEnvelopes, setWantedEnvelopeTrack } from '../services/beatFx/beatFxSource';
 import { getPlaybackAnalysisKey, getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 import { modelsPresent, subscribeModelAvailability } from '../services/analysis/modelAvailability';
 import { isNativeModelsAvailable, modelWillBeAvailable, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
@@ -45,7 +45,12 @@ export function useBeatFxTrack(): boolean {
     const drumsWanted = useVisualizerSettingsStore(state => visualizerWantsDrumHits({ ...state, pageTransparent })) && !staticMode;
     // 雾笺's 疏雨轻车 reads the drum hits and the vocal envelope, which the same separation reads (analysis/vocalEnvelope.ts).
     const vocalsWanted = useVisualizerSettingsStore(state => visualizerWantsStems({ ...state, pageTransparent })) && !staticMode;
-    const separationWanted = drumsWanted || vocalsWanted;
+    // 凝彩的低频/人声/能量/和声效果读同一次分离给的四条包络（analysis/musicEnvelope.ts）。
+    const envelopesWanted = useVisualizerSettingsStore(state => visualizerWantsEnvelopes({ ...state, pageTransparent })) && !staticMode;
+    // 鼓点 / 人声要的是混音频带那条（快，几秒出整曲），与包络那条分开问：
+    // 只开新效果时不该顺带把整曲鼓点也读一遍（虽然分离是共享的，混音分析不是）。
+    const drumHitsWanted = drumsWanted || vocalsWanted;
+    const separationWanted = drumHitsWanted || envelopesWanted;
     const wanted = beatsWanted || separationWanted;
     // `cached`: read what is stored, never run a model (SmartBeatMode).
     const storedOnly = !useVisualizerSettingsStore(state => smartBeatMayAnalyse(state.smartBeat));
@@ -174,7 +179,7 @@ export function useBeatFxTrack(): boolean {
     }, [identity, wanted, beatsWanted, storedOnly]);
 
     useEffect(() => {
-        if (!separationWanted || !identity || !song) return undefined;
+        if (!drumHitsWanted || !identity || !song) return undefined;
         let left = false;
         let retryTimer: ReturnType<typeof setTimeout> | null = null;
         // The hits are read off getDrumHits by the frame loop once in; a track with none plays nothing.
@@ -200,7 +205,25 @@ export function useBeatFxTrack(): boolean {
         };
         // Keyed like the lookup above.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [identity, separationWanted, vocalsWanted, drumModel, storedOnly]);
+    }, [identity, drumHitsWanted, vocalsWanted, drumModel, storedOnly]);
+
+    /*
+     * 四条音乐包络（低频 / 人声 / 其余乐器 / 整体）：凝彩的四个效果读它们。
+     *
+     * 与鼓点共用同一次分离（analysis/stemRun.ts），所以这里的 `separationWanted` 一开，
+     * 两边的数据就都由那一次推理产出 —— 不会为了"多几个效果"再跑一遍 htdemucs。
+     * 画面每帧自己从内存里取值（`getMusicEnvelope`），这里只负责起跑与停。
+     */
+    useEffect(() => {
+        if (!envelopesWanted || !identity || !song) return undefined;
+        const { envelopes } = loadBeatFxTrackEnvelopes(song, { storedOnly });
+        void envelopes.catch(error => console.warn('[BeatFx] music envelopes failed', error));
+        return () => {
+            // 切歌或效果关掉：让分离在下一个窗口停下，已分离的曲线留在内存里下次接着用。
+            setWantedEnvelopeTrack(null);
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [identity, envelopesWanted, storedOnly]);
 
     // Until the analysis service's 2b: a separation still running stopped (at its next segment) when the
     // track changed, or 智能动感模式 or static mode was switched off - not when the picture did. Stopped

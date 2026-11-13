@@ -84,30 +84,13 @@ jobs:
         run: |
           set -euo pipefail
           ls -la release
-          # electron-builder 会按 semver 规范化 ${version}：四段的 0.7.28.3 变成 0.7.2-8.3，
-          # 所以产物名不能拿 package.json 的版本直接拼（那样每个碰版本号的 PR 都会红在这里）。
-          # 改为按后缀找本次打包的实际产物：每类恰好一份、且非空。
-          echo "package.json version: $(node -p 'require("./package.json").version')"
-          expect_artifact() {
-            local suffix="$1"
-            local -a found=()
-            mapfile -t found < <(find release -maxdepth 1 -type f -name "folia-major-*-${suffix}" | sort)
-            if [ "${#found[@]}" -eq 0 ]; then
-              echo "::error::no release artifact matching folia-major-*-${suffix}"
-              ls -la release
-              exit 1
-            fi
-            if [ "${#found[@]}" -gt 1 ]; then
-              printf '%s\n' "${found[@]}"
-              echo "::error::more than one release artifact matching folia-major-*-${suffix}"
-              exit 1
-            fi
-            test -s "${found[0]}" || { echo "::error::${found[0]} is empty"; exit 1; }
-            echo "found ${found[0]}"
-          }
-          expect_artifact linux-arm64.tar.gz
-          expect_artifact linux-arm64.deb
-          expect_artifact linux-aarch64.rpm
+          version="$(node -p "require('./package.json').version")"
+          for artifact in \
+            "release/folia-major-${version}-linux-arm64.tar.gz" \
+            "release/folia-major-${version}-linux-arm64.deb" \
+            "release/folia-major-${version}-linux-aarch64.rpm"; do
+            test -s "${artifact}" || { echo "missing ${artifact}"; exit 1; }
+          done
 
           app=release/linux-arm64-unpacked
           check_arm64() {

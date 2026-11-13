@@ -35,6 +35,9 @@ class FoliaAutomixModelsPlugin : Plugin() {
     /** 分段交付的拍点表，同样是 nativeBeats.ts 在听。 */
     private val beatChunkEvent = "beatAnalysisChunk"
 
+    /** 从分离出的鼓轨上取到的频带，每 30 秒一块；drumHits.ts 在听。 */
+    private val drumStemBandsEvent = "drumStemBands"
+
     /** 首段多长（秒）：这一段先算先交，让画面在播放开始后一两秒就有反应。 */
     private val fastSeconds = 45
 
@@ -366,6 +369,178 @@ class FoliaAutomixModelsPlugin : Plugin() {
                 call.reject("鼓点频带分析失败: ${error.message}", error)
             }
         }
+    }
+
+    /**
+     * 从 htdemucs 分离出的**鼓轨**上取鼓点频带，按块回传。
+     *
+     * 为什么不是一次算完整曲：
+     *   · 分离一首四分钟的歌在手机上是几分钟的推理，中间任何一个环节（切歌、退出）
+     *     都会让这次结果白扔；
+     *   · 分块之后第一块（30 秒音频）几十秒就能回，界面可以先拿它替换混音那份，
+     *     剩下的继续补 —— 听的还是同一首歌，越往后越准。
+     *
+     * 每块做四件事，全在原生：
+     *   1. 解码这 30 秒（44.1k 双声道，只这一段，常驻十几 MB）；
+     *   2. htdemucs 只算 drums 轨；
+     *   3. 降混 + 2:1 抽取到 22.05k 单声道；
+     *   4. mel，取 kick / snare / hat 三条频带。
+     *
+     * 回传的是三条频带（base64 float32，一块约 4.5KB），挑点仍由 Web 侧统一做，
+     * 两条路（混音 / 真鼓轨）用的是同一份起音判据。
+     */
+    @PluginMethod
+    fun separateDrumsBandsFromUrl(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) return call.reject("缺少 url")
+        val context: Context = context
+        val chunkSeconds = (call.getDouble("chunkSeconds") ?: 30.0).coerceIn(10.0, 60.0)
+        val maxSeconds = (call.getDouble("maxSeconds") ?: 480.0).coerceAtLeast(chunkSeconds)
+        // 已经分离过的部分（缓存里有半份）从那里接着来，不再从 0 重算一遍。
+        val startSeconds = (call.getDouble("startSeconds") ?: 0.0).coerceIn(0.0, maxSeconds)
+        /*
+         * 要不要顺带交回四条音乐包络（低频 / 人声 / 其余乐器 / 整体）。
+         *
+         * 模型本来就一次吐四轨，多要三轨只是多拷几份内存，推理时间一模一样 ——
+         * 所以「鼓点」和「智能动感的其他效果」共用这一次分离，而不是为此再跑一遍。
+         * 每块交回的是每 50ms 一个 RMS 值（四分钟的歌四条曲线约 60KB），波形一个字节都不过桥。
+         */
+        val withEnvelopes = call.getBoolean("envelopes") ?: false
+        worker.execute {
+            try {
+                cancelRequested.set(false)
+                AutomixLoad.applyThreadPriority()
+                val started = System.currentTimeMillis()
+                val file = AutomixModels.ensureLocal(context, AutomixModels.HTDEMUCS)
+                HtdemucsRunner.ensureLoaded(file)
+                var from = startSeconds
+                var blocks = 0
+                var reachedEnd = false
+                while (!reachedEnd && from < maxSeconds && !cancelRequested.get()) {
+                    val decoded = TrackPcmDecoder.decodeRange(context, url, from, chunkSeconds)
+                        ?: break
+                    if (decoded.samples <= 0) break
+                    val separated = HtdemucsRunner.separate(
+                        decoded.left,
+                        decoded.right,
+                        stems = if (withEnvelopes) listOf(0, 1, 2, 3) else listOf(0), // drums[, bass, other, vocals]
+                        cancelled = { cancelRequested.get() },
+                    )
+                    val drums = separated.stems["drums"]
+                    val drumsUsable = drums != null && drums.isNotEmpty() && drums[0].isNotEmpty()
+                    // 鼓轨空了就没有鼓点可挑；但包络仍值得交回（这首歌可能只是没有鼓）。
+                    if (!drumsUsable && !withEnvelopes) break
+                    val mono = if (drumsUsable && drums != null) downmixHalf(drums) else FloatArray(0)
+                    val bands: Array<FloatArray> = if (mono.isEmpty()) emptyArray() else BeatThisRunner.drumBands(mono) { cancelRequested.get() }
+                    val frames = if (bands.isEmpty()) 0 else bands[0].size
+                    val until = from + decoded.samples.toDouble() / HtdemucsRunner.SAMPLE_RATE
+                    if (frames > 0 || withEnvelopes) {
+                        val payload = JSObject()
+                        if (frames > 0) {
+                            val encoded = JSArray()
+                            for (band in bands) encoded.put(encodeFloats(band))
+                            payload.put("bands", encoded)
+                            payload.put("frames", frames)
+                            payload.put("fps", BeatThisRunner.FPS)
+                        }
+                        if (withEnvelopes) {
+                            payload.put("envelopes", envelopeBlock(separated.stems, decoded.left, decoded.right, from, until))
+                        }
+                        payload.put("fromSec", from)
+                        payload.put("untilSec", until)
+                        blocks += 1
+                        val emit = Runnable { notifyListeners(drumStemBandsEvent, payload) }
+                        val host = activity
+                        if (host != null) host.runOnUiThread(emit) else emit.run()
+                        android.util.Log.i(
+                            "Automix",
+                            "drum stem: ${from.toInt()}s+${chunkSeconds.toInt()}s -> $frames 帧" +
+                                (if (withEnvelopes) "，四轨包络" else "") +
+                                "，累计 ${System.currentTimeMillis() - started}ms",
+                        )
+                    }
+                    val advanced = decoded.samples.toDouble() / HtdemucsRunner.SAMPLE_RATE
+                    from += advanced
+                    // 解出来的比请求的短，说明已经到结尾了。
+                    reachedEnd = advanced < chunkSeconds - 0.05
+                    AutomixLoad.yieldPoint()
+                }
+                call.resolve(
+                    JSObject()
+                        .put("ok", true)
+                        .put("blocks", blocks)
+                        .put("seconds", from)
+                        .put("cancelled", cancelRequested.get()),
+                )
+            } catch (error: Exception) {
+                call.reject("鼓轨分离失败: ${error.message}", error)
+            }
+        }
+    }
+
+    /** 鼓轨的两条声道 → 22.05k 单声道：左右平均，再每两个样本取一个（整数倍抽取，不用插值）。 */
+    private fun downmixHalf(stems: Array<FloatArray>): FloatArray {
+        val left = stems[0]
+        val right = if (stems.size > 1) stems[1] else left
+        val out = FloatArray(left.size / 2)
+        for (index in out.indices) {
+            val at = index * 2
+            out[index] = (left[at] + right[at]) * 0.5f
+        }
+        return out
+    }
+
+    /** 包络的帧率：每 50ms 一个值。20Hz 对画面上的呼吸、脉动足够，四分钟也就 4800 点。 */
+    private val envelopeFps = 20
+
+    /**
+     * 一块音频的四条包络：低频（bass 轨）、人声（vocals 轨）、其余乐器（other 轨）、整体（混音）。
+     *
+     * 都是该段的 RMS，**不做归一化** —— 整首歌的响度只有 Web 侧拿到全部块之后才知道，
+     * 在这里按块拉满会让前奏和副歌一样亮，画面就失去起伏了。
+     */
+    private fun envelopeBlock(
+        stems: Map<String, Array<FloatArray>>,
+        left: FloatArray,
+        right: FloatArray,
+        from: Double,
+        until: Double,
+    ): JSObject {
+        val hop = (HtdemucsRunner.SAMPLE_RATE / envelopeFps).coerceAtLeast(1)
+        return JSObject()
+            .put("fps", envelopeFps)
+            .put("bass", encodeFloats(rmsEnvelope(stems["bass"], hop)))
+            .put("vocals", encodeFloats(rmsEnvelope(stems["vocals"], hop)))
+            .put("other", encodeFloats(rmsEnvelope(stems["other"], hop)))
+            .put("energy", encodeFloats(rmsEnvelope(left, right, hop)))
+            .put("fromSec", from)
+            .put("untilSec", until)
+    }
+
+    /** 一条轨（[声道][样本]）的 RMS 包络；轨不在或为空时给一条空曲线。 */
+    private fun rmsEnvelope(stem: Array<FloatArray>?, hop: Int): FloatArray {
+        if (stem == null || stem.isEmpty() || stem[0].isEmpty()) return FloatArray(0)
+        val left = stem[0]
+        val right = if (stem.size > 1) stem[1] else left
+        return rmsEnvelope(left, right, hop)
+    }
+
+    /** 两条声道的 RMS 包络：每 hop 个样本一个值。 */
+    private fun rmsEnvelope(left: FloatArray, right: FloatArray, hop: Int): FloatArray {
+        if (left.isEmpty()) return FloatArray(0)
+        val frames = (left.size + hop - 1) / hop
+        val out = FloatArray(frames)
+        for (frame in 0 until frames) {
+            val start = frame * hop
+            val end = minOf(left.size, start + hop)
+            var sum = 0.0
+            for (index in start until end) {
+                val mono = (left[index] + (if (index < right.size) right[index] else left[index])) * 0.5f
+                sum += mono.toDouble() * mono
+            }
+            out[frame] = kotlin.math.sqrt(sum / (end - start).coerceAtLeast(1)).toFloat()
+        }
+        return out
     }
 
     /**

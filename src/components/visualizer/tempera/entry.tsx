@@ -41,12 +41,42 @@ export default defineVisualizer({
     // 智能动感模式「墨染奥行」: the paper rests under a faint grey stain and an ink blot in its palette's accent spreads
     // over it on each kick and snare of the track's drum hits (htdemucs_gpu; temperaInkFlash.ts). The same switch
     // brings in the depth: blurred layers with parallax, a per-shot camera pan and size-as-depth glyphs (temperaDepth.ts).
-    beatEffects: [{
-        id: BEAT_EFFECT_IDS.temperaInkFlash,
-        nameKey: 'options.beatEffect_temperaInkFlash',
-        descKey: 'options.beatEffect_temperaInkFlashDesc',
-        source: 'drums',
-    }],
+    //
+    // 另外四个读音乐包络的效果（temperaMusicMotion.ts）：同一次 htdemucs 分离给出的低频、人声、
+    // 其余乐器与整体能量，各自一个开关 —— 低频压暗四周、人声浮起暖光、能量决定明暗、和声掠过细纹。
+    // 它们的 `source: 'envelopes'` 只决定要不要跑那一次分离，四种强度互不影响。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.temperaInkFlash,
+            nameKey: 'options.beatEffect_temperaInkFlash',
+            descKey: 'options.beatEffect_temperaInkFlashDesc',
+            source: 'drums',
+        },
+        {
+            id: BEAT_EFFECT_IDS.temperaBassSurge,
+            nameKey: 'options.beatEffect_temperaBassSurge',
+            descKey: 'options.beatEffect_temperaBassSurgeDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.temperaVocalGlow,
+            nameKey: 'options.beatEffect_temperaVocalGlow',
+            descKey: 'options.beatEffect_temperaVocalGlowDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.temperaEnergyDrift,
+            nameKey: 'options.beatEffect_temperaEnergyDrift',
+            descKey: 'options.beatEffect_temperaEnergyDriftDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.temperaMelodyShift,
+            nameKey: 'options.beatEffect_temperaMelodyShift',
+            descKey: 'options.beatEffect_temperaMelodyShiftDesc',
+            source: 'envelopes',
+        },
+    ],
     // Deliberately unkeyed on the seed: the runtime hands a track change over in place
     // (see songHandover.ts / pixiRuntimeHost.ts). Remounting here would throw the WebGL
     // context away mid-transition and leave the frame empty for the whole rebuild.

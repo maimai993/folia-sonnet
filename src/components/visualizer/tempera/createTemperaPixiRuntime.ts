@@ -24,6 +24,7 @@ import { destroyTemperaGradientFills } from './temperaShapes';
 import { TemperaImageTextures } from './temperaImageTextures';
 import { TemperaOverlay } from './temperaOverlay';
 import { TemperaInkFlash } from './temperaInkFlash';
+import { TemperaMusicMotion } from './temperaMusicMotion';
 import { getBeatEffectStrength, getBeatFxHeard } from '../../../services/beatFx/beatFxLive';
 import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { getDrumHits } from '../../../services/analysis/drumHits';
@@ -156,6 +157,8 @@ export class TemperaPixiRuntime {
     private overlay!: TemperaOverlay;
     /** 智能动感模式「墨染奥行」's ink: the stain and the ink flash, between the scenes and the overlay. */
     private inkFlash!: TemperaInkFlash;
+    /** 低频涌动 / 人声泛光 / 情绪明暗 / 和声错位：一层全屏叠加，读四条音乐包络。 */
+    private musicMotion!: TemperaMusicMotion;
     private inkFlashSupported: boolean | undefined;
     /**
      * 墨染奥行 also owns the depth: the baked depth blur, the parallax, the per-shot camera pan and the
@@ -227,7 +230,14 @@ export class TemperaPixiRuntime {
         runtime.creditsLayer = new TemperaCreditsLayer(pixi);
         runtime.overlay = new TemperaOverlay(pixi);
         runtime.inkFlash = new TemperaInkFlash(pixi);
-        app.stage.addChild(runtime.sceneContainer, runtime.creditsLayer.container, runtime.inkFlash.container, runtime.overlay.container);
+        runtime.musicMotion = new TemperaMusicMotion(pixi);
+        app.stage.addChild(
+            runtime.sceneContainer,
+            runtime.creditsLayer.container,
+            runtime.inkFlash.container,
+            runtime.musicMotion.container,
+            runtime.overlay.container,
+        );
 
         // Textures are loaded once and shared by every scene: paragraph scenes are rebuilt as
         // playback moves, and reloading a character cut-out on each one would thrash.
@@ -562,6 +572,7 @@ export class TemperaPixiRuntime {
 
         if (!wipeDrawn) this.overlay.drawWipe(0, 0, width, height, '#000000');
         this.updateInkFlash(time, width, height, paragraphIndex);
+        this.updateMusicMotion(time, width, height, paragraphIndex);
         this.creditsLayer.applyFrame(creditsFrame, hasCredits, time, finalParagraph?.endTime, width, height);
     };
 
@@ -603,6 +614,21 @@ export class TemperaPixiRuntime {
         }
         const inkColor = this.sceneCache.get(paragraphIndex)?.palette.accent ?? this.options.theme.accentColor;
         this.inkFlash.update({ time: hitTime, width, height, strength, hits, paragraphIndex, inkColor });
+    }
+
+    /**
+     * 四个「听歌」效果（低频涌动 / 人声泛光 / 情绪明暗 / 和声错位）：一层全屏叠加，
+     * 四条曲线按播放头取样（analysis/musicEnvelope.ts），四个强度各自缩放。
+     */
+    private updateMusicMotion(time: number, width: number, height: number, paragraphIndex: number) {
+        const tint = this.sceneCache.get(paragraphIndex)?.palette.accent ?? this.options.theme.accentColor;
+        this.musicMotion.update({
+            time,
+            width,
+            height,
+            tint,
+            off: Boolean(this.options.staticMode),
+        });
     }
 
     renderOnce() {
@@ -813,6 +839,7 @@ export class TemperaPixiRuntime {
         this.creditsLayer.dispose();
         this.overlay.release();
         this.inkFlash.destroy();
+        this.musicMotion.destroy();
         this.imageTextures.destroy();
         this.app.destroy({ removeView: true }, { children: true, texture: true });
     }

@@ -276,6 +276,20 @@ const decodeChunk = (encoded: string): Float32Array => {
     return new Float32Array(bytes.buffer, 0, bytes.length / 4);
 };
 
+/** 一块四轨包络：缺哪条给空曲线，四条全空算没有。 */
+const decodeStemEnvelopes = (
+    raw: { fps?: number; bass?: string; vocals?: string; other?: string; energy?: string } | undefined,
+): NativeStemEnvelopes | null => {
+    if (!raw) return null;
+    const read = (value: string | undefined): Float32Array => (typeof value === 'string' && value ? decodeChunk(value) : new Float32Array(0));
+    const bass = read(raw.bass);
+    const vocals = read(raw.vocals);
+    const other = read(raw.other);
+    const energy = read(raw.energy);
+    if (!bass.length && !vocals.length && !other.length && !energy.length) return null;
+    return { fps: Number(raw.fps) || 20, bass, vocals, other, energy };
+};
+
 export type NativeStems = {
     drums: { left: Float32Array; right: Float32Array };
     bass: { left: Float32Array; right: Float32Array };
@@ -498,6 +512,123 @@ export const analyzeDrumBandsNativeFromUrl = async (url: string): Promise<Native
     } catch (error) {
         console.warn('[AutomixModels] native drum bands failed', error);
         return null;
+    }
+};
+
+
+/** 原生鼓轨分离回传的一块：三条频带，覆盖 [fromSec, untilSec) 这一段。 */
+export type NativeDrumStemBlock = {
+    bands: [Float32Array, Float32Array, Float32Array];
+    frames: number;
+    fps: number;
+    fromSec: number;
+    untilSec: number;
+    /**
+     * 同一次分离顺带给回的四轨包络（智能动感的其他效果用，见 analysis/musicEnvelope.ts）。
+     *
+     * 值是这一段里每 50ms 的 RMS，**未归一化** —— 整首歌的响度要等全部块到齐才知道。
+     * 模型本来就一次吐四轨，所以这一份不额外花推理时间，只多几 KB 过桥。
+     */
+    envelopes?: NativeStemEnvelopes;
+};
+
+/** 一块音频的四条包络曲线（与 `NativeDrumStemBlock` 同段）。 */
+export type NativeStemEnvelopes = {
+    fps: number;
+    bass: Float32Array;
+    vocals: Float32Array;
+    other: Float32Array;
+    /** 混音整体（四条轨的和，用来调明暗与景深）。 */
+    energy: Float32Array;
+};
+
+/**
+ * 从 htdemucs **分离出的鼓轨**上取鼓点频带，原生分块回传（Kotlin 的 separateDrumsBandsFromUrl）。
+ *
+ * 与混音那条的差别只有「鼓从哪来」：这条的频带里没有贝斯和人声，鼓面不会被别的声音敲响。
+ * 代价是慢 —— 手机上一块 30 秒音频要几十秒推理 —— 所以它只做后台补齐：
+ * 混音那份先顶上，这一块一块替换，听得越久越准。
+ *
+ * 每块回传的只是三条频带（约 4.5KB），挑点仍由 Web 侧做，两条路用的是同一份起音判据。
+ */
+export const separateDrumBandsNativeFromUrl = async (
+    url: string,
+    onBlock: (block: NativeDrumStemBlock) => void,
+    options: { timeoutMs?: number; startSeconds?: number; envelopes?: boolean } = {},
+): Promise<{ seconds: number; cancelled: boolean } | null> => {
+    if (!isNativeModelsAvailable()) return null;
+    if (!url) return null;
+    const plugin = NativeAutomix as unknown as {
+        separateDrumsBandsFromUrl?: (options: {
+            url: string;
+            startSeconds?: number;
+            envelopes?: boolean;
+        }) => Promise<{ ok?: boolean; blocks?: number; seconds?: number; cancelled?: boolean }>;
+        addListener: (
+            eventName: 'drumStemBands',
+            listener: (event: {
+                bands?: string[];
+                frames?: number;
+                fps?: number;
+                fromSec?: number;
+                untilSec?: number;
+                envelopes?: { fps?: number; bass?: string; vocals?: string; other?: string; energy?: string };
+            }) => void,
+        ) => Promise<PluginListenerHandle>;
+    };
+    // 旧 APK 的插件没有这个方法：返回 null，调用方继续用混音那份。
+    if (typeof plugin.separateDrumsBandsFromUrl !== 'function') return null;
+    if (!present.htdemucs && !(await installModel('htdemucs'))) return null;
+
+    let handle: PluginListenerHandle | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    try {
+        handle = await plugin.addListener('drumStemBands', (event) => {
+            const encoded = Array.isArray(event?.bands) ? event.bands : [];
+            // 包络与频带各来各的：鼓静音的一段仍然有包络，没有鼓点也不该丢掉它。
+            const envelopes = decodeStemEnvelopes(event?.envelopes);
+            if (encoded.length < 3 && !envelopes) return;
+            const bands: [Float32Array, Float32Array, Float32Array] = encoded.length >= 3
+                ? [decodeChunk(encoded[0]), decodeChunk(encoded[1]), decodeChunk(encoded[2])]
+                : [new Float32Array(0), new Float32Array(0), new Float32Array(0)];
+            const frames = Number(event?.frames) || bands[0].length;
+            if (frames <= 0 && !envelopes) return;
+            onBlock({
+                bands,
+                frames,
+                fps: Number(event?.fps) || 50,
+                fromSec: Number(event?.fromSec) || 0,
+                untilSec: Number(event?.untilSec) || 0,
+                ...(envelopes ? { envelopes } : {}),
+            });
+        });
+        /*
+         * 十五分钟的兜底：四分钟的歌在手机上分离要几分钟，但再久基本是卡住了。
+         * 原生那头是单线程队列，一次卡死会把后面的节拍分析全堵住，所以必须有出口。
+         */
+        const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
+        const result = await Promise.race([
+            plugin.separateDrumsBandsFromUrl({
+                url,
+                ...(options.startSeconds && options.startSeconds > 0 ? { startSeconds: options.startSeconds } : {}),
+                ...(options.envelopes ? { envelopes: true } : {}),
+            }),
+            new Promise<null>((resolve) => {
+                timer = setTimeout(() => {
+                    console.warn('[AutomixModels] drum stem separation timed out, asking it to stop');
+                    void cancelNativeSeparation();
+                    resolve(null);
+                }, timeoutMs);
+            }),
+        ]);
+        if (!result) return null;
+        return { seconds: Number(result.seconds) || 0, cancelled: Boolean(result.cancelled) };
+    } catch (error) {
+        console.warn('[AutomixModels] drum stem separation failed', error);
+        return null;
+    } finally {
+        if (timer !== null) clearTimeout(timer);
+        if (handle) void handle.remove().catch(() => {});
     }
 };
 

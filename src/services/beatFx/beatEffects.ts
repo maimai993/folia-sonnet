@@ -19,7 +19,13 @@ import type { BeatEffectSetting, SmartBeatSettings } from '../../types';
 // set it aside (2026-10-17: 时计's 齿轮随拍 and the Latent background's 潮汐脉动) rather than deleting
 // it, so it can come back by dropping `retired`.
 
-export type BeatEffectSource = 'beats' | 'drums' | 'stems';
+/**
+ * The analysis an effect listens to. 'beats' and 'drums' are what the models hand over directly;
+ * 'stems' is the vocal envelope the same htdemucs run reads; 'envelopes' is the four curves that run
+ * also gives (低频 / 人声 / 其余乐器 / 整体, analysis/musicEnvelope.ts) - one separation feeds all of
+ * them, so a picture may read any of these without costing another run.
+ */
+export type BeatEffectSource = 'beats' | 'drums' | 'stems' | 'envelopes';
 
 /** A part of an effect with its own slider: a stable key (stored) and the i18n key of its name. */
 export interface BeatEffectPart {
@@ -60,6 +66,10 @@ export const BEAT_EFFECT_IDS = {
     machiScreenFlash: 'machi.screenFlash',
     nebbiaDrizzleRide: 'nebbia.drizzleRide',
     nebbiaAquaBeat: 'nebbia.aquaBeat',
+    temperaBassSurge: 'tempera.bassSurge',
+    temperaVocalGlow: 'tempera.vocalGlow',
+    temperaEnergyDrift: 'tempera.energyDrift',
+    temperaMelodyShift: 'tempera.melodyShift',
 } as const;
 
 /**
@@ -92,6 +102,21 @@ export const DRUM_BEAT_EFFECT_IDS: readonly string[] = [
 /** Whether any drum-hit effect is switched on, whichever picture is on screen. */
 export const anyDrumBeatEffectOn = (settings: SmartBeatSettings): boolean =>
     DRUM_BEAT_EFFECT_IDS.some(id => resolveBeatEffectSetting(settings, id).on);
+
+/**
+ * The effects that read the four music envelopes (`source: 'envelopes'`), on any picture. As with the
+ * drum hits, their declarations live on the registry entries, so the list is spelled out here.
+ */
+export const ENVELOPE_BEAT_EFFECT_IDS: readonly string[] = [
+    BEAT_EFFECT_IDS.temperaBassSurge,
+    BEAT_EFFECT_IDS.temperaVocalGlow,
+    BEAT_EFFECT_IDS.temperaEnergyDrift,
+    BEAT_EFFECT_IDS.temperaMelodyShift,
+];
+
+/** Whether any envelope effect is switched on, whichever picture is on screen. */
+export const anyEnvelopeBeatEffectOn = (settings: SmartBeatSettings): boolean =>
+    ENVELOPE_BEAT_EFFECT_IDS.some(id => resolveBeatEffectSetting(settings, id).on);
 
 /** Whether the effects play at all: 智能动感模式 on, or on what is already stored (`cached`). */
 export const smartBeatActive = (settings: SmartBeatSettings): boolean => settings.mode !== 'off';
