@@ -114,8 +114,8 @@ export class TemperaMusicMotion {
     private readonly strengths = new Float32Array(4);
     private readonly tint = new Float32Array(3);
     private readonly uSize = new Float32Array(2);
-    /** 标量 uniform 也用数组：直接改元素，不必摸 Pixi 的 uniforms 表。 */
-    private readonly timeValue = new Float32Array(1);
+    /** 标量走 Pixi 的 uniforms 表（`uniform1f` 只认 number，塞 Float32Array 进去会变成 NaN）。 */
+    private motionUniforms: import('pixi.js').UniformGroup | null = null;
     private tintKey = '';
 
     constructor(private readonly pixi: PixiModule) {
@@ -129,11 +129,12 @@ export class TemperaMusicMotion {
         const pixi = this.pixi;
         const uniforms = new pixi.UniformGroup({
             uSize: { value: this.uSize, type: 'vec2<f32>' },
-            uTime: { value: this.timeValue, type: 'f32' },
+            uTime: { value: 0, type: 'f32' },
             uTint: { value: this.tint, type: 'vec3<f32>' },
             uLevels: { value: this.levels, type: 'vec4<f32>' },
             uStrengths: { value: this.strengths, type: 'vec4<f32>' },
         });
+        this.motionUniforms = uniforms;
         this.shader = new pixi.Shader({
             glProgram: pixi.GlProgram.from({ vertex, fragment, name: 'tempera-music-motion' }),
             resources: { motionUniforms: uniforms },
@@ -189,7 +190,7 @@ export class TemperaMusicMotion {
             this.tintKey = frame.tint;
             this.tint.set(new this.pixi.Color(frame.tint || '#ffffff').toArray().slice(0, 3));
         }
-        this.timeValue[0] = at;
+        if (this.motionUniforms) (this.motionUniforms.uniforms as { uTime: number }).uTime = at;
 
         const anyLevel = this.levels[0] * this.strengths[0] + this.levels[1] * this.strengths[1]
             + this.levels[2] * this.strengths[2] + Math.abs(this.levels[3] * this.strengths[3] - 0.42) * 0.2;
@@ -203,5 +204,6 @@ export class TemperaMusicMotion {
         this.geometry = null;
         this.mesh = null;
         this.shader = null;
+        this.motionUniforms = null;
     }
 }
