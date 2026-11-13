@@ -42,7 +42,9 @@ export const faceOf = (item: OmniExploreItem, t: (key: string) => string): Face 
     const wideCoverUrl = isArtist ? undefined : item.wideCoverUrl;
     return {
         kind: collection.type,
-        title: collection.name,
+        // 歌单名可能是 i18n key（平台自己的那几个歌单）。i18n 找不到词条时原样返回 key，
+        // 所以「默认收藏夹」这种真实名字也照常显示，不需要另外判一次。
+        title: collection.name ? t(collection.name) : collection.name,
         subtitle: item.subtitle ?? ((isArtist ? '' : getProviderCollectionArtistLabel(collection)) || kindLabel),
         pictureUrl: wideCoverUrl ?? coverUrl,
         coverUrl,

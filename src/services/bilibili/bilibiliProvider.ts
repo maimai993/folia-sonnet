@@ -307,15 +307,15 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const zoneFeeds = await Promise.all([
                 ...BILIBILI_ZONES.map(zone =>
                     fetchBilibiliZoneFeed(zone.rid, 12)
-                        .then(hits => ({ id: `zone-${zone.rid}`, title: zone.title, hits }))
-                        .catch(() => ({ id: `zone-${zone.rid}`, title: zone.title, hits: [] })),
+                        .then(hits => ({ id: `zone-${zone.rid}`, titleKey: zone.titleKey, hits }))
+                        .catch(() => ({ id: `zone-${zone.rid}`, titleKey: zone.titleKey, hits: [] })),
                 ),
                 listBangumiSeasons('bangumi')
-                    .then(seasons => ({ id: 'bangumi', title: '番剧', seasons, hits: [] as BilibiliSearchHit[] }))
-                    .catch(() => ({ id: 'bangumi', title: '番剧', seasons: [], hits: [] as BilibiliSearchHit[] })),
+                    .then(seasons => ({ id: 'bangumi', titleKey: 'zone.bangumi', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'bangumi', titleKey: 'zone.bangumi', seasons: [], hits: [] as BilibiliSearchHit[] })),
                 listBangumiSeasons('movie')
-                    .then(seasons => ({ id: 'movie', title: '电影', seasons, hits: [] as BilibiliSearchHit[] }))
-                    .catch(() => ({ id: 'movie', title: '电影', seasons: [], hits: [] as BilibiliSearchHit[] })),
+                    .then(seasons => ({ id: 'movie', titleKey: 'zone.movie', seasons, hits: [] as BilibiliSearchHit[] }))
+                    .catch(() => ({ id: 'movie', titleKey: 'zone.movie', seasons: [], hits: [] as BilibiliSearchHit[] })),
             ]);
 
             const asCollection = (season: BangumiSeason): ProviderExploreItem => ({
@@ -328,7 +328,7 @@ export const bilibiliProvider: OnlineMusicProvider = {
                     const items: ProviderExploreItem[] = 'seasons' in entry && entry.seasons.length > 0
                         ? entry.seasons.map(asCollection)
                         : entry.hits.map(hit => ({ kind: 'song' as const, song: normalizeBilibiliSong(hit) }));
-                    return { id: entry.id, title: entry.title, items };
+                    return { id: entry.id, title: entry.titleKey, items };
                 })
                 .filter(section => section.items.length > 0);
 

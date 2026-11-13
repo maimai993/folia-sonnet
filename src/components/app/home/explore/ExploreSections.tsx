@@ -52,7 +52,15 @@ interface ShelfProps {
 // A section: its heading, with "more" beside it where the section has further entries, and
 // under it the entries of the read at hand.
 const Shelf: React.FC<ShelfProps> = ({ section, form, batch, arrival, base, leave, enters, isStale, isLoadingMore, pageControls, onSelect, onLoadMore }) => {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
+    /**
+     * 分节的标题。
+     *
+     * 平台给的 title 现在是一个 i18n key（分区名要跟着界面语言走），但也可能是
+     * 一段现成的文字（老平台、或标题本身就是内容）。有对应词条就取词条，没有就
+     * 原样显示 —— 不要把一个看起来像 key 的东西摆到界面上。
+     */
+    const sectionTitle = (title: string): string => (i18n.exists(title) ? t(title) : title);
     const keys = useMemo(() => keysOf(section.items), [section.items]);
     // The element that scrolls sideways (a band has none), and which of its ends hide further entries.
     const row = useRef<HTMLDivElement | null>(null);
@@ -86,7 +94,7 @@ const Shelf: React.FC<ShelfProps> = ({ section, form, batch, arrival, base, leav
                     {/* The heading is what its title comes up from under. It is higher than the row, so that no stroke
                         of the title is cut, and takes the row's height of it: the row is as high as its buttons. */}
                     <h2 className="-my-1 min-w-0 overflow-hidden text-[28px] font-medium leading-10 tracking-[0.01em]" style={{ fontFamily: EXPLORE_SERIF }}>
-                        <motion.span variants={TITLE} custom={arrival} className="block truncate">{section.title}</motion.span>
+                        <motion.span variants={TITLE} custom={arrival} className="block truncate">{sectionTitle(section.title)}</motion.span>
                     </h2>
                     <motion.span aria-hidden variants={RULE} custom={arrival} data-explore-rule className="ml-1 h-px min-w-6 flex-1 origin-left bg-[var(--ex-line)]" />
                     {section.moreCursor && (

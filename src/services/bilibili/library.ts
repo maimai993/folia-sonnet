@@ -164,17 +164,17 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
     });
 
     shelves.push(
-        simple('toview', '稍后再看', 'https://api.bilibili.com/x/v2/history/toview'),
-        simple('coins', '最近投币的视频', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
-        simple('likes', '最近点赞的视频', `https://api.bilibili.com/x/space/like/video?vmid=${uid}&pn=1&ps=30`, true),
-        simple('uploads', '我的投稿', await signedUrl('/x/space/wbi/arc/search', {
+        simple('toview', 'shelf.toview', 'https://api.bilibili.com/x/v2/history/toview'),
+        simple('coins', 'shelf.coins', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
+        simple('likes', 'shelf.likes', `https://api.bilibili.com/x/space/like/video?vmid=${uid}&pn=1&ps=30`, true),
+        simple('uploads', 'shelf.uploads', await signedUrl('/x/space/wbi/arc/search', {
             mid: uid,
             pn: 1,
             ps: 30,
             order: 'pubdate',
         }), true),
-        simple('bangumi', '我的追番', `https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
-        simple('tv', '我的追剧', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
+        simple('bangumi', 'shelf.bangumi', `https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
+        simple('tv', 'shelf.tv', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
     );
 
     return shelves;

@@ -216,26 +216,27 @@ interface RcmdPayload {
  */
 export interface BilibiliZone {
     rid: number;
-    title: string;
+    /** i18n key：分区名是给人看的，按界面语言取。 */
+    titleKey: string;
 }
 
 /** 能直接出内容的分区（剩下的两类——番剧与电影——走 bangumi 那一套）。 */
 export const BILIBILI_ZONES: BilibiliZone[] = [
-    { rid: 1, title: '动画' },
-    { rid: 3, title: '音乐' },
-    { rid: 4, title: '游戏' },
-    { rid: 5, title: '娱乐' },
-    { rid: 36, title: '科技' },
-    { rid: 155, title: '时尚' },
-    { rid: 160, title: '生活' },
-    { rid: 119, title: '鬼畜' },
-    { rid: 129, title: '舞蹈' },
-    { rid: 181, title: '影视' },
-    { rid: 188, title: '数码' },
-    { rid: 211, title: '美食' },
-    { rid: 217, title: '动物' },
-    { rid: 223, title: '汽车' },
-    { rid: 234, title: '运动' },
+    { rid: 1, titleKey: 'zone.1' },
+    { rid: 3, titleKey: 'zone.3' },
+    { rid: 4, titleKey: 'zone.4' },
+    { rid: 5, titleKey: 'zone.5' },
+    { rid: 36, titleKey: 'zone.36' },
+    { rid: 155, titleKey: 'zone.155' },
+    { rid: 160, titleKey: 'zone.160' },
+    { rid: 119, titleKey: 'zone.119' },
+    { rid: 129, titleKey: 'zone.129' },
+    { rid: 181, titleKey: 'zone.181' },
+    { rid: 188, titleKey: 'zone.188' },
+    { rid: 211, titleKey: 'zone.211' },
+    { rid: 217, titleKey: 'zone.217' },
+    { rid: 223, titleKey: 'zone.223' },
+    { rid: 234, titleKey: 'zone.234' },
 ];
 
 /**
