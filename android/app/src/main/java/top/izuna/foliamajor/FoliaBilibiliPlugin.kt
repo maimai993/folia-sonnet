@@ -49,6 +49,16 @@ class FoliaBilibiliPlugin : Plugin() {
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/120.0.0.0 Mobile Safari/537.36"
         private const val REFERER = "https://www.bilibili.com/"
+
+    /**
+     * cookie 自己留的一份底。
+     *
+     * CookieManager 的持久化挂在 WebView 的存储上：冷启动那一刻它可能还没把磁盘
+     * 上的会话读回来，`getCookie` 于是回空 —— 表现就是「重启之后登录态没了，
+     * 但 bilibili 那边其实还认着」。所以写的时候在这里另存一份，读的时候先看它。
+     */
+    private const val PREFS_NAME = "folia_bilibili"
+    private const val PREF_COOKIE = "cookie"
     }
 
     /** 读超时放宽到 30 秒：搜索接口偶尔慢，但不该像 AI 那样给到 150 秒。 */
@@ -85,6 +95,10 @@ class FoliaBilibiliPlugin : Plugin() {
      * 回 `{ ok, status, bodyText }`。`ok` 只表示 HTTP 通不通，业务码由渲染层解析 ——
      * 这样「bilibili 回 -404 说没有这条视频」和「网络断了」在 JS 那边分得开。
      */
+    /** cookie 自己留的那份底（见 PREF_COOKIE）。 */
+    private fun prefs() =
+        context.getSharedPreferences(PREFS_NAME, android.content.Context.MODE_PRIVATE)
+
     @PluginMethod
     fun request(call: PluginCall) {
         val url = call.getString("url")
@@ -114,8 +128,8 @@ class FoliaBilibiliPlugin : Plugin() {
          * cookie 由登录流程写进 CookieManager，这里只读 —— 插件本身不发登录请求，
          * 也不持有任何凭据，重启 App 后仍在。
          */
-        val cookie = CookieManager.getInstance().getCookie(REFERER)
-        if (!cookie.isNullOrEmpty()) {
+        val cookie = currentCookie()
+        if (cookie.isNotEmpty()) {
             builder.header("Cookie", cookie)
         }
 
@@ -185,7 +199,7 @@ class FoliaBilibiliPlugin : Plugin() {
      */
     @PluginMethod
     fun authStatus(call: PluginCall) {
-        val cookie = CookieManager.getInstance().getCookie(REFERER) ?: ""
+        val cookie = currentCookie()
         val sessdata = cookieValue(cookie, "SESSDATA")
         val uid = cookieValue(cookie, "DedeUserID")
         val result = JSObject()
@@ -222,6 +236,8 @@ class FoliaBilibiliPlugin : Plugin() {
             )
         }
         manager.flush()
+        // 另存一份底，冷启动时 CookieManager 未必已经把会话读回来（见 PREF_COOKIE）。
+        prefs().edit().putString(PREF_COOKIE, raw).apply()
         val result = JSObject()
         result.put("ok", true)
         call.resolve(result)
@@ -235,9 +251,32 @@ class FoliaBilibiliPlugin : Plugin() {
             manager.setCookie(REFERER, "$name=; Domain=.bilibili.com; Path=/; Max-Age=0")
         }
         manager.flush()
+        prefs().edit().remove(PREF_COOKIE).apply()
         val result = JSObject()
         result.put("ok", true)
         call.resolve(result)
+    }
+
+    /**
+     * 现在该带的 bilibili cookie。
+     *
+     * 先问 CookieManager —— 它才是发请求时真正生效的那份。冷启动那一刻它可能还没把
+     * 磁盘上的会话读回来，读到空就回落到登录时自己存的那份，并顺手写回去，
+     * 这样接下来的请求也带得上。
+     */
+    private fun currentCookie(): String {
+        val fromManager = CookieManager.getInstance().getCookie(REFERER) ?: ""
+        if (fromManager.isNotEmpty()) return fromManager
+        val stored = prefs().getString(PREF_COOKIE, null) ?: return ""
+        val manager = CookieManager.getInstance()
+        manager.setAcceptCookie(true)
+        for (pair in stored.split(';')) {
+            val trimmed = pair.trim()
+            if (trimmed.isEmpty() || !trimmed.contains('=')) continue
+            manager.setCookie(REFERER, "$trimmed; Domain=.bilibili.com; Path=/; Secure")
+        }
+        manager.flush()
+        return stored
     }
 
     /** 从 cookie 串里取一个值；没有就回 null。 */

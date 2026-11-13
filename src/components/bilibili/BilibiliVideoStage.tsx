@@ -1,7 +1,7 @@
 import React from 'react';
 import { selectDisplaySong, usePlaybackStore } from '../../stores/usePlaybackStore';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
-import { fetchBilibiliPlayUrl, fetchBilibiliVideoInfo } from '../../services/bilibili/api';
+import { dropStreamsExcept, ensureStream, peekStream, prefetchQueueStreams } from '../../services/bilibili/streamPrefetch';
 import { bilibiliBvidOf } from '../../services/bilibili/bilibiliNormalize';
 import {
     isInjectedVideoUrl,
@@ -27,27 +27,40 @@ const BilibiliVideoStage: React.FC = () => {
         [displaySong],
     );
 
+    // 队列一变就把里面所有投稿的地址取回来。
+    // 切歌时画面才不至于等一次网络往返才出来。
+    const playQueue = usePlaybackStore(state => state.playQueue);
+    React.useEffect(() => {
+        if (playQueue.length === 0) return;
+        prefetchQueueStreams(playQueue);
+        // 队列里已经没有的那些，缓存留着没意义。
+        dropStreamsExcept(playQueue);
+    }, [playQueue]);
+
     const [videoUrl, setVideoUrl] = React.useState('');
 
     // 取画面。声音不在这里换：播放器已经通过 provider 的 getAudioSource 放的是
     // 这条投稿的 DASH 音轨，两端同一个 cid，天生同步。
+    //
+    // 先看预取缓存：队列一变 streamPrefetch 就把整条队列的地址取回来了，
+    // 切歌时这里直接命中，不用等两个往返（详情 + 取流）才出画面。
     React.useEffect(() => {
         if (!bvid || !isBilibiliAvailable()) {
             setVideoUrl('');
             return undefined;
         }
+        const ready = peekStream(bvid);
+        if (ready) {
+            setVideoUrl(ready);
+            return undefined;
+        }
         let alive = true;
         setVideoUrl('');
         void (async () => {
-            try {
-                const info = await fetchBilibiliVideoInfo(bvid);
-                const track = await fetchBilibiliPlayUrl(bvid, info.cid);
-                if (alive) setVideoUrl(track.url);
-            } catch (error) {
-                // 取不到画面只是没有背景，声音照放：不要因此影响播放。
-                console.warn('[Bilibili] Video stream unavailable', error);
-                if (alive) setVideoUrl('');
-            }
+            const entry = await ensureStream(bvid);
+            if (!alive) return;
+            // 取不到画面只是没有背景，声音照放：不要因此影响播放。
+            setVideoUrl(entry?.videoUrl ?? '');
         })();
         return () => { alive = false; };
     }, [bvid]);

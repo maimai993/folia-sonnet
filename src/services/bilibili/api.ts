@@ -164,7 +164,13 @@ interface ViewPayload {
     owner?: { name?: string };
     /** 封面图；可能是 http，用的时候要升成 https。 */
     pic?: string;
-    pages?: Array<{ cid: number; duration?: number }>;
+    pages?: Array<{
+        cid: number;
+        /** 分P 的名字。单P 投稿这里是空串或者和标题一样。 */
+        part?: string;
+        duration?: number;
+        page?: number;
+    }>;
 }
 
 /** 推荐接口回来的一条。字段和搜索那边不太一样，所以单独解析。 */
@@ -235,6 +241,29 @@ export const fetchBilibiliVideoInfo = async (bvid: string) => {
     };
 };
 
+/**
+ * 这条投稿的所有分P。
+ *
+ * 多P 投稿（一整季的番、一整套教程）在 B 站是一串分P，各自有 cid 和自己的名字，
+ * 播放地址也各是各的 —— 所以「一集」在这里就是一首歌，整条投稿是一个歌单。
+ * 单P 投稿回一条，调用方据此决定要不要显示成歌单。
+ */
+export const fetchBilibiliPages = async (
+    bvid: string,
+): Promise<Array<{ cid: number; title: string; durationSec: number; index: number }>> => {
+    const payload = unwrap(await fetchJson<ViewPayload>(`${API_BASE}/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`));
+    const pages = payload.pages ?? [];
+    return pages
+        .filter(page => typeof page.cid === 'number')
+        .map((page, index) => ({
+            cid: page.cid,
+            // 单P 投稿的 part 常常是空的，用总标题兜底。
+            title: (page.part ?? '').trim() || payload.title || '',
+            durationSec: page.duration ?? 0,
+            index: page.page ?? index + 1,
+        }));
+};
+
 interface PlayUrlDash {
     dash?: {
         video?: Array<{
@@ -282,6 +311,23 @@ export interface PlayUrlSubtitle {
     /** 字幕文件的地址，JSON。协议相对地址，前面要补 https:。 */
     subtitle_url?: string;
 }
+
+/**
+ * 这条投稿有哪些字幕轨。
+ *
+ * 字幕**不在取流那一次响应里** —— `playurl` 的 subtitle 字段永远是空的，
+ * 得单独问 `x/player/v2`（它才是播放器页面拿字幕的地方）。而且只有登录了才给：
+ * 未登录时这里回的是一张空表。
+ */
+export const fetchBilibiliSubtitles = async (
+    bvid: string,
+    cid: number,
+): Promise<PlayUrlSubtitle[]> => {
+    const payload = unwrap(await fetchJson<{
+        subtitle?: { subtitles?: PlayUrlSubtitle[] };
+    }>(`https://api.bilibili.com/x/player/v2?bvid=${encodeURIComponent(bvid)}&cid=${cid}`));
+    return payload.subtitle?.subtitles ?? [];
+};
 
 /** 字幕文件里的 `body` 是一条条带时间的句子。 */
 interface SubtitleBody {

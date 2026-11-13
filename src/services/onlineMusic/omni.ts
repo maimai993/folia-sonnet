@@ -58,6 +58,7 @@ import { resolveProviderLyricsChorus } from '../../utils/lyrics/chorusResolver';
 import { DEFAULT_ONLINE_PROVIDER_ID, OnlineProviderError } from '../../types/onlineMusic';
 import { useOnlineProviderAccountStore } from '../../stores/useOnlineProviderAccountStore';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
+import { getPlatformLyricSource } from '../../utils/lyrics/lyricSources';
 import { toSafePlaybackUrl } from '../../utils/appPlaybackHelpers';
 import { saveSongReplayGain } from './resourceCache';
 import {
@@ -898,6 +899,23 @@ export const omni = {
         return providerSupports(provider, 'mutations')
             && providerSupports(provider, 'likes')
             && Boolean(provider?.mutations?.likeSong);
+    },
+
+    /**
+     * 这首歌的歌词只能由它自己的平台给，别处不该去匹配。
+     *
+     * 视频平台就是这种：它放的是投稿，字幕就是歌词，而投稿和别的平台的歌曲之间
+     * 没有对应关系 —— 拿视频标题去曲库里搜，搜到的一定是另一首歌。
+     *
+     * 判据是「平台声明了自己有歌词，却不是歌词匹配源」：反过来，一家音乐平台
+     * 声明了 lyrics 又登记成匹配源，就该照常参与匹配。
+     */
+    ownsItsLyricsOnly(song: SongResult): boolean {
+        const source = getPlaybackSourceRef(song);
+        if (source.kind !== 'online') return false;
+        const provider = getOnlineMusicProvider(source.providerId);
+        if (!providerSupports(provider, 'lyrics') || !provider?.lyrics) return false;
+        return !getPlatformLyricSource(source.providerId);
     },
 
     canEditCollectionTracks(collection: OmniCollection): boolean {

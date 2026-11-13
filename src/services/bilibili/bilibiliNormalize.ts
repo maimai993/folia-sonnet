@@ -13,13 +13,36 @@ import type { BilibiliSearchHit } from '../../types/bilibili';
 /** provider 内部认这个前缀，用它把 id 和别的平台的歌分开。 */
 const BILIBILI_ID_PREFIX = 'bilibili:';
 
-/** 一个投稿在本应用里的 id。 */
-export const bilibiliSongId = (bvid: string): string => `${BILIBILI_ID_PREFIX}${bvid}`;
+/**
+ * 一条投稿（或它的一个分P）在本应用里的 id。
+ *
+ * 分P 写进 id 是因为**同一个 bvid 下的每一集播放地址都不一样**（cid 不同）。
+ * 只带 bvid 的话，一个多P 投稿的所有集数在应用眼里是同一首歌：队列里会去重、
+ * 切集时进度不会重置、缓存也会互相顶掉。带上 cid 它们才是各自独立的歌。
+ */
+export const bilibiliSongId = (bvid: string, cid?: number | null): string => (
+    typeof cid === 'number' && cid > 0 ? `${BILIBILI_ID_PREFIX}${bvid}:${cid}` : `${BILIBILI_ID_PREFIX}${bvid}`
+);
 
 /** 从 id 里取回 bvid；不是本平台的 id 就回空串。 */
 export const bilibiliBvidOf = (song: { id?: string | number } | null | undefined): string => {
     const id = String(song?.id ?? '');
-    return id.startsWith(BILIBILI_ID_PREFIX) ? id.slice(BILIBILI_ID_PREFIX.length) : '';
+    if (!id.startsWith(BILIBILI_ID_PREFIX)) return '';
+    const rest = id.slice(BILIBILI_ID_PREFIX.length);
+    // 分P 的 id 是 `BV...:cid`，取冒号前那截。
+    const colon = rest.indexOf(':');
+    return colon >= 0 ? rest.slice(0, colon) : rest;
+};
+
+/** 从 id 里取回分P 的 cid；单P 的 id 没有这一段，回 null。 */
+export const bilibiliCidOf = (song: { id?: string | number } | null | undefined): number | null => {
+    const id = String(song?.id ?? '');
+    if (!id.startsWith(BILIBILI_ID_PREFIX)) return null;
+    const rest = id.slice(BILIBILI_ID_PREFIX.length);
+    const colon = rest.indexOf(':');
+    if (colon < 0) return null;
+    const cid = Number(rest.slice(colon + 1));
+    return Number.isFinite(cid) && cid > 0 ? cid : null;
 };
 
 /** 图片地址可能是 http（WebView 里会被拦），统一升成 https。 */
@@ -34,14 +57,21 @@ export const upgradeCoverUrl = (url: string | undefined): string => {
  * 时长按这个应用的习惯用毫秒（接口给的是秒）。UP 主当歌手，专辑留空 ——
  * 投稿没有专辑这回事，硬塞一个只会让「打开专辑」指到不存在的地方。
  */
-export const normalizeBilibiliSong = (hit: BilibiliSearchHit): UnifiedSong => ({
-    id: bilibiliSongId(hit.bvid),
-    name: hit.title,
+export const normalizeBilibiliSong = (
+    hit: BilibiliSearchHit,
+    /** 多P 投稿里的某一集；不传就是这条投稿本身。 */
+    page?: { cid: number; title: string; durationSec: number },
+): UnifiedSong => ({
+    id: bilibiliSongId(hit.bvid, page?.cid),
+    // 分P 用自己那一集的名字，单P 用投稿标题。
+    name: page?.title || hit.title,
     artists: hit.author ? [{ id: `bilibili-author:${hit.author}`, name: hit.author }] : [],
     // 封面挂在专辑上：播放页和播放栏都是从那里取的。投稿没有专辑，名字留空。
     album: { id: '', name: '', coverUrl: upgradeCoverUrl(hit.coverUrl) || undefined },
     // 时长按这个应用的习惯用毫秒（接口给的是秒）。
-    durationMs: Math.max(0, Math.round(hit.durationSec * 1000)),
-    isVideo: true,
+    durationMs: Math.max(0, Math.round((page?.durationSec ?? hit.durationSec) * 1000)),
+    // 不设 isVideo：这个字段在别处是「这首歌有一条对应的 MV」的意思（队列、搜索结果行
+    // 都拿它显示一个 "MV" 角标）。B 站这里放的就是投稿本身，不是某个别的平台的歌的 MV，
+    // 打上那个角标只会让人以为还有一份别的视频。
     sourceRef: { kind: 'online', providerId: 'bilibili', mediaId: hit.bvid },
 });

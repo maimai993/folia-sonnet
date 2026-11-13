@@ -88,7 +88,6 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/lyricDirector/catalog.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
     'src/stores/useVideoLayerSettingsStore.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
     'src/components/app/AppSurface.tsx': { n: { bilibili: 5 }, kind: 'file', why: 'the app surface mounts the video platform own MV layer next to the existing video layer' },
-    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2, appleMusic: 2, feiniu: 2, lxmusic: 3, bilibili: 2 }, kind: 'file', why: 'the table of every platform app icon: each platform is named once for its import and once for its entry' },
     'src/components/app/search/BilibiliVideoResults.tsx': { n: { bilibili: 16 }, kind: 'file', why: 'that platform own search results inside the search workspace' },
     'src/components/app/search/SearchTabs.tsx': { n: { bilibili: 2 }, kind: 'doc', why: 'the comment saying the video platform has a tab of its own' },
     'src/components/app/search/SearchWorkspace.tsx': { n: { bilibili: 6 }, kind: 'file', why: 'the workspace shows that platform own result list when its source tab is chosen' },

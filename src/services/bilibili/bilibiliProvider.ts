@@ -6,11 +6,12 @@ import {
     fetchBilibiliPlayUrl,
     fetchBilibiliVideoInfo,
     fetchBilibiliSubtitle,
+    fetchBilibiliSubtitles,
     searchBilibiliVideos,
 } from './api';
 import { pickSubtitleTracks } from './bilibiliLyrics';
 import { buildLyricsFromCues } from './bilibiliLyrics';
-import { bilibiliBvidOf, bilibiliSongId, normalizeBilibiliSong } from './bilibiliNormalize';
+import { bilibiliBvidOf, bilibiliCidOf, bilibiliSongId, normalizeBilibiliSong } from './bilibiliNormalize';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
 import { isBilibiliAvailable } from './transport';
 import { generateQrCode, pollQrCode, exchangeLogin } from './login';
@@ -33,7 +34,7 @@ import { readBilibiliAuthNative, saveBilibiliCookiesNative as bilibiliSaveCookie
 
 /** 一条投稿 → 一次分页结果。视频搜索没有可靠的「还有下一页」，所以不做翻页。 */
 const pageOf = (hits: BilibiliSearchHit[], offset: number): ProviderPage<ReturnType<typeof normalizeBilibiliSong>> => ({
-    items: hits.map(normalizeBilibiliSong),
+    items: hits.map(hit => normalizeBilibiliSong(hit)),
     hasMore: false,
     nextOffset: offset + hits.length,
 });
@@ -178,10 +179,9 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const bvid = bilibiliBvidOf(song);
             if (!bvid) return empty;
             try {
-                const info = await fetchBilibiliVideoInfo(bvid);
-                // 字幕在取流那一次响应里，不在详情里。
-                const stream = await fetchBilibiliPlayUrl(bvid, info.cid);
-                const tracks = stream.subtitles;
+                // 字幕不在取流里，得单独问 player/v2（见 fetchBilibiliSubtitles）。
+                const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
+                const tracks = await fetchBilibiliSubtitles(bvid, cid);
                 if (tracks.length === 0) return empty;
                 const { primary, secondary } = pickSubtitleTracks(tracks);
                 if (!primary?.subtitle_url) return empty;
@@ -228,8 +228,9 @@ export const bilibiliProvider: OnlineMusicProvider = {
         async getAudioSource(song, quality) {
             const bvid = bilibiliBvidOf(song);
             if (!bvid) return null;
-            const info = await fetchBilibiliVideoInfo(bvid);
-            const track = await fetchBilibiliPlayUrl(bvid, info.cid, quality);
+            // 多P 投稿的每一集都有自己的 cid，取流要用那一集的。
+            const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
+            const track = await fetchBilibiliPlayUrl(bvid, cid, quality);
             // 拿不到独立音轨（老投稿只有 durl）时退回那条合成流，画面和声音在一起。
             return {
                 url: track.audioUrl || track.url,
@@ -258,7 +259,7 @@ export const bilibiliProvider: OnlineMusicProvider = {
         /** 首页推荐。登录了就带 Cookie，B 站自己会回个性化内容。 */
         async getDailySongs() {
             const hits = await fetchBilibiliRecommendations();
-            return hits.map(normalizeBilibiliSong);
+            return hits.map(hit => normalizeBilibiliSong(hit));
         },
         async getRecommendedCollections() {
             // 投稿没有「歌单 / 专辑」这种集合，推荐页只给一排视频。
@@ -268,11 +269,25 @@ export const bilibiliProvider: OnlineMusicProvider = {
 
     explore: {
         /** 探索页也是这一屏推荐：对视频来说「给你推荐」就是唯一的内容面。 */
-        async getHome() {
+        /**
+         * 推荐页：接口给什么就摆什么，一屏就是一节。
+         *
+         * 登录了是**自己的**推荐，没登录是平台默认给的 —— 这条差异全在接口那一侧
+         * （cookie 由原生带过去），这里不用管。
+         */
+        async getFeed() {
             const hits = await fetchBilibiliRecommendations();
-            return { sections: [{ id: 'recommend', songs: hits.map(normalizeBilibiliSong) }] };
+            return {
+                sections: [{
+                    id: 'recommend',
+                    title: '',
+                    items: hits.map(hit => ({ kind: 'song' as const, song: normalizeBilibiliSong(hit) })),
+                }],
+                // 没有翻页：这个接口一次就是一批，再要一次是另一批，接不上。
+                refreshReadsAnew: true,
+            };
         },
-    } as never,
+    },
 };
 
 /** 这个 id 是不是本平台的。别的模块拿它判「要不要走视频那条路」。 */
