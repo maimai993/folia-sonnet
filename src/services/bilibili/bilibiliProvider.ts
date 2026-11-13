@@ -63,6 +63,40 @@ const pageOf = (hits: BilibiliSearchHit[], offset: number): ProviderPage<ReturnT
  */
 let pendingQr: { qrcodeKey: string; url: string } | null = null;
 
+/**
+ * 这一站按哪一档去取流。
+ *
+ * 通用那个音质偏好是给音乐平台听的，默认 high；放到这一站它就是 1080P 的 DASH，
+ * 在手机上一放就卡。所以**用户从没动过那个选项**的时候，这里按 720P 走；他自己选过
+ * 就照他选的来 —— 不能因为他选了 1080P 又偷偷降回去。
+ *
+ * 「动过没有」看的是那个键有没有被写过，不是值是多少：写进去一个 high 也是选。
+ */
+const pickBilibiliQuality = (quality: string): string => {
+    try {
+        return localStorage.getItem('default_audio_quality') === null ? 'standard' : quality;
+    } catch {
+        return 'standard';
+    }
+};
+
+/**
+ * 搜到过的季：season_id → 它自己那条记录。
+ *
+ * 只为一件事：季接口偶尔只认 ep_id，而 ep_id 只在搜索结果里有。点进分集列表时
+ * 搜索早就过去了，所以在这里留一份。有上限，翻太多季也不会一直涨。
+ */
+const seasonsById = new Map<number, BangumiSeason>();
+
+const rememberSeason = (season: BangumiSeason): void => {
+    seasonsById.set(season.seasonId, season);
+    // 最多留 200 条，超了丢最早的（Map 的插入顺序就是迭代顺序）。
+    if (seasonsById.size > 200) {
+        const oldest = seasonsById.keys().next();
+        if (!oldest.done) seasonsById.delete(oldest.value);
+    }
+};
+
 export const bilibiliProvider: OnlineMusicProvider = {
     id: 'bilibili',
     displayName: 'Bilibili',
@@ -110,11 +144,15 @@ export const bilibiliProvider: OnlineMusicProvider = {
     },
 
     search: {
+        /*
+         * 单曲和视频是同一份结果。
+         *
+         * 这一家搜出来的每条本来就是一条投稿，点开就当一首歌放 —— 所以两档都走这里，
+         * 差别只在页签上摆哪个名字。以前单曲那条把**没归一化的搜索结果**直接交给了
+         * 分页，界面认不出来，表现就是「视频搜得到、单曲搜不到」。
+         */
         async searchSongs(query, limit, offset) {
-            if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
-            const hits = await searchBilibiliVideos(query);
-            // 搜索接口一次给一批，这里按 limit 切，保持和其它平台一样的契约。
-            return pageOf(hits.slice(offset, offset + limit), offset);
+            return this.searchVideos!(query, limit, offset);
         },
 
         /*
@@ -137,6 +175,8 @@ export const bilibiliProvider: OnlineMusicProvider = {
         async searchSeasons(query, seasonKind, limit, offset) {
             if (!query.trim()) return { items: [], hasMore: false, nextOffset: offset };
             const seasons = await searchBangumiSeasons(query, seasonKind);
+            // 记下这一季（含第一集的 ep_id），点进去时季接口可能会用它。
+            seasons.forEach(rememberSeason);
             const window = seasons.slice(offset, offset + limit);
             return {
                 items: window.map(season => ({ ...seasonAsCollection(season), type: 'album' as const })),
@@ -340,7 +380,13 @@ export const bilibiliProvider: OnlineMusicProvider = {
             if (!bvid) return null;
             // 多P 投稿的每一集都有自己的 cid，取流要用那一集的。
             const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
-            const track = await fetchBilibiliPlayUrl(bvid, cid, quality);
+            /*
+             * 这一家的「音质」其实是**画质**（画面和声音是一起取的）。
+             *
+             * 通用那个音质偏好是给音乐平台听的，默认 high，放到这一站就是 1080P 的
+             * DASH —— 在手机上一放就卡。没单独选过的话按 720P 走，选过的照选。
+             */
+            const track = await fetchBilibiliPlayUrl(bvid, cid, quality === 'high' ? 'standard' : quality);
             // 拿不到独立音轨（老投稿只有 durl）时退回那条合成流，画面和声音在一起。
             const candidates = track.audioUrls.length > 0 ? track.audioUrls : track.urls;
             /*
@@ -571,8 +617,16 @@ export const bilibiliProvider: OnlineMusicProvider = {
         async getAlbumTracks(id, limit = 100, offset = 0) {
             const seasonId = Number(id);
             if (!Number.isFinite(seasonId)) return { items: [], hasMore: false, nextOffset: 0 };
-            const episodes = await listBangumiEpisodes(seasonId);
-            const artist = 'B站';
+            /*
+             * 两条路都试：season_id 与 ep_id。这一家的季接口偶尔只认其中一条，
+             * 单走 season_id 时会是空列表 —— 表现就是「点进番剧是零首」。
+             *
+             * ep_id 从搜索时带回来的第一集拿；拿不到就只用 season_id。
+             */
+            const season = seasonsById.get(seasonId);
+            const episodes = await listBangumiEpisodes(seasonId, season?.firstEpId ?? null);
+            // 投稿人的名字就是这一季自己的话，没有就留空（不拿平台名当作者）。
+            const artist = '';
             const page = episodes.slice(offset, offset + limit);
             return {
                 items: page.map(episode => normalizeBilibiliSong(

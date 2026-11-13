@@ -436,8 +436,30 @@ export const fetchBilibiliSubtitle = async (
  *
  * 拿不到 DASH（老投稿或某些清晰度）时退回 durl。
  */
+/**
+ * 档位对应的画面高度上限。
+ *
+ * 这些是「这一档最多给到多高」，不是请求参数 —— 接口回什么由它自己定（会员、投稿本身
+ * 有没有 4K、风控都可能改），真正挑哪一条在这里定。
+ */
+const qualityMaxHeight: Record<string, number> = {
+    standard: 720,
+    high: 1080,
+    ultra: 1080,
+    lossless: 1080,
+    hires: 2160,
+};
+
+/**
+ * 从 DASH 里挑一条画面轨。
+ *
+ * quality 是用户选的档位，必须参与挑轨：以前这里只按 height 从高到低排，接口一旦
+ * 把 4K 也回下来（fnval 要了全部格式、fourk 又开着），不管用户选的是哪一档都拿 4K
+ * —— 手机上就是又糊又卡，甚至直接放不动。现在的规则是「不超过这一档上限的最高那条」。
+ */
 export const pickVideoTrack = (
     payload: PlayUrlDash,
+    quality: string = 'standard',
 ): { url: string; height: number; urls: string[] } | null => {
     const videos = payload.dash?.video ?? [];
     if (videos.length > 0) {
@@ -454,11 +476,20 @@ export const pickVideoTrack = (
             })
             .filter(item => item.url.length > 0);
         if (scored.length > 0) {
-            scored.sort((a, b) => {
+            /*
+             * 先按档位筛出「这一档允许的」，再在里面挑最高的一条。
+             *
+             * 一档都不符合（比如投稿本身就是 480，而用户要 1080）时退回全部候选：
+             * 能放总比什么都没有好。
+             */
+            const cap = qualityMaxHeight[quality] ?? qualityMaxHeight.standard;
+            const withinCap = scored.filter(item => item.height <= cap);
+            const pool = withinCap.length > 0 ? withinCap : scored;
+            pool.sort((a, b) => {
                 if (a.isAvc !== b.isAvc) return a.isAvc ? -1 : 1;
                 return b.height - a.height;
             });
-            return { url: scored[0].url, urls: scored[0].urls, height: scored[0].height };
+            return { url: pool[0].url, urls: pool[0].urls, height: pool[0].height };
         }
     }
     const fallback = payload.durl?.find(item => typeof item.url === 'string' && item.url.length > 0);
@@ -532,15 +563,27 @@ export const fetchBilibiliPlayUrl = async (
     audioUrls: string[];
     subtitles: PlayUrlSubtitle[];
 }> => {
+    /*
+     * 要哪些格式，跟着档位走。
+     *
+     * nval 是位掩码：以前固定写 4048，等于把 8K、杜比视界、AV1、AI 插帧全要了一遍。
+     * 这些格式**即使最后一条都不用**也会把候选列表撑大，而且一旦挑中 AV1，低端机上解码
+     * 直接卡成幻灯片 —— 用户报的「又糊又特别卡」就是这个。现在按档位只放开需要的：
+     * 基础档只要 mp4 + dash；1080P 起才加 HDR / 4K；4K 档才开始考虑 AV1。
+     *
+     * ourk 同理：只要没选到 4K 档就不开。
+     */
+    const wants4k = (qualityMaxHeight[quality] ?? 720) > 1080;
+    const fnval = wants4k ? 4048 : 2 + 1 + 4; // dash + mp4 + hdr（2=dash, 1=mp4, 4=hdr）
     const url = await signedUrl('/x/player/wbi/playurl', {
         bvid,
         cid,
         qn: qualityToQn[quality] ?? 64,
-        fnval: 4048,
-        fourk: 1,
+        fnval,
+        fourk: wants4k ? 1 : 0,
     });
     const payload = unwrap(await fetchJson<PlayUrlDash>(url));
-    const track = pickVideoTrack(payload);
+    const track = pickVideoTrack(payload, quality);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
     // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。
     // 备用地址一起带回去：CDN 的一台节点回 403 时，原生中转靠它换下一台。
