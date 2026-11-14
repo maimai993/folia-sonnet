@@ -16,6 +16,14 @@ export default defineVisualizer({
     mode: 'mv',
     // 紧跟 blank：两者是「纯画面」的一对，摆在一起好找。
     order: 901,
+    /*
+     * 不再作为「歌词动画样式」出现在选择器里。
+     *
+     * MV 的家在「外观 → 歌词壁纸」的背景模式里（'mv' 一档）：它说的是「这一页的
+     * 背景是画面」，不是「歌词怎么画」。注册保留 —— 存量设置里若还存着 mv，
+     * 渲染层照样认得，只是选择器不再把它摆出来当选项。
+     */
+    hiddenFromPickers: true,
     labelKey: 'ui.visualizerMv',
     labelFallback: 'MV',
     previewSeed: 'mv',

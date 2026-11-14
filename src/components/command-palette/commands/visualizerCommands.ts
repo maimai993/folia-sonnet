@@ -94,7 +94,8 @@ export const visualizerCommands: CommandPaletteCommand[] = [
     createToggleCommand('smart-beat-off', 'visualizer', 'Smart beat mode: Off', 'Turn the beat effects off; every picture as it was', [...SMART_BEAT_KEYWORDS, 'off', '关闭', '关'], context => context.visualizer.setSmartBeatMode('off')),
     createToggleCommand('smart-beat-cached', 'visualizer', 'Smart beat mode: Analysed only', 'Play the beat effects from tracks already analysed only; smart beat itself analyses nothing new and leaves the GPU alone (automix is not affected)', [...SMART_BEAT_KEYWORDS, 'cached', 'cache only', 'analysed only', '只用已分析', '缓存', '半开'], context => context.visualizer.setSmartBeatMode('cached')),
     createToggleCommand('smart-beat-on', 'visualizer', 'Smart beat mode: On', 'Play the beat effects, analysing a track not analysed yet on the GPU', [...SMART_BEAT_KEYWORDS, 'on', '开启', '开', '全开'], context => context.visualizer.setSmartBeatMode('on')),
-    ...VISUALIZER_REGISTRY.flatMap(({ mode, command }) => (
+    // 隐藏的款式（mv）不生成切换命令 —— 它的家在壁纸背景模式里。
+    ...VISUALIZER_REGISTRY.filter(({ hiddenFromPickers }) => !hiddenFromPickers).flatMap(({ mode, command }) => (
         command ? [createVisualizerCommand(mode, command.title, command.description, command.keywords)] : []
     )),
     // 町景的取景控制条（machi/MachiCameraBar.tsx）：只在播放页、正在画町景时有；打开时收起侧边面板，让出画面。

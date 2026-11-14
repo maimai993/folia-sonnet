@@ -1867,6 +1867,7 @@ export default {
     "guestMode": "Guest Mode",
     "loginOnHome": "Login on Home",
     "audioQuality": "Default Quality",
+    "videoQuality": "Default picture quality",
     "vocalCancel": "Remove vocals",
     "vocalCancelHint": "Strips the centre-panned vocal in real time. Centred bass and kick get pulled down with it.",
     "qualityStandard": "Standard",

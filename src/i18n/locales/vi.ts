@@ -1867,6 +1867,7 @@ export default {
     "guestMode": "Chế độ khách",
     "loginOnHome": "Đăng nhập tại Trang chủ",
     "audioQuality": "Chất lượng mặc định",
+    "videoQuality": "Chất lượng hình mặc định",
     "vocalCancel": "Tắt giọng hát",
     "vocalCancelHint": "Loại bỏ giọng hát ở giữa theo thời gian thực. Bass và trống nằm giữa cũng bị giảm theo.",
     "qualityStandard": "Tiêu chuẩn",

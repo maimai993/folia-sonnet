@@ -69,8 +69,16 @@ const https = (url: string | undefined): string => {
 };
 
 const getJson = async <T>(url: string): Promise<T> => {
-    const envelope = await fetchJson<T>(url);
-    return unwrap(envelope as ApiEnvelope<T>);
+    try {
+        const envelope = await fetchJson<T>(url);
+        return unwrap(envelope as ApiEnvelope<T>);
+    } catch (error) {
+        // 设备上「点开番剧零首」抓现场：把真实失败码打进日志（-352 风控 / -404 无此季 / 超时各是不同的病）。
+        console.warn('[Bilibili] pgc request failed',
+            url.replace(/^https:\/\/api\.bilibili\.com/, ''),
+            error instanceof Error ? error.message : error);
+        throw error;
+    }
 };
 
 /**

@@ -388,17 +388,19 @@ export const bilibiliProvider: OnlineMusicProvider = {
          * 一声不出。标了它，Web 会先把地址取好、随队列一起交给原生。
          */
         audioResolvedByWeb: true,
-        // 只声明三档：对视频来说这三个就是 480P / 720P / 1080P（未登录上限 480P）。
-        // 界面上这几档会显示成清晰度而不是音质（见 AccountTab 的 VIDEO_QUALITY_LABEL_KEYS）。
-        /**
-         * 清晰度档位（这一家是「画质」，走的仍是声音那条通道）。
+        /*
+         * 清晰度档位不能在模块加载时算死。
          *
-         * 大会员才拿得到 1080P60 与 4K —— 非会员选了也只会回落到能拿到的那一档，
-         * 界面上摆一个点了没用的选项不如不摆。登录态里带了 vipStatus，据此放开。
+         * 以前写成 `useBilibiliAuthStore.getState().isVip ? 五档 : 三档` —— provider
+         * 模块在登录 hydrate 之前就求值了，那次 getState 拿到的永远是未登录：大会员
+         * 也只看到三档，而且之后登录了也不会变。改成 getter，每次界面问都按当下
+         * 的登录态算（未登录时接口本来就只给 480P，选了高档会回落，不算说谎）。
          */
-        audioQualityLevels: useBilibiliAuthStore.getState().isVip
-            ? ['standard', 'high', 'ultra', 'lossless', 'hires']
-            : ['standard', 'high', 'ultra'],
+        get audioQualityLevels(): readonly ('standard' | 'high' | 'ultra' | 'lossless' | 'hires')[] {
+            return useBilibiliAuthStore.getState().isVip
+                ? ['standard', 'high', 'ultra', 'lossless', 'hires']
+                : ['standard', 'high', 'ultra'];
+        },
 
         /**
          * 这首歌要放什么：取 B 站 DASH 的那条**声音轨**。

@@ -26,7 +26,8 @@ export const useRandomPool = () => {
     // The pool's choices: every registered style, built-ins first (the shelf's order), then the
     // mod-contributed ones by their own order. A saved selection that names a mod is kept as-is.
     const options = useMemo(() => (
-        VISUALIZER_REGISTRY.map(entry => ({ value: entry.mode, label: getVisualizerModeLabel(entry.mode, t) }))
+        // 隐藏的款式（mv）不进随机池 —— 它不是「歌词怎么画」的一种。
+        VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).map(entry => ({ value: entry.mode, label: getVisualizerModeLabel(entry.mode, t) }))
     ), [t]);
     const knownModes = useMemo(() => normalizeRandomVisualizerModesWith(modes, isRegisteredMode), [modes]);
 
@@ -35,7 +36,7 @@ export const useRandomPool = () => {
         modes: knownModes,
         setModes: (next: readonly VisualizerMode[]) => setModes(next),
         /** The saved selection names every registered style. */
-        allOn: knownModes.length === VISUALIZER_REGISTRY.length,
+        allOn: knownModes.length === VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).length,
         /**
          * Every registered style. The 全选 button turns disabled under the press, and focus on a disabled
          * button drops to the page, which closes the panel's layer (Popover): the focus goes to the
@@ -43,10 +44,10 @@ export const useRandomPool = () => {
          */
         selectAll: (grid?: HTMLElement | null) => {
             grid?.querySelector<HTMLElement>('[data-value][tabindex="0"]')?.focus();
-            setModes(VISUALIZER_REGISTRY.map(entry => entry.mode));
+            setModes(VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).map(entry => entry.mode));
         },
         /** 「已选 5/14」 */
-        countLabel: t('options.randomPoolCount', { selected: knownModes.length, total: VISUALIZER_REGISTRY.length }),
+        countLabel: t('options.randomPoolCount', { selected: knownModes.length, total: VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).length }),
         /** The style this song drew. */
         currentLabel: getVisualizerModeLabel(mode, t),
         /** Said when the last style that is on is pressed: the pool keeps one at least. */

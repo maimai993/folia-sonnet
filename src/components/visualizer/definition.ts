@@ -200,6 +200,13 @@ export interface VisualizerRegistryEntry {
     labelFallback: string;
     previewSeed: string;
     previewStartOffset: number;
+    /**
+     * True when the style should NOT appear in the pickers (style grid, command palette's
+     * style list). The registry still knows it — a stored setting can name it, and the
+     * renderer can draw it — but the user is not offered it as a choice. The MV "style"
+     * is one: it moved into the wallpaper background modes, where it belongs.
+     */
+    hiddenFromPickers?: boolean;
     /*
      * The small line icon shown beside the style's name: the children of the 24x24 stroked <svg>
      * that modeGlyphs.tsx draws. A style without one (a mod's, say) gets the generic icon.

@@ -1867,6 +1867,7 @@ export default {
     "guestMode": "Mode Tamu",
     "loginOnHome": "Login di Beranda",
     "audioQuality": "Kualitas Default",
+    "videoQuality": "Kualitas gambar baku",
     "vocalCancel": "Hapus vokal",
     "vocalCancelHint": "Menghapus vokal di tengah secara real time. Bass dan kick yang juga di tengah ikut melemah.",
     "qualityStandard": "Standar",

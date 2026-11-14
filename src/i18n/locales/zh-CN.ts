@@ -1883,6 +1883,7 @@ export default {
     "guestMode": "游客模式",
     "loginOnHome": "去主页登录",
     "audioQuality": "默认音质",
+    "videoQuality": "默认画质",
     "vocalCancel": "关闭人声",
     "vocalCancelHint": "实时去掉居中的主唱，留下伴奏。居中的贝斯和底鼓会被一起削弱。",
     "qualityStandard": "标准",

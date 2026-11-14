@@ -16,7 +16,12 @@ import { BRIDGE_UNAVAILABLE_CODE, isBilibiliAvailable, requestBilibiliUrl } from
 
 export const API_BASE = 'https://api.bilibili.com';
 const WBI_TTL_MS = 10 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 12_000;
+/*
+ * JS 侧的超时要比原生 OkHttp 的读超时（30s）宽 —— 窄了的话原生还在好好等，
+ * JS 这头先放弃，表现就是首页一进来的并发请求里一半「timeout」。设备实测
+ * 12s 在并发高峰会把本会成功的请求掐掉，放宽到 20s。
+ */
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export interface ApiEnvelope<T> {
     code: number;
@@ -67,14 +72,21 @@ export const fetchJson = async <T>(url: string): Promise<ApiEnvelope<T>> => {
     }
 };
 
-export const unwrap = <T>(envelope: ApiEnvelope<T>): T => {
+export const unwrap = <T>(envelope: ApiEnvelope<T> & { result?: T }): T => {
     if (envelope.code !== 0) {
         throw new BilibiliApiError(envelope.code, envelope.message || `bilibili error ${envelope.code}`);
     }
-    if (envelope.data === undefined) {
+    /*
+     * 载荷有两个家：x/web-interface 一族放 `data`，pgc 一族（番剧/影视）放 `result`。
+     * 以前只认 `data` —— 番剧的分集接口每次都在这里被判成「empty payload」，
+     * 表现就是「点开番剧/电影，一集都解析不出来」。
+     */
+    const payload = envelope.data !== undefined ? envelope.data
+        : (envelope as { result?: T }).result;
+    if (payload === undefined) {
         throw new BilibiliApiError(envelope.code, 'empty payload');
     }
-    return envelope.data;
+    return payload;
 };
 
 let wbiKeys: { imgKey: string; subKey: string; fetchedAt: number } | null = null;
@@ -680,7 +692,8 @@ export const fetchBilibiliPlayUrl = async (
     } catch (error) {
         const code = error instanceof BilibiliApiError ? error.code : -1;
         if (code !== -400 && code !== -403) throw error;
-        console.warn('[Bilibili] wbi playurl rejected, falling back to the plain endpoint', code);
+        console.warn('[Bilibili] wbi playurl rejected, falling back to the plain endpoint', code,
+            'bvid:', bvid || '(none)', 'epId:', epId ?? '(none)', 'cid:', cid);
         /*
          * 退路不要带 platform=html5。
          *
