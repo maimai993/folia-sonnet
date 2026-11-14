@@ -216,6 +216,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private var cachedPlaying = false
     @Volatile
     private var cachedBuffering = false
+    /**
+     * 最近一拍位置采样的值与时刻（elapsedRealtime）。只有 positionTick 写。
+     * 缓存位置被 seek / 换源 / 暂停改写后与它不再相等，显示位置就不外推（#320）。
+     */
+    @Volatile
+    private var tickSamplePositionMs = -1L
+    @Volatile
+    private var tickSampleAtMs = 0L
 
     private val positionTick = object : Runnable {
         override fun run() {
@@ -240,6 +248,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     && position + 1_000L < lastTickPositionMs
             lastTickPositionMs = position
             cachedPositionMs = position
+            // 先写位置再写时刻：读的一侧以「时刻对应的那个位置仍是缓存值」为外推前提（#320）。
+            tickSamplePositionMs = position
+            tickSampleAtMs = android.os.SystemClock.elapsedRealtime()
             /*
              * 缓冲标记只靠事件清（playing / paused / ...），漏一次就一直挂着：
              * 显示锚点按「在缓冲」把 playing 写成 false，桌面歌词冻在原地，
@@ -722,6 +733,18 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     /** 缓存值：调用方可能在插件线程上，这里绝不去碰播放器。 */
     fun getPositionMs(): Long {
         return Math.max(0L, cachedPositionMs)
+    }
+
+    /**
+     * 给桌面歌词核对用的「此刻」位置：缓存值加上采样之后过去的时间（#320）。
+     * 与 [getPositionMs] 一样只读缓存，任何线程可调；规则见 extrapolatedDisplayPositionMs。
+     */
+    fun getDisplayPositionMs(audible: Boolean): Long {
+        val sampleAt = tickSampleAtMs
+        val cached = cachedPositionMs
+        val fresh = cached == tickSamplePositionMs
+        return Math.max(0L, extrapolatedDisplayPositionMs(cached, if (fresh) sampleAt else 0L,
+            android.os.SystemClock.elapsedRealtime(), audible, requestedSpeed))
     }
 
     fun getDurationMs(): Long {
