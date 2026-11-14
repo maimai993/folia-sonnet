@@ -14,7 +14,7 @@ import { BRIDGE_UNAVAILABLE_CODE, isBilibiliAvailable, requestBilibiliUrl } from
 // 画质要不到时接口会降档返回，所以「要 1080p」不代表拿到的就是 1080p，实际高度跟着
 // 结果走。未登录上限是 480p。
 
-const API_BASE = 'https://api.bilibili.com';
+export const API_BASE = 'https://api.bilibili.com';
 const WBI_TTL_MS = 10 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 12_000;
 
@@ -126,29 +126,63 @@ export const parseDurationText = (text: string): number => {
     return parts.reduce((total, part) => total * 60 + part, 0);
 };
 
+const normalizeHit = (row: Record<string, unknown>): BilibiliSearchHit[] => {
+    const bvid = typeof row.bvid === 'string' ? row.bvid : '';
+    if (!bvid) return [];
+    return [{
+        bvid,
+        title: stripSearchHighlight(typeof row.title === 'string' ? row.title : ''),
+        author: typeof row.author === 'string' ? row.author : '',
+        durationSec: parseDurationText(typeof row.duration === 'string' ? row.duration : ''),
+        coverUrl: normalizeCoverUrl(typeof row.pic === 'string' ? row.pic : ''),
+        playCount: typeof row.play === 'number' ? row.play : 0,
+    }];
+};
+
+interface AllV2Block {
+    result_type?: string;
+    data?: Record<string, unknown>[];
+}
+
+/** 从综合搜索的返回里把视频块抽出来（搜索的主路被拒时走这条备用路）。 */
+const hitsFromAllV2 = (payload: { result?: AllV2Block[] }): BilibiliSearchHit[] => {
+    const blocks = Array.isArray(payload.result) ? payload.result : [];
+    const video = blocks.find(block => block.result_type === 'video');
+    if (!video || !Array.isArray(video.data)) return [];
+    return video.data.flatMap(normalizeHit);
+};
+
 const searchOnce = async (keyword: string, page: number): Promise<BilibiliSearchHit[]> => {
-    const url = await signedUrl('/x/web-interface/wbi/search/type', {
-        search_type: 'video',
-        keyword,
-        page,
-        page_size: 30,
-    });
-    const envelope = await fetchJson<{ result?: unknown[] }>(url);
-    const result = unwrap(envelope).result;
-    if (!Array.isArray(result)) return [];
-    return result.flatMap((item): BilibiliSearchHit[] => {
-        const row = item as Record<string, unknown>;
-        const bvid = typeof row.bvid === 'string' ? row.bvid : '';
-        if (!bvid) return [];
-        return [{
-            bvid,
-            title: stripSearchHighlight(typeof row.title === 'string' ? row.title : ''),
-            author: typeof row.author === 'string' ? row.author : '',
-            durationSec: parseDurationText(typeof row.duration === 'string' ? row.duration : ''),
-            coverUrl: normalizeCoverUrl(typeof row.pic === 'string' ? row.pic : ''),
-            playCount: typeof row.play === 'number' ? row.play : 0,
-        }];
-    });
+    try {
+        const url = await signedUrl('/x/web-interface/wbi/search/type', {
+            search_type: 'video',
+            keyword,
+            page,
+            page_size: 30,
+        });
+        const envelope = await fetchJson<{ result?: unknown[] }>(url);
+        const result = unwrap(envelope).result;
+        if (!Array.isArray(result)) return [];
+        return result.flatMap((item): BilibiliSearchHit[] => normalizeHit(item as Record<string, unknown>));
+    } catch (error) {
+        /*
+         * 搜索和取流一样有两条路：wbi 签名版和综合搜索版。
+         *
+         * wbi 那条对签名挑得很 —— 设备上实测 -412「request was banned」，签名
+         * 算得再对也过不去。综合搜索（search/all/v2）不验签名，一次就把视频块
+         * 连同番剧、用户等一起给回来，抽出 video 那一块就是同一份结果。
+         *
+         * 综合搜索没有分页参数（一页就是一批），所以备用路只在第一页走，后面的
+         * 页直接空着 —— 大多数搜索用不满一页，先保住「能搜出来」。
+         */
+        if (page !== 1) return [];
+        console.warn('[Bilibili] wbi search rejected, falling back to the all/v2 endpoint', error instanceof BilibiliApiError ? error.code : error);
+        const envelope = await fetchJsonWithHeaders<{ result?: AllV2Block[] }>(
+            `${API_BASE}/x/web-interface/search/all/v2?keyword=${encodeURIComponent(keyword)}&page=1`,
+            { Referer: 'https://search.bilibili.com/', Origin: 'https://search.bilibili.com' },
+        );
+        return hitsFromAllV2(unwrap(envelope));
+    }
 };
 
 /** 搜一批投稿。失败时抛出 BilibiliApiError。 */
@@ -615,14 +649,36 @@ export const fetchBilibiliPlayUrl = async (
     const effectiveQuality = signedIn ? quality : 'standard';
     const wants4k = (qualityMaxHeight[effectiveQuality] ?? 720) > 1080;
     const fnval = wants4k ? 4048 : 2 + 1 + 4; // dash + mp4 + hdr（2=dash, 1=mp4, 4=hdr）
-    const url = await signedUrl('/x/player/wbi/playurl', {
-        bvid,
-        cid,
-        qn: qualityToQn[quality] ?? 64,
-        fnval,
-        fourk: wants4k ? 1 : 0,
-    });
-    const payload = unwrap(await fetchJson<PlayUrlDash>(url));
+    const qn = qualityToQn[quality] ?? 64;
+    /*
+     * 取流有两条路：wbi 签名版和老的普通版。
+     *
+     * wbi 那条是「正路」，但它的签名校验对客户端挑得很：签名稍有出入（buvid 对不上、
+     * key 换了没跟住）就回 -400「请求错误」，而且**不管怎么重算签名都过不去** ——
+     * 这不是我们算错，是站方对这一跳的校验收得比文档说的严。
+     *
+     * 老接口没有这层校验，实测在设备上直接给流（durl 模式，最高 720P）。所以先走
+     * wbi，一旦它拿 -400 就退到老接口：有流可比什么都没有强得多。字幕只有 wbi
+     * 那份会带，退路里就空着 —— 歌词优先的默认设置下用户看到的还是歌词。
+     */
+    let payload: PlayUrlDash;
+    try {
+        const url = await signedUrl('/x/player/wbi/playurl', {
+            bvid,
+            cid,
+            qn,
+            fnval,
+            fourk: wants4k ? 1 : 0,
+        });
+        payload = unwrap(await fetchJson<PlayUrlDash>(url));
+    } catch (error) {
+        const code = error instanceof BilibiliApiError ? error.code : -1;
+        if (code !== -400 && code !== -403) throw error;
+        console.warn('[Bilibili] wbi playurl rejected, falling back to the plain endpoint', code);
+        const fallbackUrl = `${API_BASE}/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}`
+            + `&qn=${qn}&platform=html5&high_quality=1`;
+        payload = unwrap(await fetchJson<PlayUrlDash>(fallbackUrl));
+    }
     const track = pickVideoTrack(payload, effectiveQuality);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
     // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。

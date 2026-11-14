@@ -1,4 +1,4 @@
-import { fetchJson, fetchJsonWithHeaders, signedUrl, unwrap, type ApiEnvelope } from './api';
+import { API_BASE, fetchJson, fetchJsonWithHeaders, signedUrl, unwrap, type ApiEnvelope } from './api';
 import { isBilibiliAvailable } from './transport';
 
 // src/services/bilibili/bangumi.ts
@@ -197,7 +197,15 @@ const searchAll = async (keyword: string, page: number): Promise<SearchAllPayloa
             if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 400));
         }
     }
-    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+    /*
+     * wbi 版两次都被拒（-412 / -400 这类）时退到不验签名的同名接口。
+     *
+     * 两个版本返回的是同一份分组结果，差别只在要不要签名；设备上实测 wbi 版
+     * 被拦、普通版稳定给全量，所以这里把普通版当保底 —— 番剧/电影分区的搜索
+     * 就靠它才有结果。
+     */
+    const plainUrl = `${API_BASE}/x/web-interface/search/all/v2?keyword=${encodeURIComponent(keyword)}&page=${page}`;
+    return unwrap(await fetchJsonWithHeaders<SearchAllPayload>(plainUrl, SEARCH_HEADERS));
 };
 
 /** 站内搜索接口认的那个来源；别的值会被风控。 */
