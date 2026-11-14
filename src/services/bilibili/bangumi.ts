@@ -228,25 +228,13 @@ export const searchBangumiSeasons = async (
  * 算真的失败（调用方会看到空列表，而不是一个错误）。
  */
 const searchAll = async (keyword: string, page: number): Promise<SearchAllPayload> => {
-    let lastError: unknown = null;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-        try {
-            const url = await signedUrl('/x/web-interface/wbi/search/all/v2', { keyword, page });
-            return unwrap(await fetchJsonWithHeaders<SearchAllPayload>(url, SEARCH_HEADERS));
-        } catch (error) {
-            lastError = error;
-            if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 400));
-        }
-    }
     /*
-     * wbi 版两次都被拒（-412 / -400 这类）时退到不验签名的同名接口。
-     *
-     * 两个版本返回的是同一份分组结果，差别只在要不要签名；设备上实测 wbi 版
-     * 被拦、普通版稳定给全量，所以这里把普通版当保底 —— 番剧/电影分区的搜索
-     * 就靠它才有结果。
+     * 全仓只有一份搜索实现（search.ts）：综合搜索 all/v2 带齐平台参数、不签名，
+     * 一次拿回全部分类。这里要的是**原始分组**（番剧/影视那两块的 season_id 与
+     * hit_epids 是下游解析要用的字段），所以取 raw 而不是归一化后的形状。
      */
-    const plainUrl = `${API_BASE}/x/web-interface/search/all/v2?keyword=${encodeURIComponent(keyword)}&page=${page}`;
-    return unwrap(await fetchJsonWithHeaders<SearchAllPayload>(plainUrl, SEARCH_HEADERS));
+    const browse = await import('./search');
+    return { result: (await browse.rawSeasonBlocks(keyword, page)) as SearchAllPayload['result'] };
 };
 
 /** 站内搜索接口认的那个来源；别的值会被风控。 */

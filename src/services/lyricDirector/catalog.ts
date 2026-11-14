@@ -385,9 +385,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
     // 内建清单里有它，`isKnownDirectorMode` 就会放行，所以这里必须有一格空的，
     // 否则「AI 选了提示词却拿不到任何参数」是唯一没有登记的模式。与 still 同形。
     prompt: { setter: null, params: {} },
-    // B 站 MV 也没有可调参数：画面是投稿本身，唯一能调的「音画偏移」需要看着画面拖，
-    // 不适合交给 AI 猜。与 still / prompt 同形。
-    mv: { setter: null, params: {} },
     // 无歌词同样没有参数：它只有外壳，不画任何歌词元素，AI 无处着手。与 still 同形。
     blank: { setter: null, params: {} },
 };
