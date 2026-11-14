@@ -38,7 +38,7 @@ export default defineVisualizerBackground({
     command: {
         title: 'Background: MV',
         description: 'Switch background to Bilibili MV (video behind the lyrics)',
-        keywords: ['mv', 'bilibili', 'video background', 'MV', '视频背景', '画面背景', '背景切换到 MV'],
+        keywords: ['mv', 'video background', 'MV', '视频背景', '画面背景', '背景切换到 MV'],
     },
     // 画面不由这一层画：BilibiliMvLayer 把解析好的视频流注入视频层（歌词层之下）。
     // 这里只表达「这一款背景要求有画面」。

@@ -1178,6 +1178,8 @@ export default {
       "background-latent-mesh": { "title": "Latent: Fluid", "description": "Tampilkan hanya lapisan MeshGradient" },
       "background-latent-both": { "title": "Latent: Campuran", "description": "Tampilkan kedua lapisan shader" },
       "background-url": { "title": "Latar: Latar Tertanam", "description": "Alihkan latar ke mode halaman web tertanam" },
+      "background-mv": { "title": "Latar: MV", "description": "Alihkan latar ke MV: video diputar di belakang lirik" },
+      "visualizer-blank": { "title": "Visualizer: Kosong", "description": "Beralih ke mode tanpa lirik; latar dan lapisan video tetap" },
       "background-sora": { "title": "Latar: Sora", "description": "Alihkan latar ke latar belakang medan bintang Sora" },
       "background-particles": { "title": "Latar: Partikel", "description": "Pecahkan sampul menjadi partikel yang beriak dan melonjak" },
     "background-sonic": { "title": "Latar: Topografi sonik", "description": "Alihkan latar ke terrain kolom bercahaya yang digerakkan spektrum" },

@@ -1178,6 +1178,8 @@ export default {
       "background-latent-mesh": { "title": "Latent: Fluid", "description": "Show only the MeshGradient layer" },
       "background-latent-both": { "title": "Latent: Mixed", "description": "Show both shader layers" },
       "background-url": { "title": "Background: Embedded Background", "description": "Switch background to embedded webpage mode" },
+      "background-mv": { "title": "Background: MV", "description": "Switch background to MV: the video plays behind the lyrics" },
+      "visualizer-blank": { "title": "Visualizer: Blank", "description": "Switch to the lyrics-free visualizer; the background and video layer stay" },
       "background-sora": { "title": "Background: Sora", "description": "Switch background to Sora starfield" },
       "background-particles": { "title": "Background: Particles", "description": "Cover broken into particles that ripple and jump" },
     "background-sonic": { "title": "Background: Sonic Topography", "description": "Switch background to a terrain of glowing columns driven by the spectrum" },

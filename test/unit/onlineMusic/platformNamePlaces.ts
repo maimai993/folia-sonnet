@@ -81,10 +81,10 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/modal/lyric-match/LocalSongLyricMatch.tsx': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/lyric-match/navidromeSongMatch.ts': { n: { netease: 1 }, kind: 'lyric', why: 'raised by the upstream merge 2026-10-17' },
     'src/components/modal/settings/pages/HelpPage.tsx': { n: { qq: 5 }, kind: 'namesake', why: 'the QQ chat app\'s community group, not QQ Music: its number and its i18n key' },
-    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1, bilibili: 5 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
+    'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1, bilibili: 1 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
     'src/components/modal/settings/pages/LyricsPage.tsx': { n: { spotify: 1 }, kind: 'lyric', why: 'which of two hand-written descriptions of the lyric sources is shown' },
-    'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7, bilibili: 10 }, kind: 'stored', why: 'an i18n key' },
-    'src/components/panelTab/AccountTab.tsx': { n: { bilibili: 3 }, kind: 'doc', why: 'the comment saying that on a video platform the same three levels are named 480P/720P/1080P instead of audio qualities' },
+    'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7, bilibili: 2 }, kind: 'stored', why: 'an i18n key' },
+    'src/components/panelTab/AccountTab.tsx': { n: { bilibili: 5 }, kind: 'doc', why: 'the comments: video platforms name qualities 480P/720P/1080P, and the quality column header names the platform' },
     'src/services/lyricDirector/catalog.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
     'src/stores/useVideoLayerSettingsStore.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
     'src/components/app/AppSurface.tsx': { n: { bilibili: 5 }, kind: 'file', why: 'the app surface mounts the video platform own MV layer next to the existing video layer' },
@@ -262,4 +262,9 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/library/suites/grid/shared/useGridStayPlayback.ts': { n: { lxmusic: 2 }, kind: 'doc', why: 'the comment that explains why a 洛雪 song must not be re-cued' },
     'src/services/proxiedUrl.ts': { n: { lxmusic: 1 }, kind: 'doc', why: 'the comment that records why a 洛雪 source needs this exception handled' },
     'src/stores/useLxWorkspaceStore.ts': { n: { lxmusic: 3 }, kind: 'stored', why: 'the 洛雪 workspace state the overlay panel opens and closes' },
+    // MV 背景：那一层自己不画画面，画面由视频层（组件名即平台名）注入；注释里指名道姓是分工说明。
+    'src/components/visualizer/backgrounds/mv/entry.tsx': { n: { bilibili: 6 }, kind: 'doc', why: 'the comments explaining the division of work with the video layer; one file also names it in the command text' },
+    'src/components/visualizer/backgrounds/mv/MvBackgroundSettingsCard.tsx': { n: { bilibili: 4 }, kind: 'doc', why: 'the comments explaining which layer reads the persisted mode choice' },
+    'src/hooks/useLyricsWallpaperFeed.ts': { n: { bilibili: 1 }, kind: 'stored', why: 'the wire mode name of the wallpaper background choice' },
+    'src/stores/useVisualizerSettingsStore.ts': { n: { bilibili: 1 }, kind: 'doc', why: 'the comment recording where the MV master switch lives' },
 };

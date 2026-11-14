@@ -31,6 +31,9 @@ vi.mock('@/services/onlineMusic/omni', () => ({
         resolveAudioQuality: (_providerId: string, preference: string) => preference,
         isPreviewAudioSource: () => false,
         prefersOwnWordByWordLyrics: prefersOwnWordByWordMock,
+        // 视频平台的歌词只归它自己（omni.ts ownsItsLyricsOnly）；这些测试放的是音乐平台的歌，
+        // 统一答 false 即可。
+        ownsItsLyricsOnly: () => false,
     },
 }));
 

@@ -18,6 +18,8 @@ describe('visualizer background registry', () => {
             'nomand',
             'latent',
             'url',
+            // fork 自有：MV（画面垫在歌词下面；总开关见 BilibiliMvLayer）
+            'mv',
             'sora',
             // fork 自有：封面粒子（移植自 Mineradio）
             'particles',

@@ -1194,6 +1194,8 @@ export default {
       "background-latent-mesh": { "title": "背景切换到隐现：流体", "description": "仅显示 隐现 流体层" },
       "background-latent-both": { "title": "背景切换到隐现：混合", "description": "同时显示 隐现 像素与流体层" },
       "background-url": { "title": "背景切换到 嵌入背景", "description": "切换背景到嵌入网页模式" },
+      "background-mv": { "title": "背景切换：MV", "description": "将背景切换到 MV：画面垫在歌词下面" },
+      "visualizer-blank": { "title": "歌词动画：无歌词", "description": "切到不画歌词的样式；背景与视频层照旧" },
       "background-sora": { "title": "背景切换：空", "description": "将背景切换到星空 (Sora)" },
       "background-particles": { "title": "背景切换：粒子", "description": "将封面打散成会起伏跳动的粒子" },
     "background-sonic": { "title": "背景切换：音域回响", "description": "将背景切换成频谱驱动的柱状地形" },

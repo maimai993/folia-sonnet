@@ -1178,6 +1178,8 @@ export default {
       "background-latent-mesh": { "title": "Latent: Dòng chảy", "description": "Chỉ hiển thị lớp MeshGradient" },
       "background-latent-both": { "title": "Latent: Kết hợp", "description": "Hiển thị cả hai lớp shader" },
       "background-url": { "title": "Nền: Trang Web", "description": "Chuyển nền sang chế độ trang web" },
+      "background-mv": { "title": "Nền: MV", "description": "Chuyển nền sang MV: video phát phía sau lời bài hát" },
+      "visualizer-blank": { "title": "Visualizer: Trống", "description": "Chuyển sang chế độ không vẽ lời bài hát; nền và lớp video vẫn giữ" },
       "background-sora": { "title": "Nền: Sora", "description": "Chuyển nền sang bầu trời sao Sora" },
       "background-particles": { "title": "Nền: Hạt", "description": "Tách ảnh bìa thành các hạt gợn sóng và nhảy múa" },
     "background-sonic": { "title": "Nền: Địa hình âm vực", "description": "Chuyển nền sang địa hình cột phát sáng do phổ tần điều khiển" },
