@@ -47,3 +47,18 @@ internal fun playerAudible(isPlaying: Boolean, buffering: Boolean): Boolean {
 internal fun playerStalled(playWhenReady: Boolean, bufferingState: Boolean, isPlaying: Boolean): Boolean {
     return playWhenReady && bufferingState && !isPlaying
 }
+
+/**
+ * 播放器事件写显示锚点时的 playing 取值（#314）。
+ *
+ * paused / playing 本身就是结论：pause() 是先发 paused、后 setPlayWhenReady(false) 的，那一刻播放器真值还是 true。
+ * 其余事件（ready / seeked / position）只认播放器线程上的实时 isPlaying：READY 只表示有可播放源，
+ * 不表示出声；不能读 play() 乐观写的 cachedPlaying，否则尚未出声就被写成 playing=true。
+ */
+internal fun anchorPlayingForEvent(type: String, playerIsPlayingNow: Boolean): Boolean {
+    return when (type) {
+        "paused" -> false
+        "playing" -> true
+        else -> playerIsPlayingNow
+    }
+}

@@ -758,6 +758,11 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         return cachedPlaying
     }
 
+    /** 播放器线程事件用的实时值；其他线程不得调用。 */
+    fun isPlayingOnPlayerThread(): Boolean {
+        return player?.isPlaying == true
+    }
+
     /** 与位置快照一并交付，认领时不得把缓冲误当成正在出声。 */
     fun isBuffering(): Boolean = cachedBuffering
 
