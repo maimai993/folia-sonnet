@@ -45,6 +45,19 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
     // 是给旁边那些「这条是我放的吗」的判断用的，不是地址本身。这里剥掉再交给 <video>。
     const source = stripInjectPrefix(injectedUrl) ?? localFileUrl ?? (url || null);
     const active = enabled && Boolean(source);
+    /*
+     * 画面怎么摆，分两种来源说。
+     *
+     * 注入进来的是平台自己的 MV 投稿：竖屏的裁成中间一条两边全黑，等于把画面大部分
+     * 扔了；横屏的又有上下一点点出界。这一层的要求是「看得全」—— 完整显示（contain，
+     * 竖屏两侧留黑），一旦连 contain 都摆不下（横屏在窄屏上），宁可拉伸也要让四条边
+     * 都在屏幕里。
+     *
+     * 用户自己上传 / 自己填地址的那份不动：人家选了 cover 还是 contain 是自己的审美，
+     * 这层替他做主就是把他的背景改了。
+     */
+    const isInjected = Boolean(stripInjectPrefix(injectedUrl));
+    const objectFit = isInjected ? 'contain' : fit;
 
     useEffect(() => {
         ensureVideoLayerFileRestored();
@@ -180,7 +193,7 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
                 preload="metadata"
                 aria-hidden
                 className="absolute inset-0 h-full w-full pointer-events-none"
-                style={{ opacity, objectFit: fit }}
+                style={{ opacity, objectFit, width: '100%', height: '100%' }}
             />
             <VideoLayerSpinner videoRef={videoRef} />
         </>

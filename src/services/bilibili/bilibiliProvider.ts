@@ -549,6 +549,12 @@ export const bilibiliProvider: OnlineMusicProvider = {
         /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */
         async getPlaylistTracks(id) {
             /*
+             * 「点了歌单没反应」先分清两头：卡片点的动作有没有走到这里、走到了
+             * 这里数据给没给出来。这条日志就是给设备上抓现场用的 —— id 是什么、
+             * 有没有匹配到 shelf，一眼可判。
+             */
+            console.info('[Bilibili] getPlaylistTracks asked', String(id));
+            /*
              * 「用户」那一档点开的是**某个人的投稿**（id 形如 `user:<mid>`）。
              * 它不在账号自己的歌单列表里（那是自己名下的），所以先认这个前缀。
              */
@@ -571,8 +577,13 @@ export const bilibiliProvider: OnlineMusicProvider = {
             }
             const shelves = await listBilibiliShelves();
             const shelf = shelves.find(item => item.id === raw);
-            if (!shelf) return { items: [], hasMore: false, nextOffset: 0 };
+            if (!shelf) {
+                console.info('[Bilibili] getPlaylistTracks: no shelf matched', raw,
+                    'have:', shelves.map(s => s.id).join(','));
+                return { items: [], hasMore: false, nextOffset: 0 };
+            }
             const videos = await shelf.load();
+            console.info('[Bilibili] getPlaylistTracks: shelf loaded', raw, videos.length, 'items');
             return {
                 items: videos.map(video => normalizeBilibiliSong({
                     bvid: video.bvid,
