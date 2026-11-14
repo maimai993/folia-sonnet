@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Clapperboard, Search } from 'lucide-react';
 import { searchBilibiliVideos } from '../../services/bilibili/api';
@@ -7,6 +7,7 @@ import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 import { songKeyOf } from '../bilibili/BilibiliMvLayer';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { GroupLine } from './shell/GroupLine';
+import { Button } from '@/components/ui';
 import { PanelButton } from './shell/PanelButton';
 import { PanelRow } from './shell/PanelRow';
 import { Segments } from './shell/Segments';
@@ -103,13 +104,14 @@ const MvSourceRow: React.FC<MvSourceRowProps> = ({ song }) => {
                 <div className="mx-1 mb-2 rounded-xl border border-white/10 bg-black/30 p-2">
                     <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[13px] font-bold text-[color:var(--st-t1)]">{t('ui.mvPickTitle')}</span>
-                        <button
+                        <Button
                             type="button"
+                            variant="bare"
                             className="text-xs text-[color:var(--st-t2)]"
                             onClick={() => setPicking(false)}
                         >
                             {t('ui.close')}
-                        </button>
+                        </Button>
                     </div>
                     {searching && <div className="py-4 text-center text-xs text-[color:var(--st-t2)]">{t('ui.mvSearching')}</div>}
                     {!searching && error && <div className="py-4 text-center text-xs text-red-400">{error}</div>}
@@ -119,9 +121,10 @@ const MvSourceRow: React.FC<MvSourceRowProps> = ({ song }) => {
                     {!searching && candidates.length > 0 && (
                         <div className="max-h-64 space-y-1 overflow-y-auto">
                             {candidates.map(hit => (
-                                <button
+                                <Button
                                     key={hit.bvid}
                                     type="button"
+                                    variant="bare"
                                     className="flex w-full items-center gap-2 rounded-lg p-1.5 text-left hover:bg-white/10"
                                     onClick={() => void pick(hit.bvid)}
                                 >
@@ -135,7 +138,7 @@ const MvSourceRow: React.FC<MvSourceRowProps> = ({ song }) => {
                                         </span>
                                     </span>
                                     <Search size={13} className="flex-none opacity-40" />
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     )}
