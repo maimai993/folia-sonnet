@@ -42,4 +42,27 @@ class DisplayAnchorPolicyTest {
         assertFalse(playerAudible(false, false))
         assertFalse(playerAudible(false, true))
     }
+
+    @Test
+    fun `要求播着却在等数据才算卡住`() {
+        // #314：网络一卡播放器停在 BUFFERING，播放意图还在。
+        assertTrue(playerStalled(playWhenReady = true, bufferingState = true, isPlaying = false))
+    }
+
+    @Test
+    fun `用户暂停后即便还在缓冲也不算卡住`() {
+        assertFalse(playerStalled(playWhenReady = false, bufferingState = true, isPlaying = false))
+    }
+
+    @Test
+    fun `出错或放完停在非缓冲状态不算卡住`() {
+        // IDLE / ENDED：playWhenReady 可能还是 true，但它不会自己好起来。
+        assertFalse(playerStalled(playWhenReady = true, bufferingState = false, isPlaying = false))
+    }
+
+    @Test
+    fun `真在出声不算卡住`() {
+        assertFalse(playerStalled(playWhenReady = true, bufferingState = false, isPlaying = true))
+        assertFalse(playerStalled(playWhenReady = true, bufferingState = true, isPlaying = true))
+    }
 }

@@ -556,7 +556,8 @@ class FloatingLyricsOverlay private constructor(context: Context) {
 
         // 这两条跟随叠层那两个开关：用户在设置里关了「暂停时隐藏 / 唱完隐藏」，
         // 那小窗就该跟着留着 —— 它是同一套桌面歌词，不该自己另立一套规则。
-        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true)) return false
+        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true)
+                && !WallpaperLyricsState.playerStallHeld()) return false
         if (snapshot.lines == null || snapshot.lines.size == 0) return false
         // 纯音乐（原生补的那行占位）：没有真歌词可显示。
         if (snapshot.placeholderOnly && tuningFlag("wp.skipInstrumental", true)
