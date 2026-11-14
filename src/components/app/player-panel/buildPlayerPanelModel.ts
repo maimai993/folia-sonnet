@@ -63,6 +63,9 @@ export type PlayerPanelDeps = {
     generateAITheme: () => void;
     isGeneratingTheme: boolean;
     canGenerateAITheme: boolean;
+    /** 「匹配 MV」：重搜当前歌的 B 站画面并从头放。 */
+    rematchMv: () => void;
+    isRematchingMv: boolean;
     theme: UnifiedPanelProps['playback']['theme'];
     setTheme: UnifiedPanelProps['playback']['onThemeChange'];
     handleBgModeChange: UnifiedPanelProps['playback']['onBgModeChange'];
@@ -123,6 +126,8 @@ export const buildPlayerPanelModel = ({
     isGeneratingTheme,
     hasLyrics,
     canGenerateAITheme,
+    rematchMv,
+    isRematchingMv,
     theme,
     setTheme,
     handleBgModeChange,
@@ -204,6 +209,8 @@ export const buildPlayerPanelModel = ({
             isGeneratingTheme,
             hasLyrics,
             canGenerateAITheme,
+            onRematchMv: rematchMv,
+            isRematchingMv,
             theme,
             onThemeChange: setTheme,
             onBgModeChange: handleBgModeChange,

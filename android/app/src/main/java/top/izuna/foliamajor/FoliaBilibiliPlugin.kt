@@ -188,11 +188,26 @@ class FoliaBilibiliPlugin : Plugin() {
                 override fun onResponse(httpCall: Call, response: Response) {
                     try {
                         response.use { it ->
-                            val text = it.body?.string() ?: ""
+                            /*
+                             * 回体二选一：JSON/文本接口回 bodyText；二进制（图床的
+                             * jpeg/webp 等）回 bodyBase64 —— 图片字节按 UTF-8 解码会把
+                             * 数据毁掉，WebView 那侧拿到的是一张解不开的图。按响应的
+                             * content-type 分流：图片类一律走 base64。
+                             */
+                            val contentType = it.header("Content-Type") ?: ""
+                            val isImage = contentType.startsWith("image/")
                             val result = JSObject()
                             result.put("ok", it.isSuccessful)
                             result.put("status", it.code)
-                            result.put("bodyText", text)
+                            if (isImage) {
+                                val bytes = it.body?.bytes() ?: ByteArray(0)
+                                result.put("bodyBase64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+                                result.put("contentType", contentType)
+                            } else {
+                                val text = it.body?.string() ?: ""
+                                result.put("bodyText", text)
+                                result.put("contentType", contentType)
+                            }
                             /*
                              * 把 Set-Cookie 原样带回去，扫码登录要用。
                              *

@@ -87,9 +87,13 @@ const BilibiliMvLayer: React.FC = () => {
      * （用户听到的「放了两个声音」），画面也会互相抢同一个注入槽位。
      *
      * 所以按 id 判掉，不靠注释约定。
+     *
+     * 例外（B 站当背景来源）：B 站的歌也允许给它配画面 —— 但**只注入画面、不注入
+     * 声音**（声音是这条投稿自己的，播放器已经在放了，再换就是两个声音）。画面走
+     * 这一层，声音走 BilibiliVideoStage，两半各管各的。
      */
     const isOwnPost = isBilibiliSongId((displaySong as { id?: string } | null)?.id);
-    const active = enabled && isBilibiliAvailable() && !isOwnPost && current.title.length > 0;
+    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
 
     // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
     React.useEffect(() => {
@@ -187,7 +191,9 @@ const BilibiliMvLayer: React.FC = () => {
     }, [subtitles, setLyrics]);
 
     React.useEffect(() => {
-        if (!audioUrl) return undefined;
+        // B 站自己的歌声音已经在放这条投稿了（BilibiliVideoStage 管），再换音源就是
+        // 两个声音 —— 音源注入对它们跳过，只注入画面（见上面 active 的注释）。
+        if (isOwnPost || !audioUrl) return undefined;
         const previous = usePlaybackStore.getState().audioSrc;
         if (previous === audioUrl) return undefined;
         setAudioSrc(audioUrl);
@@ -196,7 +202,7 @@ const BilibiliMvLayer: React.FC = () => {
                 setAudioSrc(previous ?? '');
             }
         };
-    }, [audioUrl, setAudioSrc]);
+    }, [audioUrl, setAudioSrc, isOwnPost]);
 
     return null;
 };

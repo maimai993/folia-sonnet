@@ -447,6 +447,9 @@ class LocalAudioServer(context: Context) {
         if (files != null) {
             for (file in files) {
                 if (!file.isFile || file.name.endsWith(".part")) continue
+                // 命中计数 sidecar 不是缓存内容：不算大小也不算份数，不然设置页里
+                // 「已缓存歌曲 32 份」会数出一堆看不见的计数文件。
+                if (file.name.endsWith(".cnt")) continue
                 size += file.length()
                 count += 1
             }
@@ -853,6 +856,42 @@ class LocalAudioServer(context: Context) {
             writeStatus(output, 404, "Not Found")
             return
         }
+        /*
+         * 命中计数 +1（LFU 清退的依据）。
+         *
+         * 以前清退按 lastModified（写入时间）排：一听就过的歌和新缓存的老歌一样待遇，
+         * 常听的那首反而先被删。现在每次读都把计数 +1（`<名字>.cnt` 记着），超限清退时
+         * **先删计数最小的**——没人听的那份让位给天天听的那份；计数并列时再比时间，
+         * 同一批写进去的按老优先。
+         *
+         * 计数写在 sidecar 而不是改文件名：改名会让「按前缀找副本」那一层（mediaCacheFile）
+         * 找不到已经放着的份，播放到一半就 404。
+         *
+         * 节流：ExoPlayer 播放是 range 请求流，一首歌几百个请求；每个都写盘的话
+         * 计数文件被写成热点。10 秒一个 key 只 +1 一次 —— 计数表达「这份被放过」，
+         * 不需要精确到每个请求。
+         */
+        try {
+            val now = System.currentTimeMillis()
+            val counter = File(target.parentFile, target.name + ".cnt")
+            synchronized (hitCountGate) {
+                val last = hitCountAtMs[target.name]
+                if (last == null || now - last > 10_000L) {
+                    hitCountAtMs[target.name] = now
+                    if (hitCountAtMs.size > 256) {
+                        // 内存里的节流表别无限涨：丢掉一半最旧的（HashMap 无序，随便抽一半即可）。
+                        val drop = hitCountAtMs.keys.take(hitCountAtMs.size / 2)
+                        drop.forEach { hitCountAtMs.remove(it) }
+                    }
+                    val next = (counter.takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() ?: 0L) + 1L
+                    counter.writeText(next.toString())
+                    // lastModified 一起刷：计数并列时它是「谁更早」，也是兜底的清退依据。
+                    target.setLastModified(now)
+                }
+            }
+        } catch (_: Exception) {
+            // 计数写不上不影响播放 —— 清退退回按时间排，顶多不够聪明。
+        }
         writeResponse(
             output,
             requestParts,
@@ -1053,6 +1092,10 @@ class LocalAudioServer(context: Context) {
 
     private var lastPruneAtMs = 0L
 
+    /** 命中计数节流表：key → 上次 +1 的时间。见 streamMediaCacheFile 的注释。 */
+    private val hitCountAtMs = HashMap<String, Long>()
+    private val hitCountGate = Object()
+
     /**
      * 写完一份副本之后的收尾，只做一次遍历。
      *
@@ -1073,6 +1116,12 @@ class LocalAudioServer(context: Context) {
         for (file in files) {
             val name = file.name
             if (!file.isFile) continue
+            // 命中计数 sidecar：不是缓存内容，不计大小；它跟着自己的媒体文件走
+            // （媒体文件被清时才清它），同 base 写新格式时旧计数就该扔了 —— 顺手清掉。
+            if (name.endsWith(".cnt")) {
+                if (!name.endsWith(storedName + ".cnt") && name.startsWith(base + ".")) file.delete()
+                continue
+            }
             // 写一半留下的残骸，永远不会被读，顺手清掉。
             if (name.endsWith(".part")) {
                 file.delete()
@@ -1090,11 +1139,29 @@ class LocalAudioServer(context: Context) {
         val now = System.currentTimeMillis()
         if (now - lastPruneAtMs < PRUNE_INTERVAL_MS) return
         lastPruneAtMs = now
-        kept.sortWith { a, b -> a.lastModified().compareTo(b.lastModified()) }
-        for (file in kept) {
-            if (total <= limit) break
-            val size = file.length()
-            if (file.delete()) total -= size
+        /*
+         * 清退按「谁最不值得留」排：命中计数小的先走（没人听的副本让位），计数并列
+         * 再按时间旧优先。计数读不到（sidecar 缺了、坏了）当 0 —— 那种份最先被清，
+         * 也符合直觉：连计数都没有，说明它从来没被放过。
+         */
+        data class Victim(val file: File, val hits: Long)
+        val victims = kept.map { file ->
+            val hits = File(file.parentFile, file.name + ".cnt")
+                .takeIf { it.isFile }
+                ?.let { runCatching { it.readText().trim().toLongOrNull() }.getOrNull() }
+                ?: 0L
+            Victim(file, hits)
+        }
+        victims.sortedWith(
+            compareBy({ it.hits }, { it.file.lastModified() })
+        ).forEach { victim ->
+            if (total <= limit) return
+            val size = victim.file.length()
+            if (victim.file.delete()) {
+                total -= size
+                // 计数 sidecar 一起清：留着的话同一个 key 下次写进来会继承旧计数。
+                File(victim.file.parentFile, victim.file.name + ".cnt").delete()
+            }
         }
     }
 

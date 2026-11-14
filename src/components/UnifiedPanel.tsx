@@ -59,6 +59,9 @@ type UnifiedPanelPlaybackProps = {
     isGeneratingTheme: boolean;
     hasLyrics: boolean;
     canGenerateAITheme: boolean;
+    /** 「匹配 MV」：给当前这首歌重新找一条 B 站投稿画面（清缓存强制重搜），匹配后从头放。 */
+    onRematchMv: () => void;
+    isRematchingMv: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
     onBgModeChange: (mode: ThemeMode) => void;
@@ -173,6 +176,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         isGeneratingTheme,
         hasLyrics,
         canGenerateAITheme,
+        onRematchMv,
+        isRematchingMv,
         theme,
         onThemeChange,
         onBgModeChange,
@@ -381,6 +386,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     onGenerateAITheme={onGenerateAITheme}
                     isGeneratingTheme={isGeneratingTheme}
                     canGenerateAITheme={canGenerateAITheme}
+                    onRematchMv={onRematchMv}
+                    isRematchingMv={isRematchingMv}
                     theme={theme}
                     onThemeChange={onThemeChange}
                     onBgModeChange={onBgModeChange}

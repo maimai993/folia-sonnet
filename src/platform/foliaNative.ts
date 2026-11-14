@@ -703,7 +703,7 @@ interface FoliaBilibiliPlugin {
         headers?: Record<string, string>;
         /** 停在第一跳不跟随 3xx：扫码登录换 cookie 要读 302 自己的 Set-Cookie。 */
         noRedirect?: boolean;
-    }): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }>;
+    }): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }>;
     /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
     authStatus(): Promise<{ signedIn: boolean; uid: string }>;
     /**
@@ -761,7 +761,7 @@ export const requestBilibiliNative = async (
     headers?: Record<string, string>,
     /** 停在第一跳不跟随 3xx：扫码登录那一步要读 302 自己的 Set-Cookie。 */
     noRedirect?: boolean,
-): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }> => {
+): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }> => {
     if (!isBilibiliNativeAvailable()) {
         return { ok: false, status: 0, bodyText: '' };
     }

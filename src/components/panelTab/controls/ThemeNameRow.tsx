@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowUpDown, Check, Moon, RefreshCw, Sparkle, Sparkles, Sun } from 'lucide-react';
+import { ArrowUpDown, Check, Clapperboard, Moon, RefreshCw, Sparkle, Sparkles, Sun } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '../../../types';
 import type { ThemeSourceModel } from '../../../hooks/themeControllerState';
@@ -21,6 +21,9 @@ interface ThemeNameRowProps {
     onGenerateAITheme: () => void;
     isGeneratingTheme: boolean;
     canGenerateAITheme: boolean;
+    /** 「匹配 MV」：给正在放的歌重找一条 B 站投稿画面。 */
+    onRematchMv: () => void;
+    isRematchingMv: boolean;
     isDaylight: boolean;
     onToggleDaylight: () => void;
 }
@@ -33,6 +36,8 @@ const ThemeNameRow: React.FC<ThemeNameRowProps> = ({
     onGenerateAITheme,
     isGeneratingTheme,
     canGenerateAITheme,
+    onRematchMv,
+    isRematchingMv,
     isDaylight,
     onToggleDaylight,
 }) => {
@@ -81,6 +86,18 @@ const ThemeNameRow: React.FC<ThemeNameRowProps> = ({
                     disabled={isGeneratingTheme || !canGenerateAITheme}
                 >
                     {isGeneratingTheme ? t('ui.generatingTheme') : t('ui.generateAITheme')}
+                </Button>
+                {/*
+                    「匹配 MV」：对当前这首歌重新搜一条 B 站投稿当画面（强制清缓存），
+                    匹配到之后播放器从头放。放在生成 AI 主题旁边 —— 两个都是「给这首歌
+                    换点东西」的动作。
+                */}
+                <Button
+                    icon={isRematchingMv ? RefreshCw : Clapperboard}
+                    onClick={onRematchMv}
+                    disabled={isRematchingMv}
+                >
+                    {isRematchingMv ? t('ui.rematchingMv') : t('ui.rematchMv')}
                 </Button>
                 {/* Opens its width at the row's end when there is a theme to sync. */}
                 <span

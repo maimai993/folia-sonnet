@@ -690,14 +690,33 @@ export const omni = {
         /*
          * 视频站那几档：番剧和电影共用一个实现（按页签选 kind），用户返回的是
          * 「这个人的投稿」当歌单。它们都由平台自己声明，音乐平台走不到这里。
+         *
+         * 每一档都先确认实现真的在：声明过的档位和实现之间偶尔会脱节（比如某个
+         * 平台声明了歌单搜索但方法没写），那种时候这一档回空 —— **绝不能让它抛**。
+         * 以前这里直接 `search.searchPlaylists!()`，一个 TypeError 就把整次
+         * submitSearch 带崩，连视频那档的结果一起没掉（用户看到的「搜索直接失败」）。
          */
-        const found = kind === 'album'
-            ? await search.searchAlbums!(query, page.limit, page.offset)
-            : kind === 'bangumi' || kind === 'movie'
-                ? await search.searchSeasons!(query, kind, page.limit, page.offset)
-                : kind === 'user'
-                    ? await search.searchPeople!(query, page.limit, page.offset)
-                    : await search.searchPlaylists!(query, page.limit, page.offset);
+        const runKind = async (): Promise<OmniPage<OmniCollection>> => {
+            if (kind === 'album') {
+                return search.searchAlbums
+                    ? search.searchAlbums(query, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            if (kind === 'bangumi' || kind === 'movie') {
+                return search.searchSeasons
+                    ? search.searchSeasons(query, kind, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            if (kind === 'user') {
+                return search.searchPeople
+                    ? search.searchPeople(query, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            return search.searchPlaylists
+                ? search.searchPlaylists(query, page.limit, page.offset)
+                : emptyPage(page.offset);
+        };
+        const found = await runKind();
         // A provider names its own collections: one that answers with another's would open nowhere.
         return { ...found, items: found.items.filter(collection => collection.providerId === providerId) };
     },

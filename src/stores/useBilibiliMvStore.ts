@@ -33,6 +33,15 @@ const RESOLUTION_TTL_MS = 30 * 60 * 1000;
 /** 开关落盘的键：用户开了 MV 背景，下次进播放页还是开着。 */
 const ENABLED_STORAGE_KEY = 'bilibili_mv_enabled';
 
+/*
+ * 后台不匹配。
+ *
+ * 熄屏 / 切到后台时 WebView 的网络与定时器都被系统掐着：匹配跑到一半会停在半路，
+ * 回到前台拿到的是一条没下完的地址 —— 画面定格在那儿、声音按播放器自己的时钟走，
+ * 用户看到的就是「画面和音频对不上」。所以后台一律不解析（这一单推迟到回前台）；
+ * visibilitychange 回到 visible 时，把当前歌强刷一遍 —— 旧的那份缓存视为过期。
+ */
+
 /** 「让 AI 判断哪条是 MV」落盘的键。默认开：配了 AI 就该用它。 */
 const USE_AI_MATCH_STORAGE_KEY = 'bilibili_mv_use_ai';
 
@@ -62,6 +71,12 @@ const writeStoredEnabled = (enabled: boolean) => {
         // 存不下就只改这一次的状态，不影响用。
     }
 };
+
+/** 后台推迟的那一单：回到前台时对它重新解析（强刷 —— 旧缓存视为过期）。 */
+let pendingForegroundKey: string | null = null;
+
+/** 后台推迟的那一单的参数，回前台原样重放。 */
+let pendingForegroundRequest: { title: string; artist: string; durationSec: number } | null = null;
 
 interface CachedResolution extends BilibiliMvResolution {
     /** 解析完成的时间；resolving 时为 0。 */
@@ -129,6 +144,13 @@ interface BilibiliMvActions {
     invalidate: (songKey: string) => void;
     /** 清空全部缓存（设置里「重新匹配」用）。 */
     clear: () => void;
+    /**
+     * 用户从搜索结果里手动挑一条 BV 钉给这首歌。
+     *
+     * 搜到的那条直接解析、打开画面；钉上之后这首歌不再自动匹配（自动匹配会在下一次
+     * 解析时把手动的盖掉）。不想要了就点「重新匹配」—— invalidate 会把钉住的清掉。
+     */
+    pinBv: (songKey: string, bvid: string) => Promise<void>;
 }
 
 export type BilibiliMvStore = BilibiliMvState & BilibiliMvActions;
@@ -223,6 +245,13 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
      */
     resolveForSong: async (songKey, title, artist, durationSec = 0, force = false) => {
         if (!songKey) return;
+        // 后台不匹配：熄屏 / 切后台时请求会停在半路，拿到的是一条没下完的地址
+        // （画面定格、声音照走 —— 用户看到的「音画不同步」）。记下这首歌，回前台重试。
+        if (typeof document !== 'undefined' && document.hidden) {
+            pendingForegroundKey = songKey;
+            pendingForegroundRequest = { title, artist, durationSec };
+            return;
+        }
         const state = get();
         // force 是「重新匹配」，它要能打断正在飞的那一单 —— 否则按钮看起来没反应。
         if (state.inflight[songKey] && !force) return;
@@ -347,6 +376,12 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
 
     prefetchNext: (songKey, title, artist, durationSec = 0) => {
         if (!songKey) return;
+        // 后台不预取：请求会停在半路（见 resolveForSong 里的注释），回前台重放那一单。
+        if (typeof document !== 'undefined' && document.hidden) {
+            pendingForegroundKey = songKey;
+            pendingForegroundRequest = { title, artist, durationSec };
+            return;
+        }
         const state = get();
         // 开关没开就不预取：用户根本不会看到画面，白花流量又占搜索接口的额度。
         if (!state.enabled) return;
@@ -368,7 +403,97 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
     },
 
     clear: () => set({ bySongKey: {}, inflight: {} }),
+
+    pinBv: async (songKey, bvid) => {
+        if (!songKey || !bvid.trim()) return;
+        const clean = bvid.trim();
+        if (!isBilibiliAvailable()) return;
+        set(current => ({
+            inflight: { ...current.inflight, [songKey]: true },
+            bySongKey: {
+                ...current.bySongKey,
+                [songKey]: {
+                    state: 'resolving',
+                    songKey,
+                    stream: null,
+                    keyword: clean,
+                    manual: true,
+                    resolvedAt: 0,
+                },
+            },
+        }));
+        const finish = (resolution: Omit<CachedResolution, 'songKey' | 'resolvedAt'>) => {
+            set(current => {
+                const { [songKey]: _gone, ...rest } = current.inflight;
+                return {
+                    inflight: rest,
+                    bySongKey: {
+                        ...current.bySongKey,
+                        [songKey]: { ...resolution, songKey, resolvedAt: Date.now() },
+                    },
+                };
+            });
+        };
+        try {
+            // 打开画面是「用户点了这条就该看到」的意思：这里顺手把开关写上（与注释
+            // 里 pinBv 的语义一致 —— 不该还要再回设置里开一次）。
+            if (!get().enabled) get().setEnabled(true);
+            const info = await fetchBilibiliVideoInfo(clean);
+            const track = await fetchBilibiliPlayUrl(clean, info.cid);
+            const streamHeaders = {
+                Referer: 'https://www.bilibili.com/',
+                Origin: 'https://www.bilibili.com',
+            };
+            const [localVideo, localAudio] = await Promise.all([
+                proxyBilibiliStream(track.urls.length > 0 ? track.urls : [track.url], streamHeaders),
+                track.audioUrls.length > 0 || track.audioUrl
+                    ? proxyBilibiliStream(track.audioUrls.length > 0 ? track.audioUrls : [track.audioUrl], streamHeaders)
+                    : Promise.resolve(null),
+            ]);
+            const stream: BilibiliMvStream = {
+                bvid: clean,
+                cid: info.cid,
+                title: info.title,
+                author: info.author,
+                durationSec: info.durationSec,
+                videoUrl: localVideo ?? track.url,
+                audioUrl: localAudio ?? (track.audioUrl || track.url),
+                quality: track.height,
+                subtitles: await resolveMvSubtitles(track.subtitles, clean),
+            };
+            void warmStreamCache(stream.videoUrl);
+            if (stream.audioUrl) void warmStreamCache(stream.audioUrl);
+            finish({ state: 'ready', stream, keyword: clean, manual: true });
+        } catch (error) {
+            const message = error instanceof BilibiliApiError
+                ? error.message
+                : error instanceof Error
+                    ? error.message
+                    : String(error);
+            finish({ state: 'error', stream: null, keyword: clean, manual: true, message });
+        }
+    },
 }));
+
+/*
+ * 回到前台：后台攒下的那一单现在才解析。
+ *
+ * 放在 store 建好之后 —— 监听里要读 get()。旧的那份缓存因 force 清掉：后台期间
+ * 直链多半已经过期，重放一次才能拿到能用的地址（画面不再定格在熄屏前那一帧）。
+ */
+if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) return;
+        const songKey = pendingForegroundKey;
+        const request = pendingForegroundRequest;
+        pendingForegroundKey = null;
+        pendingForegroundRequest = null;
+        if (!songKey || !request) return;
+        const current = useBilibiliMvStore.getState();
+        if (!current.enabled) return;
+        void current.resolveForSong(songKey, request.title, request.artist, request.durationSec, true);
+    });
+}
 
 /** 给非 React 的地方读当前解析结果。 */
 export const readBilibiliMv = (songKey: string) => useBilibiliMvStore.getState().bySongKey[songKey];

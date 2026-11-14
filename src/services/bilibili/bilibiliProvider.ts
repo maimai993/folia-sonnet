@@ -131,7 +131,11 @@ export const bilibiliProvider: OnlineMusicProvider = {
         // 推荐和取流都因此拿到大会员画质。
         auth: true,
         userLibrary: true,
-        playlists: false,
+        // 收藏夹 / 稍后再看 / 投稿这些歌单都实现了（library.getUserPlaylists /
+        // catalog.getPlaylistTracks）—— 这个开关以前是 false（那时还没写），
+        // 首页的「歌单」页签因此一直被禁用（canUsePlaylists = userLibrary &&
+        // playlists），用户看到的就是一排灰页签点不动。
+        playlists: true,
         albums: true,
         // UP 主按歌手注册：歌手页、封面上的歌手、搜索跳转都用已有的那一套。
         artists: true,
@@ -540,10 +544,26 @@ export const bilibiliProvider: OnlineMusicProvider = {
         async getAlbumDetail(id) {
             const seasonId = Number(id);
             if (!Number.isFinite(seasonId)) return null;
+            /*
+             * 先问搜索时记下的那份索引（有标题、封面、第一集），索引里没有就**直接
+             * 问分集接口**。以前只认索引：探索页点进来的季从没被搜索过，索引里自然
+             * 没有 —— 表现就是「点进去专辑是空的」。分集接口反正总要调，它回的分集
+             * 同样能拼出这一季的名字和封面。
+             */
             const seasons = await listBangumiSeasons('bangumi').catch(() => []);
-            const hit = seasons.find(season => season.seasonId === seasonId);
-            if (!hit) return null;
-            return seasonAsCollection(hit);
+            const hit = seasons.find(season => season.seasonId === seasonId)
+                ?? seasonsById.get(seasonId)
+                ?? null;
+            if (hit) return seasonAsCollection(hit);
+            // 索引里没有：分集接口就是「这一季存不存在」的裁决。
+            const episodes = await listBangumiEpisodes(seasonId, null).catch(() => []);
+            if (episodes.length === 0) return null;
+            return {
+                providerId: 'bilibili',
+                id: seasonId,
+                name: episodes[0].title || `Season ${seasonId}`,
+                type: 'album' as const,
+            };
         },
 
         /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */

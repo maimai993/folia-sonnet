@@ -5,6 +5,7 @@ import type { ReplayGainMode } from '../../types';
 import LyricCalibrationControl from './LyricCalibrationControl';
 import LyricFileButton from './LyricFileButton';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
+import MvSourceRow from './MvSourceRow';
 import ReplayGainControl, { type ReplayGainValues } from './ReplayGainControl';
 import { FactList, type Fact } from './shell/FactList';
 import { GroupLine } from './shell/GroupLine';
@@ -41,6 +42,8 @@ type SourceTabProps<K extends string> = {
     /** What is known about the song's file or its copy on a server. */
     facts?: ReadonlyArray<Fact>;
     isDaylight: boolean;
+    /** 正在放的歌的原对象：视频来源那一行（MV 背景）读它的名字与歌手。 */
+    rawSong?: unknown;
 };
 
 export const SourceTab = <K extends string>({
@@ -57,11 +60,13 @@ export const SourceTab = <K extends string>({
     onLyricTimelineOffsetChange,
     facts,
     isDaylight,
+    rawSong,
 }: SourceTabProps<K>): React.ReactElement => {
     const { t } = useTranslation();
 
     return (
         <div>
+            <MvSourceRow song={rawSong ?? null} />
             <PanelRow label={t('localMusic.lyrics')}>
                 {onClearLyrics && (
                     <PanelIconButton size="s" label={t('localMusic.delete')} onClick={onClearLyrics}>
