@@ -10,7 +10,13 @@ import {
 } from './binaryAssetStore';
 import { resolveProxiedUrl } from './proxiedUrl';
 
-interface StoredCoverDescriptor extends BinaryAssetWriteResult { }
+interface StoredCoverDescriptor extends BinaryAssetWriteResult {
+    /**
+     * 这份字节是从哪个地址下的（#323）。`loadCachedOrFetchCover` 只按 key 命中：本地歌重新匹配到
+     * 另一张在线封面时 key 不变，没有它就会一直给旧图。没记地址的旧条目照旧命中。
+     */
+    sourceUrl?: string;
+}
 
 const isStoredCoverDescriptor = (value: unknown): value is StoredCoverDescriptor => {
     if (!value || typeof value !== 'object') return false;
@@ -50,8 +56,15 @@ export const fetchCoverBlob = async (coverUrl: string): Promise<Blob> => {
     return await response.blob();
 };
 
-export async function getCachedCoverUrl(cacheKey: string): Promise<string | null> {
+// expectedSourceUrl：只要从这个地址下的那份；记着别的地址的条目当作没缓存（#323），没记地址的旧条目照旧算。
+export async function getCachedCoverUrl(cacheKey: string, expectedSourceUrl?: string | null): Promise<string | null> {
     const stored = await getFromCache<unknown>(cacheKey);
+    if (expectedSourceUrl && isStoredCoverDescriptor(stored) && stored.sourceUrl && stored.sourceUrl !== expectedSourceUrl) return null;
+    return await coverUrlFromStored(cacheKey, stored);
+}
+
+// 把已经读出来的那一条缓存换成可显示的 URL；读一次就够，调用方先看过描述再交过来。
+const coverUrlFromStored = async (cacheKey: string, stored: unknown): Promise<string | null> => {
     if (isBlob(stored)) {
         const descriptor = await writeCoverAsset(cacheKey, stored).catch(() => null);
         if (!descriptor) {
@@ -73,7 +86,7 @@ export async function getCachedCoverUrl(cacheKey: string): Promise<string | null
         return null;
     }
     return createSafeObjectUrl(cachedCover);
-}
+};
 
 /**
  * Whether a cover is already stored, without minting an object URL to find out.
@@ -88,18 +101,35 @@ export async function hasCachedCover(cacheKey: string): Promise<boolean> {
     return isBlob(stored) || isStoredCoverDescriptor(stored);
 }
 
-export async function loadCachedOrFetchCover(cacheKey: string, coverUrl?: string | null): Promise<string | null> {
+/**
+ * `options.coverChanged`：调用方知道这首的封面刚换过地址（自动匹配换了在线封面）。没记地址的旧条目
+ * 认不出自己是哪张图，这时也一并重取，否则会一直给换之前那张。
+ */
+export async function loadCachedOrFetchCover(
+    cacheKey: string,
+    coverUrl?: string | null,
+    options: { coverChanged?: boolean } = {},
+): Promise<string | null> {
     if (!coverUrl) return null;
 
     try {
-        const cachedCoverUrl = await getCachedCoverUrl(cacheKey);
-        if (cachedCoverUrl) {
-            return cachedCoverUrl;
+        // 缓存里那份是从另一个地址下的：封面已经换了，不能再给它（#323）。
+        const stored = await getFromCache<unknown>(cacheKey);
+        const storedFor = isStoredCoverDescriptor(stored) ? stored.sourceUrl : undefined;
+        const ofAnotherCover = storedFor ? storedFor !== coverUrl : Boolean(options.coverChanged && stored !== null);
+        if (ofAnotherCover) {
+            console.log('[CoverCache] Cached cover is of another address, fetching again:', cacheKey);
+            await removeCachedCover(cacheKey);
+        } else {
+            const cachedCoverUrl = await coverUrlFromStored(cacheKey, stored);
+            if (cachedCoverUrl) {
+                return cachedCoverUrl;
+            }
         }
 
         const coverBlob = await fetchCoverBlob(coverUrl);
         const descriptor = await writeCoverAsset(cacheKey, coverBlob).catch(() => null);
-        if (descriptor) await saveToCache(cacheKey, descriptor);
+        if (descriptor) await saveToCache(cacheKey, { ...descriptor, sourceUrl: coverUrl });
         return createSafeObjectUrl(coverBlob) || coverUrl;
     } catch (error) {
         console.warn('Failed to cache cover:', error);
@@ -123,7 +153,7 @@ export async function cacheLocalSongOnlineCover(songId: string, coverUrl: string
     try {
         const descriptor = await writeCoverAsset(cacheKey, await fetchCoverBlob(coverUrl));
         if (!descriptor) return false;
-        await saveToCache(cacheKey, descriptor);
+        await saveToCache(cacheKey, { ...descriptor, sourceUrl: coverUrl });
         return true;
     } catch (error) {
         console.warn('[LocalMusic] Failed to cache matched cover:', error);

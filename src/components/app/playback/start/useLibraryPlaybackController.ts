@@ -848,7 +848,8 @@ export function useLibraryPlaybackController({
                 supplyLyricsAfterEmptyLoad();
 
                 if (updatedMeta.coverUrl && updatedMeta.coverUrl !== initialMeta.coverUrl) {
-                    loadCachedOrFetchCover(`cover_local_${updatedLocalSong.id}`, updatedMeta.coverUrl).then((resolvedCoverUrl) => {
+                    // 匹配刚把封面换成另一张：缓存里那份（尤其没记地址的旧条目）是换之前的图（#323）。
+                    loadCachedOrFetchCover(`cover_local_${updatedLocalSong.id}`, updatedMeta.coverUrl, { coverChanged: true }).then((resolvedCoverUrl) => {
                         if (askedSongKeyRef.current === initialSongKey) {
                             setManagedCachedCoverUrl(resolvedCoverUrl);
                         }
