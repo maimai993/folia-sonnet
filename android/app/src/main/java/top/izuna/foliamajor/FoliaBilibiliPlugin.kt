@@ -217,11 +217,20 @@ class FoliaBilibiliPlugin : Plugin() {
 
         val builder = Request.Builder()
             .url(url)
-            .get()
             .header("User-Agent", headerOf("User-Agent", USER_AGENT))
             .header("Referer", headerOf("Referer", REFERER))
             .header("Origin", headerOf("Origin", REFERER.trimEnd('/')))
             .header("Accept", "application/json, text/plain, */*")
+
+        /*
+         * 方法 / 请求体：默认 GET。
+         *
+         * 只有几个「写」接口需要 POST（改签名、改资料），它们一律是表单编码 + csrf，
+         * 走的是和 GET 同一个 cookie 罐。所以这里只多认 method 与 form 两个字段，
+         * 不另开一个可上传任意内容的通道。
+         */
+        val method = call.getString("method", "GET")?.uppercase() ?: "GET"
+        val form = call.getObject("form", null)
 
         /*
          * 带上 CookieManager 里的 bilibili cookie。
@@ -253,6 +262,20 @@ class FoliaBilibiliPlugin : Plugin() {
                     builder.header(key, value)
                 }
             }
+        }
+
+        // 请求体：只有 POST / PUT 才有，表单编码（接口要的就是 x-www-form-urlencoded）。
+        if (method == "POST" || method == "PUT") {
+            val formBody = okhttp3.FormBody.Builder()
+            if (form != null) {
+                for (key in form.keys()) {
+                    val value = form.getString(key)
+                    if (!key.isNullOrEmpty() && value != null) formBody.add(key, value)
+                }
+            }
+            builder.method(method, formBody.build())
+        } else {
+            builder.get()
         }
 
         // 等待交给 OkHttp 的线程池，别占着桥线程（见 FoliaNativePlugin 那条教训）。
@@ -320,6 +343,17 @@ class FoliaBilibiliPlugin : Plugin() {
      *
      * 只回「有没有登录」和 uid，**不回 cookie 本身** —— 渲染层不需要，也不该碰。
      */
+    /**
+     * 读 csrf（bili_jct）：写接口（改签名 / 改资料）都要把它当表单字段带上。
+     *
+     * 只交出这一个值 —— 它是公开的双重提交令牌，不是凭据；SESSDATA 那几个字
+     * 仍然只在原生侧，渲染层永远拿不到。
+     */
+    @PluginMethod
+    fun csrfToken(call: PluginCall) {
+        call.resolve(JSObject().put("csrf", cookieValue(currentCookie(), "bili_jct") ?: ""))
+    }
+
     @PluginMethod
     fun authStatus(call: PluginCall) {
         val cookie = currentCookie()

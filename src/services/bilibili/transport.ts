@@ -68,7 +68,11 @@ export const requestBilibiliUrl = async (
     } = {},
 ): Promise<BilibiliTransportResponse> => {
     if (isBilibiliNativeAvailable()) {
-        return requestBilibiliNative(url, init.headers, init.noRedirect) as Promise<BilibiliBridgeResponse>;
+        // POST 走表单：接口要的是 x-www-form-urlencoded，传入的 body 就是那张表。
+        const write = init.method === 'POST' && init.body
+            ? { method: 'POST' as const, form: Object.fromEntries(new URLSearchParams(init.body)) }
+            : undefined;
+        return requestBilibiliNative(url, init.headers, init.noRedirect, write) as Promise<BilibiliBridgeResponse>;
     }
 
     // 没有原生桥：试着直连。失败时把话说清楚。

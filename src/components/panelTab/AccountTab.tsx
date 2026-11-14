@@ -20,6 +20,7 @@ import { isCapacitorAndroid } from '../../platform/runtime';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { PlaybackSignalPathButton } from '../hifi/PlaybackSignalPathButton';
+import BilibiliAccountRows from './BilibiliAccountRows';
 import LanCastControl from '../lan-cast/LanCastControl';
 
 // src/components/panelTab/AccountTab.tsx
@@ -207,6 +208,12 @@ const AccountTab: React.FC<AccountTabProps> = ({
             {/* 投送（DLNA 音响）入口。放在音质页、跟着信号链路 —— 两者都是「这首歌最后怎么出声」
                 的事，而播放页上原来那颗悬浮按钮会压住「正在播放」提示卡（issue #279）。 */}
             <LanCastControl variant="tile" isDaylight={isDaylight} />
+
+            {/* B 站特有的那几行：关注 / 粉丝 / 签名。只在登录着、且当前平台就是它时挂出来 ——
+                别的平台没有「关注」这种关系，摆一行点了没反应的按钮比不摆更糟。 */}
+            {activeUser && activeProviderId === 'bilibili' && (
+                <BilibiliAccountRows providerId={activeProviderId} />
+            )}
 
             {activeUser && (
                 <div className="flex px-1 py-2">

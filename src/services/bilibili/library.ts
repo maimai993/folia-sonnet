@@ -345,30 +345,21 @@ export const searchBilibiliUsers = async (keyword: string): Promise<BilibiliUser
     if (!isBilibiliAvailable()) return [];
     const trimmed = keyword.trim();
     if (!trimmed) return [];
+    /*
+     * 和视频搜索同一份综合结果（search.ts）：bili_user 那一块就是人。
+     * 之前单独签一次 `wbi/search/type?search_type=bili_user`，设备上常年 -412，
+     * 表现就是「用户那一档永远空」。综合搜索不验签名，一次带回全部分类。
+     */
     try {
-        const url = await signedUrl('/x/web-interface/wbi/search/type', {
-            search_type: 'bili_user',
-            keyword: trimmed,
-            page: 1,
-        });
-        const payload = unwrap(await fetchJsonWithHeaders<{
-            result?: Array<{
-                mid?: number;
-                uname?: string;
-                upic?: string;
-                usign?: string;
-                videos?: number;
-            }>;
-        }>(url, SEARCH_HEADERS));
-        return (payload.result ?? [])
-            .filter(item => typeof item.mid === 'number')
-            .map(item => ({
-                mid: item.mid as number,
-                name: plain(item.uname),
-                avatarUrl: https(item.upic),
-                sign: plain(item.usign),
-                videoCount: item.videos ?? 0,
-            }));
+        const browse = await import('./search');
+        const rows = await browse.searchUsersOf(trimmed);
+        return rows.map(row => ({
+            mid: row.mid,
+            name: row.name,
+            avatarUrl: row.avatarUrl,
+            sign: row.sign,
+            videoCount: row.videoCount,
+        }));
     } catch {
         return [];
     }

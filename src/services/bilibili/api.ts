@@ -151,52 +151,6 @@ const normalizeHit = (row: Record<string, unknown>): BilibiliSearchHit[] => {
     }];
 };
 
-interface AllV2Block {
-    result_type?: string;
-    data?: Record<string, unknown>[];
-}
-
-/** 从综合搜索的返回里把视频块抽出来（搜索的主路被拒时走这条备用路）。 */
-const hitsFromAllV2 = (payload: { result?: AllV2Block[] }): BilibiliSearchHit[] => {
-    const blocks = Array.isArray(payload.result) ? payload.result : [];
-    const video = blocks.find(block => block.result_type === 'video');
-    if (!video || !Array.isArray(video.data)) return [];
-    return video.data.flatMap(normalizeHit);
-};
-
-const searchOnce = async (keyword: string, page: number): Promise<BilibiliSearchHit[]> => {
-    try {
-        const url = await signedUrl('/x/web-interface/wbi/search/type', {
-            search_type: 'video',
-            keyword,
-            page,
-            page_size: 30,
-        });
-        const envelope = await fetchJson<{ result?: unknown[] }>(url);
-        const result = unwrap(envelope).result;
-        if (!Array.isArray(result)) return [];
-        return result.flatMap((item): BilibiliSearchHit[] => normalizeHit(item as Record<string, unknown>));
-    } catch (error) {
-        /*
-         * 搜索和取流一样有两条路：wbi 签名版和综合搜索版。
-         *
-         * wbi 那条对签名挑得很 —— 设备上实测 -412「request was banned」，签名
-         * 算得再对也过不去。综合搜索（search/all/v2）不验签名，一次就把视频块
-         * 连同番剧、用户等一起给回来，抽出 video 那一块就是同一份结果。
-         *
-         * 综合搜索没有分页参数（一页就是一批），所以备用路只在第一页走，后面的
-         * 页直接空着 —— 大多数搜索用不满一页，先保住「能搜出来」。
-         */
-        if (page !== 1) return [];
-        console.warn('[Bilibili] wbi search rejected, falling back to the all/v2 endpoint', error instanceof BilibiliApiError ? error.code : error);
-        const envelope = await fetchJsonWithHeaders<{ result?: AllV2Block[] }>(
-            `${API_BASE}/x/web-interface/search/all/v2?keyword=${encodeURIComponent(keyword)}&page=1`,
-            { Referer: 'https://search.bilibili.com/', Origin: 'https://search.bilibili.com' },
-        );
-        return hitsFromAllV2(unwrap(envelope));
-    }
-};
-
 /** 搜一批投稿。失败时抛出 BilibiliApiError。 */
 export const searchBilibiliVideos = async (
     keyword: string,
@@ -207,12 +161,17 @@ export const searchBilibiliVideos = async (
     }
     const trimmed = keyword.trim();
     if (!trimmed) return [];
+    /*
+     * 走统一搜索（search.ts）：综合搜索一次带回全部分类，投稿就是其中的 video 块。
+     * 以前这里是「先赌签名路、挂了再退综合路」—— 设备上签名路常年 -412，等于每次都
+     * 白跑一趟再来。现在直连稳的那条。
+     */
+    const browse = await import('./search');
     const all: BilibiliSearchHit[] = [];
     for (let page = 1; page <= pages; page += 1) {
-        const hits = await searchOnce(trimmed, page);
-        all.push(...hits);
-        // 这一页不够 30 条说明没有下一页了，别再白跑一次。
-        if (hits.length < 30) break;
+        const items = await browse.searchVideosOf(trimmed, page);
+        all.push(...items);
+        if (items.length < 30) break;
     }
     return all;
 };

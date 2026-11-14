@@ -703,6 +703,9 @@ interface FoliaBilibiliPlugin {
         headers?: Record<string, string>;
         /** 停在第一跳不跟随 3xx：扫码登录换 cookie 要读 302 自己的 Set-Cookie。 */
         noRedirect?: boolean;
+        /** 写接口（改签名等）：表单编码的 POST。 */
+        method?: 'POST';
+        form?: Record<string, string>;
     }): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }>;
     /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
     authStatus(): Promise<{ signedIn: boolean; uid: string }>;
@@ -721,6 +724,8 @@ interface FoliaBilibiliPlugin {
      * 之后所有 request 都会自动带上 —— 插件自己不发登录请求，也不持有凭据。
      */
     setCookies(options: { cookie: string }): Promise<{ ok: boolean }>;
+    /** csrf（bili_jct）：写接口的表单字段，不是凭据。 */
+    csrfToken(): Promise<{ csrf: string }>;
     clearCookies(): Promise<{ ok: boolean }>;
 }
 
@@ -761,12 +766,19 @@ export const requestBilibiliNative = async (
     headers?: Record<string, string>,
     /** 停在第一跳不跟随 3xx：扫码登录那一步要读 302 自己的 Set-Cookie。 */
     noRedirect?: boolean,
+    /** 写接口（改签名等）用的方法 / 表单。不传就是 GET。 */
+    write?: { method: 'POST'; form: Record<string, string> },
 ): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }> => {
     if (!isBilibiliNativeAvailable()) {
         return { ok: false, status: 0, bodyText: '' };
     }
     try {
-        const result = await FoliaBilibili.request({ url, headers, noRedirect: noRedirect === true });
+        const result = await FoliaBilibili.request({
+            url,
+            headers,
+            noRedirect: noRedirect === true,
+            ...(write ? { method: write.method, form: write.form } : {}),
+        });
         if (result && typeof result === 'object' && 'status' in result) return result;
         return { ok: false, status: 0, bodyText: '' };
     } catch (error) {
@@ -785,6 +797,18 @@ export const readBilibiliAuthNative = async (): Promise<{ signedIn: boolean; uid
     } catch (error) {
         console.warn('[FoliaBilibili] authStatus failed', error);
         return { signedIn: false, uid: '' };
+    }
+};
+
+/** csrf（bili_jct）：写接口（改签名等）的表单字段。没登录就是空串。 */
+export const readBilibiliCsrfNative = async (): Promise<string> => {
+    if (!isBilibiliNativeAvailable()) return '';
+    try {
+        const bridge = FoliaBilibili as unknown as { csrfToken?: () => Promise<{ csrf?: string }> };
+        const result = await bridge.csrfToken?.();
+        return result?.csrf ?? '';
+    } catch {
+        return '';
     }
 };
 
