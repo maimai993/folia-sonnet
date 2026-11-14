@@ -85,15 +85,16 @@ object BeatThisRunner {
         val environment = env ?: OrtEnvironment.getEnvironment().also { env = it }
         val options = OrtSession.SessionOptions().apply {
             /*
-             * 线程数取一半核数，但**封顶 3**。
+             * 固定 2 个推理线程。
              *
-             * 原来八核机就是四线程：节拍分析是整曲一次跑几十秒的活，
-             * 四个 ONNX 工作线程一起抢 CPU，别的 App 与音频线程只能捡剩下的 ——
-             * 用户看到的是「一分析手机就卡」。少一个线程，推理慢约 20%，
-             * 但后台播放、滚动、通知栏都顺畅得多；这是用户能直接感觉到的差别。
-             * 下限仍是 2：单线程跑 8 分钟的注意力网络要等到人以为程序挂了。
+             * 八核机原来开 4 个、后来 3 个，手机上仍然「一分析就烫、就卡」——
+             * 因为手机不是把核分完就没事了，功耗墙一到整机降频，连音频都受影响。
+             * 2 个线程的推理慢约三成，但配合首段（45 秒先出）用户感觉不到：
+             * 开头一两秒就有拍点，后面整曲在后台慢慢补齐。
+             * 双核机给 1 个，四核及以上给 2 个。
              */
-            setIntraOpNumThreads((Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 3))
+            val cores = Runtime.getRuntime().availableProcessors()
+            setIntraOpNumThreads(if (cores >= 4) 2 else 1)
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         }
         val loaded = environment.createSession(modelFile.absolutePath, options)
@@ -117,9 +118,22 @@ object BeatThisRunner {
      * `cancelled` 在每一块之前问一次：切歌、退出时正在跑的这一次不该继续占着单线程队列，
      * 后面的分析全会被它堵住（界面上就是「智能动感一直没反应」）。
      */
-    fun analyze(mono: FloatArray, cancelled: (() -> Boolean)? = null): Result {
+    fun analyze(
+        mono: FloatArray,
+        cancelled: (() -> Boolean)? = null,
+        /** 阶段 + 这一段的进度（0..1）。只给界面看，不影响结果。 */
+        onProgress: ((stage: String, percent: Float) -> Unit)? = null,
+        /**
+         * 算完一块就交一次「到这里为止」的拍点表。
+         *
+         * 为什么不只在最后交一次：四分钟的歌整曲推理在手机上要几十秒，
+         * 而用户按下播放后第一块（约 41 秒音频）出来就能让特效动起来 ——
+         * 剩下的算完再替换，表只会变长，不会跳。
+         */
+        onChunk: ((beats: List<Beat>, upToSec: Double) -> Unit)? = null,
+    ): Result {
         val model = session ?: error("beat_this 还没载入")
-        val mel = melSpectrogram(mono)
+        val mel = melSpectrogram(mono) { done -> onProgress?.invoke("mel", done) }
         if (mel.frames <= 0) return Result(emptyList(), FloatArray(0), FPS)
 
         val beatLogits = FloatArray(mel.frames)
@@ -132,7 +146,7 @@ object BeatThisRunner {
         while (start < mel.frames) {
             if (cancelled?.invoke() == true) {
                 // 只交回已经算完的那一截；调用方看 `cancelled` 决定是否采用。
-                return Result(pickPeaks(beatLogits, downbeatLogits), beatLogits.copyOfRange(0, start), FPS, true)
+                return Result(pickPeaks(beatLogits, downbeatLogits, start), beatLogits.copyOfRange(0, start), FPS, true)
             }
             val end = min(mel.frames, start + CHUNK_FRAMES)
             val length = end - start
@@ -165,6 +179,10 @@ object BeatThisRunner {
                     }
                 }
             }
+            onProgress?.invoke("infer", end.toFloat() / mel.frames)
+            // 这一块的拍点已经定了：交给界面先用着。未填的帧不在 pickPeaks 的范围里。
+            // 放在 break 之前 —— 只有一块的短音频（45 秒的首段）也才会收到这一次。
+            onChunk?.invoke(pickPeaks(beatLogits, downbeatLogits, end), end / FPS)
             if (end >= mel.frames) break
             start = end - OVERLAP_FRAMES
             if (start <= 0) start = end
@@ -190,10 +208,15 @@ object BeatThisRunner {
      *
      * 这几个常数与 Web 侧一致；将来若发现节拍偏密/偏疏，先怀疑它们而不是模型。
      */
-    private fun pickPeaks(beat: FloatArray, downbeat: FloatArray): List<Beat> {
-        if (beat.isEmpty()) return emptyList()
-        val sig = FloatArray(beat.size) { sigmoid(beat[it]) }
-        val dsig = FloatArray(downbeat.size) { sigmoid(downbeat[it]) }
+    private fun pickPeaks(beat: FloatArray, downbeat: FloatArray, to: Int = beat.size): List<Beat> {
+        if (beat.isEmpty() || to <= 0) return emptyList()
+        /*
+         * 只看已经算过的帧。未算的帧 logit 是 0，sigmoid(0) = 0.5 —— 高过阈值 0.28，
+         * 每一帧都会被当成峰。分块交付与中途取消都会踩到这一点。
+         */
+        val limit = min(to, beat.size)
+        val sig = FloatArray(limit) { sigmoid(beat[it]) }
+        val dsig = FloatArray(limit) { sigmoid(downbeat[it]) }
 
         val threshold = 0.28f
         val peakRadius = 3
@@ -316,7 +339,7 @@ object BeatThisRunner {
         return DoubleArray(N_MELS) { melToHz(melMin + (melMax - melMin) * (it + 1) / (N_MELS + 1)) }
     }
 
-    private fun melSpectrogram(mono: FloatArray): Mel {
+    private fun melSpectrogram(mono: FloatArray, onProgress: ((Float) -> Unit)? = null): Mel {
         if (mono.isEmpty()) return Mel(FloatArray(0), 0)
         val bands = filterbank ?: buildFilterbank().also { filterbank = it }
         val window = hann ?: FloatArray(N_FFT) { index ->
@@ -348,7 +371,11 @@ object BeatThisRunner {
 
         for (frame in 0 until frames) {
             // 每 1024 帧（约 20 秒音频）让一次：前台只做一次优先级检查，后台让出 CPU。
-            if (frame and 1023 == 0) AutomixLoad.yieldPoint()
+            // 同一个点顺手报一次进度：频谱这一段占整曲耗时的三分之一上下。
+            if (frame and 1023 == 0) {
+                AutomixLoad.yieldPoint()
+                onProgress?.invoke(frame.toFloat() / frames)
+            }
             val start = frame * HOP - pad
             for (index in 0 until N_FFT) {
                 val source = start + index

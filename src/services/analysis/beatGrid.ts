@@ -105,6 +105,14 @@ export interface TrackBeatGridOptions {
      * 见 automix/nativeBeats.ts 的 analyzeBeatsFromUrl 说明。
      */
     nativeSourceUrl?: () => Promise<string | null>;
+
+    /**
+     * 安卓原生分段交付：每算完一块（累积，从头到 `seconds`）回调一次。
+     *
+     * 只在原生那条路上有意义。整曲要二十秒以上，而第一块（45 秒）一两秒就好 ——
+     * 调用方拿它先把画面点亮，整曲到了再替换。
+     */
+    onPartial?: (beats: NativeBeat[], seconds: number) => void;
 }
 
 /**
@@ -121,7 +129,7 @@ export interface TrackBeatGridOptions {
 export const getTrackBeatGrid = async (
     key: string,
     readMid: () => Promise<Float32Array | null>,
-    { cpuFallback = false, storedOnly = false, urgency = 'background', nativeSourceUrl }: TrackBeatGridOptions = {},
+    { cpuFallback = false, storedOnly = false, urgency = 'background', nativeSourceUrl, onPartial }: TrackBeatGridOptions = {},
 ): Promise<AccentedBeatGrid | null> => {
     const stored = await readStoredBeatGrid(key);
     if (stored) return stored;
@@ -166,7 +174,7 @@ export const getTrackBeatGrid = async (
                     // 端口每次启动都变，别把它写进日志；路径本身足以判断走的是哪条来源。
                     const where = sourceUrl.replace(/^(https?:\/\/127\.0\.0\.1):\d+/, '$1:…');
                     console.info(`[BeatGrid] native analysis from ${where}`);
-                    analysis = await analyzeBeatsNativeFromUrl(sourceUrl);
+                    analysis = await analyzeBeatsNativeFromUrl(sourceUrl, undefined, onPartial);
                 } catch (error) {
                     console.warn('[BeatGrid] native analysis failed', error);
                     return null;

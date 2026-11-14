@@ -5,6 +5,7 @@ import { useVisualizerSettingsStore } from '../stores/useVisualizerSettingsStore
 import { visualizerWantsBeats, visualizerWantsDrumHits } from '../components/visualizer/beatClockTargets';
 import { smartBeatActive, smartBeatMayAnalyse } from '../services/beatFx/beatEffects';
 import { getBeatFxStatus, subscribeBeatFxStatus } from '../services/beatFx/beatFxLive';
+import { getBeatAnalysisProgress, subscribeBeatAnalysisProgress, type BeatAnalysisProgress } from '../services/beatFx/beatProgress';
 import { drumHitsSnapshot, parseDrumHitsSnapshot, subscribeDrumHits, type DrumStage } from '../services/analysis/drumHits';
 import { getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 
@@ -38,6 +39,8 @@ export interface SmartBeatStatusView {
     /** 时计's drum hits: how many are in, how far they reach (`null` once the whole track is picked),
      *  and which step a read is at while there are none yet. */
     drums: { count: number; until: number | null; stage: DrumStage | null } | null;
+    /** 拍点分析走到哪一段了（只在 `loading` 时有值）：取音频 / 解码 / 频谱 / 推理。 */
+    progress: BeatAnalysisProgress | null;
 }
 
 export function useSmartBeatStatus(): SmartBeatStatusView {
@@ -54,19 +57,31 @@ export function useSmartBeatStatus(): SmartBeatStatusView {
         () => '0|',
     );
     const drums = drumKey ? parseDrumHitsSnapshot(drumSnapshot) : null;
+    const rawProgress = useSyncExternalStore(
+        subscribeBeatAnalysisProgress,
+        getBeatAnalysisProgress,
+        () => null,
+    );
+    /*
+     * 进度在整个分析期间都递出去，不只是 `loading`：
+     * 分段交付后状态会先变成 `ready`（第一块到了），但整曲还在算 ——
+     * 界面要能说「已就绪 20 拍 · 正在补齐整曲 62%」，否则用户以为已经算完了。
+     * 分析结束时 endBeatAnalysisProgress 会把它清空，`ready` 之后自然不再显示。
+     */
+    const progress = rawProgress;
 
     const wantsBeats = visualizerWantsBeats({ ...settings, pageTransparent });
     const wantsDrums = visualizerWantsDrumHits({ ...settings, pageTransparent });
 
-    if (!smartBeatActive(smartBeat)) return { kind: 'off', beats: 0, note: null, drums };
-    if (!song) return { kind: 'noTrack', beats: 0, note: null, drums: null };
+    if (!smartBeatActive(smartBeat)) return { kind: 'off', beats: 0, note: null, drums, progress };
+    if (!song) return { kind: 'noTrack', beats: 0, note: null, drums: null, progress };
     if (!wantsBeats) {
         // 只有 drum hits 也值得说一句：这时候永远不会跑 beat_this，也就永远没有拍点日志。
         // 一个 hit 都还没有时也要把 `drums` 递出去：卡片靠它的 `stage` 说「在取音频 / 在解码」。
-        return { kind: wantsDrums ? 'drumsOnly' : 'noEffect', beats: 0, note: null, drums };
+        return { kind: wantsDrums ? 'drumsOnly' : 'noEffect', beats: 0, note: null, drums, progress };
     }
-    if (!snapshot.key) return { kind: 'noTrack', beats: 0, note: null, drums };
-    if (snapshot.source === 'loading') return { kind: 'loading', beats: 0, note: null, drums };
-    if (snapshot.source === 'beat_this') return { kind: 'ready', beats: snapshot.eventCount, note: null, drums };
-    return { kind: 'none', beats: 0, note: snapshot.note ?? (smartBeatMayAnalyse(smartBeat) ? null : 'only stored results'), drums };
+    if (!snapshot.key) return { kind: 'noTrack', beats: 0, note: null, drums, progress };
+    if (snapshot.source === 'loading') return { kind: 'loading', beats: 0, note: null, drums, progress };
+    if (snapshot.source === 'beat_this') return { kind: 'ready', beats: snapshot.eventCount, note: null, drums, progress };
+    return { kind: 'none', beats: 0, note: snapshot.note ?? (smartBeatMayAnalyse(smartBeat) ? null : 'only stored results'), drums, progress };
 }

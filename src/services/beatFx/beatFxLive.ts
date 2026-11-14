@@ -222,6 +222,26 @@ export const setBeatFxEvents = (
 };
 
 /**
+ * 同一首歌的分段续写：换上更长的表，但**不动时钟的位置**。
+ *
+ * 与 `setBeatFxEvents` 只差一点：不把 `lastTime` 清空。分段每 40 秒来一次，
+ * 每次都重同步会漏掉那一帧正好该响的拍子，而这里本来只是「同一份列表变长了」，
+ * 时钟该接着走。安卓原生按块交付用这条（nativeBeats.ts 的 beatAnalysisChunk）。
+ */
+export const updateBeatFxEvents = (key: string, events: BeatFxEvent[], source: BeatFxSourceKind = 'beat_this') => {
+    if (key !== trackKey) return;
+    state.events = events;
+    beatPeriod = resolveBeatFxBeatPeriod(events);
+    holdUntil = 0;
+    if (debug) {
+        debug.source = source;
+        debug.note = null;
+        debug.eventCount = events.length;
+    }
+    publishStatus({ key, source, note: null, eventCount: events.length });
+};
+
+/**
  * Whether the playing track's beat list is installed - or a track change is still inside its hold.
  * Until then (analysing, not cached, no model, a GPU that could not take it) a visualizer draws its
  * original frame rather than a beat FX frame with nothing driving it.

@@ -29,6 +29,16 @@ const SmartBeatSettingsCard: React.FC<SmartBeatSettingsCardProps> = ({ t }) => {
     const availability = useSmartBeatAvailability(smartBeat.mode);
     const status = useSmartBeatStatus();
     const unavailableReason = availability === 'ready' ? null : t(`options.beatFxUnavailable_${availability}`);
+    /*
+     * 分析要几十秒，而进度事件只在阶段边界到一次（解码完、每 20 秒频谱）。
+     * 秒数得自己走 —— 否则一行字停在那里，和卡死还是分不出来。
+     */
+    const [, tick] = React.useState(0);
+    React.useEffect(() => {
+        if (status.kind !== 'loading') return undefined;
+        const timer = setInterval(() => tick(value => value + 1), 1000);
+        return () => clearInterval(timer);
+    }, [status.kind]);
 
     const statusText = (() => {
         switch (status.kind) {
@@ -55,10 +65,32 @@ const SmartBeatSettingsCard: React.FC<SmartBeatSettingsCardProps> = ({ t }) => {
                                 : t('options.smartBeatStatusDrumsReading');
                 return `${t('options.smartBeatStatusDrumsOnly')} · ${step}`;
             }
-            case 'loading':
-                return t('options.smartBeatStatusLoading');
-            case 'ready':
-                return `${t('options.smartBeatStatusReady')} · ${status.beats}`;
+            case 'loading': {
+                /*
+                 * 说出**哪一段**、到多少、等了多久。
+                 *
+                 * 原来只有一句「正在分析这首歌的节拍…」：整首歌几分钟里一个字不变，
+                 * 用户没法判断是后台在慢慢算，还是这条路已经死了（真机反馈 2026-11-13）。
+                 * 现在卡在取音频还是推理一眼可见；超时后这一行会换成具体原因。
+                 */
+                const progress = status.progress;
+                if (!progress) return t('options.smartBeatStatusLoading');
+                const stage = progress.stage === 'decode' ? t('options.smartBeatStageDecode')
+                    : progress.stage === 'mel' ? t('options.smartBeatStageMel')
+                        : progress.stage === 'infer' ? t('options.smartBeatStageInfer')
+                            : t('options.smartBeatStagePrepare');
+                const percent = progress.stage === 'prepare' ? '' : ` · ${Math.round(progress.percent * 100)}%`;
+                const seconds = Math.max(0, Math.round((Date.now() - progress.startedAt) / 1000));
+                return `${stage}${percent} · ${seconds}s`;
+            }
+            case 'ready': {
+                const base = `${t('options.smartBeatStatusReady')} · ${status.beats}`;
+                // 第一块到了就算就绪，但整曲还在算：说清楚，别让人以为已经完事。
+                const progress = status.progress;
+                if (!progress) return base;
+                const percent = progress.stage === 'prepare' ? '' : ` ${Math.round(progress.percent * 100)}%`;
+                return `${base} · ${t('options.smartBeatStatusFilling')}${percent}`;
+            }
             case 'none':
                 return status.note ? `${t('options.smartBeatStatusNone')} · ${status.note}` : t('options.smartBeatStatusNone');
         }
