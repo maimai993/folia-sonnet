@@ -216,6 +216,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private var cachedPlaying = false
     @Volatile
     private var cachedBuffering = false
+    /**
+     * 「要求播着、却在等数据」（见 DisplayAnchorPolicy.kt 的 playerStalled）。
+     *
+     * 只在播放器线程上、每次事件发出前按播放器真值重算（见 [emit]），所以监听方在回调里
+     * 读到的就是这一刻的值；别的线程（叠层的 3 秒核对）读的是 volatile 缓存。
+     */
+    @Volatile
+    private var cachedStalled = false
 
     private val positionTick = object : Runnable {
         override fun run() {
@@ -663,6 +671,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             val current = player
             player = null
             cachedPlaying = false
+            cachedStalled = false
             if (current != null) {
                 current.removeListener(playerListener)
                 current.release()
@@ -734,6 +743,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
     /** 与位置快照一并交付，认领时不得把缓冲误当成正在出声。 */
     fun isBuffering(): Boolean = cachedBuffering
+
+    /** 播放意图还在、只是在等数据：桌面歌词据此不把这段当成暂停（#314）。读的是缓存，任何线程可问。 */
+    fun isStalled(): Boolean = cachedStalled
 
     /**
      * 当前倍速。写锚点那一侧要拿它决定要不要跳过这一拍 —— 见
@@ -1263,6 +1275,26 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         else if (type == "playing" || type == "paused" || type == "ended" || type == "error" || type == "idle") {
             cachedBuffering = false
         }
+        /*
+         * 「卡住」跟着每一条事件按播放器真值重算（#314）。
+         *
+         * 放在通知监听方之前：监听方在同一次回调里写桌面歌词的锚点，要读到的是这一刻的值。
+         * 所有 emit 都在播放器线程上，问 playWhenReady / playbackState / isPlaying 是安全的；
+         * 位置刻度每 250ms 走一次这里，所以缓冲一结束（或播放器出错落到 IDLE）最晚下一拍就清掉，
+         * 不依赖某一条事件「一定会来」。
+         */
+        /*
+         * 这四条事件本身就是「不在等数据」的结论，不去问播放器：
+         * [pause] 是先发 paused、后 setPlayWhenReady(false) 的（界面要当场停），那一刻问到的
+         * playWhenReady 还是 true —— 缓冲中按暂停就会被记成「卡住」，叠层该收不收。
+         */
+        val settled = type == "paused" || type == "ended" || type == "error" || type == "idle"
+        val current = player
+        cachedStalled = !settled && current != null && playerStalled(
+            current.playWhenReady,
+            current.playbackState == Player.STATE_BUFFERING,
+            current.isPlaying,
+        )
         if (listener != null) {
             listener.onEvent(type, positionMs, durationMs, message)
         }

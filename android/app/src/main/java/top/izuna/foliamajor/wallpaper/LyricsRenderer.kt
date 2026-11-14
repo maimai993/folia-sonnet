@@ -1135,7 +1135,8 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
         // 逼近速度 6（时间常数 ≈170ms）：约半秒淡完，快得跟手、慢得不突兀。
         val playbackAlive = WallpaperLyricsState.heartbeatAlive()
         val wantPlaybackUi = playbackAlive
-                && (snapshot.playing || !tb("wp.hideWhenPaused", true))
+                && (snapshot.playing || !tb("wp.hideWhenPaused", true)
+                || WallpaperLyricsState.playerStallHeld())
         uiAlpha = approach(uiAlpha, if (wantPlaybackUi) 1f else 0f, deltaSeconds, 6f)
         val drawPlaybackUi = uiAlpha > 0.004f
         if (drawPlaybackUi && !tb("wp.hideNativeProgress", false)) {

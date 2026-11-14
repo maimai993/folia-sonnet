@@ -422,6 +422,45 @@ class WallpaperLyricsState private constructor() {
             return age >= 0L && age <= HEARTBEAT_TIMEOUT_MS
         }
 
+        // ===== 播放器在等数据（#314） =====
+        // 快照里的 playing=false 有两种来路：用户暂停，和播放器缓冲 / 欠载时「这一刻没出声」。
+        // 时间轴上两者一样（都该停在原地），所以 playing 本身不改；但「暂停时隐藏」只该管前一种。
+        // 这一份单独记在快照之外：它不是画面内容，不进推送签名，也不该让七处构造快照的地方都带上。
+        private val stallHold = StallHold()
+
+        /**
+         * 原生播放器报一次「此刻是不是要求播着却在等数据」。每条播放器事件都会报（播放器线程）。
+         *
+         * 只有原生播放器会报：Web `<audio>` 那条路从不调用，行为与加这段之前一致。
+         */
+        @JvmStatic
+        fun setPlayerStalled(stalled: Boolean) {
+            val now = SystemClock.elapsedRealtime()
+            val previousMs = stallHold.elapsedMs(now)
+            if (!stallHold.update(stalled, now)) {
+                return
+            }
+            // 只在翻面时记：定位「叠层为什么没按暂停收起 / 为什么停住」靠这两行（真机上以前无从分辨）。
+            if (stalled) {
+                android.util.Log.i("FoliaWallpaper", "player stalled (waiting for data): " +
+                        "desktop lyrics stay up for at most " + STALL_HOLD_MAX_MS + "ms")
+            } else {
+                android.util.Log.i("FoliaWallpaper", "player stall ended after " + previousMs + "ms")
+            }
+        }
+
+        /** 这一刻的 playing=false 是不是「在等数据」而非暂停（已过上限的不算，见 STALL_HOLD_MAX_MS）。 */
+        @JvmStatic
+        fun playerStallHeld(): Boolean {
+            return stallHold.held(SystemClock.elapsedRealtime())
+        }
+
+        /** 还在等数据但已经超过上限：收起理由里要能说清是这一条。 */
+        @JvmStatic
+        fun playerStallExpired(): Boolean {
+            return stallHold.expired(SystemClock.elapsedRealtime())
+        }
+
         // ===== 主题推送按内容去重 =====
         // 切歌那一推本来就被「等主题落定」的闸按住，但闸放开之后仍可能连着来两份：
         // 一份主题在途、一份主题落定（或封面补到）。叠层每收一次整包就重画一次，

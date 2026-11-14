@@ -314,6 +314,15 @@ class FoliaNativePlayerPlugin : Plugin() {
                  * FoliaNativePlayer 文件头的「线程」那一节），不在主线程。
                  */
                 /*
+                 * 先把「是不是在等数据」交给桌面歌词（#314），再写下面的锚点。
+                 *
+                 * 缓冲时下面那段会把快照写成 playing=false（时间轴该停住，这没错），而叠层的
+                 * 「暂停时隐藏」只认这一个布尔值：网络一卡，动画停 3.5 秒后整层淡出，缓冲完再
+                 * 淡回来。这一份让它分得清「用户暂停」和「在等数据」。每条事件都报（含 buffering /
+                 * error / idle 这些不写锚点的），值由播放器在发事件前按真值算好。
+                 */
+                WallpaperLyricsState.setPlayerStalled(player?.isStalled() == true)
+                /*
                  * 桌面歌词（壁纸 / 悬浮小窗 / 锁屏）的时间轴锚点：由播放器自己给，
                  * **就在这里写**，不再绕一次主线程 —— 锚点记的是「收到这个位置的那一刻」，
                  * 晚一点写（哪怕只是排到下一轮主线程消息）都会让外推偏慢一截。
@@ -529,6 +538,8 @@ class FoliaNativePlayerPlugin : Plugin() {
             current.release()
             player = null
         }
+        // 播放器没了就不会再有事件来清「在等数据」：这里收掉，别让叠层替一台不存在的播放器撑着（#314）。
+        WallpaperLyricsState.setPlayerStalled(false)
         instance = null
         super.handleOnDestroy()
     }
@@ -823,6 +834,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         if (current != null) {
             current.release()
         }
+        // 同 handleOnDestroy：收掉之后不会再有事件来清这个标记（#314）。
+        WallpaperLyricsState.setPlayerStalled(false)
         call.resolve()
     }
 }
