@@ -39,6 +39,15 @@ let lastHeldThemeFields = '';
 window.__foliaWallpaperPush = (incoming) => {
     let payload = incoming;
     if (!payload || typeof payload !== 'object') return;
+    /*
+     * 整份主题每一推都是 JSON 现解出来的新对象，内容通常一字未变。
+     * 直接用的话主题 memo 每推一次就重算、可视化拿到新 theme 跟着重建 —— 叠层上就是推送之后
+     * 紧跟着一个慢帧（#320）。内容相同就沿用上一份的引用；主题很小，序列化比较的代价可以忽略。
+     */
+    if (payload.theme && latest.theme && payload.theme !== latest.theme
+        && JSON.stringify(payload.theme) === JSON.stringify(latest.theme)) {
+        payload = { ...payload, theme: latest.theme };
+    }
     const now = performance.now();
     if ((payload.lines?.length ?? 0) > 0) {
         lastGoodLines = payload.lines ?? null;

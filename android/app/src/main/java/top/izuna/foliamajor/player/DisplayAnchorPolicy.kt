@@ -33,3 +33,26 @@ internal fun displayAnchorNeedsWrite(
 internal fun playerAudible(isPlaying: Boolean, buffering: Boolean): Boolean {
     return isPlaying && !buffering
 }
+
+/** 外推的上限：比后台最慢的采样周期（1 秒）宽一点，超过就说明采样停了，不再猜。 */
+internal const val DISPLAY_POSITION_EXTRAPOLATE_MAX_MS = 1_500L
+
+/**
+ * 叠层核对要的「此刻」位置（#320）。
+ *
+ * 缓存位置是上一拍采样的值：App 在后台时一秒才采一次，拿它直接当锚点就是往回拽最多 1 秒，
+ * 每 3 秒一次的核对因此每次都越过 250ms 容差、把桌面歌词往回抽一下。
+ * 在出声时按采样之后过去的墙钟补上（乘倍速）；没在出声、没有采样时刻、或缓存已被
+ * seek / 换源改写（sampleAtMs 传 0）时原样返回缓存值。
+ */
+internal fun extrapolatedDisplayPositionMs(
+    cachedPositionMs: Long,
+    sampleAtMs: Long,
+    nowMs: Long,
+    audible: Boolean,
+    speed: Float,
+): Long {
+    if (!audible || sampleAtMs <= 0L) return cachedPositionMs
+    val elapsed = (nowMs - sampleAtMs).coerceIn(0L, DISPLAY_POSITION_EXTRAPOLATE_MAX_MS)
+    return cachedPositionMs + (elapsed * speed).toLong()
+}
