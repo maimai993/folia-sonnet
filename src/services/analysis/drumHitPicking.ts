@@ -158,6 +158,228 @@ export const pickBandHits = (tracks: DrumBands, frames: number): DrumHits => {
     return { times: Float64Array.from(times), strengths: Float32Array.from(strengths), kinds: Uint8Array.from(kinds) };
 };
 
+/*
+ * 混音路径的鼓点规整（`regularizeDrumHits`）。
+ *
+ * 为什么需要：真分轨里只有鼓，一节拍常常只有一个起音；混音里贝斯、人声、钢琴的起音
+ * 都落在 kick / snare 的频带里，`MIN_HIT_GAP` 0.09 秒意味着**每秒最多 11 个** hit。
+ * 于是同一段音乐，节拍特效按 beat_this 的拍点走（120 BPM 时 2 下/秒），仿真鼓面却被
+ * 敲 4~6 下/秒 —— 用户的原话是「鼓点和动感模式总有一个慢一个快」。
+ *
+ * 规整做三件事：
+ *   1. 从 kick / snare 的间隔自估**基本脉冲**（不需要拍点列表，时计只吃鼓点时不跑 beat_this）；
+ *   2. 落在脉冲网格 ±SNAP 内的起音吸附到网格上，同一格只留最强的一个；
+ *   3. 离网格远且不强的起音丢掉（那是贝斯的滑音、人声的辅音），强的保留（切分重音）。
+ *
+ * 帽子单独走：它本来就密（八分、十六分），只做最小间隔，不参与网格。
+ */
+export interface RegularizeDrumOptions {
+    /** 起音吸附到脉冲网格的最大距离（秒）。 */
+    snap: number;
+    /** 网格外、强度低于此值的 body 起音丢掉。 */
+    weakFloor: number;
+    /** 帽子之间的最小间隔（秒）。 */
+    hatGap: number;
+    /** 指定脉冲周期（秒）；不给就从 hits 自己估。 */
+    period?: number | null;
+}
+
+/** 混音路径的默认参数（见上面的注释）。 */
+export const MIX_DRUM_REGULARIZE: RegularizeDrumOptions = {
+    snap: 0.08,
+    /*
+     * 0.5 不是随手写的：混音里贝斯与人声漏进鼓频带的起音，强度大多落在 0.3~0.45
+     * （它们没有鼓的瞬态）；真正的切分重音（军鼓反拍、tom）通常 0.6 以上。
+     * 门槛压到 0.28 会把贝斯线全留下，鼓面又变密了。
+     */
+    weakFloor: 0.5,
+    hatGap: 0.11,
+};
+
+/** 自估的脉冲周期限制在这个范围里：30~200 BPM 的拍长（含半拍）。 */
+const PULSE_MIN = 0.15;
+const PULSE_MAX = 1.1;
+/** 少于这么多个 body 起音就不估：样本太少的众数是噪声。 */
+const PULSE_MIN_HITS = 8;
+/** 估周期时先只看这么强的 body 起音：真鼓比漏进来的贝斯、人声响。 */
+const PULSE_STRONG = 0.55;
+
+/**
+ * 从 kick / snare 的相邻间隔里取众数，当作基本脉冲（秒）；样本不足或没有明显周期时 null。
+ *
+ * 直方图而不是中位数：切分多的歌里，一半间隔是八分音符、一半是四分音符，中位数会落在
+ * 两者之间；众数至少落在一个真实的脉冲上。
+ *
+ * 先用强的起音估。混音里贝斯每 0.1 秒换一个音，弱的起音连成片，众数会落到 0.1 秒上 ——
+ * 那等于「把每一根贝斯弦都当鼓敲」，比不规整还密。真鼓的起音强度明显高一截，用它估出来的
+ * 才是鼓组的脉冲；强的样本不够时才退回全部起音。
+ */
+export const estimateDrumPulse = (
+    times: Float64Array,
+    kinds: Uint8Array,
+    strengths?: Float32Array,
+): number | null => {
+    const estimate = (pickStrong: boolean): number | null => {
+        const body: number[] = [];
+        for (let at = 0; at < times.length; at += 1) {
+            if (kinds[at] === DRUM_HAT) continue;
+            if (pickStrong && strengths && strengths[at] < PULSE_STRONG) continue;
+            body.push(times[at]);
+        }
+        if (body.length < PULSE_MIN_HITS) return null;
+        const bin = 0.025;
+        const counts = new Map<number, number>();
+        for (let at = 1; at < body.length; at += 1) {
+            const gap = body[at] - body[at - 1];
+            if (gap < PULSE_MIN || gap > PULSE_MAX) continue;
+            const slot = Math.round(gap / bin);
+            counts.set(slot, (counts.get(slot) ?? 0) + 1);
+        }
+        let best = -1;
+        let bestCount = 0;
+        for (const [slot, count] of counts) {
+            if (count > bestCount || (count === bestCount && slot < best)) {
+                best = slot;
+                bestCount = count;
+            }
+        }
+        // 一个周期要站得住：至少四次重复，且占全部间隔的十分之一以上。
+        const total = body.length - 1;
+        if (best < 0 || bestCount < 4 || bestCount / total < 0.1) return null;
+        return best * bin;
+    };
+    return estimate(true) ?? estimate(false);
+};
+
+/**
+ * 把混音里读到的起音收成鼓组的脉冲（见上面的注释）。没有可信周期时只做密度控制。
+ *
+ * `until` 原样带过去：它说的是「hits 覆盖到哪」，规整只挪动几十毫秒。
+ */
+export const regularizeDrumHits = (hits: DrumHits, options: RegularizeDrumOptions = MIX_DRUM_REGULARIZE): DrumHits => {
+    const count = hits.times.length;
+    if (count === 0) return hits;
+    /*
+     * 先按时间排一遍。
+     *
+     * 上游的 pick 是有序的，但这个函数也会拿到「手拼」的列表（测试、缓存里的旧数据、
+     * 以后接别的拾取器），而网格化是按相邻关系归格的 —— 一条乱序的输入会让两个
+     * 本该合到一格的起音分别落进两格。
+     */
+    const order = Array.from({ length: count }, (_, index) => index).sort((left, right) => hits.times[left] - hits.times[right]);
+    const times = Float64Array.from(order, index => hits.times[index]);
+    const strengths = Float32Array.from(order, index => hits.strengths[index]);
+    const kinds = Uint8Array.from(order, index => hits.kinds[index]);
+
+    const period = options.period === undefined
+        ? estimateDrumPulse(times, kinds, strengths)
+        : options.period;
+    const bodyTimes: number[] = [];
+    const bodyStrengths: number[] = [];
+    const bodyKinds: number[] = [];
+    const hatTimes: number[] = [];
+    const hatStrengths: number[] = [];
+    let lastHat = -Infinity;
+
+    for (let at = 0; at < count; at += 1) {
+        const time = times[at];
+        const strength = strengths[at];
+        const kind = kinds[at];
+        if (kind === DRUM_HAT) {
+            // 帽子只留最小的间隔，密到听不出个数的那种一律收掉。
+            if (time - lastHat < options.hatGap) {
+                const last = hatTimes.length - 1;
+                if (last >= 0 && strength > hatStrengths[last]) {
+                    hatTimes[last] = time;
+                    hatStrengths[last] = strength;
+                    lastHat = time;
+                }
+                continue;
+            }
+            hatTimes.push(time);
+            hatStrengths.push(strength);
+            lastHat = time;
+            continue;
+        }
+        bodyTimes.push(time);
+        bodyStrengths.push(strength);
+        bodyKinds.push(kind);
+    }
+
+    const outTimes: number[] = [];
+    const outStrengths: number[] = [];
+    const outKinds: number[] = [];
+    if (!period || period <= 0 || bodyTimes.length === 0) {
+        /*
+         * 估不出周期：只做密度控制。
+         *
+         * 阈值不能再取 snap（0.08）：混音里贝斯换音就是 0.1 秒一下，全留下了。0.16 是
+         * 「再快也不可能是鼓组的一拍」的下限 —— 375 BPM 的十六分才比这密。
+         */
+        const gap = Math.max(options.snap, 0.16);
+        let last = -Infinity;
+        for (let at = 0; at < bodyTimes.length; at += 1) {
+            if (bodyTimes[at] - last < gap) {
+                const index = outTimes.length - 1;
+                if (index >= 0 && bodyStrengths[at] > outStrengths[index]) {
+                    outTimes[index] = bodyTimes[at];
+                    outStrengths[index] = bodyStrengths[at];
+                    outKinds[index] = bodyKinds[at];
+                    last = bodyTimes[at];
+                }
+                continue;
+            }
+            outTimes.push(bodyTimes[at]);
+            outStrengths.push(bodyStrengths[at]);
+            outKinds.push(bodyKinds[at]);
+            last = bodyTimes[at];
+        }
+    } else {
+        const phase = bodyTimes[0];
+        const slotOf = (time: number) => Math.round((time - phase) / period);
+        // 一拍里可能先来 kick 后来 snare：按格收集，最后每格留最强的一个。
+        // 隔得远的格子分开记（切分重音不进 Map，免得和网格点抢同一格）。
+        const slots = new Map<number, { time: number; strength: number; kind: number }>();
+        for (let at = 0; at < bodyTimes.length; at += 1) {
+            const time = bodyTimes[at];
+            const slot = slotOf(time);
+            const gridTime = phase + slot * period;
+            const distance = Math.abs(time - gridTime);
+            if (distance > options.snap) {
+                // 不在网格上：只有够强才当切分重音留着，否则是别的乐器漏进来的起音。
+                if (bodyStrengths[at] < options.weakFloor) continue;
+                outTimes.push(time);
+                outStrengths.push(bodyStrengths[at]);
+                outKinds.push(bodyKinds[at]);
+                continue;
+            }
+            const kept = slots.get(slot);
+            if (!kept || bodyStrengths[at] > kept.strength) {
+                slots.set(slot, { time: gridTime, strength: bodyStrengths[at], kind: bodyKinds[at] });
+            }
+        }
+        for (const kept of slots.values()) {
+            outTimes.push(kept.time);
+            outStrengths.push(kept.strength);
+            outKinds.push(kept.kind);
+        }
+    }
+
+    for (let at = 0; at < hatTimes.length; at += 1) {
+        outTimes.push(hatTimes[at]);
+        outStrengths.push(hatStrengths[at]);
+        outKinds.push(DRUM_HAT);
+    }
+    // 三组各自已经有序，合起来重排（帽子与 body 交错）。
+    const finalOrder = outTimes.map((_, index) => index).sort((left, right) => outTimes[left] - outTimes[right]);
+    return {
+        times: Float64Array.from(finalOrder, index => outTimes[index]),
+        strengths: Float32Array.from(finalOrder, index => outStrengths[index]),
+        kinds: Uint8Array.from(finalOrder, index => outKinds[index]),
+        ...(hits.until === undefined ? {} : { until: hits.until }),
+    };
+};
+
 export const energyFrames = (signal: Float32Array): Float32Array => {
     const out = new Float32Array(Math.ceil(signal.length / ENERGY_HOP));
     for (let at = 0; at < signal.length; at += 1) out[Math.floor(at / ENERGY_HOP)] += signal[at] * signal[at];

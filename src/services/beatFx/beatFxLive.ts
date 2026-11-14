@@ -103,6 +103,42 @@ export const resolveBeatFxBeatPeriod = (events: readonly BeatFxEvent[]): number 
 };
 const firedCounts = { beats: 0, downbeats: 0 };
 
+/**
+ * What the beat list lookup is doing for the track on screen, for a setting to show.
+ *
+ * 智能动感的失败在画面上只有一种表现 —— 特效不动，和「这首歌还没分析」一模一样。
+ * 而它至少有四种原因：当前画面没有开着任何一个吃拍点的特效、没有在播的歌、
+ * 正在分析、分析失败。前两个根本不会产生任何日志（整条链路没启动），
+ * 所以「翻日志找原因」在有日志之前就已经失败了。这个快照让界面直接说出是哪种。
+ *
+ * 变更频率与加载次数相当（一首歌一次），不是每帧：调用方可以放心订阅。
+ */
+export interface BeatFxStatus {
+    /** The analysis key the clock is on, or null with nothing playing. */
+    key: string | null;
+    /** 'loading' while the lookup is in flight. */
+    source: BeatFxSourceKind | 'loading';
+    /** Why there are no beats, when there are none. */
+    note: string | null;
+    eventCount: number;
+}
+
+let status: BeatFxStatus = { key: null, source: 'none', note: null, eventCount: 0 };
+const statusListeners = new Set<() => void>();
+
+const publishStatus = (next: BeatFxStatus) => {
+    status = next;
+    for (const listener of statusListeners) listener();
+};
+
+/** The current status; the same object until it changes, so it can be a `useSyncExternalStore` snapshot. */
+export const getBeatFxStatus = (): BeatFxStatus => status;
+
+export const subscribeBeatFxStatus = (listener: () => void): (() => void) => {
+    statusListeners.add(listener);
+    return () => { statusListeners.delete(listener); };
+};
+
 /** The 轻拍 / 重拍 strengths (0..2) the envelopes are scaled by from the next step on. */
 export const setBeatFxIntensities = (beat: number, downbeat: number) => {
     intensities.beat = beat;
@@ -156,6 +192,7 @@ export const beginBeatFxTrack = (key: string | null) => {
         debug.note = null;
         debug.eventCount = 0;
     }
+    publishStatus({ key, source: key ? 'loading' : 'none', note: null, eventCount: 0 });
 };
 
 /**
@@ -181,6 +218,27 @@ export const setBeatFxEvents = (
         debug.note = note ?? null;
         debug.eventCount = events.length;
     }
+    publishStatus({ key, source, note: note ?? null, eventCount: events.length });
+};
+
+/**
+ * 同一首歌的分段续写：换上更长的表，但**不动时钟的位置**。
+ *
+ * 与 `setBeatFxEvents` 只差一点：不把 `lastTime` 清空。分段每 40 秒来一次，
+ * 每次都重同步会漏掉那一帧正好该响的拍子，而这里本来只是「同一份列表变长了」，
+ * 时钟该接着走。安卓原生按块交付用这条（nativeBeats.ts 的 beatAnalysisChunk）。
+ */
+export const updateBeatFxEvents = (key: string, events: BeatFxEvent[], source: BeatFxSourceKind = 'beat_this') => {
+    if (key !== trackKey) return;
+    state.events = events;
+    beatPeriod = resolveBeatFxBeatPeriod(events);
+    holdUntil = 0;
+    if (debug) {
+        debug.source = source;
+        debug.note = null;
+        debug.eventCount = events.length;
+    }
+    publishStatus({ key, source, note: null, eventCount: events.length });
 };
 
 /**
@@ -237,14 +295,29 @@ export const getBeatFxRotationSign = (): number => state.rotationSign;
 /**
  * One frame of the beat clock. `audioElement` is the deck being heard, or null when nothing is
  * playing; `context` is the AudioContext it is routed through, used for output latency.
+ *
+ * `positionSec` is for the routes with no element to read: 安卓的原生播放器与 mpv 都不在
+ * WebView 里，那块 `<audio>` 的 currentTime 恒为 0。给了它就照它走（null = 没在放），
+ * 没给才去看元素。这个参数不是可选的装饰 —— 少了它，手机上一次拍点都不会触发，
+ * 因为 `stepBeatFxClock` 对 null 的处置是「不推进、不触发」，而分析是否成功与它无关。
  */
-export const tickBeatFx = (audioElement: HTMLMediaElement | null, context: BaseAudioContext | null | undefined) => {
+export const tickBeatFx = (
+    audioElement: HTMLMediaElement | null,
+    context: BaseAudioContext | null | undefined,
+    /** Where the track is now, in seconds, on a route with no `<audio>`; null when nothing plays. */
+    positionSec?: number | null,
+) => {
     const now = performance.now();
-    const dtSec = lastStepAt === null ? 0 : Math.min(0.1, (now - lastStepAt) / 1000);
+    // 真实帧间隔单独留着：衰减用它会被截断（一帧掉太久不该让包络直接归零），
+    // 但「这一帧跨了多久」必须是真的 —— 判断是不是 seek 要的就是它。
+    const frameSec = lastStepAt === null ? 0 : (now - lastStepAt) / 1000;
+    const dtSec = Math.min(0.1, frameSec);
     lastStepAt = now;
 
     let heardTime: number | null = null;
-    if (audioElement && !audioElement.paused && !audioElement.ended) {
+    if (positionSec !== undefined) {
+        heardTime = positionSec !== null && Number.isFinite(positionSec) ? positionSec : null;
+    } else if (audioElement && !audioElement.paused && !audioElement.ended) {
         const live = context as (BaseAudioContext & { outputLatency?: number; baseLatency?: number }) | null | undefined;
         const latency = (Number(live?.outputLatency) || 0) + (Number(live?.baseLatency) || 0);
         // What the listener hears lags what the element has decoded by the output latency.
@@ -255,7 +328,7 @@ export const tickBeatFx = (audioElement: HTMLMediaElement | null, context: BaseA
     heardAt = heardTime;
     if (heardTime !== null) lastHeard = { key: trackKey, time: heardTime };
 
-    stepBeatFxClock(state, heardTime, dtSec);
+    stepBeatFxClock(state, heardTime, dtSec, frameSec);
     firedCounts.beats = state.firedBeats;
     firedCounts.downbeats = state.firedDownbeats;
     beatImpact.set(state.beatImpact * intensities.beat);

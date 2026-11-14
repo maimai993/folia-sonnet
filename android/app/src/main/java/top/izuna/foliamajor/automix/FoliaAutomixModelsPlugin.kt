@@ -29,6 +29,15 @@ import java.util.concurrent.Executors
 @CapacitorPlugin(name = "FoliaAutomixModels")
 class FoliaAutomixModelsPlugin : Plugin() {
 
+    /** 拍点分析进度的事件名，与 Web 侧 nativeBeats.ts 的监听一致。 */
+    private val beatProgressEvent = "beatAnalysisProgress"
+
+    /** 分段交付的拍点表，同样是 nativeBeats.ts 在听。 */
+    private val beatChunkEvent = "beatAnalysisChunk"
+
+    /** 首段多长（秒）：这一段先算先交，让画面在播放开始后一两秒就有反应。 */
+    private val fastSeconds = 45
+
     /**
      * 模型拷贝与推理都很重，一律放在单线程池上顺序跑。
      *
@@ -39,9 +48,30 @@ class FoliaAutomixModelsPlugin : Plugin() {
         Thread(runnable, "folia-automix").apply { priority = Thread.NORM_PRIORITY - 1 }
     }
 
+    /**
+     * 取消标记。
+     *
+     * 分离一首四分钟的歌在手机上要几分钟，而界面随时可能切歌、退出、或者用户就是想停。
+     * `shutdownNow` 打断不了 Tensor 推理（JNI 里不响应中断），但推理是**按窗口**串起来的，
+     * 在窗口之间问一次这个标记就够 —— 已经算完的部分照常交回去。
+     */
+    private val cancelRequested = java.util.concurrent.atomic.AtomicBoolean(false)
+
     override fun handleOnDestroy() {
+        cancelRequested.set(true)
+        // 那 20MB 的单声道缓存只是给「同一首歌的下一次分析」备的，插件都没了就还回去。
+        TrackPcmDecoder.clearMonoCache()
         worker.shutdownNow()
         super.handleOnDestroy()
+    }
+
+    /** 让正在跑的推理在下一个窗口边界停下来。没有在跑也安全（下一次开始时重置）。 */
+    @PluginMethod
+    fun cancelAutomix(call: PluginCall) {
+        cancelRequested.set(true)
+        // 取消基本总跟着切歌：这首歌的 PCM 不会再用了，先释放。
+        TrackPcmDecoder.clearMonoCache()
+        call.resolve(JSObject().put("ok", true))
     }
 
     @PluginMethod
@@ -175,6 +205,42 @@ class FoliaAutomixModelsPlugin : Plugin() {
      * 要么被拒（"Native HTTP response exceeds the bridge size limit"），
      * 要么把 base64 + JSON 序列化的 8 倍放大撞进 256MB 堆。
      */
+    /**
+     * 拍点分析的进度：阶段 + 这一段自己的完成度。
+     *
+     * 为什么要报：界面上原来只有一句不变的「正在分析这首歌的节拍…」，几十秒里一个字不动，
+     * 和卡死在用户眼里没有区别，也没法判断是慢还是坏了（真机反馈 2026-11-13）。
+     * 只在阶段边界与每 1024 帧报一次，整曲最多二三十条消息。
+     */
+    private fun reportBeatProgress(stage: String, percent: Float) {
+        val payload = JSObject().put("stage", stage).put("percent", percent.toDouble())
+        val emit = Runnable { notifyListeners(beatProgressEvent, payload) }
+        val host = activity
+        if (host != null) host.runOnUiThread(emit) else emit.run()
+    }
+
+    /**
+     * 交一段「到这里为止」的拍点表。
+     *
+     * 表是**累积**的（每次都是从头到 `until` 的全量），因为界面那边的时钟只需要一份完整列表；
+     * 整曲四分钟也就四五百个拍点，重复发的代价可以忽略，换来的是界面不用自己做合并去重。
+     */
+    private fun emitBeatChunk(beats: List<BeatThisRunner.Beat>, upToSec: Double, final: Boolean) {
+        val array = JSArray()
+        for (beat in beats) {
+            array.put(
+                JSObject()
+                    .put("time", beat.time)
+                    .put("downbeat", beat.isDownbeat)
+                    .put("confidence", beat.confidence.toDouble()),
+            )
+        }
+        val payload = JSObject().put("beats", array).put("until", upToSec).put("final", final)
+        val emit = Runnable { notifyListeners(beatChunkEvent, payload) }
+        val host = activity
+        if (host != null) host.runOnUiThread(emit) else emit.run()
+    }
+
     @PluginMethod
     fun analyzeBeatsFromUrl(call: PluginCall) {
         val url = call.getString("url")
@@ -182,21 +248,53 @@ class FoliaAutomixModelsPlugin : Plugin() {
         val context: Context = context
         worker.execute {
             try {
+                cancelRequested.set(false)
+                AutomixLoad.applyThreadPriority()
                 val started = System.currentTimeMillis()
-                val decoded = TrackPcmDecoder.decode(context, url)
-                    ?: return@execute call.reject("无法解码音频: $url")
-                /*
-                 * beat_this 要 22050Hz 单声道。这里从 44100 双声道降到单声道
-                 * 再按 2:1 抽取 —— 正好是整数倍，不需要插值。
-                 */
-                val mono = downmixToMono22k(decoded)
                 val file = AutomixModels.ensureLocal(context, AutomixModels.BEAT_THIS)
                 BeatThisRunner.ensureLoaded(file)
-                val result = BeatThisRunner.analyze(mono)
+
+                /*
+                 * 第一段：只解前 45 秒，先让画面动起来。
+                 *
+                 * 为什么值得多花这一次：整曲「解码 + 频谱 + 六块推理」在手机上要二十秒以上，
+                 * 而 45 秒（约 22 拍）的解码、频谱、单块推理加起来两秒上下 ——
+                 * 用户按下播放后第一次看到镜面/鼓面响应，就在这个量级。
+                 *
+                 * `allowCache = false` 是关键：这一份是截断，一旦写进 20 秒缓存，
+                 * 紧接着的整曲分析会命中它，后半首就永远没有拍点了。
+                 */
+                val head = TrackPcmDecoder.decodeMono(
+                    context,
+                    url,
+                    maxSeconds = fastSeconds,
+                    allowCache = false,
+                )
+                if (head != null && !cancelRequested.get()) {
+                    BeatThisRunner.analyze(
+                        mono = head,
+                        cancelled = { cancelRequested.get() },
+                        onChunk = { beats, upTo -> emitBeatChunk(beats, upTo, final = false) },
+                    )
+                }
+
+                /*
+                 * 整曲。解码结果还会被紧接着的鼓点分析复用（TrackPcmDecoder 的短时缓存）。
+                 */
+                val mono = TrackPcmDecoder.decodeMono(context, url)
+                    ?: return@execute call.reject("无法解码音频: $url")
+                reportBeatProgress("decode", 1f)
+                val result = BeatThisRunner.analyze(
+                    mono = mono,
+                    cancelled = { cancelRequested.get() },
+                    onProgress = { stage, percent -> reportBeatProgress(stage, percent) },
+                    onChunk = { beats, upTo -> emitBeatChunk(beats, upTo, final = false) },
+                )
                 android.util.Log.i(
                     "Automix",
                     "beat_this(url): ${mono.size} 样本 -> ${result.beats.size} 个拍点，" +
-                        "耗时 ${System.currentTimeMillis() - started}ms",
+                        "耗时 ${System.currentTimeMillis() - started}ms" +
+                        if (result.cancelled) "（已取消）" else "",
                 )
 
                 val beats = JSArray()
@@ -212,7 +310,11 @@ class FoliaAutomixModelsPlugin : Plugin() {
                     JSObject()
                         .put("beats", beats)
                         .put("fps", result.fps)
-                        .put("frames", result.beatLogits.size),
+                        .put("frames", result.beatLogits.size)
+                        // 实际分析了多长：解码器对超长的现场版会截断，截断后后半首没有拍点，
+                        // 前端要能知道（原来这里不说，看上去就是「这首歌后半段没有节拍」）。
+                        .put("seconds", mono.size.toDouble() / 22050.0)
+                        .put("cancelled", result.cancelled),
                 )
             } catch (error: Exception) {
                 call.reject("节拍分析失败: ${error.message}", error)
@@ -221,9 +323,61 @@ class FoliaAutomixModelsPlugin : Plugin() {
     }
 
     /**
+     * 混音的三条鼓点频带（kick / snare / hats），**音频由原生自己按地址取**。
+     *
+     * 这是「时计」在手机上真正需要的那个东西。它原先要么等 htdemucs 分离（比播放慢，永远追不上），
+     * 要么在 WebView 里 `decodeAudioData` 整曲再逐块算 mel（四分钟的歌几十秒），两个都会让
+     * 仿真鼓面在很长一段时间里一动不动。这里把解码与 mel 都搬到原生：一两秒出整曲的频带，
+     * 过桥的只有 3 × 帧数 个 float（四分钟约 150KB），挑鼓点仍在 Web 侧做，算法只有一份。
+     *
+     * 参数：url —— 本地绝对路径，或 http(s) 地址（媒体缓存的回环地址也算本地）。
+     * 返回：bands 三条 base64 float32、frames、fps（50）、seconds（实际解码到的长度）。
+     */
+    @PluginMethod
+    fun analyzeDrumBandsFromUrl(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) return call.reject("缺少 url")
+        val context: Context = context
+        worker.execute {
+            try {
+                cancelRequested.set(false)
+                AutomixLoad.applyThreadPriority()
+                val started = System.currentTimeMillis()
+                // 与节拍分析共用同一条 22.05k 单声道：同一首歌紧跟在前者之后调用时直接命中缓存。
+                val mono = TrackPcmDecoder.decodeMono(context, url)
+                    ?: return@execute call.reject("无法解码音频: $url")
+                val bands = BeatThisRunner.drumBands(mono) { cancelRequested.get() }
+                val frames = if (bands.isEmpty()) 0 else bands[0].size
+                android.util.Log.i(
+                    "Automix",
+                    "drum bands: ${mono.size} 样本 -> $frames 帧，" +
+                        "耗时 ${System.currentTimeMillis() - started}ms",
+                )
+                val payload = JSArray()
+                for (band in bands) payload.put(encodeFloats(band))
+                call.resolve(
+                    JSObject()
+                        .put("bands", payload)
+                        .put("frames", frames)
+                        .put("fps", BeatThisRunner.FPS)
+                        .put("seconds", mono.size.toDouble() / BeatThisRunner.SAMPLE_RATE),
+                )
+            } catch (error: Exception) {
+                call.reject("鼓点频带分析失败: ${error.message}", error)
+            }
+        }
+    }
+
+    /**
      * 用 htdemucs 分离四轨，**音频由原生自己按地址取**（不必走桥）。
      *
-     * 参数：url —— 本地绝对路径，或 http(s) 地址。
+     * 参数：
+     *   url —— 本地绝对路径，或 http(s) 地址。
+     *   stems —— 逗号分隔的轨名（drums / bass / other / vocals）；不传就是四轨全要。
+     *            分析只要鼓或只要人声时传一个，过桥的数据量与内存都跟着减半。
+     *   startSeconds / seconds —— 只分离这一段（分析用）。四分钟的歌在手机上是几分钟的
+     *            推理，而鼓点与人声包络只关心前一两分钟时，没有理由全算。
+     *
      * 返回与 separateStems 完全一致（stems 里是 base64 float32），
      * 因为下游解析那段的形状不该因为取音频的方式而变。
      */
@@ -232,54 +386,103 @@ class FoliaAutomixModelsPlugin : Plugin() {
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
+        val stems = parseStems(call.getString("stems"))
+        val startSeconds = call.getDouble("startSeconds") ?: 0.0
+        val seconds = call.getDouble("seconds")
         worker.execute {
             try {
+                cancelRequested.set(false)
                 val started = System.currentTimeMillis()
                 val decoded = TrackPcmDecoder.decode(context, url)
                     ?: return@execute call.reject("无法解码音频: $url")
-                val file = AutomixModels.ensureLocal(context, AutomixModels.HTDEMUCS)
-                HtdemucsRunner.ensureLoaded(file)
-                val result = HtdemucsRunner.separate(decoded.left, decoded.right) { _, _ -> }
-                android.util.Log.i(
-                    "Automix",
-                    "htdemucs(url): ${decoded.samples} 样本 -> ${result.stems.keys}，" +
-                        "耗时 ${System.currentTimeMillis() - started}ms",
-                )
-                val stems = JSObject()
-                for ((name, channels) in result.stems) {
-                    stems.put(
-                        name,
-                        JSObject()
-                            .put("left", encodeFloats(channels[0]))
-                            .put("right", encodeFloats(channels[1])),
-                    )
-                }
-                call.resolve(
-                    JSObject()
-                        .put("stems", stems)
-                        .put("sampleRate", decoded.sampleRate)
-                        .put("samples", decoded.samples),
-                )
+                respondWithStems(call, decoded, stems, startSeconds, seconds, started)
             } catch (error: Exception) {
                 call.reject("四轨分离失败: ${error.message}", error)
             }
         }
     }
 
+    /** 轨名 → 下标；认不出的名字忽略，一个都不剩就退回四轨全要。 */
+    private fun parseStems(raw: String?): List<Int> {
+        if (raw.isNullOrBlank()) return HtdemucsRunner.STEMS.indices.toList()
+        val picked = raw.split(',')
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .mapNotNull { name -> HtdemucsRunner.STEMS.indexOf(name).takeIf { it >= 0 } }
+            .distinct()
+        return picked.ifEmpty { HtdemucsRunner.STEMS.indices.toList() }
+    }
+
     /**
-     * 44100 双声道 → 22050 单声道。
+     * 跑一次分离并把结果交回 JS。
      *
-     * 先左右平均（居中的人声与乐器会保留，这正是节拍检测要的），
-     * 再每两个样本取一个 —— 44100/2 = 22050，整数倍抽取不需要重采样。
+     * 四条路（从地址、从 PCM）只有「音频从哪来」不同，这一段完全一样：范围换算、
+     * 进度节流、取消、base64 编码。分成两份写的时候，改参数只改了一半 —— 于是
+     * `separateStems` 认 `stems` 而 `separateStemsFromUrl` 不认，调用方一脸问号。
      */
-    private fun downmixToMono22k(decoded: TrackPcmDecoder.Result): FloatArray {
-        val frames = decoded.samples
-        val out = FloatArray(frames / 2)
-        for (i in out.indices) {
-            val srcIndex = i * 2
-            out[i] = (decoded.left[srcIndex] + decoded.right[srcIndex]) * 0.5f
+    private fun respondWithStems(
+        call: PluginCall,
+        decoded: TrackPcmDecoder.Result,
+        stems: List<Int>,
+        startSeconds: Double,
+        seconds: Double?,
+        started: Long,
+    ) {
+        val file = AutomixModels.ensureLocal(context, AutomixModels.HTDEMUCS)
+        HtdemucsRunner.ensureLoaded(file)
+        val rate = decoded.sampleRate
+        val from = (startSeconds * rate).toInt().coerceIn(0, decoded.samples)
+        val to = if (seconds == null || seconds <= 0) {
+            decoded.samples
+        } else {
+            (from + seconds * rate).toInt().coerceIn(from, decoded.samples)
         }
-        return out
+        var lastPercent = -1
+        val result = HtdemucsRunner.separate(
+            decoded.left,
+            decoded.right,
+            stems = stems,
+            fromSample = from,
+            toSample = to,
+            onProgress = { done, total ->
+                val percent = if (total > 0) done * 100 / total else 100
+                // 五个百分点发一次：一个窗口往往跨好几个百分点，不会太频繁。
+                if (percent / 5 != lastPercent / 5 && percent < 100) {
+                    lastPercent = percent
+                    val event = JSObject()
+                    event.put("name", AutomixModels.HTDEMUCS)
+                    event.put("status", "analyzing")
+                    event.put("percent", percent)
+                    notifyListeners("modelProgress", event)
+                }
+            },
+            cancelled = { cancelRequested.get() },
+        )
+        android.util.Log.i(
+            "Automix",
+            "htdemucs: ${decoded.samples} 样本 [${from}, ${to}) -> ${result.stems.keys}，" +
+                "耗时 ${System.currentTimeMillis() - started}ms" +
+                if (cancelRequested.get()) "（已取消，交回算完的部分）" else "",
+        )
+
+        val encoded = JSObject()
+        for ((name, channels) in result.stems) {
+            encoded.put(
+                name,
+                JSObject()
+                    .put("left", encodeFloats(channels[0]))
+                    .put("right", encodeFloats(channels[1])),
+            )
+        }
+        call.resolve(
+            JSObject()
+                .put("stems", encoded)
+                .put("sampleRate", result.sampleRate)
+                // 这一段的长度，不是整首的：取消时会更短，调用方按 fromSample 拼。
+                .put("samples", result.stems.values.firstOrNull()?.get(0)?.size ?: 0)
+                .put("fromSample", result.fromSample)
+                .put("cancelled", cancelRequested.get()),
+        )
     }
 
     /**
@@ -296,16 +499,18 @@ class FoliaAutomixModelsPlugin : Plugin() {
         val context: Context = context
         worker.execute {
             try {
+                cancelRequested.set(false)
                 val mono = decodeFloats(encoded) ?: return@execute call.reject("samples 不是 float32 数组")
 
                 val file = AutomixModels.ensureLocal(context, AutomixModels.BEAT_THIS)
                 BeatThisRunner.ensureLoaded(file)
                 val started = System.currentTimeMillis()
-                val result = BeatThisRunner.analyze(mono)
+                val result = BeatThisRunner.analyze(mono) { cancelRequested.get() }
                 android.util.Log.i(
                     "Automix",
                     "beat_this: ${mono.size} 样本 -> ${result.beats.size} 个拍点，" +
-                        "耗时 ${System.currentTimeMillis() - started}ms",
+                        "耗时 ${System.currentTimeMillis() - started}ms" +
+                        if (result.cancelled) "（已取消）" else "",
                 )
 
                 val beats = JSArray()
@@ -321,7 +526,8 @@ class FoliaAutomixModelsPlugin : Plugin() {
                     JSObject()
                         .put("beats", beats)
                         .put("fps", result.fps)
-                        .put("frames", result.beatLogits.size),
+                        .put("frames", result.beatLogits.size)
+                        .put("cancelled", result.cancelled),
                 )
             } catch (error: Exception) {
                 call.reject("节拍分析失败: ${error.message}", error)
@@ -330,65 +536,37 @@ class FoliaAutomixModelsPlugin : Plugin() {
     }
 
     /**
-     * 用 htdemucs 分离四轨。
+     * 用 htdemucs 分离一段 PCM（调用方按段喂，见 stemRange.ts）。
      *
      * 参数：
      *   left / right —— base64 编码的 float32 小端 PCM，**必须已经是 44100Hz**。
      *                   单声道就把右声道传同一份（模型要的是立体声输入）。
+     *   stems —— 逗号分隔的轨名；不传就是四轨全要。
      *
      * 返回每个轨的波形，同样 base64 编码 —— 调用方拿去做鼓点/人声能量用，
      * 不需要自己再解码一次格式。
      *
-     * 这个调用很重：一次 3.9 秒的窗口，手机上通常几百毫秒到一两秒，
-     * 一首四分钟的歌要跑几十个窗口。所以放在单线程池里排队，
-     * 并且分窗口回报进度 —— 前端据此显示「分析了多少」。
+     * 这个调用很重：一次 3.9 秒的窗口，手机上通常几秒，一首四分钟的歌要跑几十个窗口。
+     * 所以放在单线程池里排队，并且分窗口回报进度 —— 前端据此显示「分析了多少」。
      */
     @PluginMethod
     fun separateStems(call: PluginCall) {
         val leftEncoded = call.getString("left") ?: return call.reject("缺少 left")
         val rightEncoded = call.getString("right") ?: leftEncoded
-        val context: Context = context
+        val stems = parseStems(call.getString("stems"))
         worker.execute {
             try {
+                cancelRequested.set(false)
                 val left = decodeFloats(leftEncoded) ?: return@execute call.reject("left 不是 float32 数组")
                 val right = decodeFloats(rightEncoded) ?: return@execute call.reject("right 不是 float32 数组")
-
-                val file = AutomixModels.ensureLocal(context, AutomixModels.HTDEMUCS)
-                HtdemucsRunner.ensureLoaded(file)
                 val started = System.currentTimeMillis()
-
-                /* 进度事件：让界面知道分到哪了。窗口之间就是天然的节流点。 */
-                var lastPercent = -1
-                val result = HtdemucsRunner.separate(left, right) { done, total ->
-                    val percent = if (total > 0) done * 100 / total else 100
-                    // 每个百分点发一次就够；一个窗口往往跨好几个百分点，不会太频繁。
-                    if (percent != lastPercent && percent < 100) {
-                        lastPercent = percent
-                        val event = JSObject()
-                        event.put("name", AutomixModels.HTDEMUCS)
-                        event.put("status", "analyzing")
-                        event.put("percent", percent)
-                        notifyListeners("modelProgress", event)
-                    }
-                }
-                android.util.Log.i(
-                    "Automix",
-                    "htdemucs: ${left.size} 样本 -> ${result.stems.keys} " +
-                        "耗时 ${System.currentTimeMillis() - started}ms",
-                )
-
-                val stems = JSObject()
-                for ((name, channels) in result.stems) {
-                    val entry = JSObject()
-                    entry.put("left", encodeFloats(channels[0]))
-                    entry.put("right", encodeFloats(channels[1]))
-                    stems.put(name, entry)
-                }
-                call.resolve(
-                    JSObject()
-                        .put("stems", stems)
-                        .put("sampleRate", result.sampleRate)
-                        .put("samples", left.size),
+                respondWithStems(
+                    call,
+                    TrackPcmDecoder.Result(left, right, HtdemucsRunner.SAMPLE_RATE),
+                    stems,
+                    0.0,
+                    null,
+                    started,
                 )
             } catch (error: Exception) {
                 call.reject("四轨分离失败: ${error.message}", error)

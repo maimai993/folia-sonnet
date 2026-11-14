@@ -23,6 +23,27 @@ import { isNativePlaybackReconciling } from './nativePlaybackSync';
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 /**
+ * 一个原生事件从「在播放器线程上生成」到「进到 WebView 的 JS 里」花了多久（毫秒）。
+ *
+ * 这一步是歌词/进度条的全部误差来源：`positionMs` 标的是**生成那一刻**的位置，而
+ * `apply()` 原来把**收到那一刻**当作基准时刻。播放器线程 → 主线程 → `evaluateJavascript`
+ * → JS 上下文这条路上任何一点排队（起播那一瞬间尤其：正在铺歌词、取封面、切视觉器），
+ * 都会变成「时钟从这一秒起整首歌落后那么多」—— 而且因为位置样本不过桥（只有状态边界
+ * 过桥，见 FoliaNativePlayerPlugin），这个落后**没有人来纠正**。
+ *
+ * 两边读的是同一个系统时钟，所以差值就是过桥耗时，不需要另外对齐时钟。
+ *
+ * 异常值一律当 0：墙钟被 NTP 拽回、事件来自另一台机器、或者差出几秒（那不是排队，
+ * 是时钟跳变），都不该把歌词整首推到别处。
+ */
+export const eventDeliveryDelayMs = (wallMs: number | undefined, nowWallMs: number): number => {
+    if (typeof wallMs !== 'number' || !Number.isFinite(wallMs)) return 0;
+    const late = nowWallMs - wallMs;
+    if (!Number.isFinite(late) || late < 0 || late > 3000) return 0;
+    return late;
+};
+
+/**
  * 原生播放（P1）总闸：**已打开**。
  *
  * 曾经因为「开原生播放时 App 内那个歌词可视化页面隔几秒顿一下、关掉就好」停用过一阵。
@@ -283,9 +304,20 @@ class NativePlaybackEngine {
 
     private apply(event: NativePlaybackEvent): void {
         const now = performance.now();
+        /*
+         * 事件是**过去**发生的：位置是生成那一刻的位置，基准时刻也要退回到那一刻。
+         *
+         * 不退这一步的后果是整首歌的恒定滞后（见 `eventDeliveryDelayMs`）：歌词、进度条、
+         * 节拍时钟全都比声音晚一段过桥耗时，而且换哪副耳机都一样 —— 因为它跟音频输出无关。
+         */
+        const lateMs = eventDeliveryDelayMs(event.wallMs, Date.now());
+        const stampedAtMs = now - lateMs;
+        if (lateMs >= 60 && (event.type === 'playing' || event.type === 'ready' || event.type === 'seeked' || event.type === 'paused')) {
+            console.info(`[Clock] ${event.type} 事件过桥用了 ${Math.round(lateMs)}ms，基准按生成时刻对齐`);
+        }
         if (typeof event.positionMs === 'number') {
             this.positionMs = Math.max(0, event.positionMs);
-            this.updatedAtMs = now;
+            this.updatedAtMs = stampedAtMs;
         }
         if (typeof event.durationMs === 'number' && event.durationMs > 0) {
             this.durationMs = event.durationMs;
@@ -294,11 +326,19 @@ class NativePlaybackEngine {
             case 'playing':
                 this.playing = true;
                 this.stalled = false;
-                this.updatedAtMs = now;
+                this.updatedAtMs = stampedAtMs;
                 /*
                  * 声音这一刻才真的开始。`play()` 到这一下之间可能隔着缓冲 / 起播，
                  * 日志里是几百毫秒；那段时间墙钟已经走了，不能让歌词白白领先。
                  * 以播放器给的位置为准把基准复位（这是允许往回走的状态边界）。
+                 */
+                this.lastDeliveredMs = this.positionMs;
+                break;
+            case 'ready':
+                /*
+                 * 起播前的边界：位置同样是**生成那一刻**的。这一下也允许把时钟往回放 ——
+                 * 缓冲结束时它比前面那几条外推出来的位置更权威，而「只进不退」的夹子会让
+                 * 时钟卡在前面，等墙钟追上来，看起来就是歌词停在原地几百毫秒。
                  */
                 this.lastDeliveredMs = this.positionMs;
                 break;

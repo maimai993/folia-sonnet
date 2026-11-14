@@ -8,7 +8,7 @@ import android.util.Log
 import java.nio.ByteOrder
 
 /**
- * 整首歌的 PCM 解码，给 htdemucs / beat_this 用。
+ * 整首歌的 PCM 解码，给 htdemucs / beat_this / 鼓点频带用。
  *
  * 为什么要放在原生侧：
  *   Web 层原来是把线上地址 fetch 成整段 ArrayBuffer，再解码、再以 base64 过桥交给推理。
@@ -19,10 +19,16 @@ import java.nio.ByteOrder
  *   所以音频根本不该过桥：由原生自己按 URL 拉流、MediaCodec 解码成 PCM，
  *   直接把样本数组交给推理。整个过程 Web 层一个字节都拿不到，也就不存在上限问题。
  *
- * 输出约定（与 HtdemucsRunner / BeatThisRunner 要求一致）：
- *   · sampleRate 44100（htdemucs 训练时的采样率）
- *   · 双声道 FloatArray，左右分开，样本值 [-1, 1]
- *   · 源是单声道时复制到两路（分离仍有意义：人声在中间，两路相同会被判成居中分量）
+ * 两种输出：
+ *   · [decode]     —— 44.1kHz **双声道**（htdemucs 的训练输入）。
+ *   · [decodeMono] —— 22.05kHz **单声道**（beat_this 与鼓点频带只要这一条）。
+ *
+ * 为什么单声道值得单独一条路：双声道 44.1kHz 的一首四分钟歌是 85MB × 2 路。
+ * 节拍/鼓点分析拿到它之后还要再降混、再抽一半 —— 那 170MB 里有 3/4 是白分配的。
+ * 手机上这不是「慢一点」：它会把进程推到内存压力区，触发 GC 与交换，
+ * 用户感觉就是「一分析就卡」。同一条路解成 22.05k 单声道只要 21MB。
+ *
+ * 源是单声道时双声道输出复制到两路（分离仍有意义：人声在中间，两路相同会被判成居中分量）。
  */
 internal object TrackPcmDecoder {
 
@@ -32,12 +38,81 @@ internal object TrackPcmDecoder {
     /** htdemucs 训练用的采样率。 */
     const val TARGET_RATE = 44_100
 
+    /** beat_this 与鼓点频带的采样率（与 Web 侧一致）。 */
+    const val MONO_RATE = 22_050
+
     data class Result(
         val left: FloatArray,
         val right: FloatArray,
         val sampleRate: Int,
     ) {
         val samples: Int get() = left.size
+    }
+
+    private class Pcm(
+        val left: FloatArray,
+        val right: FloatArray?,
+        val sampleRate: Int,
+    )
+
+    /**
+     * 单声道缓存：同一首歌的节拍分析与鼓点分析几乎总是前后脚发生。
+     *
+     * 两次调用各解一遍整曲，就是两遍解码 CPU（手机上 1~4 秒）与两轮几十 MB 的分配 ——
+     * 而两次要的是完全相同的一条 22.05k 单声道。留一份 20 秒，
+     * 第二遍直接命中。只留一首、只在前台留：后台不需要为了「下次可能用」占着 20MB。
+     */
+    private const val MONO_CACHE_TTL_MS = 20_000L
+    private var cachedMonoUrl: String? = null
+    private var cachedMonoAt: Long = 0L
+    private var cachedMono: FloatArray? = null
+
+    /**
+     * 从本地文件或 URL 解出整首歌的**单声道 22.05kHz** PCM，带短时缓存。
+     *
+     * @param pathOrUrl 本地绝对路径，或 http(s) 地址（交给 MediaExtractor 直连）。
+     * @param maxSeconds 最多解这么久（默认 8 分钟）。超长的现场版截断，避免内存爆掉。
+     */
+    @Synchronized
+    fun decodeMono(
+        context: Context,
+        pathOrUrl: String,
+        maxSeconds: Int = 480,
+        /**
+         * 用不用、写不写那份 20 秒缓存。
+         *
+         * 「先解前 45 秒 » 那一趟必须是 false：它是截断，一旦写进缓存，
+         * 紧接着的整曲分析会命中它，后半首就没有拍点了。
+         */
+        allowCache: Boolean = true,
+    ): FloatArray? {
+        val now = System.currentTimeMillis()
+        val cached = cachedMono
+        if (allowCache && cached != null &&
+            cachedMonoUrl == pathOrUrl &&
+            now - cachedMonoAt in 0..MONO_CACHE_TTL_MS
+        ) {
+            Log.i(TAG, "单声道缓存命中: $pathOrUrl（${cached.size} 样本）")
+            cachedMonoAt = now
+            return cached
+        }
+        val pcm = decodePcm(context, pathOrUrl, MONO_RATE, monoOnly = true, maxSeconds = maxSeconds) ?: return null
+        val mono = pcm.left
+        // 后台时不留：这一份只是给下一次分析备的，而下次多半是回前台之后。
+        if (allowCache && !AutomixLoad.inBackground) {
+            cachedMonoUrl = pathOrUrl
+            cachedMonoAt = now
+            cachedMono = mono
+        }
+        return mono
+    }
+
+    /** 丢掉单声道缓存（切歌、退出分析时调用，尽早把 20MB 还给系统）。 */
+    @Synchronized
+    fun clearMonoCache() {
+        cachedMonoUrl = null
+        cachedMonoAt = 0L
+        cachedMono = null
     }
 
     /**
@@ -47,6 +122,24 @@ internal object TrackPcmDecoder {
      * @param maxSeconds 最多解这么久（默认 8 分钟）。超长的现场版截断，避免内存爆掉。
      */
     fun decode(context: Context, pathOrUrl: String, maxSeconds: Int = 480): Result? {
+        val pcm = decodePcm(context, pathOrUrl, TARGET_RATE, monoOnly = false, maxSeconds = maxSeconds) ?: return null
+        val right = pcm.right ?: return null
+        return Result(left = pcm.left, right = right, sampleRate = pcm.sampleRate)
+    }
+
+    /**
+     * 真正的解码循环。
+     *
+     * `monoOnly` 只影响**落点**：降混在写之前就做掉，不先解出两路再降混 ——
+     * 那正是内存翻倍的地方。
+     */
+    private fun decodePcm(
+        context: Context,
+        pathOrUrl: String,
+        targetRate: Int,
+        monoOnly: Boolean,
+        maxSeconds: Int,
+    ): Pcm? {
         if (pathOrUrl.isBlank()) return null
         var extractor: MediaExtractor? = null
         var codec: MediaCodec? = null
@@ -98,17 +191,23 @@ internal object TrackPcmDecoder {
              * 输出容量按「目标采样率 × 时长 × 声道」预留。
              * 留 5% 余量给编码器 padding；上限 8 分钟，最坏约 44100*480*2*4B ≈ 169MB，
              * 但那已经是极端情况（且推理本身要 500MB）；常规 4 分钟歌约 85MB。
+             * 单声道那条路是它的一半再一半：22050*480*4B ≈ 42MB，常规 4 分钟约 21MB。
              */
-            val estimate = (TARGET_RATE.toLong() * minOf(limitUs / 1_000_000.0, maxSeconds.toDouble())).toInt() + TARGET_RATE
+            val estimate = (targetRate.toLong() * minOf(limitUs / 1_000_000.0, maxSeconds.toDouble())).toInt() + targetRate
             var left = FloatArray(estimate)
-            var right = FloatArray(estimate)
+            var right: FloatArray? = if (monoOnly) null else FloatArray(estimate)
             var written = 0
+            /*
+             * 让路的计数：每解出这么多帧就检查一次前后台。
+             * 44.1k 下 44100×2 帧 ≈ 2 秒音频，解码本身只要几十毫秒 —— 粒度足够细，
+             * 又不会让每次检查都变成一次 JNI/系统调用。
+             */
+            var yieldCountdown = targetRate * 2
 
             val info = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
-            var resampleRemainderL = 0.0
-            var resampleRemainderR = 0.0
+            var resampleRemainder = 0.0
             /*
              * 连续空转的次数。
              *
@@ -121,12 +220,13 @@ internal object TrackPcmDecoder {
             val idleLimit = 2000
 
             /*
-             * 重采样比例：源采样率 / 目标 44100。
+             * 重采样比例：源采样率 / 目标采样率。
              *
              * 用线性插值，不做高保真重采样 —— 分析/分离只关心频段与时序。
-             * 但必须做：htdemucs 的输入固定 44100，喂错采样率整首歌的音高就变了。
+             * 但必须做：htdemucs 的输入固定 44100，喂错采样率整首歌的音高就变了；
+             * beat_this 固定 22050，喂错就是「拍点整体偏快或偏慢」。
              */
-            var ratio = sourceRate.toDouble() / TARGET_RATE
+            var ratio = sourceRate.toDouble() / targetRate
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -162,7 +262,7 @@ internal object TrackPcmDecoder {
                         if (outFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
                             val realRate = outFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                             if (realRate > 0) {
-                                ratio = realRate.toDouble() / TARGET_RATE
+                                ratio = realRate.toDouble() / targetRate
                             }
                         }
                         idleSpins = 0
@@ -185,7 +285,7 @@ internal object TrackPcmDecoder {
                                 val frames = shorts.remaining() / channels
                                 /*
                                  * 逐帧取源样本，再按 ratio 线性插值到目标采样率。
-                                 * 累加器跨 buffer 保留（resampleRemainder*），否则每个 buffer
+                                 * 累加器跨 buffer 保留（resampleRemainder），否则每个 buffer
                                  * 的接缝处都会掉/重一个样本，长歌会累积成可听的偏移。
                                  */
                                 for (f in 0 until frames) {
@@ -195,19 +295,26 @@ internal object TrackPcmDecoder {
                                     } else {
                                         l
                                     }
-                                    resampleRemainderL += 1.0
-                                    resampleRemainderR += 1.0
-                                    while (resampleRemainderL >= ratio) {
-                                        resampleRemainderL -= ratio
+                                    resampleRemainder += 1.0
+                                    while (resampleRemainder >= ratio) {
+                                        resampleRemainder -= ratio
                                         if (written >= left.size) {
-                                            val grownL = left.copyOf(left.size + estimate)
-                                            val grownR = right.copyOf(right.size + estimate)
-                                            left = grownL
-                                            right = grownR
+                                            left = left.copyOf(left.size + estimate)
+                                            val current = right
+                                            if (current != null) right = current.copyOf(current.size + estimate)
                                         }
-                                        left[written] = l
-                                        right[written] = r
+                                        if (monoOnly) {
+                                            left[written] = (l + r) * 0.5f
+                                        } else {
+                                            left[written] = l
+                                            right?.set(written, r)
+                                        }
                                         written += 1
+                                    }
+                                    yieldCountdown -= 1
+                                    if (yieldCountdown <= 0) {
+                                        yieldCountdown = targetRate * 2
+                                        AutomixLoad.yieldPoint()
                                     }
                                 }
                             }
@@ -222,11 +329,14 @@ internal object TrackPcmDecoder {
                 Log.w(TAG, "解码结果为空: $pathOrUrl")
                 return null
             }
-            Log.i(TAG, "解码完成: ${sourceRate}Hz/${channels}ch -> 44100Hz, $written 样本")
-            return Result(
+            Log.i(
+                TAG,
+                "解码完成: ${sourceRate}Hz/${channels}ch -> ${targetRate}Hz${if (monoOnly) " 单声道" else " 双声道"}，$written 样本",
+            )
+            return Pcm(
                 left = left.copyOf(written),
-                right = right.copyOf(written),
-                sampleRate = TARGET_RATE,
+                right = right?.copyOf(written),
+                sampleRate = targetRate,
             )
         } catch (error: Exception) {
             Log.w(TAG, "解码失败: ${error.message}")

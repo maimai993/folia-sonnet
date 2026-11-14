@@ -31,12 +31,17 @@ describe('estimateAutoAlign', () => {
     });
 
     it('finds a whole-song offset of a few hundred milliseconds', () => {
-        // 歌词时间戳比人声晚 300 ms：整首都要往前挪，offset 应为 +300。
+        /*
+         * 人声比歌词时间戳早 300 ms（词比声音晚出）：整首都要往前挪。
+         *
+         * 播放端是 `lyricTimeSec = audioTime - offset / 1000`，正的 offset 让歌词更晚，
+         * 所以「往前挪」是负数。原来这里断言 +300 —— 符号反了，自动校准会把偏差放大一倍。
+         */
         const { envelope, lines } = buildEnvelope(20, -0.3);
         const result = estimateAutoAlign(envelope, FPS, lines);
         expect(result.applied).toBe(true);
-        expect(result.offsetMs).toBeGreaterThanOrEqual(270);
-        expect(result.offsetMs).toBeLessThanOrEqual(330);
+        expect(result.offsetMs).toBeLessThanOrEqual(-270);
+        expect(result.offsetMs).toBeGreaterThanOrEqual(-330);
         expect(result.confidence).toBeGreaterThan(0.9);
     });
 
@@ -56,8 +61,25 @@ describe('estimateAutoAlign', () => {
         expect(['low-confidence', 'negligible']).toContain(result.reason);
     });
 
-    it('ignores interlude placeholders and one-word lines', () => {
-        const { envelope, lines } = buildEnvelope(20, -0.3);
+    it('does not follow a drum hit that lands before the voice', () => {
+        /*
+         * 每句之前 350 ms 有一记比人声还响的鼓（60 ms 的瞬态）。它是「最大的能量跃升」，
+         * 但撑不住 —— 人声才是这一行的起唱点。跟着鼓走会把整首歌词往后推 350 ms，
+         * 而且写进本曲偏移之后一直跟着这首歌。
+         */
+        const { envelope, lines } = buildEnvelope(20, 0);
+        for (const line of lines) {
+            const from = Math.round((line.startTime - 0.35) * FPS);
+            for (let frame = from; frame < from + 6; frame += 1) {
+                envelope[frame] = VOICE_DB + 6;
+            }
+        }
+        const result = estimateAutoAlign(envelope, FPS, lines);
+        expect(result.applied).toBe(false);
+        expect(Math.abs(result.offsetMs)).toBeLessThan(80);
+    });
+
+    it('ignores interlude placeholders and one-word lines', () => {        const { envelope, lines } = buildEnvelope(20, -0.3);
         const withNoise: AutoAlignLine[] = [
             ...lines,
             { startTime: 1, endTime: 1.2, fullText: '啊' },
@@ -65,8 +87,8 @@ describe('estimateAutoAlign', () => {
         ];
         const result = estimateAutoAlign(envelope, FPS, withNoise);
         expect(result.applied).toBe(true);
-        expect(result.offsetMs).toBeGreaterThanOrEqual(270);
-        expect(result.offsetMs).toBeLessThanOrEqual(330);
+        expect(result.offsetMs).toBeLessThanOrEqual(-270);
+        expect(result.offsetMs).toBeGreaterThanOrEqual(-330);
     });
 });
 

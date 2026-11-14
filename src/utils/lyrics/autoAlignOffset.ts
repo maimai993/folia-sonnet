@@ -70,6 +70,13 @@ const DEFAULTS: Required<AutoAlignOptions> = {
 /** 间奏占位行（`……`）不参与：它没有「唱」这回事。 */
 const INTERLUDE_TEXT = '……';
 
+/** 起唱之后要看多久才算「唱下去了」：人声是持续的，鼓点、拍手是瞬态。 */
+const SUSTAIN_SEC = 0.25;
+/** 这段时间里能量允许掉多少 dB；再多就不是人声，是敲了一下。 */
+const SUSTAIN_MAX_DROP_DB = 10;
+/** 一行最多试几个候选起唱点（按跃升从大到小）；再多只是白算。 */
+const MAX_CANDIDATES = 8;
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
 /**
@@ -187,20 +194,51 @@ export const estimateAutoAlign = (
             continue;
         }
 
-        let bestFrame = -1;
-        let bestRise = 0;
+        /*
+         * 候选按跃升从大到小排，取第一个「起来了还接着唱」的。
+         *
+         * 只认能量跃升，撞上的常常不是人声而是鼓：底鼓、军鼓、拍手都在人声频段里留一下
+         * 尖峰，跃升比人声还陡，但它几十毫秒就掉下去了。原来的实现只看最大的那一下，
+         * 于是整曲偏移被这些东西带着走 —— 有时偏一个反拍、有时偏正拍，落在「听得出来」
+         * 的位置上，而且一旦写进本曲偏移就一直跟着这首歌（用户说的「很容易对不准」）。
+         *
+         * 所以候选要过一道持续性：起唱之后 60~250 ms 里能量不掉出峰值 10 dB。
+         * 人声一唱就是几百毫秒，瞬态撑不住这么久。第一个不合格就退到第二个，而不是
+         * 整行作废 —— 鼓点比人声响得多的歌，作废会一行样本都不剩。
+         */
+        const candidates: Array<{ frame: number; rise: number }> = [];
         for (let frame = from; frame <= to; frame += 1) {
             // 人声起唱是「安静 → 有声」，所以只认上升到有声区的那些帧。
             if (envelope[frame] < reference - 26) {
                 continue;
             }
             const rise = envelope[frame] - envelope[frame - riseFrames];
-            if (rise > bestRise) {
-                bestRise = rise;
-                bestFrame = frame;
+            if (rise >= config.minRiseDb) {
+                candidates.push({ frame, rise });
             }
         }
-        if (bestFrame < 0 || bestRise < config.minRiseDb) {
+        if (candidates.length === 0) {
+            continue;
+        }
+        candidates.sort((left, right) => right.rise - left.rise);
+
+        let bestFrame = -1;
+        for (const candidate of candidates.slice(0, MAX_CANDIDATES)) {
+            const sustainFrom = candidate.frame + Math.round(fps * 0.06);
+            const sustainTo = Math.min(envelope.length - 1, candidate.frame + Math.round(fps * SUSTAIN_SEC));
+            let held = Number.NEGATIVE_INFINITY;
+            for (let frame = sustainFrom; frame <= sustainTo; frame += 1) {
+                if (envelope[frame] > held) {
+                    held = envelope[frame];
+                }
+            }
+            if (!Number.isFinite(held) || held < envelope[candidate.frame] - SUSTAIN_MAX_DROP_DB || held < reference - 30) {
+                continue;
+            }
+            bestFrame = candidate.frame;
+            break;
+        }
+        if (bestFrame < 0) {
             continue;
         }
 
@@ -215,10 +253,37 @@ export const estimateAutoAlign = (
         return { ...empty('not-enough-lines'), samples: deltas.length };
     }
 
+    /*
+     * 先取中位数，再按它的绝对偏差（MAD）裁一轮离群样本，重新取一次。
+     *
+     * 只算「落在中位数 ±200 ms 内的比例」不改中位数本身：一首歌里若三分之一的行撞在
+     * 鼓点上、而且都偏同一个方向，中位数会被那三分之一拽走几十毫秒，比例还照样过线。
+     * 裁掉之后的中位数才是「整首歌真正一致的那个差」。
+     */
     const centre = median(deltas);
-    const inliers = deltas.filter(delta => Math.abs(delta - centre) <= 0.2).length;
-    const confidence = inliers / deltas.length;
-    const offsetMs = Math.round((centre * 1000) / 10) * 10;
+    const spread = median(deltas.map(delta => Math.abs(delta - centre)));
+    /*
+     * 裁剪窗口最多 150 ms。
+     *
+     * MAD×3 是常规做法，但这批样本常常是双峰的（一半撞在鼓上、偏一个反拍），双峰的 MAD
+     * 很大，×3 之后什么都裁不掉 —— 于是「各行方向不一致」那一关形同虚设，反而把一首
+     * 半对半错的歌硬调了。上限压到 150 ms，双峰的样本自然通不过下面的 confidence。
+     */
+    const limit = Math.max(0.06, Math.min(0.15, spread * 2));
+    const inliers = deltas.filter(delta => Math.abs(delta - centre) <= limit);
+    const refined = inliers.length >= config.minSamples ? median(inliers) : centre;
+    const confidence = inliers.length / deltas.length;
+    /*
+     * ★ 符号。
+     *
+     * `delta` 是「歌词标注的时刻 − 人声真正起唱的时刻」：正数说明歌词标晚了（人声先唱、
+     * 词还没到）。而播放端的 `lyricTimeSec = audioTime − offset / 1000` —— 正的 offset 是把
+     * 歌词时钟往回拨，也就是**让歌词更晚**。所以要把「标晚了」补回来，offset 必须取反。
+     *
+     * 原来这里是正的：歌词比声音早的歌被推得更早，比声音晚的被推得更晚 —— 自动校准
+     * 反而把偏差放大一倍。用户说的「很容易对不准、词曲不同步」有一半来自这里。
+     */
+    const offsetMs = Math.round((-refined * 1000) / 10) * 10;
 
     if (confidence < config.minConfidence) {
         return { offsetMs: 0, confidence, samples: deltas.length, applied: false, reason: 'low-confidence' };

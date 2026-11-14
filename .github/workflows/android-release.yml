@@ -156,10 +156,18 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Cache Android analysis weights
+        # 182MB 的两份 ONNX 不进 git。缓存命中时 `npm run models:android` 只做一次
+        # sha256 校验；没命中才去 hf-mirror 下。key 跟脚本走：权重或校验值一改就重下。
+        uses: actions/cache@v4
+        with:
+          path: android/app/src/main/assets/models
+          key: android-models-${{ hashFiles('scripts/fetchAndroidModels.mjs', 'android/app/src/main/java/top/izuna/foliamajor/automix/AutomixModels.kt') }}
+
       - name: Build web assets and sync to Android
-        # 一条命令两件事：vite build（FOLIA_BUILD_TARGET=capacitor）+ cap sync android。
-        # 分开写容易漏掉同步那一步，而漏了之后打出来的包照样是绿的 —— 只有装机才发现
-        # 前端还是旧的。
+        # 一条命令三件事：vite build（FOLIA_BUILD_TARGET=capacitor）+ 取分析权重 +
+        # cap sync android。分开写容易漏掉同步那一步，而漏了之后打出来的包照样是绿的 ——
+        # 只有装机才发现前端还是旧的；漏了权重则是装机后智能动感永远不动。
         run: npm run cap:sync:android
 
       - name: Restore signing keystore
