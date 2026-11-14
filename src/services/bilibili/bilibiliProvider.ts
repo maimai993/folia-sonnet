@@ -27,9 +27,11 @@ import {
     bilibiliArtistId,
     bilibiliBvidOf,
     bilibiliCidOf,
+    bilibiliEpIdOf,
     bilibiliMidOfArtistId,
     bilibiliSongId,
     normalizeBilibiliSong,
+    normalizeBilibiliEpisode,
 } from './bilibiliNormalize';
 import { useBilibiliAuthStore } from '../../stores/useBilibiliAuthStore';
 import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
@@ -406,17 +408,23 @@ export const bilibiliProvider: OnlineMusicProvider = {
          * 不需要音画偏移。
          */
         async getAudioSource(song, quality) {
+            /*
+             * 番剧分集（`bilibili:ep:<epId>:<cid>`）没有 bvid：取流按 PGC 走，
+             * playurl 给 ep_id 而不是 bvid —— 两个接口是同一个，参数不同而已。
+             */
+            const epId = bilibiliEpIdOf(song);
             const bvid = bilibiliBvidOf(song);
-            if (!bvid) return null;
+            if (!bvid && !epId) return null;
             // 多P 投稿的每一集都有自己的 cid，取流要用那一集的。
-            const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
+            const cid = bilibiliCidOf(song) ?? (bvid ? (await fetchBilibiliVideoInfo(bvid)).cid : 0);
+            if (!cid) return null;
             /*
              * 这一家的「音质」其实是**画质**（画面和声音是一起取的）。
              *
              * 通用那个音质偏好是给音乐平台听的，默认 high，放到这一站就是 1080P 的
              * DASH —— 在手机上一放就卡。没单独选过的话按 720P 走，选过的照选。
              */
-            const track = await fetchBilibiliPlayUrl(bvid, cid, quality === 'high' ? 'standard' : quality);
+            const track = await fetchBilibiliPlayUrl(bvid, cid, quality === 'high' ? 'standard' : quality, epId);
             // 拿不到独立音轨（老投稿只有 durl）时退回那条合成流，画面和声音在一起。
             const candidates = track.audioUrls.length > 0 ? track.audioUrls : track.urls;
             /*
@@ -440,6 +448,16 @@ export const bilibiliProvider: OnlineMusicProvider = {
 
         /** 按 id 取一条投稿的完整信息：推荐列表里的行被点开时用它补全。 */
         async getSongDetail(id) {
+            /*
+             * 番剧分集没有 bvid，也问不到普通投稿那套信息 —— 它被点开时手里的
+             * 标题 / 封面已经全了（normalizeBilibiliEpisode 填好），不必再补，
+             * 也补不了。null 会让上层以为是「查无此歌」，所以这里把手里这份直接还回去。
+             */
+            const epId = bilibiliEpIdOf({ id });
+            if (epId) {
+                // 手里只有 epId：回一份占位（标题/时长留空，队列里已有的一份才是全的）。
+                return normalizeBilibiliEpisode({ epId, title: '', cid: 0, durationSec: 0 }, '');
+            }
             const bvid = bilibiliBvidOf({ id });
             if (!bvid) return null;
             const info = await fetchBilibiliVideoInfo(bvid);
@@ -605,14 +623,37 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const videos = await shelf.load();
             console.info('[Bilibili] getPlaylistTracks: shelf loaded', raw, videos.length, 'items');
             return {
-                items: videos.map(video => normalizeBilibiliSong({
-                    bvid: video.bvid,
-                    title: video.title,
-                    author: video.author,
-                    durationSec: video.durationSec,
-                    coverUrl: video.coverUrl,
-                    playCount: video.playCount,
-                })),
+                items: videos.map(video => {
+                    /*
+                     * 追番 / 追剧摊平出来的条目 bvid 是 `ep:<epId>`：它是番剧分集，
+                     * 没有 bvid —— 按分集转成歌（取流走 ep_id 那条路）。
+                     */
+                    if (video.bvid.startsWith('ep:')) {
+                        const epId = Number(video.bvid.slice('ep:'.length));
+                        return Number.isFinite(epId) && epId > 0
+                            ? normalizeBilibiliEpisode(
+                                { epId, title: video.title, cid: video.cid ?? 0, durationSec: video.durationSec },
+                                video.author,
+                                video.coverUrl,
+                            )
+                            : normalizeBilibiliSong({
+                                bvid: video.bvid,
+                                title: video.title,
+                                author: video.author,
+                                durationSec: video.durationSec,
+                                coverUrl: video.coverUrl,
+                                playCount: video.playCount,
+                            });
+                    }
+                    return normalizeBilibiliSong({
+                        bvid: video.bvid,
+                        title: video.title,
+                        author: video.author,
+                        durationSec: video.durationSec,
+                        coverUrl: video.coverUrl,
+                        playCount: video.playCount,
+                    });
+                }),
                 hasMore: false,
                 nextOffset: videos.length,
             };
@@ -687,21 +728,18 @@ export const bilibiliProvider: OnlineMusicProvider = {
              */
             const season = seasonsById.get(seasonId);
             const episodes = await listBangumiEpisodes(seasonId, season?.firstEpId ?? null);
-            // 投稿人的名字就是这一季自己的话，没有就留空（不拿平台名当作者）。
-            const artist = '';
+            /*
+             * 一集一首歌，按分集自己的 id 走（`bilibili:ep:<epId>:<cid>`）。
+             *
+             * 以前这里走 normalizeBilibiliSong：那一条要求 bvid，而番剧（PGC）的
+             * 分集**没有 bvid** —— 正片全部被丢掉，就算分集列表拉到了也摆不出来，
+             * 用户看到的就是「第几集解析不出来」。取流见 getAudioSource 里的 ep 分支。
+             */
+            const title = season?.title ?? episodes[0]?.title ?? `Season ${seasonId}`;
+            const cover = season?.coverUrl ?? '';
             const page = episodes.slice(offset, offset + limit);
             return {
-                items: page.map(episode => normalizeBilibiliSong(
-                    {
-                        bvid: episode.bvid,
-                        title: episode.title,
-                        author: artist,
-                        durationSec: episode.durationSec,
-                        coverUrl: '',
-                        playCount: 0,
-                    },
-                    { cid: episode.cid, title: episode.title, durationSec: episode.durationSec },
-                )),
+                items: page.map(episode => normalizeBilibiliEpisode(episode, title, cover)),
                 hasMore: offset + limit < episodes.length,
                 nextOffset: offset + limit,
             };

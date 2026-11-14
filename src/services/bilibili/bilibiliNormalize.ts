@@ -19,10 +19,29 @@ const BILIBILI_ID_PREFIX = 'bilibili:';
  * 分P 写进 id 是因为**同一个 bvid 下的每一集播放地址都不一样**（cid 不同）。
  * 只带 bvid 的话，一个多P 投稿的所有集数在应用眼里是同一首歌：队列里会去重、
  * 切集时进度不会重置、缓存也会互相顶掉。带上 cid 它们才是各自独立的歌。
+ *
+ * 番剧分集没有 bvid（PGC 内容走 ep_id 取流），写成 `bilibili:ep:<epId>:<cid>`：
+ * ep 前缀让取流那层知道要问 PGC 的 playurl，而不是普通投稿的。
  */
 export const bilibiliSongId = (bvid: string, cid?: number | null): string => (
     typeof cid === 'number' && cid > 0 ? `${BILIBILI_ID_PREFIX}${bvid}:${cid}` : `${BILIBILI_ID_PREFIX}${bvid}`
 );
+
+/** 一集番剧在本应用里的 id：`bilibili:ep:<epId>[:<cid>]`。 */
+export const bilibiliEpisodeSongId = (epId: number, cid?: number | null): string => (
+    typeof cid === 'number' && cid > 0
+        ? `${BILIBILI_ID_PREFIX}ep:${epId}:${cid}`
+        : `${BILIBILI_ID_PREFIX}ep:${epId}`
+);
+
+/** id 是番剧分集的形式吗（`bilibili:ep:...`）；是的话取回 epId。 */
+export const bilibiliEpIdOf = (song: { id?: string | number } | null | undefined): number | null => {
+    const id = String(song?.id ?? '');
+    const rest = id.startsWith(BILIBILI_ID_PREFIX) ? id.slice(BILIBILI_ID_PREFIX.length) : '';
+    if (!rest.startsWith('ep:')) return null;
+    const epId = Number(rest.slice('ep:'.length).split(':')[0]);
+    return Number.isFinite(epId) && epId > 0 ? epId : null;
+};
 
 /** 从 id 里取回 bvid；不是本平台的 id 就回空串。 */
 export const bilibiliBvidOf = (song: { id?: string | number } | null | undefined): string => {
@@ -82,6 +101,8 @@ export const upgradeCoverUrl = (url: string | undefined): string => {
  *
  * 时长按这个应用的习惯用毫秒（接口给的是秒）。UP 主当歌手，专辑留空 ——
  * 投稿没有专辑这回事，硬塞一个只会让「打开专辑」指到不存在的地方。
+ *
+ * 番剧分集（没有 bvid）不走这里：用 normalizeBilibiliEpisode。
  */
 export const normalizeBilibiliSong = (
     hit: BilibiliSearchHit,
@@ -100,4 +121,24 @@ export const normalizeBilibiliSong = (
     // 都拿它显示一个 "MV" 角标）。B 站这里放的就是投稿本身，不是某个别的平台的歌的 MV，
     // 打上那个角标只会让人以为还有一份别的视频。
     sourceRef: { kind: 'online', providerId: 'bilibili', mediaId: hit.bvid },
+});
+
+/**
+ * 一集番剧 → UnifiedSong。
+ *
+ * 分集没有 bvid（PGC 内容），id 写成 `bilibili:ep:<epId>:<cid>`，取流那层见 ep 前缀
+ * 就按 PGC 的 playurl 问（ep_id 而不是 bvid）。封面从季带来 —— 分集自己的封面多为空，
+ * 播放页靠它兜底。
+ */
+export const normalizeBilibiliEpisode = (
+    episode: { epId: number; title: string; cid: number; durationSec: number },
+    seasonTitle: string,
+    seasonCoverUrl?: string,
+): UnifiedSong => ({
+    id: bilibiliEpisodeSongId(episode.epId, episode.cid),
+    name: episode.title || seasonTitle,
+    artists: [],
+    album: { id: '', name: seasonTitle, coverUrl: upgradeCoverUrl(seasonCoverUrl) || undefined },
+    durationMs: Math.max(0, Math.round(episode.durationSec * 1000)),
+    sourceRef: { kind: 'online', providerId: 'bilibili', mediaId: `ep${episode.epId}` },
 });

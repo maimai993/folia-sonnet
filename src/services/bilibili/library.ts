@@ -1,6 +1,7 @@
 import { fetchBilibiliZoneFeed, fetchJson, fetchJsonWithHeaders, signedUrl, unwrap } from './api';
 import { upgradeCoverUrl } from './bilibiliNormalize';
 import { isBilibiliAvailable } from './transport';
+import { listBangumiEpisodes } from './bangumi';
 
 /** 站内搜索接口认的来源；用 www 会被风控成 412。 */
 const SEARCH_HEADERS = {
@@ -34,6 +35,8 @@ export interface BilibiliShelfItem {
     coverUrl: string;
     durationSec: number;
     playCount: number;
+    /** 番剧分集的 cid（普通投稿条目没有）；分集取流要用它。 */
+    cid?: number;
 }
 
 /** 封面地址统一成完整的 https（协议相对的写法这里也会遇到）。 */
@@ -251,6 +254,52 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         });
     }
 
+    /*
+     * 追番 / 追剧：这两个接口回的是**番剧季**（season_id、标题、封面），不是视频
+     * 投稿 —— 以前的 toItem 把它们按视频解析（要 bvid），季条目自然一个都没有，
+     * 整个歌单空掉。现在把每一季摊平成它的分集：一部番就是一份「歌」（一集一首），
+     * 和「我的收藏」摊平各收藏夹是同一个模式。分集没有 bvid 也能播 —— 取流走
+     * ep_id 那条路（bilibiliProvider 的 getAudioSource 按歌的 ep 前缀分派）。
+     */
+    const followList = async (type: 1 | 2): Promise<BilibiliShelfItem[]> => {
+        try {
+            const payload = unwrap(await fetchJsonWith<{
+                result?: {
+                    list?: Array<{
+                        season_id?: number;
+                        title?: string;
+                        cover?: string;
+                        season_type?: number;
+                        first_ep?: { ep_id?: number };
+                    }>;
+                };
+            }>(`https://api.bilibili.com/x/space/bangumi/follow/list?type=${type}&follow_status=0&pn=1&ps=30&vmid=${uid}`));
+            const seasons = payload.result?.list ?? [];
+            const collected: BilibiliShelfItem[] = [];
+            for (const season of seasons) {
+                const seasonId = season.season_id;
+                if (typeof seasonId !== 'number') continue;
+                const episodes = await listBangumiEpisodes(seasonId, season.first_ep?.ep_id ?? null).catch(() => []);
+                for (const episode of episodes) {
+                    collected.push({
+                        // 分集没有 bvid：给 `ep:<epId>` 占位，getPlaylistTracks 认得出它是番剧分集。
+                        bvid: `ep:${episode.epId}`,
+                        title: episode.title || season.title || '',
+                        // UP 主那一栏放季名 —— 追番列表里「谁的作品」就是哪部番。
+                        author: season.title ?? '',
+                        coverUrl: https(season.cover),
+                        durationSec: episode.durationSec,
+                        playCount: 0,
+                        cid: episode.cid,
+                    });
+                }
+            }
+            return collected;
+        } catch {
+            return [];
+        }
+    };
+
     shelves.push(
         simple('toview', 'shelfToview', 'https://api.bilibili.com/x/v2/history/toview'),
         simple('coins', 'shelfCoins', `https://api.bilibili.com/x/space/coin/video?vmid=${uid}&pn=1&ps=30`, true),
@@ -261,8 +310,16 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
             ps: 30,
             order: 'pubdate',
         }), true),
-        simple('bangumi', 'shelfBangumi', `https://api.bilibili.com/x/space/bangumi/follow/list?type=1&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
-        simple('tv', 'shelfTv', `https://api.bilibili.com/x/space/bangumi/follow/list?type=2&follow_status=0&pn=1&ps=30&vmid=${uid}`, true),
+        {
+            id: 'bangumi',
+            title: 'shelfBangumi',
+            load: () => followList(1),
+        },
+        {
+            id: 'tv',
+            title: 'shelfTv',
+            load: () => followList(2),
+        },
     );
 
     // 条数一次问全，而且并着问：它们是同一个账号下的几个小列表。

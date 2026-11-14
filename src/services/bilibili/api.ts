@@ -613,9 +613,12 @@ export const forgetBilibiliSignedIn = (): void => {
 };
 
 export const fetchBilibiliPlayUrl = async (
+    /** 普通投稿的 bvid；番剧分集传空串（改用 epId 那条路）。 */
     bvid: string,
     cid: number,
     quality: string = 'standard',
+    /** 番剧分集的 ep_id：给了它 playurl 就按 PGC 问（不需要 bvid）。 */
+    epId?: number | null,
 ): Promise<{
     url: string;
     height: number;
@@ -662,10 +665,13 @@ export const fetchBilibiliPlayUrl = async (
      * 那份会带，退路里就空着 —— 歌词优先的默认设置下用户看到的还是歌词。
      */
     let payload: PlayUrlDash;
+    // 番剧分集没有 bvid：playurl 对 PGC 内容认 ep_id（ep_id 与 cid 二选一或都给）。
+    const idParams: Record<string, string | number> = epId
+        ? { ep_id: epId, cid }
+        : { bvid, cid };
     try {
         const url = await signedUrl('/x/player/wbi/playurl', {
-            bvid,
-            cid,
+            ...idParams,
             qn,
             fnval,
             fourk: wants4k ? 1 : 0,
@@ -683,7 +689,10 @@ export const fetchBilibiliPlayUrl = async (
          * 一点点」。不带这个参数、给 fnval=16（只要 DASH），同一接口回的是分离的
          * 音轨 + 画面轨，时长精确到毫秒、画质还更高（登录后能到 1080P）。
          */
-        const fallbackUrl = `${API_BASE}/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}`
+        const idQuery = epId
+            ? `ep_id=${epId}&cid=${cid}`
+            : `bvid=${encodeURIComponent(bvid)}&cid=${cid}`;
+        const fallbackUrl = `${API_BASE}/x/player/playurl?${idQuery}`
             + `&qn=${qn}&fnval=16&fnver=0&fourk=${wants4k ? 1 : 0}`;
         payload = unwrap(await fetchJson<PlayUrlDash>(fallbackUrl));
     }

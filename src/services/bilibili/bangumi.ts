@@ -38,7 +38,7 @@ export interface BangumiSeason {
 export interface BangumiEpisode {
     epId: number;
     title: string;
-    /** 这一集对应的投稿号；取流和字幕都靠它。 */
+    /** 这一集对应的投稿号；普通投稿取流和字幕靠它。番剧分集没有它（空串），取流走 ep_id。 */
     bvid: string;
     cid: number;
     durationSec: number;
@@ -246,12 +246,18 @@ export const listBangumiEpisodes = async (
             );
             const result = payload?.result;
             const episodes = result?.episodes ?? result?.main_section?.episodes ?? [];
-            const usable = episodes.filter(ep => typeof ep.cid === 'number' && ep.bvid);
+            /*
+             * 只要有 cid 就留。以前要求 bvid 也在场 —— 番剧（PGC）的分集**本来就没有
+             * bvid**，只有 ep_id + cid，取流走 PGC 的 playurl（ep_id 那条路）；
+             * 电影的分集有时才有。这一道过滤把正片番剧全滤光了，用户看到的就是
+             * 「点进去一集都没有」。
+             */
+            const usable = episodes.filter(ep => typeof ep.cid === 'number' && ep.id);
             if (usable.length > 0) {
                 return usable.map((ep, index) => ({
                     epId: ep.id ?? index + 1,
                     title: ep.long_title || ep.title || '',
-                    bvid: ep.bvid as string,
+                    bvid: ep.bvid ?? '',
                     cid: ep.cid as number,
                     durationSec: ep.duration ?? 0,
                     index: index + 1,

@@ -421,7 +421,16 @@ const executeSearch = async (
         return searchAllSources(query, offset, limit, deps, onPartial);
     }
 
-    return kind === 'song'
+    /*
+     * 「视频」那一档走单曲的路。
+     *
+     * 视频站搜出来的每条本来就是一条投稿 —— 「视频」和「单曲」是同一份结果（见
+     * omni.getProviderSearchKinds 的注释）。以前这里只判 `kind === 'song'`，
+     * 「视频」落进了集合路径，集合路径里又没有 video 的实现（落到歌单那档的守卫，
+     * 回一个空页）—— 用户看到的就是「视频搜不出来」。现在视频也交给单曲路径，
+     * 结果照常摆进 `searchResults`。
+     */
+    return kind === 'song' || kind === 'video'
         ? searchOnlineProviderSongs(sourceTab, query, limit, offset)
         : searchOnlineProviderCollections(sourceTab, kind, query, limit, offset);
 };
