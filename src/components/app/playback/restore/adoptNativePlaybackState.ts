@@ -25,11 +25,10 @@ export const adoptNativePlaybackState = (snapshot: NativeQueueState): boolean =>
         || queue.some((item, index) => getPlaybackSongKey(item) !== getPlaybackSongKey(store.playQueue[index])))) {
         store.setPlayQueue(queue);
     }
-    if (changed) {
-        store.setLyricsState(null);
-        store.setCachedCoverUrl(snapshot.artworkUrl || null);
-    }
+    if (changed) store.setLyricsState(null);
     makeSongCurrent(song as SongResult);
+    // 歌换上之后再写封面：换歌那一下 store 会清掉上一首的封面（#323），先写就被一并清掉。
+    if (changed) store.setCachedCoverUrl(snapshot.artworkUrl || null);
     if (media?.songKey === snapshot.songKey && media.url) store.setAudioSrc(media.url);
     store.setDuration(Math.max(0, snapshot.durationMs) / 1000);
     currentTime.set(Math.max(0, snapshot.positionMs) / 1000);
