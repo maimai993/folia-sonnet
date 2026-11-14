@@ -332,6 +332,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         instance = this
         val generation = PLAYER_GENERATIONS.advance()
         playerGeneration = generation
+        // 旧实例若还没销毁，它的释放回调会因代数过期而跳过清理；新播放器从干净的缓冲豁免开始。
+        WallpaperLyricsState.clearPlayerStall()
         /*
          * 均衡器先恢复再建播放器。
          *
@@ -463,10 +465,10 @@ class FoliaNativePlayerPlugin : Plugin() {
                  */
                 payload.put("wallMs", System.currentTimeMillis().toDouble())
                 // ended / error 用事件发出时真实装着的那首（见 FoliaNativePlayer.emit），不用已被下一单提前改写的 lastMediaId。
-                val eventKey = if ("ended" == type || "error" == type) player?.lastEventMediaId() ?: "" else player?.currentMediaId() ?: ""
+                val eventKey = if ("ended" == type || "error" == type) self.lastEventMediaId() else self.currentMediaId()
                 payload.put("songKey", eventKey)
-                payload.put("playing", player?.isPlaying() == true)
-                payload.put("buffering", player?.isBuffering() == true)
+                payload.put("playing", self.isPlaying())
+                payload.put("buffering", self.isBuffering())
                 /*
                  * ⭐ **播完了自动下一首。**
                  *
@@ -571,7 +573,8 @@ class FoliaNativePlayerPlugin : Plugin() {
     override fun handleOnDestroy() {
         // 先使排队中的旧播放器事件失效，再异步释放播放器线程；清理只在代数仍是当前时生效。
         releasePlayerAndClearStall()
-        instance = null
+        // 旧实例迟到销毁时不能把新实例的入口一并清掉。
+        if (instance === this) instance = null
         super.handleOnDestroy()
     }
 
@@ -599,8 +602,6 @@ class FoliaNativePlayerPlugin : Plugin() {
         if (url != current.currentUrl() &&
             FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)
         ) {
-            // 过渡接管换的也是媒体：旧媒体的缓冲豁免不继承（与原有行为一致）。
-            WallpaperLyricsState.clearPlayerStall()
             MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
             val handled = JSObject()
             handled.put("ok", true)

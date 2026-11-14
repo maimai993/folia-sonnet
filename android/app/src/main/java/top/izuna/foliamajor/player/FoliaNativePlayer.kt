@@ -301,7 +301,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         onPlayerThreadBeforePrepare: (() -> Unit)? = null,
     ) {
         // 换源时旧缓冲状态不属于新媒体；首个新源事件到达前也必须按暂停语义处理。
-        cachedPlaying = false
+        // cachedPlaying 不在这里动：它是 play() 的「继续」判据与通知栏的播放态，prepare 后紧跟 play()，
+        // 清掉会让每次切歌多一个淡入、通知栏闪一下暂停；stall 由下面两项与 emit 的真值重算负责。
         cachedStalled = false
         cachedBuffering = false
         lastUrl = url
@@ -681,29 +682,33 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         if (released) return
         released = true
         handler.post {
-            stopTicking()
-            val current = player
-            player = null
-            cachedPlaying = false
-            cachedStalled = false
-            if (current != null) {
-                current.removeListener(playerListener)
-                current.release()
-                AudioPipelineTelemetry.notePlayerReleased()
+            try {
+                stopTicking()
+                val current = player
+                player = null
+                cachedPlaying = false
+                cachedStalled = false
+                if (current != null) {
+                    current.removeListener(playerListener)
+                    current.release()
+                    AudioPipelineTelemetry.notePlayerReleased()
+                }
+                // 过渡进行到一半时插件被销毁：出场那台也得收，否则两首歌一起响到进程结束。
+                val outgoing = transitionOutgoing
+                transitionOutgoing = null
+                if (outgoing != null) {
+                    outgoing.release()
+                    AudioPipelineTelemetry.notePlayerReleased()
+                }
+                TransitionDspState.clear()
+            } finally {
+                // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
+                playbackThread.quitSafely()
+                // 释放前排队的播放器事件可能在这里之前重新写入 stalled；只有清理完成后
+                // 才通知宿主状态，确保 StallHold 不会把已释放的播放器再豁免最多 15 秒。
+                // 放在 finally：释放过程中抛异常也不能让缓冲豁免残留。
+                afterReleased?.invoke()
             }
-            // 过渡进行到一半时插件被销毁：出场那台也得收，否则两首歌一起响到进程结束。
-            val outgoing = transitionOutgoing
-            transitionOutgoing = null
-            if (outgoing != null) {
-                outgoing.release()
-                AudioPipelineTelemetry.notePlayerReleased()
-            }
-            TransitionDspState.clear()
-            // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
-            playbackThread.quitSafely()
-            // 释放前排队的播放器事件可能在这里之前重新写入 stalled；只有清理完成后
-            // 才通知宿主状态，确保 StallHold 不会把已释放的播放器再豁免最多 15 秒。
-            afterReleased?.invoke()
         }
     }
 
