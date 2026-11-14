@@ -54,7 +54,18 @@ const BilibiliMvLayer: React.FC = () => {
      * 表达，不属于用户开关。
      */
     const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
-    const enabled = backgroundMode === 'mv' || useBilibiliMvStore(state => state.forcedByStyle);
+    /*
+     * 背景模式选了「MV」（歌词动画设置 → 背景）也是总开关，而且是**持久**的那一个。
+     *
+     * 只靠 forcedByStyle 有个坑：requirement 是当前挂载的背景组件写的，而「无歌词」
+     * 这类样式不画背景（background: false）—— 换到那类样式时 MV 背景组件整个卸载，
+     * requirement 放开，画面就消失，切回来也不一定恢复（注入槽位被清过）。
+     * 读持久化的模式选择就没有这个问题：开关跟着设置走，跟当前画的是哪款歌词样式无关。
+     */
+    const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
+    const enabled = backgroundMode === 'mv'
+        || visualizerBackgroundMode === 'mv'
+        || useBilibiliMvStore(state => state.forcedByStyle);
     /*
      * 背景样式要求画面时从这里进来（见 services/mvRequirement）。
      *

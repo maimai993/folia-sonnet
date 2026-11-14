@@ -27,6 +27,22 @@ export const bilibiliSongId = (bvid: string, cid?: number | null): string => (
     typeof cid === 'number' && cid > 0 ? `${BILIBILI_ID_PREFIX}${bvid}:${cid}` : `${BILIBILI_ID_PREFIX}${bvid}`
 );
 
+/**
+ * 一条投稿的「分P 专辑」在应用里的 id：`bilibili:video:<bvid>`。
+ *
+ * 把多P 投稿当专辑摆出来（KKk 那边的「分P 面板」在这边的对应物）：搜索结果行的专辑
+ * 名点进去，就是这条投稿的全部分P，一P 一首歌。前缀和歌曲 id 区分开，
+ * getAlbumTracks 据此分派（seasonId 是数字，这个是带前缀的串）。
+ */
+export const bilibiliVideoCollectionId = (bvid: string): string => `${BILIBILI_ID_PREFIX}video:${bvid}`;
+
+/** id 是分P 专辑的形式吗；是的话取回 bvid。 */
+export const bilibiliBvidOfVideoCollectionId = (id: string | number | null | undefined): string => {
+    const text = String(id ?? '');
+    const rest = text.startsWith(BILIBILI_ID_PREFIX) ? text.slice(BILIBILI_ID_PREFIX.length) : '';
+    return rest.startsWith('video:') ? rest.slice('video:'.length) : '';
+};
+
 /** 一集番剧在本应用里的 id：`bilibili:ep:<epId>[:<cid>]`。 */
 export const bilibiliEpisodeSongId = (epId: number, cid?: number | null): string => (
     typeof cid === 'number' && cid > 0
@@ -113,8 +129,19 @@ export const normalizeBilibiliSong = (
     // 分P 用自己那一集的名字，单P 用投稿标题。
     name: page?.title || hit.title,
     artists: hit.author ? [{ id: `bilibili-author:${hit.author}`, name: hit.author }] : [],
-    // 封面挂在专辑上：播放页和播放栏都是从那里取的。投稿没有专辑，名字留空。
-    album: { id: '', name: '', coverUrl: upgradeCoverUrl(hit.coverUrl) || undefined },
+    /*
+     * 专辑 = 这条投稿的分P 列表。
+     *
+     * 以前 id 留空 —— 「投稿没有专辑」当时是对的，但 KKk 的分P 面板对过来，这边的
+     * 对应物就是「点搜索结果行里的专辑名，打开这条投稿的全部分P」。id 一空那个
+     * 入口就是死的，多P 投稿只能干瞪眼听第一集。现在 id 指向分P 专辑
+     * （getAlbumTracks 认它），单P 投稿点进去也只有一P，无害。
+     */
+    album: {
+        id: bilibiliVideoCollectionId(hit.bvid),
+        name: hit.title,
+        coverUrl: upgradeCoverUrl(hit.coverUrl) || undefined,
+    },
     // 时长按这个应用的习惯用毫秒（接口给的是秒）。
     durationMs: Math.max(0, Math.round((page?.durationSec ?? hit.durationSec) * 1000)),
     // 不设 isVideo：这个字段在别处是「这首歌有一条对应的 MV」的意思（队列、搜索结果行

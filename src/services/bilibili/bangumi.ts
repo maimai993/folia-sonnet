@@ -47,6 +47,15 @@ export interface BangumiEpisode {
 }
 
 interface IndexPayload {
+    /** 现行形状：envelope.data 直接就是列表容器（没有 result 包一层）。 */
+    list?: Array<{
+        season_id?: number;
+        title?: string;
+        cover?: string;
+        index_show?: string;
+        season_type?: number;
+        first_ep?: { ep_id?: number };
+    }>;
     result?: {
         data?: {
             list?: Array<{
@@ -97,11 +106,21 @@ export const listBangumiSeasons = async (
     const url = 'https://api.bilibili.com/pgc/season/index/result'
         + `?season_type=${seasonType}&page=${page}&pagesize=${pageSize}&type=1`;
     const payload = await getJson<IndexPayload>(url);
-    // 这个接口的 data 有两种形状（对象带 data，或直接是数组），都兜住。
-    const raw = payload?.result;
-    const list = Array.isArray(raw)
-        ? (raw as Array<{ season_id?: number; title?: string; cover?: string; index_show?: string; first_ep?: { ep_id?: number } }>)
-        : (raw?.data?.list ?? []);
+    /*
+     * 接口的返回形状迭代过几代，三种都兜住：
+     *   1. 老形状：envelope.result 直接是数组；
+     *   2. 中间形状：envelope.result.data.list；
+     *   3. **现行形状（2026-11 实测）**：envelope.data 直接就是 { list, total, ... }，
+     *      没有 result 包一层 —— 以前只认前两种，现行形状解析出来是空列表，
+     *      表现就是「番剧/电影节一片空」。
+     */
+    const direct = (payload as { list?: unknown[] }).list;
+    const raw = (payload as { result?: unknown }).result;
+    const list: Array<{ season_id?: number; title?: string; cover?: string; index_show?: string; first_ep?: { ep_id?: number } }> = Array.isArray(direct)
+        ? (direct as typeof list)
+        : Array.isArray(raw)
+            ? (raw as typeof list)
+            : ((raw as { data?: { list?: typeof list } } | undefined)?.data?.list ?? []);
     return list
         .filter(item => typeof item.season_id === 'number')
         .map(item => ({

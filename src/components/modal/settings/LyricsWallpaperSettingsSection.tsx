@@ -33,13 +33,12 @@ import LyricsWallpaperOverlayRows from './LyricsWallpaperOverlayRows';
 // 不是一回事；放在图形设置里，调歌词样式的人根本找不到。所以整节搬到「外观 → 歌词
 // 动画」，跟「歌词动画样式」那个入口挨在一起。
 
-/** 壁纸背景五种模式的文案键。列成一张表，加一种模式时只改这一处。 */
-const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video' | 'mv', string> = {
+/** 壁纸背景模式的文案键。列成一张表，加一种模式时只改这一处。 */
+const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video', string> = {
     cover: 'options.lyricsWallpaperBackgroundCover',
     color: 'options.lyricsWallpaperBackgroundColor',
     image: 'options.lyricsWallpaperBackgroundImage',
     video: 'options.lyricsWallpaperBackgroundVideo',
-    mv: 'options.lyricsWallpaperBackgroundMv',
 };
 
 type LyricsWallpaperSettingsSectionProps = {
@@ -269,7 +268,7 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                     control={(
                         <Segmented
                             value={lyricsWallpaperBackground}
-                            options={(['cover', 'color', 'image', 'video', 'mv'] as const).map(mode => ({
+                            options={(['cover', 'color', 'image', 'video'] as const).map(mode => ({
                                 value: mode,
                                 label: t(BACKGROUND_LABEL_KEYS[mode]),
                             }))}

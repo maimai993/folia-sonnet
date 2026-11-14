@@ -59,6 +59,83 @@ class FoliaBilibiliPlugin : Plugin() {
      */
     private const val PREFS_NAME = "folia_bilibili"
     private const val PREF_COOKIE = "cookie"
+
+    /**
+     * buvid3 / buvid4 另存，**绝不**写进 PREF_COOKIE —— 那是登录 cookie 的备份底，
+     * 把指纹混进去会把登录链路一起污染（上一版教训）。
+     */
+    private const val PREF_BUVID3 = "buvid3"
+    private const val PREF_BUVID4 = "buvid4"
+    }
+
+    /**
+     * 设备指纹（buvid3/buvid4）。
+     *
+     * wbi 签名的接口（search / playurl）要求 cookie 里有 buvid3，全新安装没访问过
+     * www 就没有，一律回 -400。buvid 从官方指纹接口拿：不带任何 cookie 请求
+     * `/x/frontend/finger/spi`，回 `b_3`（buvid3）和 `b_4`（buvid4）——
+     * 自造随机 buvid 的格式风控不认，别那么干。
+     *
+     * 与登录 cookie 完全分离：单独存 prefs，读 cookie 时合并；获取失败只降级为
+     * 「没 buvid」，绝不阻塞或破坏请求。
+     */
+    @Volatile private var buvidCache: Pair<String, String>? = null
+
+    private fun ensureBuvid(): Pair<String, String> {
+        buvidCache?.let { return it }
+        val prefs = prefs()
+        val b3 = prefs.getString(PREF_BUVID3, null)
+        val b4 = prefs.getString(PREF_BUVID4, null)
+        if (!b3.isNullOrEmpty() && !b4.isNullOrEmpty()) {
+            return Pair(b3, b4).also { buvidCache = it }
+        }
+        // 主路：官方指纹接口（不带 cookie 也会下发）。
+        try {
+            val request = Request.Builder()
+                .url("https://api.bilibili.com/x/frontend/finger/spi")
+                .get()
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", REFERER)
+                .build()
+            client.newCall(request).execute().use { response ->
+                Log.i(TAG, "finger/spi -> ${response.code}")
+                val body = response.body?.string() ?: return@use
+                val b3Match = Regex("""\s*"b_3"\s*:\s*"([^"]+)"""").find(body)
+                val b4Match = Regex("""\s*"b_4"\s*:\s*"([^"]+)"""").find(body)
+                val fetched3 = b3Match?.groupValues?.get(1)
+                val fetched4 = b4Match?.groupValues?.get(1)
+                if (!fetched3.isNullOrEmpty() && !fetched4.isNullOrEmpty()) {
+                    prefs.edit().putString(PREF_BUVID3, fetched3).putString(PREF_BUVID4, fetched4).apply()
+                    return Pair(fetched3, fetched4).also { buvidCache = it }
+                }
+            }
+        } catch (error: IOException) {
+            Log.w(TAG, "finger/spi failed: ${error.message}")
+        }
+        // 备路：真浏览器拿 buvid 的方式 —— 访问 www，buvid3 就在下发的 Set-Cookie 里。
+        // finger/spi 被风控（回 412）时这条路常常还通。
+        try {
+            val request = Request.Builder()
+                .url("https://www.bilibili.com/")
+                .get()
+                .header("User-Agent", USER_AGENT)
+                .build()
+            client.newCall(request).execute().use { response ->
+                var fetched3 = ""
+                for (value in response.headers.values("Set-Cookie")) {
+                    if (!value.startsWith("buvid3=")) continue
+                    fetched3 = value.substringAfter('=').substringBefore(';')
+                }
+                Log.i(TAG, "www fallback buvid3 -> ${response.code} ${if (fetched3.isEmpty()) "MISSING" else "ok"}")
+                if (fetched3.isNotEmpty()) {
+                    prefs.edit().putString(PREF_BUVID3, fetched3).apply()
+                    return Pair(fetched3, "").also { buvidCache = it }
+                }
+            }
+        } catch (error: IOException) {
+            Log.w(TAG, "www buvid fallback failed: ${error.message}")
+        }
+        return Pair("", "")
     }
 
     /** 读超时放宽到 30 秒：搜索接口偶尔慢，但不该像 AI 那样给到 150 秒。 */
@@ -155,7 +232,11 @@ class FoliaBilibiliPlugin : Plugin() {
          * cookie 由登录流程写进 CookieManager，这里只读 —— 插件本身不发登录请求，
          * 也不持有任何凭据，重启 App 后仍在。
          */
-        val cookie = currentCookie()
+        /*
+         * cookie = 登录 cookie（CookieManager / 备份底）+ buvid 指纹，两份来源
+         * 合并、登录项优先。buvid 缺失时 wbi 接口回 -400（见 ensureBuvid）。
+         */
+        val cookie = mergeBuvidInto(currentCookie())
         if (cookie.isNotEmpty()) {
             builder.header("Cookie", cookie)
         }
@@ -302,23 +383,63 @@ class FoliaBilibiliPlugin : Plugin() {
     /**
      * 现在该带的 bilibili cookie。
      *
-     * 先问 CookieManager —— 它才是发请求时真正生效的那份。冷启动那一刻它可能还没把
-     * 磁盘上的会话读回来，读到空就回落到登录时自己存的那份，并顺手写回去，
-     * 这样接下来的请求也带得上。
+     * 先问 CookieManager —— 它才是发请求时真正生效的那份。但**不能**因为它非空就
+     * 直接用它：WebView 里逛 B 站页面会往罐子里落 buvid3 之类的匿名 cookie，重启后
+     * 罐子非空、SESSDATA 却不在 —— 以前那种「非空就返回」的写法会跳过备份底，
+     * 表现成「重启就要重新登录」。所以正确做法是**合并**：以 CookieManager 为底，
+     * 登录项（备份底里才有的）缺哪个补哪个，并顺手写回罐子。
      */
     private fun currentCookie(): String {
-        val fromManager = CookieManager.getInstance().getCookie(REFERER) ?: ""
-        if (fromManager.isNotEmpty()) return fromManager
-        val stored = prefs().getString(PREF_COOKIE, null) ?: return ""
         val manager = CookieManager.getInstance()
         manager.setAcceptCookie(true)
-        for (pair in stored.split(';')) {
+        val fromManager = manager.getCookie(REFERER) ?: ""
+        val stored = prefs().getString(PREF_COOKIE, null)
+        if (stored.isNullOrEmpty()) return fromManager
+
+        // 备份底里有哪些登录项在罐子里已经丢了。
+        val managerNames = fromManager.split(';')
+            .mapNotNull { pair -> pair.trim().substringBefore('=').takeIf { it.isNotEmpty() } }
+            .toHashSet()
+        val missing = stored.split(';').mapNotNull { pair ->
             val trimmed = pair.trim()
-            if (trimmed.isEmpty() || !trimmed.contains('=')) continue
-            manager.setCookie(REFERER, "$trimmed; Domain=.bilibili.com; Path=/; Secure")
+            if (trimmed.isEmpty() || !trimmed.contains('=')) return@mapNotNull null
+            val name = trimmed.substringBefore('=')
+            if (name in managerNames) null else trimmed
+        }
+        if (missing.isEmpty()) return fromManager
+
+        for (pair in missing) {
+            manager.setCookie(REFERER, "$pair; Domain=.bilibili.com; Path=/; Secure")
         }
         manager.flush()
-        return stored
+        return if (fromManager.isEmpty()) missing.joinToString("; ")
+        else "$fromManager; ${missing.joinToString("; ")}"
+    }
+
+    /**
+     * 把 buvid 合进登录 cookie 串：登录项原样保留，缺的补上 buvid3/buvid4。
+     * 传入空串时只回 buvid 部分（也可能为空）。
+     *
+     * 只看缓存，不发网络：request() 跑在桥线程上，同步等一次 finger/spi 会把它
+     * 卡住（见 FoliaNativePlugin 那条教训）。缓存未热时先不带 buvid 发出去
+     * （wbi 会回 -400，退到备用接口），同时 kick 一次后台拉取，之后的请求就带上了。
+     */
+    private fun mergeBuvidInto(cookie: String): String {
+        val cached = buvidCache
+        if (cached == null) {
+            Thread({ ensureBuvid() }, "folia-buvid-fetch").start()
+            return cookie
+        }
+        val (b3, b4) = cached
+        if (b3.isEmpty()) return cookie
+        val pairs = cookie.split(';').mapNotNull { pair ->
+            val trimmed = pair.trim()
+            if (trimmed.isEmpty() || !trimmed.contains('=')) null else trimmed
+        }.toMutableList()
+        val has = { name: String -> pairs.any { it.substringBefore('=') == name } }
+        if (!has("buvid3")) pairs.add("buvid3=$b3")
+        if (b4.isNotEmpty() && !has("buvid4")) pairs.add("buvid4=$b4")
+        return pairs.joinToString("; ")
     }
 
     /** 从 cookie 串里取一个值；没有就回 null。 */

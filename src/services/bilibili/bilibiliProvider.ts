@@ -16,6 +16,7 @@ import {
     fetchBilibiliRecommendations,
     fetchBilibiliPlayUrl,
     fetchBilibiliVideoInfo,
+    fetchBilibiliPages,
     fetchBilibiliSubtitle,
     fetchBilibiliSubtitles,
     searchBilibiliVideos,
@@ -26,6 +27,7 @@ import { buildLyricsFromCues } from './bilibiliLyrics';
 import {
     bilibiliArtistId,
     bilibiliBvidOf,
+    bilibiliBvidOfVideoCollectionId,
     bilibiliCidOf,
     bilibiliEpIdOf,
     bilibiliMidOfArtistId,
@@ -720,6 +722,32 @@ export const bilibiliProvider: OnlineMusicProvider = {
         },
 
         async getAlbumTracks(id, limit = 100, offset = 0) {
+            /*
+             * 分P 专辑（`bilibili:video:<bvid>`）：一条投稿的全部分P，一P 一首歌。
+             *
+             * 搜索结果行里的专辑名点进来就是这里 —— KKk 的「分P 面板」在这边的对应物。
+             * KKk 是解析一条链接后弹面板选 P；这边是同样的东西换了个入口：点开专辑，
+             * 分P 列表就是选 P 的面板，选一P 放一P。
+             */
+            const videoBvid = bilibiliBvidOfVideoCollectionId(String(id));
+            if (videoBvid) {
+                const info = await fetchBilibiliPages(videoBvid);
+                const hit: BilibiliSearchHit = {
+                    bvid: videoBvid,
+                    title: info.title,
+                    author: info.author,
+                    durationSec: 0,
+                    coverUrl: info.coverUrl,
+                    playCount: 0,
+                };
+                const page = info.pages.slice(offset, offset + limit);
+                return {
+                    items: page.map(p => normalizeBilibiliSong(hit, p)),
+                    hasMore: offset + limit < info.pages.length,
+                    nextOffset: offset + limit,
+                };
+            }
+
             const seasonId = Number(id);
             if (!Number.isFinite(seasonId)) return { items: [], hasMore: false, nextOffset: 0 };
             /*

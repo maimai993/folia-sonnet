@@ -40,6 +40,7 @@ export const BUILTIN_VISUALIZER_BACKGROUND_MODES = [
     'common',
     'latent',
     'monet',
+    'mv',
     'nomand',
     'particles',
     'sonic',

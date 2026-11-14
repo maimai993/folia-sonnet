@@ -366,18 +366,29 @@ export const fetchBilibiliVideoInfo = async (bvid: string) => {
  */
 export const fetchBilibiliPages = async (
     bvid: string,
-): Promise<Array<{ cid: number; title: string; durationSec: number; index: number }>> => {
+): Promise<{
+    /** 投稿级元信息：分P 专辑的封面与「歌手」从这来。 */
+    title: string;
+    author: string;
+    coverUrl: string;
+    pages: Array<{ cid: number; title: string; durationSec: number; index: number }>;
+}> => {
     const payload = unwrap(await fetchJson<ViewPayload>(`${API_BASE}/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`));
     const pages = payload.pages ?? [];
-    return pages
-        .filter(page => typeof page.cid === 'number')
-        .map((page, index) => ({
-            cid: page.cid,
-            // 单P 投稿的 part 常常是空的，用总标题兜底。
-            title: (page.part ?? '').trim() || payload.title || '',
-            durationSec: page.duration ?? 0,
-            index: page.page ?? index + 1,
-        }));
+    return {
+        title: payload.title ?? '',
+        author: payload.owner?.name ?? '',
+        coverUrl: toHttps(payload.pic),
+        pages: pages
+            .filter(page => typeof page.cid === 'number')
+            .map((page, index) => ({
+                cid: page.cid,
+                // 单P 投稿的 part 常常是空的，用总标题兜底。
+                title: (page.part ?? '').trim() || payload.title || '',
+                durationSec: page.duration ?? 0,
+                index: page.page ?? index + 1,
+            })),
+    };
 };
 
 interface PlayUrlDash {

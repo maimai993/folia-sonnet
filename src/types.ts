@@ -1140,7 +1140,7 @@ export type MonetPortraitSource = 'cover' | 'custom' | 'none';
 // 莫奈的歌曲描述和封面拖动按钮：鼠标移上去才出现（原来的样子）、一直显示、不显示。
 export type MonetChromeVisibility = 'auto' | 'always' | 'hidden';
 export const MONET_CHROME_VISIBILITIES: readonly MonetChromeVisibility[] = ['auto', 'always', 'hidden'];
-export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles' | 'sonic';
+export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles' | 'sonic' | 'mv';
 export type VisualizerBackgroundMode = BuiltinVisualizerBackgroundMode | (string & {});
 
 export interface UrlBackgroundItem {
