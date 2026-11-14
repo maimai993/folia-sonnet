@@ -43,6 +43,13 @@ internal class StallHold(private val maxMs: Long = STALL_HOLD_MAX_MS) {
         return stalled && !(nowMs - sinceMs in 0..maxMs)
     }
 
+    /** 清空状态，不保留上一台播放器的缓冲豁免。 */
+    @Synchronized
+    fun reset() {
+        stalled = false
+        sinceMs = 0L
+    }
+
     /** 这一段（或刚结束的上一段）状态已经持续了多久，给日志用。 */
     @Synchronized
     fun elapsedMs(nowMs: Long): Long {

@@ -295,6 +295,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
 
     /** 装上地址并缓冲。startPositionMs 小于 0 表示从头播。 */
     fun prepare(url: String, startPositionMs: Long, mediaId: String? = null) {
+        // 换源时旧缓冲状态不属于新媒体；首个新源事件到达前也必须按暂停语义处理。
+        cachedStalled = false
+        cachedBuffering = false
         lastUrl = url
         lastMediaId = mediaId
         /*
@@ -542,6 +545,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             cachedPlaying = false
             cachedPositionMs = 0L
             cachedDurationMs = 0L
+            cachedBuffering = false
+            cachedStalled = false
             cancelFade()
             stopTicking()
             emit("idle", 0L, 0L, null)
@@ -660,7 +665,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         crossfadeCurve = CrossfadeCurve.fromName(name)
     }
 
-    fun release() {
+    fun release(afterReleased: (() -> Unit)? = null) {
         // 收过一次就别再收：线程 quit 之后再往它的 Handler 上 post 会直接抛
         // 「sending message to a Handler on a dead thread」，而系统控件（通知栏 / 耳机）
         // 在插件销毁之后仍可能来碰一次。
@@ -687,6 +692,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             TransitionDspState.clear()
             // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
             playbackThread.quitSafely()
+            // 释放前排队的播放器事件可能在这里之前重新写入 stalled；只有清理完成后
+            // 才通知宿主状态，确保 StallHold 不会把已释放的播放器再豁免最多 15 秒。
+            afterReleased?.invoke()
         }
     }
 

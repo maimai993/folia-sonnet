@@ -334,10 +334,9 @@ class FoliaNativePlayerPlugin : Plugin() {
                      * seeked 既可能是播放中的单曲循环，也可能是暂停时拖进度条：
                      * 不能用「不是 paused 就算在播」推，问播放器自己。
                      */
-                    val playing = if ("seeked" == type)
-                        player != null && player!!.isPlaying()
-                    else
-                        "paused" != type && player?.isBuffering() != true
+                    // READY 只表示已有可播放源，不表示已经出声；统一读取播放器线程缓存的真值，
+                    // 避免暂停发生在 READY 之前时被 ready 事件误写回 playing=true。
+                    val playing = player?.isPlaying() == true
                     /*
                      * ⭐ **"position" 这一档不是每次都写锚点。**
                      *
@@ -534,12 +533,15 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     override fun handleOnDestroy() {
         val current = player
+        // 先使排队中的旧播放器事件失效，再异步释放播放器线程。
+        player = null
         if (current != null) {
-            current.release()
-            player = null
+            current.release {
+                WallpaperLyricsState.clearPlayerStall()
+            }
+        } else {
+            WallpaperLyricsState.clearPlayerStall()
         }
-        // 播放器没了就不会再有事件来清「在等数据」：这里收掉，别让叠层替一台不存在的播放器撑着（#314）。
-        WallpaperLyricsState.setPlayerStalled(false)
         instance = null
         super.handleOnDestroy()
     }
@@ -558,6 +560,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
+        // 旧媒体的缓冲豁免不能跨媒体继承；新源的首个事件到达前按暂停语义处理。
+        WallpaperLyricsState.clearPlayerStall()
         /*
          * 换歌（不是同一首重新装源）优先进原生过渡引擎：接法、曲线、节拍对齐、PCM 效果链
          * 全在原生侧跑，WebView 不需要知道这次换歌长什么样。
@@ -831,11 +835,14 @@ class FoliaNativePlayerPlugin : Plugin() {
     @PluginMethod
     fun release(call: PluginCall) {
         val current = player
+        player = null
         if (current != null) {
-            current.release()
+            current.release {
+                WallpaperLyricsState.clearPlayerStall()
+            }
+        } else {
+            WallpaperLyricsState.clearPlayerStall()
         }
-        // 同 handleOnDestroy：收掉之后不会再有事件来清这个标记（#314）。
-        WallpaperLyricsState.setPlayerStalled(false)
         call.resolve()
     }
 }

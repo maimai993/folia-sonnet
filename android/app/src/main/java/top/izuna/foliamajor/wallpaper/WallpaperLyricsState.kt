@@ -461,6 +461,12 @@ class WallpaperLyricsState private constructor() {
             return stallHold.expired(SystemClock.elapsedRealtime())
         }
 
+        /** 播放器实例切换或全局状态清理时，立即撤销旧实例的缓冲豁免。 */
+        @JvmStatic
+        fun clearPlayerStall() {
+            stallHold.reset()
+        }
+
         // ===== 主题推送按内容去重 =====
         // 切歌那一推本来就被「等主题落定」的闸按住，但闸放开之后仍可能连着来两份：
         // 一份主题在途、一份主题落定（或封面补到）。叠层每收一次整包就重画一次，
@@ -802,6 +808,7 @@ class WallpaperLyricsState private constructor() {
         @JvmStatic
         @Synchronized
         fun clear(context: Context?) {
+            clearPlayerStall()
             current = EMPTY
             if (context != null) {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
