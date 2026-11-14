@@ -40,6 +40,7 @@ import top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin
 class FoliaNativePlayerPlugin : Plugin() {
 
     private var player: FoliaNativePlayer? = null
+    private var playerGeneration = 0L
 
     companion object {
         private const val EVENT = "foliaNativePlayer"
@@ -585,6 +586,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             url,
             if (startPositionMs != null) startPositionMs.toLong() else -1L,
             webSongKey,
+            onPlayerThreadBeforePrepare = { WallpaperLyricsState.clearPlayerStall() },
         )
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }

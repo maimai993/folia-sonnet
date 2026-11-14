@@ -294,8 +294,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     /** 装上地址并缓冲。startPositionMs 小于 0 表示从头播。 */
-    fun prepare(url: String, startPositionMs: Long, mediaId: String? = null) {
+    fun prepare(
+        url: String,
+        startPositionMs: Long,
+        mediaId: String? = null,
+        onPlayerThreadBeforePrepare: (() -> Unit)? = null,
+    ) {
         // 换源时旧缓冲状态不属于新媒体；首个新源事件到达前也必须按暂停语义处理。
+        cachedPlaying = false
         cachedStalled = false
         cachedBuffering = false
         lastUrl = url
@@ -313,6 +319,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         cachedPositionMs = if (startPositionMs > 0) startPositionMs else 0L
         cachedDurationMs = 0L
         runOnPlayer {
+            cachedStalled = false
+            cachedBuffering = false
+            onPlayerThreadBeforePrepare?.invoke()
             val current = ensurePlayer()
             /*
              * 换源即收掉在途的交叉淡化（#104）。
