@@ -728,6 +728,10 @@ export const bilibiliProvider: OnlineMusicProvider = {
              */
             const season = seasonsById.get(seasonId);
             const episodes = await listBangumiEpisodes(seasonId, season?.firstEpId ?? null);
+            // 设备上抓现场用：分集数与走的参数，一眼判断「零首」卡在哪一层。
+            console.info('[Bilibili] getAlbumTracks', seasonId,
+                'firstEpId:', season?.firstEpId ?? null,
+                'episodes:', episodes.length);
             /*
              * 一集一首歌，按分集自己的 id 走（`bilibili:ep:<epId>:<cid>`）。
              *

@@ -169,13 +169,27 @@ export const searchBangumiSeasons = async (
         .map(item => {
             // 标题里带高亮标签（<em class="keyword">…</em>），摆到界面上要去掉。
             const title = (item.title ?? '').replace(/<[^>]+>/g, '');
+            /*
+             * 第一集的 ep_id 有两个来处：media 块的老字段 first_ep（现在大多没有），
+             * 以及 hit_epids（形如 `ss45574,767950` —— 逗号后那截就是第一集）。
+             * 取分集列表时 season_id 一条路偶尔回空，ep_id 那条路就是保命的第二条。
+             */
+            let firstEpId: number | null = null;
+            const hitEpids = typeof item.hit_epids === 'string' ? item.hit_epids : '';
+            if (hitEpids.includes(',')) {
+                const parsed = Number(hitEpids.split(',')[1]);
+                if (Number.isFinite(parsed) && parsed > 0) firstEpId = parsed;
+            }
+            if (firstEpId === null && typeof item.first_ep?.ep_id === 'number') {
+                firstEpId = item.first_ep.ep_id;
+            }
             return {
                 seasonId: item.season_id as number,
                 title,
                 coverUrl: https(item.cover),
                 indexShow: item.index_show ?? '',
                 kind,
-                firstEpId: typeof item.first_ep?.ep_id === 'number' ? item.first_ep.ep_id : null,
+                firstEpId,
             };
         });
 };
@@ -228,6 +242,8 @@ interface SearchTypeItem {
     title?: string;
     cover?: string;
     index_show?: string;
+    /** 命中的分集号串（`ss45574,767950` —— 逗号后是第一集的 ep_id）。 */
+    hit_epids?: string;
     first_ep?: { ep_id?: number };
 }
 
