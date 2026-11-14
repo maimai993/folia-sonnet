@@ -7,6 +7,7 @@ import { Tooltip } from '../../modal/settings/kit/Tooltip';
 import { LikeButton, type SongLike } from './LikeButton';
 import { PanelIconButton } from './PanelIconButton';
 import { Button } from '../../ui';
+import { useIsWideShortViewport } from './panelViewport';
 
 // src/components/panelTab/shell/SongActions.tsx
 // The row under the song's title on the cover tab, always in view: like, add to a playlist, the
@@ -27,10 +28,13 @@ const SongActions: React.FC<SongActionsProps> = ({ like, onLocatePlayingSong, on
     const addToPlaylist = useAddToPlaylistStore(state => state.availability);
     // The collection the queue was started from, for as long as the queue is still of its songs.
     const playingFrom = usePlayingFromCollection();
+    // 矮而宽（横屏并排）时这一行不该被拉满：中间那条 flex-1 弹簧会把按钮顶到最右边，
+    // 顺带把上面的歌名撑成整栏宽，名字后面就空出一大片（issue #200）。只占内容宽。
+    const hug = useIsWideShortViewport();
     const playingFromLabel = playingFrom ? t('ui.playingFrom', { name: playingFrom.name }) : '';
 
     return (
-        <div className="mt-3.5 flex items-center gap-1.5">
+        <div className={`mt-3.5 flex items-center gap-1.5${hug ? ' w-fit' : ''}`}>
             <LikeButton like={like} filled />
             {addToPlaylist.isApplicable && (
                 <PanelIconButton
@@ -49,14 +53,14 @@ const SongActions: React.FC<SongActionsProps> = ({ like, onLocatePlayingSong, on
                         data-panel-locate
                         onClick={onLocatePlayingSong}
                         aria-label={playingFromLabel}
-                        className="st-t-fast flex h-8 min-w-0 items-center gap-1.5 rounded-full bg-[var(--st-fill)] pl-2.5 pr-3 text-xs text-[color:var(--st-t2)] transition-colors hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]"
+                        className="st-t-fast flex h-8 min-w-0 items-center gap-1.5 rounded-lg bg-[var(--st-fill)] pl-2.5 pr-3 text-xs text-[color:var(--st-t2)] transition-colors hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]"
                     >
                         <Crosshair size={14} className="shrink-0" />
                         <span className="truncate">{playingFrom.name}</span>
                     </Button>
                 </Tooltip>
             )}
-            <span className="min-w-1.5 flex-1" />
+            {!hug && <span className="min-w-1.5 flex-1" />}
             <PanelIconButton label={t('ui.backToHome')} onClick={onNavigateHome}>
                 <HomeIcon size={17} />
             </PanelIconButton>

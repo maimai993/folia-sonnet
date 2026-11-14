@@ -143,6 +143,7 @@ export const useGridViewMutations = ({
     const handleExportLocalPlaylist = useCallback(() => void mutations?.exportPlaylist(), [mutations]);
     const handleOrganizeSongInfo = useCallback(() => void mutations?.organizeSongInfo(), [mutations]);
     const handleEditEntity = useCallback(() => void mutations?.editEntity(), [mutations]);
+    const handleSetCover = useCallback(() => void mutations?.setCover(), [mutations]);
 
     const handleAddNavidromeCollectionToPlaylist = useCallback(async (playlistId: string | number) => {
         await mutations?.addToPlaylist(playlistId, playableTracks);
@@ -284,6 +285,7 @@ export const useGridViewMutations = ({
         handleResyncAllLocalFolders,
         handleExportLocalPlaylist,
         handleOrganizeSongInfo,
+        handleSetCover,
         handleEditEntity,
         handleAddNavidromeCollectionToPlaylist,
         handleCreateNavidromePlaylist,

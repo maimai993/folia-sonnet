@@ -19,6 +19,7 @@ import {
     type PendoloTuning,
     type SonnetTuning,
     type SubtitleContentMode,
+    type SubtitleOverlayLayout,
     type TemperaTuning,
     type Theme,
     type TiltTuning,
@@ -120,6 +121,8 @@ export interface VisualizerSharedProps {
     hideTranslationSubtitle?: boolean;
     showSubtitleTranslation?: boolean;
     subtitleContentMode?: SubtitleContentMode;
+    /** The shared bottom subtitle's rows (VisualizerSubtitleOverlay); it does not read subtitleContentMode. */
+    subtitleOverlayLayout?: SubtitleOverlayLayout;
     paused?: boolean;
     onBack?: () => void;
     isPanelOpen?: boolean;
@@ -186,6 +189,8 @@ export interface VisualizerQuickControlsProps<T = any> {
     tuning: T;
     onTuningChange: (patch: Partial<T>) => void;
     settings: VisualizerTuningSettings;
+    /** Closes the player panel the controls sit in: for a control that opens something on the player page itself (Machi's viewfinder bar). */
+    onClosePanel?: () => void;
 }
 
 export interface VisualizerRegistryEntry {
@@ -195,6 +200,13 @@ export interface VisualizerRegistryEntry {
     labelFallback: string;
     previewSeed: string;
     previewStartOffset: number;
+    /**
+     * True when the style should NOT appear in the pickers (style grid, command palette's
+     * style list). The registry still knows it — a stored setting can name it, and the
+     * renderer can draw it — but the user is not offered it as a choice. The MV "style"
+     * is one: it moved into the wallpaper background modes, where it belongs.
+     */
+    hiddenFromPickers?: boolean;
     /*
      * The small line icon shown beside the style's name: the children of the 24x24 stroked <svg>
      * that modeGlyphs.tsx draws. A style without one (a mod's, say) gets the generic icon.
@@ -213,6 +225,12 @@ export interface VisualizerRegistryEntry {
      * geometric shapes). Left out: the background in the props, as it is.
      */
     background?: false | ((props: VisualizerSharedProps) => VisualizerBackgroundConfig | undefined);
+    /**
+     * With `background` a function that leaves the background out for some tunings (marks it
+     * transparent): whether the style shows it with these tunings, so the background's beat effects
+     * count only then (beatClockTargets.ts, which leaves it out on a see-through page itself). Left out: it does.
+     */
+    showsBackground?: (tunings: VisualizerTuningBundle) => boolean;
     /*
      * 各模式的 entry.tsx 把真正的 renderer 包成 React.lazy —— registry 用 eager glob 发现
      * entry，如果 entry 静态 import renderer，任何碰 visualizer 设置的模块都会连带拉进 13 个
@@ -255,6 +273,26 @@ export interface VisualizerRegistryEntry {
      * screen reads it (beatClockTargets.ts).
      */
     beatEffects?: readonly BeatEffectDef[];
+    /**
+     * For a mode whose effects draw only with some tunings: whether this one of its `beatEffects` is on
+     * screen with these tunings and with the page see-through or not, so a model runs only for one
+     * that draws (beatClockTargets.ts; 雾笺's 水母随拍 only with the aquarium outside). Left out: all are.
+     */
+    beatEffectOnScreen?: (effectId: string, tunings: VisualizerTuningBundle, pageTransparent: boolean) => boolean;
+    /*
+     * Work started at app start when this is the saved style, behind the first-screen splash, so the
+     * style's first mount does not wait for it (雾笺: nebbia/nebbiaShaderWarmup.ts compiles its shaders
+     * in the background). It must not block the main thread for long, and it should import its code
+     * lazily: every entry is loaded eagerly at start-up. Run by prewarmVisualizers.ts.
+     */
+    prewarm?: () => void;
+    /*
+     * True when `prewarm` also runs for a style that is not the saved one, once the first screen is up
+     * and the page is idle: for a cost that otherwise lands on the first switch to the style (雾笺's
+     * cold shader compile, which can outlast the switch's wait for the first frame). Costs every user a
+     * little at each start, so only for a style whose first switch is otherwise slow.
+     */
+    prewarmWhenIdle?: boolean;
 }
 
 export interface FoliumTunable {

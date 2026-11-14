@@ -65,6 +65,14 @@ const TIMEOUT_MS = 20000;
 beforeEach(() => {
   state.requested.length = 0;
   state.hit = true;
+  /*
+   * 明确选一个「要填 Key 的服务商，但没填」。
+   *
+   * 默认服务商现在是免费渠道（foliawork），它自带凭据、永远可用，于是「没填 Key 的用户」
+   * 会走本机直连那条路，而本文件验的是**部署端点**那条 —— 只有「选了要填 Key 的服务商又
+   * 没填」才会落到它上面。不写死这一行，这个文件就不再验它想验的东西。
+   */
+  localStorage.setItem('foliaAiProviderSettings', JSON.stringify({ provider: 'gemini', geminiApiKey: '' }));
   // 云缓存默认就是开的；这里写一份只是免得受别的用例污染。
   localStorage.setItem('foliaCloudSettings.v2', JSON.stringify({
     enabled: true,

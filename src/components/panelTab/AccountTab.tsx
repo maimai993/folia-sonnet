@@ -6,14 +6,21 @@ import type { LibraryAccountController, LibraryAccountSnapshot } from '../../lib
 import { useLibraryAccountProviders, useLibraryAccountSelector } from '../../library/core/account/useLibraryAccount';
 import { canLogoutProvider } from '../../library/core/account/accountRules';
 import { omni } from '../../services/onlineMusic/omni';
+import { providerDisplayName } from '../../i18n/providerName';
 import { openLoginWindow } from '../login/loginWindowStore';
 import { PlatformMark } from '../login/PlatformMark';
-import { Select } from '../modal/settings/kit';
+import { Select, Toggle } from '../modal/settings/kit';
 import { useKitReducedMotion } from '../modal/settings/kit/motion';
 import { GroupLine } from './shell/GroupLine';
 import { PanelButton } from './shell/PanelButton';
 import { PanelIconButton } from './shell/PanelIconButton';
 import { PanelRow } from './shell/PanelRow';
+import { shortAccountId } from '../../utils/accountIdDisplay';
+import { isCapacitorAndroid } from '../../platform/runtime';
+import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
+import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { PlaybackSignalPathButton } from '../hifi/PlaybackSignalPathButton';
+import LanCastControl from '../lan-cast/LanCastControl';
 
 // src/components/panelTab/AccountTab.tsx
 // The panel's account tab: who is signed in on the active platform (or that nobody is, or that the
@@ -29,6 +36,8 @@ interface AccountTabProps {
     onSyncData: () => void;
     isSyncing: boolean;
     onNavigateHome: () => void;
+    /** 投送浮层按日间/夜间取配色（和播放页那颗旧按钮一致）。 */
+    isDaylight: boolean;
 }
 
 const AUDIO_QUALITY_OPTIONS: Array<{
@@ -42,6 +51,20 @@ const AUDIO_QUALITY_OPTIONS: Array<{
     { value: 'hires', labelKey: 'account.qualityHires' },
 ];
 
+/**
+ * 视频平台的那三档叫「清晰度」，不叫音质。
+ *
+ * 同一个 stored 偏好（standard / high / ultra）在两个世界里意思一样：更清楚的那一档。
+ * 只是标签不同 —— 选「标准」在音乐平台是普通音质，在 B 站是 480P。
+ */
+const VIDEO_QUALITY_LABEL_KEYS: Partial<Record<AudioQualityPreference, string>> = {
+    standard: 'account.quality480p',
+    high: 'account.quality720p',
+    ultra: 'account.quality1080p',
+};
+
+/** 视频平台（B 站）：结果是一段视频，这一行说的是清晰度。 */
+const isVideoPlatform = (providerId: string | null | undefined): boolean => providerId === 'bilibili';
 const selectLogoutPending = (snapshot: LibraryAccountSnapshot) => snapshot.logout.status === 'pending';
 
 const AccountTab: React.FC<AccountTabProps> = ({
@@ -51,6 +74,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
     onSyncData,
     isSyncing,
     onNavigateHome,
+    isDaylight,
 }) => {
     const { t } = useTranslation();
     const reduced = useKitReducedMotion();
@@ -75,6 +99,14 @@ const AccountTab: React.FC<AccountTabProps> = ({
         openLoginWindow(ranOut ? activeProviderId : null);
         onNavigateHome();
     };
+    /*
+     * 关闭人声（中置相消）。
+     *
+     * 只出现在安卓：它靠原生 AudioSink 那条链实时处理（VocalCancelProcessor.kt），
+     * 桌面端的出声不经过那条链，放一颗点了没反应的开关比不放更糟。
+     */
+    const vocalCancelEnabled = useAudioSettingsStore(state => state.vocalCancelEnabled);
+    const toggleVocalCancel = useAudioSettingsStore(state => state.handleToggleVocalCancel);
 
     return (
         <div>
@@ -105,7 +137,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
                             )}
                         </div>
                         <div className="truncate text-xs leading-[18px] text-[color:var(--st-t2)]">
-                            {activeSummary?.shortName || activeSummary?.displayName || activeProviderId} · ID: {String(activeUser.id)}
+                            {activeSummary ? providerDisplayName(t, activeSummary, activeProviderId) : activeProviderId} · ID: {shortAccountId(String(activeUser.id))}
                         </div>
                     </div>
                     <PanelIconButton label={t('account.logout')} disabled={!canLogout} onClick={() => void handleLogout()}>
@@ -121,18 +153,60 @@ const AccountTab: React.FC<AccountTabProps> = ({
             <GroupLine />
 
             {/* Provider-independent audio quality preference; each online provider maps these semantic presets. */}
-            <PanelRow label={t('account.audioQuality')}>
-                <Select
-                    name={t('account.audioQuality')}
-                    // The panel sits at the bottom of the window: a list that opens down covers the tab row.
-                    preferAbove
-                    value={litQuality}
-                    options={qualityOptions.map(option => ({ value: option.value, label: t(option.labelKey) }))}
-                    // (The lit level is where the stored preference already stands on this provider: choosing it
-                    // changes nothing here, and must not lower what is stored for the other providers.)
-                    onChange={(quality) => { if (quality !== litQuality) onAudioQualityChange(quality); }}
-                />
-            </PanelRow>
+            {(() => {
+                /*
+                 * 这一行叫什么跟两件事走：当前平台是不是视频站、以及 MV 背景开没开。
+                 *
+                 * B 站登录着（不管放的是什么）是「画质」；别的平台平时是「音质」，
+                 * 但壁纸背景选了 MV（或歌词样式选了 MV 款）时，取流那头走的是 B 站的
+                 * 清晰度档 —— 那一行也得跟着说「画质」，不然选项写 1080P、行头写
+                 * 「音质」，谁也不知道这两件事是一件事。
+                 */
+                const mvBackground = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground) === 'mv';
+                const qualityIsPicture = isVideoPlatform(activeProviderId) || mvBackground;
+                const rowLabel = qualityIsPicture ? t('account.videoQuality') : t('account.audioQuality');
+                return (
+                    <PanelRow label={rowLabel}>
+                        <Select
+                            name={rowLabel}
+                            // The panel sits at the bottom of the window: a list that opens down covers the tab row.
+                            preferAbove
+                            value={litQuality}
+                            options={qualityOptions.map(option => ({
+                                value: option.value,
+                                // 视频平台（或 MV 背景开着）这一行说的是清晰度（480P / 720P / 1080P），不是音质。
+                                label: t((qualityIsPicture && VIDEO_QUALITY_LABEL_KEYS[option.value]) || option.labelKey),
+                            }))}
+                            // (The lit level is where the stored preference already stands on this provider: choosing it
+                            // changes nothing here, and must not lower what is stored for the other providers.)
+                            onChange={(quality) => { if (quality !== litQuality) onAudioQualityChange(quality); }}
+                        />
+                    </PanelRow>
+                );
+            })()}
+
+            <PlaybackSignalPathButton />
+
+            {/* 关闭人声：只在安卓（原生 AudioSink 那条链在，桌面端没有）。
+                ★ 目前不挂在音频链上：这个处理器的透传分支连续两版都把样本写坏
+                （开不开都是滋滋声），已从 FoliaAudioSinkFactory 摘掉。开关保留，
+                但打开不会有任何效果 —— 恢复前必须先在设备上逐样本验证透传无损。 */}
+            {isCapacitorAndroid() && (
+                <PanelRow
+                    label={t('account.vocalCancel')}
+                    hint={t('account.vocalCancelHint')}
+                >
+                    <Toggle
+                        checked={vocalCancelEnabled}
+                        onChange={toggleVocalCancel}
+                        label={t('account.vocalCancel')}
+                    />
+                </PanelRow>
+            )}
+
+            {/* 投送（DLNA 音响）入口。放在音质页、跟着信号链路 —— 两者都是「这首歌最后怎么出声」
+                的事，而播放页上原来那颗悬浮按钮会压住「正在播放」提示卡（issue #279）。 */}
+            <LanCastControl variant="tile" isDaylight={isDaylight} />
 
             {activeUser && (
                 <div className="flex px-1 py-2">

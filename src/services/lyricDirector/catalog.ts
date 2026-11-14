@@ -44,6 +44,11 @@ const MODE_HINTS: Record<string, string> = {
     sonnet: '日式 MV 分镜、相机运动与转场，电影感强',
     tempera: '印刷色块与拼贴、逐字入场',
     lumiere: '光场与烟雾、辉光崩解，华丽',
+    hanabi: '花火粒子与夜空、升空绽放与拼贴，节庆感强',
+    prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
+    nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
+    machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
+    kinetic: '动画 PV 分镜：跳切、故障错位与装饰元素，节奏感极强',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -62,6 +67,11 @@ const MODE_NAMES: Record<string, string> = {
     sonnet: '商籁',
     tempera: '凝彩',
     lumiere: '绘光',
+    hanabi: '花火',
+    prompt: '提示词',
+    nebbia: '雾笺',
+    machi: '町景',
+    kinetic: '文字PV',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -80,6 +90,11 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     sonnet: 'ui.visualizerSonnet',
     tempera: 'ui.visualizerTempera',
     lumiere: 'ui.visualizerLumiere',
+    hanabi: 'ui.visualizerHanabi',
+    prompt: 'ui.visualizerPrompt',
+    nebbia: 'ui.visualizerNebbia',
+    machi: 'ui.visualizerMachi',
+    kinetic: 'ui.visualizerKinetic',
 };
 
 export type DirectorParamSpec =
@@ -160,6 +175,33 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             avatarSource: { kind: 'select', options: ['builtin', 'cover', 'color', 'custom'], zh: '头像来源' },
         },
     },
+    kinetic: {
+        setter: 'handleSetKineticTuning',
+        params: {
+            motion: { kind: 'number', min: 0, max: 1, zh: '动势强度' },
+            glitch: { kind: 'number', min: 0, max: 1, zh: '故障错位' },
+            chroma: { kind: 'number', min: 0, max: 1, zh: '色差偏移' },
+            decor: { kind: 'number', min: 0, max: 1, zh: '装饰量' },
+            density: { kind: 'number', min: 0, max: 1, zh: '切镜细度' },
+            texture: { kind: 'number', min: 0, max: 1, zh: '质感噪声' },
+            bgSwitch: { kind: 'number', min: 0, max: 1, zh: '背景切换' },
+            flash: { kind: 'boolean', zh: '闪白' },
+            koma: { kind: 'select', options: [8, 12, 0], zh: '作画枚数' },
+            hud: { kind: 'select', options: ['auto', 'on', 'off'], zh: '仪表显示' },
+            hideNo: { kind: 'boolean', zh: '隐藏句号' },
+            hideTime: { kind: 'boolean', zh: '隐藏时间码' },
+            seed: { kind: 'number', min: 0, max: 4294967295, zh: '随机种子' },
+            layout: { kind: 'select', options: ['auto', 'center', 'mixed', 'vcols', 'marquee', 'tile', 'scatter', 'ring', 'wave', 'huge', 'labels', 'condensed', 'gloss', 'type', 'diag', 'circle', 'stack', 'pill'], zh: '布局' },
+            enter: { kind: 'select', options: ['auto', 'cut', 'assemble', 'slice', 'type', 'pop', 'drop', 'stretch', 'wipe', 'blur', 'spin', 'flicker', 'scramble', 'zoom'], zh: '入场技法' },
+            hold: { kind: 'select', options: ['auto', 'static', 'breathe', 'drift', 'jitter', 'wave', 'glitchtick'], zh: '保持技法' },
+            exit: { kind: 'select', options: ['auto', 'cut', 'wipe', 'slice', 'shrink', 'blur', 'stretch', 'fall', 'drift', 'explode', 'scatter', 'glitch'], zh: '退场技法' },
+            decorPick: { kind: 'select', options: ['auto', 'grid', 'stripes', 'blobs', 'bars', 'shapes', 'counter', 'brackets', 'rings', 'dots', 'arrows', 'slash', 'sparks', 'leaders', 'waveform', 'barcode'], zh: '装饰元素' },
+            cam: { kind: 'select', options: ['auto', 'push', 'pull', 'pan', 'orbit', 'snap'], zh: '相机运动' },
+            fx: { kind: 'select', options: ['auto', 'chroma', 'shake', 'slice', 'flash', 'zoom', 'invert', 'glitchband', 'mosaic'], zh: '画面效果' },
+            trans: { kind: 'select', options: ['auto', 'cut', 'wipe', 'diagonalWipe', 'clockWipe', 'irisOpen', 'pushSlide', 'doorsOpen', 'blinds', 'whipPan', 'zoomThrough', 'inkBlob', 'flashCross'], zh: '转场' },
+            scheme: { kind: 'select', options: ['auto', 'noir', 'crimson', 'caution', 'magenta', 'paper', 'hud', 'mint', 'specimen', 'transit', 'blueprint', 'rouge', 'mono'], zh: '配色方案' },
+        },
+    },
     tilt: {
         setter: 'handleSetTiltTuning',
         params: {
@@ -171,7 +213,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
     monet: {
         setter: 'handleSetMonetTuning',
         params: {
-            keywordColoringEnabled: { kind: 'boolean', zh: '关键词着色' },
             showDescription: { kind: 'boolean', zh: '显示简介' },
             fontScale: { kind: 'number', min: 0.7, max: 1.5, zh: '字号' },
             portraitStyle: { kind: 'select', options: ['square', 'rectangular'], zh: '封面样式' },
@@ -191,7 +232,6 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             soulIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '灵魂出窍强度' },
             gradientEnabled: { kind: 'boolean', zh: '渐变跟唱' },
             gradientIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '渐变强度' },
-            keywordColoringEnabled: { kind: 'boolean', zh: '关键词着色' },
             soulActiveEnabled: { kind: 'boolean', zh: '当前字跟随漂移' },
             particleGlowEnabled: { kind: 'boolean', zh: '粒子光晕' },
             particleGlowIntensity: { kind: 'number', min: 0.1, max: 1.5, zh: '粒子光晕强度' },
@@ -300,10 +340,44 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
             seamlessTransitions: { kind: 'boolean', zh: '无缝转场' },
             overlayFrame: { kind: 'boolean', zh: '画框' },
             textOnly: { kind: 'boolean', zh: '仅歌词文字' },
-            keywordColors: { kind: 'boolean', zh: '关键词着色' },
             themeIcons: { kind: 'boolean', zh: '主题图标' },
             themeColorMix: { kind: 'number', min: 0, max: 1, zh: '主题色占比' },
             renderQuality: { kind: 'select', options: ['full', 'balanced', 'low'], zh: '画质' },
+        },
+    },
+    nebbia: {
+        setter: 'handleSetNebbiaTuning',
+        params: {
+            credits: { kind: 'boolean', zh: '结尾写曲名与歌手' },
+            jitter: { kind: 'number', min: 0, max: 1.5, zh: '手写歪斜' },
+            warp: { kind: 'number', min: 0, max: 1.5, zh: '手写变形' },
+            mist: { kind: 'number', min: 0.2, max: 1, zh: '雾气浓度' },
+            hold: { kind: 'number', min: 0, max: 6, zh: '下一句开始后保持' },
+            refog: { kind: 'number', min: 0.5, max: 12, zh: '重新起雾用时' },
+            strokeWidth: { kind: 'number', min: 0.04, max: 0.16, zh: '笔画粗细' },
+            writeSpeed: { kind: 'number', min: 0.4, max: 2.5, zh: '书写速度' },
+            doodle: { kind: 'number', min: 0, max: 1, zh: '句尾画图标' },
+            busSpeed: { kind: 'number', min: 0, max: 3, zh: '车速' },
+            neon: { kind: 'number', min: 0, max: 2, zh: '霓虹' },
+            spot: { kind: 'number', min: 0, max: 2, zh: '聚光灯' },
+            spotX: { kind: 'number', min: 0, max: 1, zh: '聚光灯横向位置' },
+            rainHit: { kind: 'number', min: 0, max: 3, zh: '雨点打在玻璃上' },
+            rainBig: { kind: 'number', min: 0, max: 2, zh: '吐字时的大雨点' },
+            bump: { kind: 'number', min: 0, max: 2.5, zh: '颠簸' },
+            resolution: { kind: 'number', min: 0.5, max: 2, zh: '渲染分辨率' },
+        },
+    },
+    machi: {
+        setter: 'handleSetMachiTuning',
+        params: {
+            motion: { kind: 'boolean', zh: '运镜' },
+            motionSpeed: { kind: 'number', min: 0.25, max: 3, zh: '运镜速度' },
+            gyro: { kind: 'boolean', zh: '陀螺仪适配' },
+            aperture: { kind: 'number', min: 1.4, max: 16, zh: '光圈' },
+            dof: { kind: 'number', min: 0, max: 2, zh: '景深强度' },
+            dofRange: { kind: 'number', min: 0.3, max: 3, zh: '景深范围' },
+            tiltShift: { kind: 'number', min: 0, max: 1, zh: '移轴' },
+            focusOffset: { kind: 'number', min: -10, max: 10, zh: '对焦点偏移' },
         },
     },
     still: { setter: null, params: {} },
@@ -311,6 +385,11 @@ export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
     // 内建清单里有它，`isKnownDirectorMode` 就会放行，所以这里必须有一格空的，
     // 否则「AI 选了提示词却拿不到任何参数」是唯一没有登记的模式。与 still 同形。
     prompt: { setter: null, params: {} },
+    // B 站 MV 也没有可调参数：画面是投稿本身，唯一能调的「音画偏移」需要看着画面拖，
+    // 不适合交给 AI 猜。与 still / prompt 同形。
+    mv: { setter: null, params: {} },
+    // 无歌词同样没有参数：它只有外壳，不画任何歌词元素，AI 无处着手。与 still 同形。
+    blank: { setter: null, params: {} },
 };
 
 /* `key` is the switch, `mustBe` the value it needs (or `not` the one that
@@ -410,6 +489,13 @@ export const tuningStateKey = (setter: string | null): string | null => {
     return `${name.charAt(0).toLowerCase()}${name.slice(1)}Tuning`;
 };
 
+/*
+ * AI 能选的样式。
+ *
+ * 模组注册的样式（跳一跳、黑胶唱片这些，id 形如 `mod:<modId>:<id>`）不在这里列举：
+ * 本模块刻意不依赖视觉注册表（注册表会反过来 import 大量渲染代码），由持有它的宿主
+ * 通过 `listDirectorModes(t, extra)` 的 `extra` 传进来，见 listDirectorModesWithHost。
+ */
 export const isKnownDirectorMode = (mode: unknown): mode is VisualizerMode => (
     typeof mode === 'string' && (BUILTIN_VISUALIZER_MODES as readonly string[]).includes(mode)
 );
@@ -419,16 +505,40 @@ export const isBlockedDirectorMode = (mode: string, blockedModes: readonly strin
     Array.isArray(blockedModes) && blockedModes.includes(mode)
 );
 
-/** The modes the AI may choose from, with the label to show for each. */
-export const listDirectorModes = (t?: (key: string) => string): DirectorModeInfo[] => (
-    (BUILTIN_VISUALIZER_MODES as readonly string[]).map((id) => ({
+/**
+ * The modes the AI may choose from, with the label to show for each.
+ *
+ * `extra` carries the mod-contributed modes (`mod:<modId>:<id>`) the host has registered, so the
+ * AI's own "never use these" list can show them too. This module stays free of the visualizer
+ * registry: the host that has it hands the entries in (see listDirectorModesWithHost).
+ */
+export const listDirectorModes = (
+    t?: (key: string) => string,
+    extra: readonly DirectorModeInfo[] = [],
+): DirectorModeInfo[] => [
+    ...(BUILTIN_VISUALIZER_MODES as readonly string[]).map((id) => ({
         id,
         label: modeLabel(id, t),
         hint: MODE_HINTS[id] ?? '',
-    }))
-);
+    })),
+    ...extra,
+];
+
+/** A mod mode's label comes from the registry entry (mods declare their own), not from the tables above. */
+export const describeHostDirectorMode = (
+    id: string,
+    label: string,
+): DirectorModeInfo => ({
+    id,
+    label,
+    hint: MODE_HINTS[id] ?? '',
+});
 
 export const modeLabel = (mode: string, t?: (key: string) => string): string => {
+    /*
+     * 只管内置样式。模组样式的名字由模组自己声明（labelKey / labelFallback），
+     * 宿主读到之后经 describeHostDirectorMode 传进来 —— 本模块不依赖注册表。
+     */
     const key = MODE_LABEL_KEYS[mode];
     const translated = t && key ? t(key) : '';
     // A missing translation comes back as the key itself.

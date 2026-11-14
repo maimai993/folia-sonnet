@@ -45,6 +45,10 @@ const selectPendingSwitch = (snapshot: LibraryAccountSnapshot) => snapshot.pendi
 const selectProviders = (snapshot: LibraryAccountSnapshot) => snapshot.providers;
 const selectActiveProviderId = (snapshot: LibraryAccountSnapshot) => snapshot.activeProviderId;
 const selectSnapshot = (snapshot: LibraryAccountSnapshot) => snapshot;
+/** 有一个平台正在同步数据（同一时间只有一个）：「同步数据」按钮据它转圈、不可再按。 */
+export const selectAccountSyncPending = (snapshot: LibraryAccountSnapshot) => snapshot.sync.status === 'pending';
+/** 正在同步数据的那个平台；没有在同步是 null。 */
+export const selectAccountSyncProviderId = (snapshot: LibraryAccountSnapshot) => snapshot.sync.providerId;
 
 /** 已翻译的失败后自检。 */
 export type LibraryLoginSelfCheckView = {
@@ -129,7 +133,7 @@ export const translateProviderSwitch = (
 // 构建与运行环境在页面生命周期内不变：构建类别由构建期注入，网页版即没有 Electron 桥。
 const LOGIN_REPORT_ENVIRONMENT: LibraryLoginReportEnvironment = {
     build: getBuildKind(),
-    web: typeof window !== 'undefined' && !window.electron,
+    web: typeof window !== 'undefined' && typeof window.electron?.platform !== 'string',
 };
 
 /** 这一次登录的诊断报告该交给谁（core/account/accountRules 的 resolveLoginReportRoute，环境是这个页面的）。 */

@@ -2,16 +2,23 @@ import { applyVisualizerTuningsToSettings } from '../../../../visualizer/tuningR
 import { importFoliumParams, snapshotFoliumParams } from '../../../../../mods/params/paramStore';
 import { buildVisualSettingsConfig } from '../../../../../services/obs/visualSettingsConfig';
 import { isThemeGenerationSource, type ThemeGenerationSource } from '../../../../../services/themePreferences';
+import { useGlassSurfaceSettingsStore } from '../../../../../stores/useGlassSurfaceSettingsStore';
+import { useLatticeSettingsStore } from '../../../../../stores/useLatticeSettingsStore';
 import { useLibraryWallLookStore } from '../../../../../stores/useLibraryWallLookStore';
+import { usePlayerChromeSettingsStore } from '../../../../../stores/usePlayerChromeSettingsStore';
+import { isScratchpadHandleStyle, useScratchpadSettingsStore } from '../../../../../stores/useScratchpadSettingsStore';
 import { useStageSettingsStore } from '../../../../../stores/useStageSettingsStore';
 import { useThemeSettingsStore } from '../../../../../stores/useThemeSettingsStore';
+import { normalizeLyricRenderQuality } from '../../../../../utils/lyricRenderQuality';
 import { useTypographySettingsStore } from '../../../../../stores/useTypographySettingsStore';
 import { useVisualizerAssetStore } from '../../../../../stores/useVisualizerAssetStore';
 import { useVisualizerSettingsStore } from '../../../../../stores/useVisualizerSettingsStore';
 import type { DualTheme, ThemeMode, UrlBackgroundItem } from '../../../../../types';
 import { decompressConfig, readSavedCustomTheme } from '../../../../../utils/appearanceCodec';
+import { parseSubtitleOverlayLayout } from '../../../../../utils/lyrics/subtitleOverlayLayout';
 import { ACTIVATE_CUSTOM_THEME_KEY, buildImportPlan, THEME_DARK_KEY, THEME_LIGHT_KEY, type ImportPlan } from '../../../../../utils/appearanceImportPlan';
 import { isFontFamilyAvailable } from '../../../../../utils/fontAvailability';
+import { isMarketFontFamily } from '../../../../../services/fontMarket';
 import { isLibraryWallSeamStyle } from '../../../../../utils/libraryWallSeamStyle';
 import { isLibraryWallSeamDirection } from '../../../../../utils/libraryWallSeamDirection';
 import { extractCfgFromInput } from '../../../../../utils/obsUrl';
@@ -81,8 +88,14 @@ export const planConfigImport = (text: string, theme: ConfigThemeControls): { co
         },
         customFontSource: customFont?.source ?? null,
         customFontLabel: customFont?.label ?? customFont?.family ?? null,
+        /*
+         * 市场字体的 family 是运行时注入的 @font-face（`zsft-full-<id>-<style>`），
+         * 只有登记过之后 canvas 才量得出来。配置里出现它时本机多半还没登记，
+         * 硬量会误报「字体不可用」—— 交给冷启动的 restore 去取，这里直接认为可用。
+         */
         incomingFontAvailable: config.lyricsCustomFontFamily
-            ? isFontFamilyAvailable(String(config.lyricsCustomFontFamily))
+            ? (isMarketFontFamily(String(config.lyricsCustomFontFamily))
+                || isFontFamilyAvailable(String(config.lyricsCustomFontFamily)))
             : undefined,
         isCustomThemeActive: theme.bgMode === 'custom',
         // A config names an uploaded image or emoji pack by source, but never carries it.
@@ -136,6 +149,35 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     if (has('visualizerOpacity')) {
         storeVisualizer.handleSetVisualizerOpacity(config.visualizerOpacity);
     }
+    if (has('lyricRenderQuality')) {
+        storeVisualizer.handleSetLyricRenderQuality(normalizeLyricRenderQuality((config as { lyricRenderQuality?: unknown }).lyricRenderQuality));
+    }
+    /*
+     * 液态玻璃（fork 独有）：配置码里是一个整对象，落库按「未给的字段保持现值」整组写入。
+     * 总开关和参数分开处理：开关不是 LiquidGlassParams 的一部分，走自己的 setter。
+     */
+    if (has('liquidGlass')) {
+        const glass = (config as { liquidGlass?: Record<string, unknown> }).liquidGlass;
+        if (glass && typeof glass === 'object') {
+            const storeGlass = useGlassSurfaceSettingsStore.getState();
+            if (typeof glass.enabled === 'boolean') {
+                storeGlass.setLiquidGlassEnabled(glass.enabled);
+            }
+            const patch: Record<string, unknown> = {};
+            for (const key of ['strength', 'blur', 'sat', 'bend'] as const) {
+                if (typeof glass[key] === 'number') patch[key] = glass[key];
+            }
+            for (const key of ['light', 'jelly'] as const) {
+                if (typeof glass[key] === 'boolean') patch[key] = glass[key];
+            }
+            if (Object.keys(patch).length > 0) {
+                storeGlass.handleSetLiquidGlassParams(patch);
+            }
+        }
+    }
+    if (has('playerHeaderBlur')) {
+        usePlayerChromeSettingsStore.getState().handleTogglePlayerHeaderBlur(Boolean(config.playerHeaderBlur));
+    }
     if (has('hidePlayerTranslationSubtitle')) {
         storeTypographySettings.handleToggleHidePlayerTranslationSubtitle(Boolean(config.hidePlayerTranslationSubtitle));
     }
@@ -148,6 +190,10 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
             || config.subtitleContentMode === 'both'
             || config.subtitleContentMode === 'none')) {
         storeTypographySettings.handleSetSubtitleContentMode(config.subtitleContentMode);
+    }
+    const subtitleOverlayLayout = has('subtitleOverlayLayout') ? parseSubtitleOverlayLayout(config.subtitleOverlayLayout) : null;
+    if (subtitleOverlayLayout) {
+        storeTypographySettings.handleSetSubtitleOverlayLayout(subtitleOverlayLayout);
     }
     if (has('subtitleOverlayBackground')) {
         storeTypographySettings.handleToggleSubtitleOverlayBackground(Boolean(config.subtitleOverlayBackground));
@@ -315,8 +361,14 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     if (has('stageTrackPillTimeoutSec') && Number.isFinite(Number(config.stageTrackPillTimeoutSec))) {
         storeStageSettings.handleSetStageTrackPillTimeoutSec(Number(config.stageTrackPillTimeoutSec));
     }
+    if (has('stageTrackPillPosition')) {
+        storeStageSettings.handleSetStageTrackPillPosition(config.stageTrackPillPosition);
+    }
     if (has('stageTrackPillOnHome')) {
         storeStageSettings.handleToggleStageTrackPillOnHome(Boolean(config.stageTrackPillOnHome));
+    }
+    if (has('stageTrackPillInObs')) {
+        storeStageSettings.handleToggleStageTrackPillInObs(Boolean(config.stageTrackPillInObs));
     }
     // The bravais wall: the collections' stack edges, the seam's material and direction, and the picture behind
     // the wall, through the setters the Bravais group on the 主页与歌单 page uses. The seam style
@@ -340,7 +392,12 @@ export const applyImportedConfig = (config: any, keys: string[], theme: ConfigTh
     if (has('libraryWallSeamDirection') && isLibraryWallSeamDirection(config.libraryWallSeamDirection)) {
         storeLibraryWall.setSeamDirection(config.libraryWallSeamDirection);
     }
-    if (has('libraryWallSeamDirectionReverse')) {
-        storeLibraryWall.setSeamDirectionReverse(Boolean(config.libraryWallSeamDirectionReverse));
+    // The scratchpad side tab's resting look (the 主页与歌单 page's scratchpad group writes it).
+    if (has('scratchpadHandleStyle') && isScratchpadHandleStyle(config.scratchpadHandleStyle)) {
+        useScratchpadSettingsStore.getState().setHandleStyle(config.scratchpadHandleStyle);
+    }
+    // Numbering only the playing song, on both tile walls (the 播放页 page's tile wall group writes it).
+    if (has('latticeBadgeCurrentOnly')) {
+        useLatticeSettingsStore.getState().handleToggleLatticeBadgeCurrentOnly(Boolean(config.latticeBadgeCurrentOnly));
     }
 };

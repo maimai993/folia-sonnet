@@ -76,39 +76,6 @@ describe('themeControllerState', () => {
         expect(nextTheme).toBe(daylightTheme);
     });
 
-    // 「AI 主题生效了、歌词却没有 AI 高亮」：高亮词与歌词图标是这首歌自己的，
-    // 以前这两项是从 previousTheme 继承的 —— 第一次继承到的就是默认主题那份空的，
-    // 之后再也没回来过。
-    it('keeps the AI theme own word colors instead of inheriting the previous theme', () => {
-        const nextTheme = resolveBgModeTheme({
-            aiTheme: dualTheme,
-            mode: 'default',
-            isDaylight: true,
-            defaultTheme,
-            daylightTheme,
-            previousTheme: defaultTheme
-        });
-
-        expect(nextTheme.wordColors).toEqual(dualTheme.light.wordColors);
-        expect(nextTheme.lyricsIcons).toEqual(dualTheme.light.lyricsIcons);
-        // 底色仍然归当前明暗档，不跟着 AI 主题走 —— 那一行没有动。
-        expect(nextTheme.backgroundColor).toBe(daylightTheme.backgroundColor);
-    });
-
-    it('keeps the AI theme own word colors in ai background mode too', () => {
-        const nextTheme = resolveBgModeTheme({
-            aiTheme: dualTheme,
-            mode: 'ai',
-            isDaylight: false,
-            defaultTheme,
-            daylightTheme,
-            previousTheme: defaultTheme
-        });
-
-        expect(nextTheme.wordColors).toEqual(dualTheme.dark.wordColors);
-        expect(nextTheme.lyricsIcons).toEqual(dualTheme.dark.lyricsIcons);
-    });
-
     it('builds an initial custom theme from the default light and dark themes', () => {
         const initialCustomTheme = buildDefaultCustomDualTheme({
             defaultTheme,
@@ -224,10 +191,137 @@ describe('themeControllerState', () => {
         expect(model.editableSource).toBe('custom');
     });
 
-    // 以前这里还有四条「高亮词与歌词图标从 previousTheme 继承」的用例。它们钉的是
-    // fa956ee4 之前的形态，而那笔提交正是把继承改掉的那笔（AI 主题生效了、歌词却没有
-    // AI 高亮）：这两项归选中的那份主题，不再继承上一份。同一个文件里两套相反的断言
-    // 不可能同时成立，所以继承那四条按新行为删掉，上面两条钉住现在的做法。
+    // 「AI 主题生效了、歌词却没有 AI 高亮」：高亮词与歌词图标是这首歌自己的，
+    // 以前这两项是从 previousTheme 继承的 —— 第一次继承到的就是默认主题那份空的，
+    // 之后再也没回来过。
+    it('keeps the AI theme own word colors instead of inheriting the previous theme', () => {
+        const nextTheme = resolveBgModeTheme({
+            aiTheme: dualTheme,
+            mode: 'default',
+            isDaylight: true,
+            defaultTheme,
+            daylightTheme,
+            previousTheme: defaultTheme
+        });
+
+        expect(nextTheme.wordColors).toEqual(dualTheme.light.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(dualTheme.light.lyricsIcons);
+        // 底色仍然归当前明暗档，不跟着 AI 主题走 —— 那一行没有动。
+        expect(nextTheme.backgroundColor).toBe(daylightTheme.backgroundColor);
+    });
+
+    // #947: switching back to the default source after generating an AI theme must restore the preset.
+    it('drops the AI palette when the source goes back to default', () => {
+        // 主题来源切回「默认」：除了这首歌的高亮词与歌词图标，其余配色必须是默认主题的，
+        // 不能残留上一个来源（以前整份沿用 AI 主题、只换背景，看起来像没切回去）。
+        const previousTheme: Theme = {
+            ...dualTheme.light,
+            wordColors: [{ word: 'drop-me', color: '#00ff00' }],
+            lyricsIcons: ['drop-icon']
+        };
+
+        const nextTheme = resolveBgModeTheme({
+            aiTheme: dualTheme,
+            mode: 'default',
+            isDaylight: true,
+            defaultTheme,
+            daylightTheme,
+            previousTheme
+        });
+
+        expect(nextTheme.name).toBe(daylightTheme.name);
+        expect(nextTheme.primaryColor).toBe(daylightTheme.primaryColor);
+        expect(nextTheme.accentColor).toBe(daylightTheme.accentColor);
+        expect(nextTheme.secondaryColor).toBe(daylightTheme.secondaryColor);
+        expect(nextTheme.backgroundColor).toBe(daylightTheme.backgroundColor);
+        // 这首歌的高亮词与图标仍然跟着 AI 主题走。
+        expect(nextTheme.wordColors).toEqual(dualTheme.light.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(dualTheme.light.lyricsIcons);
+    });
+
+    it('drops the AI palette when the source goes back to the midnight preset', () => {
+        const previousTheme: Theme = {
+            ...dualTheme.dark,
+            wordColors: [{ word: 'drop-me', color: '#123456' }],
+            lyricsIcons: ['drop-icon']
+        };
+
+        const nextTheme = resolveBgModeTheme({
+            mode: 'default',
+            aiTheme: dualTheme,
+            isDaylight: false,
+            defaultTheme,
+            daylightTheme,
+            previousTheme
+        });
+
+        expect(nextTheme.name).toBe(defaultTheme.name);
+        expect(nextTheme.backgroundColor).toBe(defaultTheme.backgroundColor);
+        expect(nextTheme.primaryColor).toBe(defaultTheme.primaryColor);
+        expect(nextTheme.wordColors).toEqual(dualTheme.dark.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(dualTheme.dark.lyricsIcons);
+    });
+
+    it('applies the default AI theme when AI background mode is requested without generated AI theme', () => {
+        const previousTheme: Theme = {
+            ...defaultTheme,
+            name: 'Legacy Theme',
+            wordColors: [{ word: 'legacy', color: '#999999' }],
+            lyricsIcons: ['legacy-icon']
+        };
+
+        const nextTheme = resolveBgModeTheme({
+            mode: 'ai',
+            aiTheme: null,
+            isDaylight: false,
+            defaultTheme,
+            daylightTheme,
+            previousTheme
+        });
+
+        expect(nextTheme.name).toBe(FALLBACK_AI_DUAL_THEME.dark.name);
+        expect(nextTheme.backgroundColor).toBe(FALLBACK_AI_DUAL_THEME.dark.backgroundColor);
+        // 高亮词与图标跟着落下来的那份 AI 主题走，不从上一份继承。
+        expect(nextTheme.wordColors).toEqual(FALLBACK_AI_DUAL_THEME.dark.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(FALLBACK_AI_DUAL_THEME.dark.lyricsIcons);
+    });
+
+    it('keeps the AI theme own word colors in ai background mode too', () => {
+        const nextTheme = resolveBgModeTheme({
+            aiTheme: dualTheme,
+            mode: 'ai',
+            isDaylight: false,
+            defaultTheme,
+            daylightTheme,
+            previousTheme: defaultTheme
+        });
+
+        expect(nextTheme.wordColors).toEqual(dualTheme.dark.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(dualTheme.dark.lyricsIcons);
+    });
+
+    it('applies AI background mode while keeping the AI theme palette', () => {
+        const previousTheme: Theme = {
+            ...defaultTheme,
+            wordColors: [{ word: 'persist', color: '#654321' }],
+            lyricsIcons: ['persist-icon']
+        };
+
+        const nextTheme = resolveBgModeTheme({
+            mode: 'ai',
+            aiTheme: dualTheme,
+            isDaylight: false,
+            defaultTheme,
+            daylightTheme,
+            previousTheme
+        });
+
+        expect(nextTheme.name).toBe('AI Dark');
+        expect(nextTheme.backgroundColor).toBe(dualTheme.dark.backgroundColor);
+        // 这两项归选中的那份 AI 主题，不再从上一份继承。
+        expect(nextTheme.wordColors).toEqual(dualTheme.dark.wordColors);
+        expect(nextTheme.lyricsIcons).toEqual(dualTheme.dark.lyricsIcons);
+    });
 
     it('builds a built-in dual theme from warm cover colors', () => {
         const builtinTheme = buildBuiltinDualTheme({

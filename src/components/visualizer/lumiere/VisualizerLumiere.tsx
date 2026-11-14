@@ -5,10 +5,13 @@ import { DEFAULT_LUMIERE_TUNING } from '../../../types';
 import type { Line } from '../../../types';
 import { loadLucideIcons } from '../../../services/lucideIconResolver';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
+import { resolveLyricAntialias } from '../../../utils/lyricRenderQuality';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import type { VisualizerSharedProps } from '../definition';
 import { useVisualizerPixiHost } from '../pixi/pixiRuntimeHost';
+import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import { useVisualizerRuntime } from '../runtime';
+import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { useVisualizerSongCommit } from '../songHandover';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import VisualizerShell from '../VisualizerShell';
@@ -40,22 +43,30 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
         songAlbum,
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
-        showSubtitleTranslation = true,
-        subtitleContentMode,
+        subtitleOverlayLayout,
         subtitleTheme,
         subtitleFontScale,
         subtitleOverlayOpacity,
         subtitleOverlayBackground,
         subtitleUpcomingLyricsBlur,
+        isPreviewMode = false,
         lumiereTuning = DEFAULT_LUMIERE_TUNING,
     } = props;
     const { t } = useTranslation();
     const hostRef = useRef<HTMLDivElement>(null);
     const [runtimeFailed, setRuntimeFailed] = useState(false);
+    // 关键词着色是全局开关（useVisualizerSettingsStore），不再看绘光自己的 tuning。
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+
+    // 分辨率与抗锯齿（#929）：全局挡位叠上本样式的覆盖。预览（样式架小图、主题乐园）保持原来的密度、不开 MSAA。
+    // 抗锯齿原来写死关着，「自动」就是关。画质档（renderQuality）照旧在 tuning 里，从乘过倍数的渲染分辨率往下降图形组。
+    const renderQuality = useLyricRenderQuality(lumiereTuning.render);
+    const renderScale = isPreviewMode ? 1 : renderQuality.scale;
+    const antialias = isPreviewMode ? false : resolveLyricAntialias(renderQuality.antialias, false);
 
     // 运行时创建期间这些输入可能已经变了；create 完成后按最新值补一次。
-    const latestRef = useRef({ tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands });
-    latestRef.current = { tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands };
+    const latestRef = useRef({ tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands, renderScale, keywordColoringEnabled });
+    latestRef.current = { tuning: lumiereTuning, paused, showText, staticMode, audioPower, audioBands, renderScale, keywordColoringEnabled };
     const metadataRef = useRef<LumiereSongMetadata>({ title: songTitle, artist: songArtist, album: songAlbum });
     metadataRef.current = { title: songTitle, artist: songArtist, album: songAlbum };
 
@@ -92,8 +103,8 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
     const runtimeRef = useVisualizerPixiHost<LumierePixiRuntime, LumiereSongContext>({
         hostRef,
         label: 'Lumiere',
-        // 只有真正需要新 WebGL 上下文的输入；歌、tuning、暂停、静态模式都就地推给运行时。
-        rebuildKey: [currentTime],
+        // 只有真正需要新 WebGL 上下文的输入（抗锯齿只能建上下文时定）；歌、tuning、分辨率、暂停、静态模式都就地推给运行时。
+        rebuildKey: [currentTime, antialias],
         song: songContext,
         // 场景同步建，主题图标线稿只画已加载的图标：建运行时和换歌前先把这首歌的主题图标加载好。
         create: async (host, song, signal) => {
@@ -111,14 +122,19 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
                 audioBands: latest.audioBands,
                 staticMode: latest.staticMode,
                 showText: latest.showText,
+                keywordColoringEnabled: latest.keywordColoringEnabled,
                 paused: latest.paused,
                 metadata: metadataRef.current,
+                renderScale: latest.renderScale,
+                antialias,
                 signal,
             });
             const current = latestRef.current;
             runtime.setSongMetadata(metadataRef.current);
             runtime.setTuning(current.tuning);
+            runtime.setRenderScale(current.renderScale);
             runtime.setShowText(current.showText);
+            runtime.setKeywordColoringEnabled(current.keywordColoringEnabled);
             runtime.setStaticMode(current.staticMode);
             runtime.setAudioSources(current.audioPower, current.audioBands);
             runtime.setPaused(current.paused);
@@ -137,8 +153,16 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
     }, [lumiereTuning, runtimeRef]);
 
     useEffect(() => {
+        runtimeRef.current?.setRenderScale(renderScale);
+    }, [renderScale, runtimeRef]);
+
+    useEffect(() => {
         runtimeRef.current?.setShowText(showText);
     }, [showText, runtimeRef]);
+
+    useEffect(() => {
+        runtimeRef.current?.setKeywordColoringEnabled(keywordColoringEnabled);
+    }, [keywordColoringEnabled, runtimeRef]);
 
     useEffect(() => {
         runtimeRef.current?.setStaticMode(staticMode);
@@ -207,8 +231,7 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
                 subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
+                subtitleOverlayLayout={subtitleOverlayLayout}
             />
         </VisualizerShell>
     );

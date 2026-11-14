@@ -1,5 +1,6 @@
 // Copyright (c) 2026 chthollyphile
-import type { LumiereRenderQuality, LumiereTuning } from '../../../types';
+import type { LumiereRenderQuality, LumiereTuning, LyricRenderScale } from '../../../types';
+import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import { snapResolutionToTexturePool } from '../pixi/pixiTextureBudget';
 import type { LumiereProgramOptions } from './lumiereProgram';
 import type { LumiereSceneTuning } from './types';
@@ -11,6 +12,9 @@ import type { LumiereSceneTuning } from './types';
 // 画质档只动开销最大的那一块：图形组（光场着色器 + 烟雾 fbm + 图形组 bloom 的整条降采样链）。
 // 图形组本来就是整屏的柔光与烟雾，低频为主，降分辨率几乎看不出来；文字组、画框和片尾卡的字仍按满分辨率
 // 光栅化与合成，所以歌词保持清晰。见 resolveLumiereGraphicsResolution。
+//
+// 分辨率倍数（#929，全局挡位 / 样式覆盖）先乘在渲染分辨率上（resolveLumiereScaledRenderResolution），
+// 画质档再从乘过的渲染分辨率往下降图形组：两者相乘，互不覆盖。
 
 export interface LumiereQualityProfile {
     /** 图形组相对渲染分辨率的倍率（按轴）；像素数是它的平方。 */
@@ -45,6 +49,14 @@ export const resolveLumiereRenderResolution = (devicePixelRatio: number | undefi
 };
 
 /**
+ * 实际的渲染分辨率：上面的 base（dpr 钳在 1..2）乘上用户选的分辨率倍数（>1 时封顶 3，见 utils/lyricRenderQuality.ts）。
+ * 倍数为 1 时与没有这个设置时完全一样。
+ */
+export const resolveLumiereScaledRenderResolution = (devicePixelRatio: number | undefined, scale: LyricRenderScale) => (
+    resolveLyricPixelRatio(resolveLumiereRenderResolution(devicePixelRatio), scale)
+);
+
+/**
  * 图形组 filter 的分辨率：满画质时就是渲染分辨率；降档时乘上倍率，再按 Pixi 纹理池的 2 的幂分桶往下吸附
  * （pixiTextureBudget.ts：最多再让 25%，换一个小一号的桶）。吸附只对图形组做——它是柔光，软一点看不出来；
  * 文字不吸附，保证清晰。
@@ -73,6 +85,8 @@ export const resolveLumiereBloomLevelDrop = (renderResolution: number, graphicsR
 export interface LumiereSceneTuningContext {
     /** false 时不画歌词：背景歌词碎片也关掉（它们是歌词的字），光照照常。 */
     showText: boolean;
+    /** 全局关键词着色开关（useVisualizerSettingsStore）——原来是用户 tuning 里的 keywordColors。 */
+    keywordColoringEnabled: boolean;
 }
 
 /** 用户 tuning → 场景 tuning。画质档在这里折进倍频与浮尘；「仅显示歌词文字」即场景的 textOnly。 */
@@ -100,7 +114,7 @@ export const toLumiereSceneTuning = (
         hideTrails: tuning.hideTrails,
         overlayFrame: tuning.overlayFrame,
         textOnly: tuning.textOnly,
-        keywordColors: tuning.keywordColors,
+        keywordColors: context.keywordColoringEnabled,
         themeIcons: tuning.themeIcons,
         themeColorMix: tuning.themeColorMix,
     };

@@ -1,8 +1,11 @@
 import { useMemo } from 'react';
+import { useNowPlayingCardPositioningEntry } from './now-playing-toast/useNowPlayingCardPositioningEntry';
+import { useNowPlayingCardLayoutStore } from './now-playing-toast/nowPlayingCardLayoutStore';
 import { currentTime, lyricCurrentTime } from '../../../stores/motionSignals';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
+import { useListeningArchiveStore } from '../listeningArchive/listeningArchiveStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../../stores/useStageSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -33,11 +36,15 @@ const MEMORY_MONITOR_SHORTCUT_LABEL = 'Alt+Shift+M';
  */
 export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => {
     const { t } = useTranslation();
+    useNowPlayingCardPositioningEntry(deps.navigateToPlayer);
+    const cardPositioning = useNowPlayingCardLayoutStore(state => state.isPositioning);
     const currentView = useAppViewStore(state => state.view);
     const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
     const isDevDebugOverlayVisible = useAppChromeStore(state => state.isDevDebugOverlayVisible);
     const isMemoryMonitorVisible = useAppChromeStore(state => state.isMemoryMonitorVisible);
     const isSearchOpen = useSearchNavigationStore(state => state.isSearchOpen);
+    const isSearchResultsBarHidden = useSearchNavigationStore(state => state.isResultsBarHidden);
+    const isListeningArchiveOpen = useListeningArchiveStore(state => state.isOpen);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const stageTrackPillMode = useStageSettingsStore(state => state.stageTrackPillMode);
     const stageTrackPillTimeoutSec = useStageSettingsStore(state => state.stageTrackPillTimeoutSec);
@@ -85,6 +92,8 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         ...deps,
         currentView,
         isSearchOpen,
+        isSearchResultsBarHidden,
+        isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,
         isMemoryMonitorVisible,
@@ -101,7 +110,8 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         playQueue,
         isFmMode,
         coverUrl: displayCoverUrl,
-        stageTrackPillMode,
+        stageTrackPillMode: cardPositioning ? 'always' : stageTrackPillMode,
+        stageTrackPillOnScreen: deps.stageTrackPillOnScreen || (cardPositioning && currentView === 'player'),
         stageTrackPillTimeoutSec,
         noTrackText: t('ui.noTrack'),
         prevTrackLabel: t('ui.previousTrack'),
@@ -119,8 +129,11 @@ export const useAppOverlaysModel = (deps: AppOverlaysDeps): AppOverlaysModel => 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [
         ...Object.values(deps),
+        cardPositioning,
         currentView,
         isSearchOpen,
+        isSearchResultsBarHidden,
+        isListeningArchiveOpen,
         isDaylight,
         isDevDebugOverlayVisible,
         isMemoryMonitorVisible,

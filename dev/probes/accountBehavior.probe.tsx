@@ -33,6 +33,7 @@ const AccountTabPanel: React.FC<{ account: LibraryAccountController }> = ({ acco
                 onAudioQualityChange={() => {}}
                 onSyncData={() => {}}
                 isSyncing={false}
+                isDaylight={false}
                 onNavigateHome={() => {}}
             />
         </div>

@@ -34,7 +34,10 @@ const IGNORED_FORWARD_HEADERS = [
 function isAllowedLyricProxyHost(hostname) {
     return hostname === 'qq.com' || hostname.endsWith('.qq.com') ||
         hostname === 'y.gtimg.cn' ||
-        hostname === 'kugou.com' || hostname.endsWith('.kugou.com');
+        // 上游把 AMLL 歌词改走官方 API 后把 amll-ttml-db 主机从这里摘掉了（连同下面那个
+        // 404 → 204 的特例），同步时跟着去掉；kgimg.com 是我们自己加的酷狗封面域，保留。
+        hostname === 'kugou.com' || hostname.endsWith('.kugou.com') ||
+        hostname === 'kgimg.com' || hostname.endsWith('.kgimg.com');
 }
 export default async function handler(req, res) {
     // Allow CORS for the proxy

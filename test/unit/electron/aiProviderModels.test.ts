@@ -1,4 +1,4 @@
-import { createRequire } from 'node:module';
+﻿import { createRequire } from 'node:module';
 import { describe, expect, it, vi } from 'vitest';
 import { AI_PROVIDER_PRESETS, resolveAiProviderPreset } from '../../../shared/ai/providerRegistry.mjs';
 
@@ -13,7 +13,7 @@ const storeWith = (settings: Record<string, unknown>) => ({ get: (name: string) 
 
 describe('provider presets and migration', () => {
     it('includes the requested providers and keeps custom last', () => {
-        expect(AI_PROVIDER_PRESETS.map(p => p.id)).toEqual(['qwen', 'anthropic', 'deepseek', 'gemini', 'kimi', 'openai', 'tencentcloud', 'mimo', 'glm', 'custom']);
+        expect(AI_PROVIDER_PRESETS.map(p => p.id)).toEqual(['qwen', 'anthropic', 'deepseek', 'foliawork', 'gemini', 'kimi', 'openai', 'tencentcloud', 'mimo', 'glm', 'custom']);
     });
     it('preserves old compatible connections and infers the provider from the host', () => {
         expect(resolveAiProviderPreset({}).id).toBe('gemini');
@@ -32,7 +32,7 @@ describe('provider presets and migration', () => {
 
 describe('model discovery', () => {
     // GLM has no listing (shared/ai/glm.mjs); see 'model discovery as described by the adapters'.
-    it.each(AI_PROVIDER_PRESETS.filter(p => p.protocol === 'openai' && p.id !== 'custom' && p.id !== 'glm'))('uses the %s base path and Bearer authentication', async preset => {
+    it.each(AI_PROVIDER_PRESETS.filter(p => p.protocol === 'openai' && p.id !== 'custom' && p.listsModels))('uses the %s base path and Bearer authentication', async preset => {
         // A model the provider's own listing filter keeps.
         const modelId = preset.recommendedModel ?? 'model-one';
         const customFetch = vi.fn().mockResolvedValue(json({ data: [{ id: modelId }] }));

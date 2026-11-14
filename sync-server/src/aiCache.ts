@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { requireAdmin } from './admin.js';
 import type { D1Database, D1PreparedStatement, Env } from './app.js';
-import { looseSongTitle, rankSongTitleMatch, songTitleLike, songTitleSeed, songTitleSegments, songTitleKey } from './songTitleMatch.js';
+import { MAX_CACHE_BACKUPS } from './aiCacheBackups.js';
+import { invalidateSongTotalCache, readSongTotal } from './aiCacheSongTotal.js';
+import {
+  deleteTitleTokens,
+  findResolveCandidates as findResolveCandidatesIn,
+  writeTitleTokens,
+} from './aiCacheTitleIndex.js';
 import { readHighlightWords, verifyStageUpload } from './stageVerifier.js';
 
 // src/aiCache.ts
@@ -26,8 +32,6 @@ const DEFAULT_LIST_LIMIT = 200;
 const MAX_SONGS_LIMIT = 200;
 const DEFAULT_SONGS_LIMIT = 60;
 const MAX_PLATFORM_CHARS = 64;
-/** 同一个键最多留几份旧版：够把被盖掉的那条捞回来，又不至于无限长。 */
-export const MAX_CACHE_BACKUPS = 10;
 
 const KIND_PATTERN = /^[a-z0-9_-]{1,32}$/;
 const KEY_PATTERN = /^[a-f0-9]{32}$/;
@@ -69,21 +73,6 @@ type AiCacheRow = {
   updated_at: string;
 };
 
-type AiCacheBackupRow = {
-  id: number;
-  kind: string;
-  cache_key: string;
-  payload_json: string;
-  payload_bytes: number;
-  song_title: string | null;
-  provider: string | null;
-  model: string | null;
-  platform: string | null;
-  hits: number;
-  created_at: string;
-  archived_at: string;
-};
-
 const mapRow = (row: AiCacheRow): AiCacheEntry => {
   let payload: unknown = null;
   try {
@@ -103,30 +92,6 @@ const mapRow = (row: AiCacheRow): AiCacheEntry => {
     hits: Number(row.hits ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-};
-
-/** 备份表里的一行：够管理员看清是哪一版，也能整版捞回来。 */
-const mapBackupRow = (row: AiCacheBackupRow) => {
-  let payload: unknown = null;
-  try {
-    payload = JSON.parse(row.payload_json);
-  } catch {
-    payload = null;
-  }
-  return {
-    id: Number(row.id ?? 0),
-    kind: row.kind,
-    key: row.cache_key,
-    payload,
-    songTitle: row.song_title ?? '',
-    provider: row.provider ?? '',
-    model: row.model ?? '',
-    platform: row.platform ?? '',
-    payloadBytes: Number(row.payload_bytes ?? 0),
-    hits: Number(row.hits ?? 0),
-    createdAt: row.created_at,
-    archivedAt: row.archived_at,
   };
 };
 
@@ -160,6 +125,35 @@ const readMetaText = (value: unknown, limit: number): string => (
 const HIT_LOG_RETENTION_DAYS = 7;
 
 /*
+ * 每条命中要写两行（累加器 + 流水），而 `run()` 每次都是一次独立的自动提交事务 ——
+ * 并发一上来，SQLite 的写锁就被这些一句话的小事务不停抢，读操作排在写锁后面等，
+ * 表现就是「明明只是取一条缓存，却卡住」。两句写合成一次 batch：一次事务、一次落盘。
+ *
+ * 流水那条仍然「写不进去就算了」：它只是统计，不该让一次命中变成 500。
+ */
+const commitHit = async (
+  db: D1Database,
+  kind: string,
+  key: string,
+  hitLog: D1PreparedStatement,
+): Promise<void> => {
+  try {
+    await db.batch([
+      db.prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?').bind(kind, key),
+      hitLog,
+    ]);
+  } catch {
+    // 整批回滚了：退一步只记累加器，命中接口本身不报错。
+    await db
+      .prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?')
+      .bind(kind, key)
+      .run()
+      .catch(() => undefined);
+    await hitLog.run().catch(() => undefined);
+  }
+};
+
+/*
  * 时间窗口的比较值必须和 `at` **同一种写法**。
  *
  * `at` 是 `new Date().toISOString()`（`2026-10-18T02:13:00.000Z`），而 `datetime('now', …)`
@@ -189,15 +183,14 @@ const handleGet = async (db: D1Database, kind: string, key: string) => {
 
   if (!row) return { ok: true, hit: false, entry: null };
 
-  await db
-    .prepare('UPDATE ai_cache SET hits = hits + 1 WHERE kind = ? AND cache_key = ?')
-    .bind(kind, key)
-    .run();
-  await db
-    .prepare('INSERT INTO ai_cache_hits (kind, cache_key, song_title, at) VALUES (?, ?, ?, ?)')
-    .bind(kind, key, row.song_title ?? '', new Date().toISOString())
-    .run()
-    .catch(() => undefined);
+  await commitHit(
+    db,
+    kind,
+    key,
+    db
+      .prepare('INSERT INTO ai_cache_hits (kind, cache_key, song_title, at) VALUES (?, ?, ?, ?)')
+      .bind(kind, key, row.song_title ?? '', new Date().toISOString()),
+  );
 
   return { ok: true, hit: true, entry: mapRow(row) };
 };
@@ -302,7 +295,11 @@ const handlePut = async (
         updated_at = excluded.updated_at
     `)
     .bind(kind, key, JSON.stringify(parsed.payload), parsed.bytes, songTitle, provider, model, platform, now, now),
+    /* 倒排索引跟主表在同一个事务里更新：不会出现「主表改了、索引还指着旧歌名」。 */
+    ...writeTitleTokens(db, kind, key, songTitle, now),
   ]);
+  /* 可能新增了一种歌名，让 /songs 的总数缓存立刻作废（不等 TTL 自然过期）。 */
+  invalidateSongTotalCache(db);
 
   return {
     ok: true,
@@ -321,25 +318,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
 );
 
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, (char) => `\\${char}`);
-
-/** 一个键一次给多少条候选去判合规 —— 多了只是让客户端多比几遍。 */
-const MAX_RESOLVE_CANDIDATES = 12;
-/**
- * 模糊匹配先捞多少行回来打分。
- *
- * LIKE '%…%' 用不上索引，而「哪条才是同一首歌」只有压成核心名之后才知道 —— 这件事
- * SQL 做不了，只好先多捞一点、在本机排完再截断。payload 只给最后那几条 parse。
- */
-const MAX_RESOLVE_SCAN_ROWS = 200;
-/** 一次查询里最多并列几条 LIKE 模式（拆段那一路用）。 */
-const MAX_RESOLVE_PATTERNS = 4;
-
-/** 捞回来的一行，还没打分。只带排序与打分要用的列，让扫描走覆盖索引。 */
-type ResolveRow = {
-  cache_key: string;
-  song_title: string | null;
-  updated_at: string | null;
-};
 
 /**
  * 按主键把整行（含 payload_json）补回来。
@@ -384,151 +362,6 @@ export const hydrateCacheRows = async (
   return map;
 };
 
-/**
- * 按一组 LIKE 模式捞行：一条 SQL 用 OR 把它们并在一起。
- *
- * 只捞这几列 —— payload 是留给最后那几条才取的（见 hydrateCacheRows）。
- */
-const scanResolveRows = async (
-  db: D1Database,
-  kind: string,
-  patterns: string[],
-): Promise<ResolveRow[]> => {
-  const terms = [...new Set(patterns.map((entry) => String(entry ?? '').trim()).filter(Boolean))]
-    .slice(0, MAX_RESOLVE_PATTERNS);
-  if (terms.length === 0) return [];
-  const where = terms.map(() => "song_title LIKE ? ESCAPE '\\'").join(' OR ');
-  const rows = await db
-    .prepare(
-      `SELECT cache_key, song_title, updated_at
-       FROM ai_cache
-       WHERE kind = ? AND song_title <> '' AND (${where})
-       ORDER BY updated_at DESC
-       LIMIT ?`,
-    )
-    .bind(kind, ...terms.map((term) => `%${escapeLike(term)}%`), MAX_RESOLVE_SCAN_ROWS)
-    .all<ResolveRow>();
-  return rows.results ?? [];
-};
-
-/** 打分 + 排序 + 截断：归一后对不上的不算候选。 */
-const rankResolveRows = (rows: ResolveRow[], title: string) => rows
-  .map((row) => ({ row, rank: rankSongTitleMatch(String(row.song_title ?? ''), title) }))
-  /* 归一后对不上的不算候选 —— 光靠原样包含捞回来的，高亮词那关也过不去。 */
-  .filter((entry) => entry.rank < 3)
-  .sort((left, right) => (
-    left.rank - right.rank
-    || String(right.row.updated_at ?? '').localeCompare(String(left.row.updated_at ?? ''))
-  ))
-  .slice(0, MAX_RESOLVE_CANDIDATES);
-
-export interface ResolveCandidate {
-  key: string;
-  songTitle: string;
-  platform: string;
-  provider: string;
-  model: string;
-  updatedAt: string;
-  /** 这条答案里 AI 标记的高亮词 —— 客户端拿它跟自己手上的歌词比。 */
-  words: string[];
-}
-
-/*
- * 按**歌名**找同类条目 —— 精确键没命中时的兜底。
- *
- * 键是「歌词 + policy」的 MD5，于是同一首歌换个版本的歌词（翻唱、现场、平台之间
- * 同一首歌的 LRC 也常常不一样）就是另一个键，明明库里躺着答案却取不到。这里改按歌名
- * 找，把每条候选的高亮词带回去，由客户端拿自己那段歌词判「合不合规」。
- *
- * 只返回高亮词、不返回 payload：判定的活留在客户端，歌词正文也就不用上传。
- */
-export const findResolveCandidates = async (
-  db: D1Database,
-  kind: string,
-  songTitle: string,
-): Promise<ResolveCandidate[]> => {
-  const title = String(songTitle ?? '').trim().slice(0, MAX_TITLE_CHARS);
-  if (!title) return [];
-  /*
-   * 两个 LIKE 都收：库里那条更长的（「晴天 现场」）命中第一个，完全相等的命中
-   * `song_title = ?`。请求更长那一种（「晴天 (Live)」）已经被 `loose` 压短成「晴天」，
-   * 于是反过来能配上库里的短名 —— 这正是括号/后缀那批歌以前配不上的方向。
-   */
-  const loose = looseSongTitle(title) || title;
-  /*
-   * 第三条：`smooth` 连标点也去了。「花海 - 现场」削掉后缀后那个连字符还在，
-   * `LIKE '%花海 -%'` 一条都配不上库里的「花海」，而 `songTitleKey` 是认的。
-   */
-  const smooth = songTitleLike(title) || loose;
-  const rows = await db
-    .prepare(
-      `SELECT cache_key, song_title, updated_at
-       FROM ai_cache
-       WHERE kind = ? AND song_title <> '' AND (song_title = ? OR song_title LIKE ? ESCAPE '\\' OR song_title LIKE ? ESCAPE '\\' OR song_title LIKE ? ESCAPE '\\')
-       ORDER BY (song_title = ?) DESC, updated_at DESC
-       LIMIT ?`,
-    )
-    .bind(kind, title, `%${escapeLike(loose)}%`, `%${escapeLike(smooth)}%`, `%${escapeLike(title)}%`, title, MAX_RESOLVE_SCAN_ROWS)
-    .all<ResolveRow>();
-
-  let ranked = rankResolveRows(rows.results ?? [], title);
-
-  /*
-   * 退路一：**拆开各段**分别去捞。
-   *
-   * 「歌手 - 歌名」那批名字：整串压完是「周杰伦晴天」，怎么 LIKE 都配不上库里的
-   * 「晴天」。这里按分隔符切开，「周杰伦」「晴天」两段各问一次、命中并在一起 ——
-   * 这是那种名字唯一能走通的路。放宽的只是入口，判定仍旧在客户端（高亮词）。
-   */
-  if (ranked.length === 0) {
-    const segments = songTitleSegments(title);
-    if (segments.length > 0) ranked = rankResolveRows(await scanResolveRows(db, kind, segments), title);
-  }
-
-  /*
-   * 退路二：**只按歌名开头那一个字**（拉丁则头一个词）去捞。
-   *
-   * 各平台给同一首歌起的名字能差到怎么压都压不到一起（换了一种写法、多了段前缀），
-   * 这时前面几条 LIKE 全部落空。同样只放宽入口，判定不变。
-   */
-  if (ranked.length === 0) {
-    const seed = songTitleSeed(title);
-    if (seed) {
-      ranked = (await scanResolveRows(db, kind, [seed]))
-        // 同一个开头才算：不然「晴天」会把「晴天的云」「晴天雨」之外的一堆也捞回来。
-        .filter((row) => songTitleKey(String(row.song_title ?? '')).startsWith(seed))
-        .map((row) => ({ row, rank: 2 }))
-        .slice(0, MAX_RESOLVE_CANDIDATES);
-    }
-  }
-
-  /*
-   * 名次定完才按主键把整行（含 payload）补回来 —— 模糊扫描那几步只碰覆盖索引，
-   * 大字段一次都不读。扫到 200 行、只取 12 条候选，payload 的读取量从「全表」
-   * 缩到「这 12 条」。
-   */
-  const full = await hydrateCacheRows(db, ranked.map(({ row }) => ({ kind, cache_key: String(row.cache_key ?? '') })));
-
-  return ranked.map(({ row }) => {
-    const hydrated = full.get(`${kind}\u0000${String(row.cache_key ?? '')}`);
-    const payloadJson = hydrated?.payload_json ?? null;
-    let payload: unknown = null;
-    try {
-      payload = payloadJson ? JSON.parse(payloadJson) : null;
-    } catch {
-      payload = null;
-    }
-    return {
-      key: String(row.cache_key ?? ''),
-      songTitle: String(hydrated?.song_title ?? row.song_title ?? ''),
-      platform: String(hydrated?.platform ?? ''),
-      provider: String(hydrated?.provider ?? ''),
-      model: String(hydrated?.model ?? ''),
-      updatedAt: String(row.updated_at ?? ''),
-      words: isRecord(payload) ? readHighlightWords(payload) : [],
-    };
-  });
-};
 
 const buildRoutes = (options: { admin: boolean }) => {
   const routes = new Hono<{ Bindings: Env }>();
@@ -550,7 +383,12 @@ const buildRoutes = (options: { admin: boolean }) => {
     }
     return c.json({
       ok: true,
-      candidates: await findResolveCandidates(c.env.FOLIA_SYNC_DB, kind, songTitle),
+      candidates: await findResolveCandidatesIn(c.env.FOLIA_SYNC_DB, kind, songTitle, {
+        hydrate: (wanted) => hydrateCacheRows(c.env.FOLIA_SYNC_DB, wanted),
+        readWords: readHighlightWords,
+        isRecord,
+        maxTitleChars: MAX_TITLE_CHARS,
+      }),
     });
   });
 
@@ -587,26 +425,40 @@ const buildRoutes = (options: { admin: boolean }) => {
      * 总数先给：客户端要拿它**先把屏幕铺满**（占位行按总数排好），再一条一条往里填。
      * 不先占位的话，每插一条整张表就重排一次 —— 几百条下来就是一直在抖。
      * 带了 q 就是筛完之后的条数（不然「已加载 3 / 900」这种进度根本没法看）。
+     *
+     * 不带 q 的那一个走短时缓存：`COUNT(DISTINCT song_title)` 得把整个歌名索引读一遍
+     * 去重，4 万条实测 5.6ms，而分页那半句只要 0.15ms —— 每请求都算一次的话，这一句
+     * 就是 `/songs` 的全部开销（压测里 p50 44ms 里大部分是它，并发时还排队）。
+     * 歌名总数变得很慢（只有新歌进库才变），缓存几秒完全看不出差别；带 q 的计数各不
+     * 相同，缓存没有意义，仍然每次现算。
      */
     const totalRow = query
       ? await c.env.FOLIA_SYNC_DB
         .prepare(`SELECT COUNT(DISTINCT song_title) AS total FROM ai_cache WHERE song_title IS NOT NULL AND song_title <> ''${filter}`)
         .bind(`%${escapeLike(query)}%`)
         .first<{ total: number }>()
-      : await c.env.FOLIA_SYNC_DB
-        .prepare("SELECT COUNT(DISTINCT song_title) AS total FROM ai_cache WHERE song_title IS NOT NULL AND song_title <> ''")
-        .first<{ total: number }>();
+      : await readSongTotal(c.env.FOLIA_SYNC_DB);
 
     const binds: unknown[] = query ? [`%${escapeLike(query)}%`, limit, offset] : [limit, offset];
 
     const rows = await c.env.FOLIA_SYNC_DB
       .prepare(
+        /*
+         * 按歌名分组之后要分页，就得有个顺序。这里按 `song_title` 排（也就是按歌名
+         * 字典序），不再按「最近更新」排：后者是聚合值，SQLite 只能把**整个分组结果**
+         * 建成临时表再排序，库一大这条就慢到几百毫秒，而 better-sqlite3 是同步的，
+         * 整个进程跟着停。按歌名排能直接顺着 `idx_ai_cache_song_group` 边扫边分组、
+         * 取到 LIMIT 就停 —— 4w 行时从 80ms 降到 2ms。
+         *
+         * 客户端本来就是靠 offset 分页、自己不做排序，所以顺序变化不影响加载。
+         * 每行的 `updatedAt` 仍旧是这一组里最新的那条，没变。
+         */
         `SELECT song_title, MAX(updated_at) AS updated_at, SUM(hits) AS hits,
                 MAX(cache_key) AS cache_key, MAX(platform) AS platform, COUNT(*) AS versions
          FROM ai_cache
          WHERE song_title IS NOT NULL AND song_title <> ''${filter}
          GROUP BY song_title
-         ORDER BY updated_at DESC
+         ORDER BY song_title ASC
          LIMIT ? OFFSET ?`,
       )
       .bind(...binds)
@@ -702,12 +554,19 @@ export const adminCacheRoutes = (() => {
      * 两段式：先只捞元数据（排序与筛选在覆盖索引上完成，不碰大字段），再按主键把
      * 这一页的 payload 补回来。原来带 payload_json 的整行扫描在 10w 条上每次都是
      * 全表翻页 —— 管理页开一次就把整个事件循环卡住。
+     *
+     * 排序键跟 `WHERE` 里的 `kind` 对齐：带 kind 筛选时用 `idx_ai_cache_kind_updated_at`，
+     * 顺着索引取够 limit 条就停；不带 kind 时走 `idx_ai_cache_updated_at`。原来一律
+     * `ORDER BY updated_at DESC`，带 kind 时会把整个 kind 分支（现在几乎就是全表）
+     * 先取回来再排 —— 实测 4w 行时 339ms，对齐后 2.5ms。
      */
+    const orderBy = typeof kind === 'string' && KIND_PATTERN.test(kind)
+      ? ' ORDER BY kind ASC, updated_at DESC'
+      : ' ORDER BY updated_at DESC';
     const metaRows = await c.env.FOLIA_SYNC_DB
       .prepare(
         `SELECT kind, cache_key, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at
-         FROM ai_cache${clause}
-         ORDER BY updated_at DESC
+         FROM ai_cache${clause}${orderBy}
          LIMIT ?`,
       )
       .bind(...binds, limit)
@@ -733,10 +592,12 @@ export const adminCacheRoutes = (() => {
     if (!KIND_PATTERN.test(kind) || !KEY_PATTERN.test(key)) {
       return c.json({ ok: false, error: 'invalid_key' }, 400);
     }
-    await c.env.FOLIA_SYNC_DB
-      .prepare('DELETE FROM ai_cache WHERE kind = ? AND cache_key = ?')
-      .bind(kind, key)
-      .run();
+    /* 主表和倒排索引一起删：留着 token 行只会让 resolve 命中一条已经不存在的记录。 */
+    await c.env.FOLIA_SYNC_DB.batch([
+      c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ? AND cache_key = ?').bind(kind, key),
+      deleteTitleTokens(c.env.FOLIA_SYNC_DB, kind, key),
+    ]);
+    invalidateSongTotalCache(c.env.FOLIA_SYNC_DB);
     return c.json({ ok: true });
   });
 
@@ -746,113 +607,18 @@ export const adminCacheRoutes = (() => {
     const kind = String(c.req.query('kind') || '').trim().toLowerCase();
     if (kind) {
       if (!KIND_PATTERN.test(kind)) return c.json({ ok: false, error: 'invalid_kind' }, 400);
-      await c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ?').bind(kind).run();
+      await c.env.FOLIA_SYNC_DB.batch([
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache WHERE kind = ?').bind(kind),
+        deleteTitleTokens(c.env.FOLIA_SYNC_DB, kind),
+      ]);
     } else {
-      await c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache').run();
+      await c.env.FOLIA_SYNC_DB.batch([
+        c.env.FOLIA_SYNC_DB.prepare('DELETE FROM ai_cache'),
+        deleteTitleTokens(c.env.FOLIA_SYNC_DB),
+      ]);
     }
+    invalidateSongTotalCache(c.env.FOLIA_SYNC_DB);
     return c.json({ ok: true });
-  });
-
-  return routes;
-})();
-
-/*
- * Admin: `/admin/api/ai-cache-backups/...` —— 每次被覆盖之前的那一版。
- *
- * 校验能挡住空数据，挡不住「一份能看但很糟的主题」。真被盖掉了，管理员在这里挑一版
- * 旧的捞回来，比让人重新生成一遍划算得多。
- */
-/**
- * 把某一版副本捞回成当前那条 —— JSON 接口与管理页面共用这一份。
- *
- * 先把**现在这条**也存进备份再覆盖：万一捞错了还能再捞回来，不会把当前版本弄丢。
- * 这一版捞回来之后自己就没必要留着了，删掉。
- */
-export const restoreCacheBackup = async (
-  db: D1Database,
-  id: number,
-): Promise<{ ok: true; kind: string; key: string } | { ok: false; error: string; status: 400 | 404 }> => {
-  if (!Number.isFinite(id) || id <= 0) {
-    return { ok: false, error: 'invalid_id', status: 400 };
-  }
-  const now = new Date().toISOString();
-  // Resolve and consume the target inside one transaction; a missing target makes every write a no-op.
-  const results = await db.batch([
-    db.prepare('SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?').bind(id),
-    db.prepare(`
-      INSERT INTO ai_cache_backups
-        (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at)
-      SELECT current.kind, current.cache_key, current.payload_json, current.payload_bytes,
-        current.song_title, current.provider, current.model, current.platform, current.hits, current.created_at, ?
-      FROM ai_cache AS current
-      JOIN ai_cache_backups AS target ON target.kind = current.kind AND target.cache_key = current.cache_key
-      WHERE target.id = ?
-    `).bind(now, id),
-    db.prepare(`
-      DELETE FROM ai_cache_backups
-      WHERE (kind, cache_key) = (SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?)
-        AND id <> ?
-        AND id NOT IN (
-          SELECT id FROM ai_cache_backups
-          WHERE (kind, cache_key) = (SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?)
-            AND id <> ?
-          ORDER BY archived_at DESC, id DESC
-          LIMIT ?
-        )
-    `).bind(id, id, id, id, MAX_CACHE_BACKUPS),
-    db.prepare(`
-      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at)
-      SELECT kind, cache_key, payload_json, COALESCE(payload_bytes, 0), COALESCE(song_title, ''),
-        COALESCE(provider, ''), COALESCE(model, ''), COALESCE(platform, ''), COALESCE(hits, 0), COALESCE(created_at, ?), ?
-      FROM ai_cache_backups WHERE id = ?
-      ON CONFLICT(kind, cache_key) DO UPDATE SET
-        payload_json = excluded.payload_json,
-        payload_bytes = excluded.payload_bytes,
-        song_title = excluded.song_title,
-        provider = excluded.provider,
-        model = excluded.model,
-        platform = excluded.platform,
-        updated_at = excluded.updated_at
-    `).bind(now, now, id),
-    db.prepare('DELETE FROM ai_cache_backups WHERE id = ?').bind(id),
-  ]);
-  const row = (results[0] as { results?: { kind: string; cache_key: string }[] }).results?.[0];
-  if (!row) return { ok: false, error: 'not_found', status: 404 };
-  return { ok: true, kind: row.kind, key: row.cache_key };
-};
-
-export const adminCacheBackupRoutes = (() => {
-  const routes = new Hono<{ Bindings: Env }>();
-  routes.use('*', requireAdmin);
-
-  /** GET /admin/api/ai-cache-backups/:kind/:key —— 这个键留下来的旧版，新的在前。 */
-  routes.get('/:kind/:key', async (c) => {
-    const kind = String(c.req.param('kind') || '').toLowerCase();
-    const key = String(c.req.param('key') || '').toLowerCase();
-    if (!KIND_PATTERN.test(kind) || !KEY_PATTERN.test(key)) {
-      return c.json({ ok: false, error: 'invalid_key' }, 400);
-    }
-    const rows = await c.env.FOLIA_SYNC_DB
-      .prepare('SELECT id, kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at FROM ai_cache_backups WHERE kind = ? AND cache_key = ? ORDER BY archived_at DESC, id DESC')
-      .bind(kind, key)
-      .all<AiCacheBackupRow>();
-    return c.json({
-      ok: true,
-      limit: MAX_CACHE_BACKUPS,
-      backups: (rows.results ?? []).map(mapBackupRow),
-    });
-  });
-
-  /*
-   * POST /admin/api/ai-cache-backups/:id/restore —— 把某一版捞回成当前那条。
-   *
-   * 借口与页面共用同一个 `restoreCacheBackup`；这里只负责把结果说成 JSON。
-   */
-  routes.post('/:id/restore', async (c) => {
-    const id = Number.parseInt(String(c.req.param('id') || ''), 10);
-    const result = await restoreCacheBackup(c.env.FOLIA_SYNC_DB, id);
-    if (!result.ok) return c.json({ ok: false, error: result.error }, result.status);
-    return c.json({ ok: true, restored: id });
   });
 
   return routes;
@@ -860,20 +626,31 @@ export const adminCacheBackupRoutes = (() => {
 
 /** Panel counters. */
 export const readCacheStats = async (db: D1Database) => {
-  const row = await db
-    .prepare('SELECT COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS bytes, COALESCE(SUM(hits), 0) AS hits FROM ai_cache')
-    .first<{ count: number; bytes: number; hits: number }>();
+  /*
+   * 一条分组查询同时给出「每个 kind 几条、占多大」和总计，不再另外跑一次全表
+   * `COUNT(*) / SUM(...)`：面板每次刷新都要这两个数，而 `SUM(payload_bytes)` 要逐行读
+   * 一个整数列 —— 合并之后只扫一遍。
+   */
   const kindRows = await db
-    .prepare('SELECT kind, COUNT(*) AS count FROM ai_cache GROUP BY kind')
-    .all<{ kind: string; count: number }>();
+    .prepare('SELECT kind, COUNT(*) AS count, COALESCE(SUM(payload_bytes), 0) AS bytes FROM ai_cache GROUP BY kind')
+    .all<{ kind: string; count: number; bytes: number }>();
+  const hitsRow = await db
+    .prepare('SELECT COALESCE(SUM(hits), 0) AS hits FROM ai_cache')
+    .first<{ hits: number }>();
+
   const kindCounts: Record<string, number> = {};
+  let cacheCount = 0;
+  let cacheBytes = 0;
   (kindRows.results ?? []).forEach((entry) => {
-    kindCounts[entry.kind] = Number(entry.count ?? 0);
+    const count = Number(entry.count ?? 0);
+    kindCounts[entry.kind] = count;
+    cacheCount += count;
+    cacheBytes += Number(entry.bytes ?? 0);
   });
   return {
-    cacheCount: Number(row?.count ?? 0),
-    cacheBytes: Number(row?.bytes ?? 0),
-    totalHits: Number(row?.hits ?? 0),
+    cacheCount,
+    cacheBytes,
+    totalHits: Number(hitsRow?.hits ?? 0),
     kindCounts,
   };
 };

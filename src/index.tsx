@@ -11,6 +11,7 @@ import { setMediaDiagnosticsEnabledReader } from './utils/mediaDiagnostics';
 import { usePerfDiagnosticsStore } from './stores/usePerfDiagnosticsStore';
 import { installAndroidPhoneFitPreference, installDeviceProfilePreference } from './services/androidPhoneLayout';
 import { installHdrProjectionPreference } from './services/hdrProjection';
+import { installAndroidModsBridge } from './mods/android/androidModsBridge';
 // import { installCoverSizeAudit } from './services/debug/coverSizeSamples';
 // @ts-ignore
 globalThis.Buffer = Buffer;
@@ -21,6 +22,8 @@ installConsoleLogCapture();
 // buffer. Both no-op off Electron. See services/debug/debugModule.ts.
 installDebugModule();
 installMemorySampleFeed();
+// 只在安卓原生端有作用；桌面/网页会立刻返回，不会碰 Capacitor。
+// 莱茵生命的原生桥由插件 load() 自启动，入口不再需要唤醒（分层边界：只有 registry 能碰 suite）。
 // Cover size audit, left wired but switched off: it answered whether the provider CDNs honour the
 // size in a cover URL - they do - and that is not a question worth re-asking every session. The
 // collector and its panel are still in the tree, and `?probe=coverSizeAudit` still reaches them.
@@ -72,5 +75,17 @@ installDeviceProfilePreference();
 // HDR 投影：上次开着的话，镜像要在首帧之前落到 <html> 上（理由同上），剩下的横屏与
 // 亮度由它自己那 5 秒倒计时带过去 —— 那时 React 还没挂载，界面上没人看着。
 installHdrProjectionPreference();
+/*
+ * 安卓端的模组桥：把原生 FoliaMods 插件包成桌面端那一份 `window.electron.mods`。
+ *
+ * 必须赶在 `./bootstrap` **之前**装上：模组 client 在启动链里就被 import 了，而它们只认
+ * 这个对象；如果晚一步，第一次 reconcile 会以为没有任何模组。桌面端/网页上直接返回。
+ *
+ * 注意这份 shim **不带 `platform`**：`window.electron.platform` 只有 Electron 的 preload
+ * 会写，所以凡是靠它判断「是不是桌面端」的代码，在安卓上仍然走非桌面分支。
+ */
+installAndroidModsBridge();
 
 void import('./bootstrap');
+// window.__foliaDev and the ?skipStartup / ?mockSong launch flags (src/dev/devLaunchFlags.ts).
+if (import.meta.env.DEV) void import('./dev/devTools');

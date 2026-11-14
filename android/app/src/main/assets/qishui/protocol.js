@@ -7706,6 +7706,93 @@ ${lines.join("\n")}
     };
   }
 
+  // src/car/discover.js
+  init_globals();
+  var DISCOVER_HOST = "https://beta-luna.douyin.com/luna";
+  var DISCOVER_UA = "Luna/19.1.0 Android";
+  function modeCover(info) {
+    if (!info || typeof info !== "object") return "";
+    const urls = Array.isArray(info.urls) ? info.urls : [];
+    const prefix = urls.find((value) => typeof value === "string" && /^https:\/\//.test(value)) || "";
+    const uri = String(info.uri || "");
+    const template = String(info.template_prefix || "");
+    if (!prefix || !uri || !template) return "";
+    return `${prefix}${uri}~${template}-image.image`;
+  }
+  function createDiscover({ client }) {
+    const post = async (path, body) => {
+      const { data } = await client.http(`${DISCOVER_HOST}${path}`, {
+        body,
+        headers: { "user-agent": DISCOVER_UA, "content-type": "application/json; charset=utf-8" }
+      });
+      return data;
+    };
+    return {
+      /**
+       * 模式探索的卡片。上游把卡片放在第一个 block 的 inner_block 里，每张卡
+       * 的 resources[0] 是一个 radio：id / title / desc / cover_url_list[0]。
+       * 返回 Folia 渲染层好消化的扁平形状；没有资源就跳过，不抛。
+       */
+      async modes() {
+        const data = await post("/discover", {});
+        const blocks = Array.isArray(data?.blocks) ? data.blocks : [];
+        const inner = blocks.flatMap((block) => Array.isArray(block.inner_block) ? block.inner_block : []);
+        const cards = [];
+        for (const entry of inner) {
+          const resource = Array.isArray(entry.resources) ? entry.resources[0] : null;
+          const id = String(resource?.resource_id || "");
+          const style = resource?.style || {};
+          const name = String(style.title || entry.title || "");
+          if (!id || !name) continue;
+          const coverInfo = Array.isArray(style.cover_url_list) ? style.cover_url_list[0] : null;
+          cards.push({
+            id,
+            name,
+            description: String(style.desc || ""),
+            cover: modeCover(coverInfo),
+            color: String(style.cover_color?.dominant_color?.rgb || "")
+          });
+        }
+        return cards;
+      },
+      /** 某张模式卡下的曲目；上游按 cursor 翻页。 */
+      async tracks(radioId, limit, cursor) {
+        const id = String(radioId || "");
+        if (!/^\d+$/.test(id)) throw new QishuiError("invalid-response", "Invalid radio id");
+        const data = await post("/feed/radio/tracks", {
+          radio_id: id,
+          count: Math.min(Math.max(Number(limit) || 20, 1), 50),
+          cursor: String(cursor || "")
+        });
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const songs = [];
+        for (const item of items) {
+          const track = item?.entity?.track_wrapper?.track;
+          if (!track) continue;
+          const id2 = String(track.id || "");
+          if (!id2) continue;
+          const artists = Array.isArray(track.artists) ? track.artists : [];
+          const album = track.album || {};
+          songs.push({
+            id: id2,
+            name: String(track.name || ""),
+            artist: artists.map((a) => String(a.name || "")).filter(Boolean).join(" / "),
+            artistId: String(artists[0]?.id || ""),
+            artists: artists.filter((a) => a.name).map((a) => ({ id: String(a.id || ""), name: String(a.name) })),
+            album: String(album.name || ""),
+            albumId: String(album.id || ""),
+            cover: modeCover(album.url_cover),
+            // 渲染层拿到秒再乘 1000。
+            duration: Number(track.duration || 0) / 1e3,
+            fee: 0,
+            playbackMode: "direct-url"
+          });
+        }
+        return { songs, hasMore: data?.has_more === true, cursor: String(data?.next_cursor || "") };
+      }
+    };
+  }
+
   // src/car/library.js
   init_globals();
   var MAX_BATCH = 100;
@@ -7966,6 +8053,7 @@ ${lines.join("\n")}
     const auth = createAuth(client, { log: log2 });
     const catalog = createCatalog(client);
     const feed = createFeed(client);
+    const discover = createDiscover({ client });
     const library = createLibrary(client);
     const { platform } = client;
     let likedReal = null;
@@ -8353,12 +8441,15 @@ ${lines.join("\n")}
         }
         return { provider: "qishui", artist, songs, total: page.total, nextOffset: page.nextOffset, hasMore: page.hasMore };
       },
-      async feed(limit) {
-        const page = await feed.songs({ count: Math.max(limit, 6) });
+      async feed(limit, scene) {
+        const page = await feed.songs({ count: Math.max(limit, 6), ...scene != null ? { scene } : {} });
         const songs = toFoliaSongs(page.items);
         return { provider: "qishui", songs, hasMore: Boolean(page.hasMore) };
       },
       feedModes: () => feed.modes(),
+      // 手机端「发现 → 模式探索」：public /luna/discover，每次请求内容会换。
+      discoverModes: () => discover.modes(),
+      discoverTracks: (id, limit, cursor) => discover.tracks(id, limit, cursor),
       likedSongs: () => library.likedSongs(),
       recentPlayed: (limit, offset) => library.recentPlayed({ limit, offset }).then((page) => ({
         provider: "qishui",
@@ -9290,7 +9381,24 @@ ${lines.join("\n")}
       const limit = qishuiClampInt(p.limit, 36, 10, 50);
       return api().artist(artistId, limit, 0, String((p || {}).artistName || ""));
     },
-    feed: (params) => api().feed(qishuiClampInt((params || {}).limit, 8, 4, 12)),
+    feed: (params) => {
+      const p = params || {};
+      const scene = /^\d+$/.test(String(p.scene ?? "")) ? String(p.scene) : void 0;
+      return api().feed(qishuiClampInt(p.limit, 8, 4, 12), scene);
+    },
+    // 场景/心情/风格分类树（免登录）。分类 id 回传给 feed 的 scene 参数即可拉该分类的歌。
+    "feed.modes": () => api().feedModes(),
+    // 手机端「发现 → 模式探索」：公开的 /luna/discover，每次会换一批卡；
+    // 点开某张卡后用 discover.tracks + 卡 id 拉那一路的歌。
+    "discover.modes": () => api().discoverModes(),
+    "discover.tracks": (params) => {
+      const p = params || {};
+      return api().discoverTracks(
+        String(p.id || ""),
+        qishuiClampInt(p.limit, 20, 1, 50),
+        String(p.cursor || "")
+      );
+    },
     "user.playlists": () => api().userPlaylists(500, 0),
     "playlist.tracks": (params) => {
       const p = params || {};

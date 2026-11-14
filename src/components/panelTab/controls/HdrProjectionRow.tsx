@@ -15,7 +15,7 @@ import {
 import { Button } from '../../ui';
 
 // src/components/panelTab/controls/HdrProjectionRow.tsx
-// 控制面板里的「HDR 投影」：锁横屏 + 亮度顶满 + 整屏左右镜像，为的是把手机躺在
+// 控制面板里的「HUD 投影」：锁横屏 + 亮度顶满 + 整屏左右镜像，为的是把手机躺在
 // 仪表台上、画面经挡风玻璃反射过来当抬头显示用。
 //
 // 打开不是立刻生效 —— 先数 5 秒。翻横屏那一刻手机多半正拿在手里，数完再翻，用户
@@ -68,7 +68,7 @@ const HdrProjectionRow: React.FC<HdrProjectionRowProps> = ({ theme }) => {
                     className="shrink-0"
                     style={on ? { color: theme.accentColor } : { opacity: 0.4 }}
                 />
-                <span className="shrink-0 text-sm leading-5">{t('ui.hdrProjectionTitle', 'HDR 投影')}</span>
+                <span className="shrink-0 text-sm leading-5">{t('ui.hdrProjectionTitle', 'HUD 投影')}</span>
                 <span
                     className="min-w-0 flex-1 truncate text-[10px] tabular-nums"
                     style={{ color: 'var(--text-secondary)', opacity: remaining > 0 ? 1 : 0.5 }}
@@ -92,7 +92,7 @@ const HdrProjectionRow: React.FC<HdrProjectionRowProps> = ({ theme }) => {
                 )}
                 <Toggle
                     checked={on}
-                    label={t('ui.hdrProjectionTitle', 'HDR 投影')}
+                    label={t('ui.hdrProjectionTitle', 'HUD 投影')}
                     onChange={(next) => {
                         if (next) {
                             setEnabled(true);

@@ -88,6 +88,17 @@ export const parseColorChannels = (color: string): Channels | null => {
     return typeof parsed === 'string' ? null : { ...parsed };
 };
 
+/**
+ * 压掉发暗发脏的光晕；在中段渐入，免得逐帧变化的 RGB（0–255）跳变。
+ * 判据取 HSV 的 V（最亮那个通道）而不是亮度：红 #ef4444、蓝 #2563eb 这类饱和色亮度低，
+ * 但光晕是干净的；近黑的深藏青 V 也低，那就该压成 0。来自上游 #795。
+ */
+export const resolveGlowColorStrength = (r: number, g: number, b: number): number => {
+    const value = Math.max(r, g, b);
+    const progress = clamp((value - 110) / 50, 0, 1);
+    return progress * progress * (3 - 2 * progress);
+};
+
 export const mixColors = (from: string, to: string, amount: number, alpha = 1) => {
     const normalizedAmount = clamp(amount, 0, 1);
     const fromParsed = parseColor(from).parsed;

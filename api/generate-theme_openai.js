@@ -27,7 +27,6 @@ const jsonResponse = (req, body, status) => (new Response(JSON.stringify(body), 
         ...buildCorsHeaders(req),
     },
 }));
-
 // What the theme answer itself needs. Attempts that leave the model thinking get room for that on
 // top (shared/ai/aiTasks.mjs), so this is the same 8192 the desktop asks with.
 const THEME_MAX_OUTPUT_TOKENS = 8192;

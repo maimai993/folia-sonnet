@@ -14,11 +14,14 @@ import {
     type LocalHomeSectionKey,
 } from './localHomeModel';
 import { getLocalCoverAssetUrl } from '../../../services/localCoverAssetUrl';
+import { applyLocalCollectionCoverOverrides } from '../collection/cover/localCollectionCover';
+import { useLocalCollectionCoverUrls } from '../collection/cover/useLocalCollectionCoverUrls';
 import { backfillLocalCovers } from '../../../services/localCoverBackfill';
 
 // src/library/core/home/useLibraryHomeLocal.ts
 // 本地页签的模型：四组条目（core/home/localHomeModel，曲库实体用宿主那份 catalog）、四个 section 的文案与卡片、
 // 当前 section 与它的批量类型；以及本地文件夹树（首页宿主持有的 core/directory/localDirectoryTrees.service，跟着曲库重读）。
+// 文件夹、专辑、歌单设了自定义封面的（core/collection/cover），分组与卡片带的是那张封面。
 
 /** 一次补多少首歌的封面。开屏时不该对着一整屏卡片发几十个请求。 */
 const COVER_BACKFILL_LIMIT = 12;
@@ -55,13 +58,21 @@ export const useLibraryHomeLocal = ({
 }): LibraryHomeLocal => {
     const { t } = useTranslation();
     const { ready, entities, assignments } = catalog;
-    const groups = useMemo(() => buildLocalHomeGroups(
+    const builtGroups = useMemo(() => buildLocalHomeGroups(
         localSongs,
         localPlaylists,
         t,
         ready ? { entities, assignments } : undefined,
         getLocalCoverAssetUrl,
     ), [assignments, entities, localPlaylists, localSongs, ready, t]);
+    // 自定义封面盖在自动封面上：分组本身照旧按歌推出来，换封面不必重新分组。
+    const coverOverrides = useLocalCollectionCoverUrls();
+    const groups = useMemo(() => ({
+        folders: applyLocalCollectionCoverOverrides(builtGroups.folders, coverOverrides),
+        albums: applyLocalCollectionCoverOverrides(builtGroups.albums, coverOverrides),
+        artists: builtGroups.artists,
+        playlists: applyLocalCollectionCoverOverrides(builtGroups.playlists, coverOverrides),
+    }), [builtGroups, coverOverrides]);
 
     const sections = useMemo<LibraryHomeLocalSection[]>(() => LOCAL_HOME_SECTIONS.map(section => {
         const sectionGroups = groups[section.key];

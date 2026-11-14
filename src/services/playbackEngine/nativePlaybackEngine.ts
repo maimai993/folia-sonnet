@@ -1,4 +1,5 @@
-import { nativePlayer, type NativePlaybackEvent } from './nativePlayerPlugin';
+import { nativePlayer, type NativePlaybackEvent, type NativePlaybackSnapshot } from './nativePlayerPlugin';
+import { isNativePlaybackReconciling } from './nativePlaybackSync';
 
 // src/services/playbackEngine/nativePlaybackEngine.ts
 //
@@ -22,6 +23,27 @@ import { nativePlayer, type NativePlaybackEvent } from './nativePlayerPlugin';
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 /**
+ * 一个原生事件从「在播放器线程上生成」到「进到 WebView 的 JS 里」花了多久（毫秒）。
+ *
+ * 这一步是歌词/进度条的全部误差来源：`positionMs` 标的是**生成那一刻**的位置，而
+ * `apply()` 原来把**收到那一刻**当作基准时刻。播放器线程 → 主线程 → `evaluateJavascript`
+ * → JS 上下文这条路上任何一点排队（起播那一瞬间尤其：正在铺歌词、取封面、切视觉器），
+ * 都会变成「时钟从这一秒起整首歌落后那么多」—— 而且因为位置样本不过桥（只有状态边界
+ * 过桥，见 FoliaNativePlayerPlugin），这个落后**没有人来纠正**。
+ *
+ * 两边读的是同一个系统时钟，所以差值就是过桥耗时，不需要另外对齐时钟。
+ *
+ * 异常值一律当 0：墙钟被 NTP 拽回、事件来自另一台机器、或者差出几秒（那不是排队，
+ * 是时钟跳变），都不该把歌词整首推到别处。
+ */
+export const eventDeliveryDelayMs = (wallMs: number | undefined, nowWallMs: number): number => {
+    if (typeof wallMs !== 'number' || !Number.isFinite(wallMs)) return 0;
+    const late = nowWallMs - wallMs;
+    if (!Number.isFinite(late) || late < 0 || late > 3000) return 0;
+    return late;
+};
+
+/**
  * 原生播放（P1）总闸：**已打开**。
  *
  * 曾经因为「开原生播放时 App 内那个歌词可视化页面隔几秒顿一下、关掉就好」停用过一阵。
@@ -33,6 +55,9 @@ const clamp = (value: number, min: number, max: number) => Math.min(Math.max(val
  *
  * ⚠️ 代价：走 `blob:` 的本地歌原生吃不下，那种歌整首回落 `<audio>`；
  * 原生出声时均衡器 / 音效 / 淡入淡出 / 混音过渡 / 频谱整体失效（都在 Web Audio 图上）。
+ *
+ * 设置里那个「原生播放（实验）」开关已经删掉了：安卓上恒开，没有第二条音频栈可选
+ * （见 useAppAudioOutput 的三层说明）。这里的总闸留着，只是代码级别的紧急关闭口。
  */
 export const NATIVE_PLAYBACK_ENABLED: boolean = true;
 
@@ -64,7 +89,31 @@ class NativePlaybackEngine {
     private stalled = false;
     private repeatMode = 0;
     private volume = 1;
+    /**
+     * 这一首自己的响度补偿系数（线性，1 = 不动）。
+     *
+     * ReplayGain 原来乘在 Web Audio 的 gain 节点上；原生出声之后那条链不参与，所以乘进
+     * 播放器音量里：真正下发的是 volume × trackGain。两个乘数分开存，用户拖音量时
+     * 补偿不会被覆盖，换歌时补偿归 1 由调用方负责（见 usePlaybackAudioBridge.applyReplayGain）。
+     */
+    private trackGain = 1;
     private currentUrl: string | null = null;
+    private songKey: string | null = null;
+
+    /** 认领只重置本地时钟，绝不 prepare / seek / play 原生。 */
+    adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
+        this.ensureSubscription();
+        this.currentUrl = snapshot.url;
+        this.songKey = snapshot.songKey ?? null;
+        this.hasSource = true;
+        this.positionMs = Math.max(0, snapshot.positionMs);
+        this.durationMs = Math.max(0, snapshot.durationMs);
+        this.playing = snapshot.playing;
+        this.rate = snapshot.speed ?? 1;
+        this.stalled = snapshot.buffering ?? false;
+        this.updatedAtMs = performance.now();
+        this.lastDeliveredMs = this.positionMs;
+    }
     private listeners = new Set<(event: NativePlaybackEvent) => void>();
     private subscriptionStarted = false;
 
@@ -120,8 +169,11 @@ class NativePlaybackEngine {
         return this.durationMs > 0 ? this.durationMs / 1000 : 0;
     }
 
-    async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number } = {}): Promise<void> {
+    async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number; songKey?: string | null } = {}): Promise<void> {
+        if (isNativePlaybackReconciling()) return;
+        if (this.hasSource && this.currentUrl === url && (!options.songKey || options.songKey === this.songKey)) return;
         this.ensureSubscription();
+        this.songKey = options.songKey ?? null;
         this.currentUrl = url;
         this.hasSource = true;
         this.playing = false;
@@ -135,6 +187,7 @@ class NativePlaybackEngine {
             url,
             startPositionMs: options.startPositionMs ?? null,
             repeatMode: this.repeatMode,
+            songKey: this.songKey,
         });
         await nativePlayer.setVolume(this.volume);
     }
@@ -162,7 +215,7 @@ class NativePlaybackEngine {
         const targetMs = Math.max(0, Math.round(seconds * 1000));
         this.positionMs = targetMs;
         this.updatedAtMs = performance.now();
-        this.stalled = false;
+        // seek 是位置意图，不是缓冲结束：保留 stalled，等待原生实际播放状态（#168）。
         // 跳是唯一允许「往回走」的动作，所以这里必须把只进不退的基准一起复位。
         this.lastDeliveredMs = targetMs;
         await nativePlayer.seek(targetMs);
@@ -179,13 +232,33 @@ class NativePlaybackEngine {
         await nativePlayer.stop();
     }
 
+    /** 用户音量（0..1）。与 [trackGain] 分开：拖音量不该把响度补偿抹掉。 */
     setVolume(volume: number): void {
         this.volume = clamp(volume, 0, 1);
         if (!this.hasSource) return;
-        void nativePlayer.setVolume(this.volume).catch(() => undefined);
+        void nativePlayer.setVolume(this.effectiveVolume()).catch(() => undefined);
+    }
+
+    /**
+     * 这一首的响度补偿（线性系数，见 src/utils/replayGain.ts 的 linearGain）。
+     *
+     * 乘在音量上一起下发，而不是另开一条原生接口：播放器只有一个音量旋钮。
+     */
+    setTrackGain(gain: number): void {
+        this.trackGain = clamp(gain, 0, 4);
+        if (!this.hasSource) return;
+        void nativePlayer.setVolume(this.effectiveVolume()).catch(() => undefined);
+    }
+
+    /** 真正下发给播放器的音量。 */
+    private effectiveVolume(): number {
+        return clamp(this.volume * this.trackGain, 0, 1);
     }
 
     setSpeed(speed: number): void {
+        // 切倍速前结算旧速率，不能把过去整段墙钟按新倍速重新计算。
+        this.positionMs = this.getPositionSec() * 1000;
+        this.updatedAtMs = performance.now();
         this.rate = clamp(speed, 0.1, 4);
         if (!this.hasSource) return;
         void nativePlayer.setSpeed(this.rate).catch(() => undefined);
@@ -195,6 +268,19 @@ class NativePlaybackEngine {
         // 只记下来：下一次 prepare 会带上它。已经在播的这一首不重新装地址 —— 那会把
         // 当前这一首从头再来一遍，而「单曲循环」是随时能按的。
         this.repeatMode = repeatMode;
+    }
+
+    /**
+     * 立刻改循环模式：对已经在播的播放器直接下发，不重新装地址。
+     *
+     * `setRepeatMode` 只在下次 prepare 才生效，正在播的这首会丢循环 —— ExoPlayer
+     * 还是 OFF，歌放完停在末尾，进度条不动；Web 那条路的 `<audio>.loop` 是元素属性，
+     * React 一渲染就生效，原生这里得补上同一个时效性。播放器还没建时退化为只记录。
+     */
+    setRepeatModeNow(repeatMode: number): void {
+        this.repeatMode = repeatMode;
+        if (!this.hasSource) return;
+        void nativePlayer.setRepeatMode(repeatMode).catch(() => undefined);
     }
 
     subscribe(listener: (event: NativePlaybackEvent) => void): () => void {
@@ -209,6 +295,8 @@ class NativePlaybackEngine {
         if (this.subscriptionStarted) return;
         this.subscriptionStarted = true;
         void nativePlayer.addListener(event => {
+            if (isNativePlaybackReconciling()) return;
+            if (event.songKey && this.songKey && event.songKey !== this.songKey) return;
             this.apply(event);
             this.listeners.forEach(listener => listener(event));
         }).catch(() => undefined);
@@ -216,9 +304,20 @@ class NativePlaybackEngine {
 
     private apply(event: NativePlaybackEvent): void {
         const now = performance.now();
+        /*
+         * 事件是**过去**发生的：位置是生成那一刻的位置，基准时刻也要退回到那一刻。
+         *
+         * 不退这一步的后果是整首歌的恒定滞后（见 `eventDeliveryDelayMs`）：歌词、进度条、
+         * 节拍时钟全都比声音晚一段过桥耗时，而且换哪副耳机都一样 —— 因为它跟音频输出无关。
+         */
+        const lateMs = eventDeliveryDelayMs(event.wallMs, Date.now());
+        const stampedAtMs = now - lateMs;
+        if (lateMs >= 60 && (event.type === 'playing' || event.type === 'ready' || event.type === 'seeked' || event.type === 'paused')) {
+            console.info(`[Clock] ${event.type} 事件过桥用了 ${Math.round(lateMs)}ms，基准按生成时刻对齐`);
+        }
         if (typeof event.positionMs === 'number') {
             this.positionMs = Math.max(0, event.positionMs);
-            this.updatedAtMs = now;
+            this.updatedAtMs = stampedAtMs;
         }
         if (typeof event.durationMs === 'number' && event.durationMs > 0) {
             this.durationMs = event.durationMs;
@@ -227,11 +326,19 @@ class NativePlaybackEngine {
             case 'playing':
                 this.playing = true;
                 this.stalled = false;
-                this.updatedAtMs = now;
+                this.updatedAtMs = stampedAtMs;
                 /*
                  * 声音这一刻才真的开始。`play()` 到这一下之间可能隔着缓冲 / 起播，
                  * 日志里是几百毫秒；那段时间墙钟已经走了，不能让歌词白白领先。
                  * 以播放器给的位置为准把基准复位（这是允许往回走的状态边界）。
+                 */
+                this.lastDeliveredMs = this.positionMs;
+                break;
+            case 'ready':
+                /*
+                 * 起播前的边界：位置同样是**生成那一刻**的。这一下也允许把时钟往回放 ——
+                 * 缓冲结束时它比前面那几条外推出来的位置更权威，而「只进不退」的夹子会让
+                 * 时钟卡在前面，等墙钟追上来，看起来就是歌词停在原地几百毫秒。
                  */
                 this.lastDeliveredMs = this.positionMs;
                 break;
@@ -256,7 +363,8 @@ class NativePlaybackEngine {
                  * 用户 seek / 单曲循环回到开头：位置是**允许往回走**的，
                  * 所以把只进不退的基准一起复位。播放状态不变。
                  */
-                this.stalled = false;
+                if (typeof event.playing === 'boolean') this.playing = event.playing;
+                if (typeof event.buffering === 'boolean') this.stalled = event.buffering;
                 this.lastDeliveredMs = this.positionMs;
                 break;
             default:

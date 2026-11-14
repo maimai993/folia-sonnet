@@ -13,7 +13,7 @@ const openHelp = async (page: Page, { denyClipboardApi = false } = {}) => {
     await page.addInitScript(([version, guideKey, deny]) => {
         localStorage.clear();
         localStorage.setItem('library_suite_prompt_seen', 'true');
-        localStorage.setItem('i18nextLng', 'en');
+        localStorage.setItem('folia_app_language', 'en');
         localStorage.setItem('static_mode', 'true');
         localStorage.setItem(guideKey, version);
         if (deny) {

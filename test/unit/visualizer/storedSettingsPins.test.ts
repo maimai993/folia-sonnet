@@ -19,6 +19,8 @@ import {
     DEFAULT_TILT_TUNING,
 } from '@/types';
 import { DEFAULT_HANABI_TUNING } from '@/components/visualizer/hanabi/types';
+import { DEFAULT_MACHI_TUNING } from '@/components/visualizer/machi/types';
+import { DEFAULT_NEBBIA_TUNING } from '@/components/visualizer/nebbia/types';
 
 // test/unit/visualizer/storedSettingsPins.test.ts
 // Pins what the lyric styles and the backgrounds keep in localStorage: for every one of them, what
@@ -30,6 +32,26 @@ import { DEFAULT_HANABI_TUNING } from '@/components/visualizer/hanabi/types';
 // listener's style just looks reset after an update. These pins are what stands in the way. They
 // were recorded before the storage code was moved into the styles' own folders and must pass
 // unchanged after every step of that move: a pin that has to change means the step is wrong.
+//
+// 同步上游 v0.7.26 时这批快照重新录过一次。每一处差异都逐条对过分叉前 HEAD 与上游两个父提交，
+// 结论是「上游新特性正确接入」或「dev 独有特性正确保留」，没有一条是默认值被上游覆盖：
+//   · 样式 tuning 多了 render（{scale, antialias}）—— 上游的分辨率与抗锯齿覆盖
+//     （utils/lyricRenderQuality.ts、各 tuning 的 normalizeLyricRenderOverride）；monet 同样有，
+//     它另外还多了 keywordColoringEnabled / showAudioVisualization / audioStyle，都是上游新增。
+//   · lumiere 多了 keywordColors、diorama 多了 keywordColoringEnabled —— 上游新特性。
+//   · machi 的 quality 里 renderScale / antialias 变成 'global' 并多了 simulatedBeat、revision
+//     —— 上游把这两个挡位并进全局覆盖了。
+//   · classic 多了 avoidOverlap、partita 多了 avoidOverlap、nebbia 多了 snow/snowSize/snowMelt
+//     —— 都是上游新特性。
+//   · sonnet 的 cameraIntensity 是 0.7（不是上游的 1）：dev 的默认值就是上限
+//     SONNET_CAMERA_INTENSITY_MAX，合并时曾被上游的 1 覆盖，已按 dev 修回。
+//   · wallpaperOverlay* 一组用的是 dev 的默认（allApps=false、hideCoverArt=true、hideWhenPaused=true
+//     等），不是上游的默认；renderPixelRatio: "null" 是 dev 独有的渲染分辨率上限。
+//
+// 这次之所以要整份重录，是因为合并把快照文件本身弄坏了：每个条目里同时留下了 dev 与上游两行
+// 同名键（hanabiTuning / lumiereTuning / machiTuning / monetTuning / classicTuning / dioramaTuning /
+// sonnetTuning / temperaTuning / nebbiaTuning / randomVisualizerModes 等）。两个父提交的快照里
+// 都没有重复键，所以那是合并产物而非真实差异。
 //
 // Each case starts the settings store anew over a storage of its own, the way the app starts.
 //
@@ -87,8 +109,7 @@ const start = async (stored: Stored) => {
         /** Everything the store holds that is not an action, each as the text it would be written as: that pins the order of an object's fields too. */
         held: () => Object.fromEntries(Object.entries(state()).filter(([, value]) => typeof value !== 'function').map(([key, value]) => [key, json(value)])),
         text: (key: string) => values.get(key) ?? null,
-        // The language the app runs in is stored by the language setting, not by these settings.
-        keys: () => [...values.keys()].filter(key => key !== 'i18nextLng').sort(),
+        keys: () => [...values.keys()].sort(),
     };
 };
 
@@ -104,13 +125,17 @@ afterEach(() => {
 // different value is as easy.
 const CURRENT: Record<string, unknown> = {
     classic_tuning: { enableWordRotation: false, breathingFloatMultiplier: 1.6, useLegacyLayout: true, wordSpacing: 1.2 },
-    cadenza_tuning: { fontScale: 1.3, widthRatio: 0.6, motionAmount: 0.8, glowIntensity: 1.4, beamIntensity: 0 },
+    cadenza_tuning: { render: { scale: 1.5, antialias: 'global' }, fontScale: 1.3, widthRatio: 0.6, motionAmount: 0.8, glowIntensity: 1.4, beamIntensity: 0 },
     partita_tuning: { showGuideLines: false, useSemanticLayout: false, staggerMin: 40, staggerMax: 150 },
     fume_tuning: {
+        render: { scale: 0.75, antialias: 'global' },
         hidePrintSymbols: true, disableGeometricBackground: false, backgroundObjectOpacity: 0.3, textHoldRatio: 0.7,
         cameraTrackingMode: 'stepped', cameraSpeed: 1.4, glowIntensity: 0.6, heroScale: 1.2,
     },
-    claddagh_tuning: { focusScaleRatio: 0.9, radiusScale: 1.2, ellipseTiltDeg: 30, showAxisLine: false, letterSpacingOffset: 4 },
+    claddagh_tuning: {
+        focusScaleRatio: 0.9, radiusScale: 1.2, ellipseTiltDeg: 30, showAxisLine: false, letterSpacingOffset: 4,
+        positionX: -12, positionY: 8, showTranslation: true, translationScale: 1.3, translationLetterSpacingOffset: 2,
+    },
     cappella_tuning: { showEmoMessages: false, emojiPackSource: 'custom', avatarSource: 'color' },
     tilt_tuning: { splitProbability: 0.4, tiltStyleProbability: 0.6, colorScheme: 'swap' },
     diorama_tuning: {
@@ -118,11 +143,14 @@ const CURRENT: Record<string, unknown> = {
         cameraSpeed: 1.3, motionAmount: 0.9, audioReactivity: 0.5,
         geometryVisibility: { ...DEFAULT_DIORAMA_TUNING.geometryVisibility, rings: !DEFAULT_DIORAMA_TUNING.geometryVisibility.rings },
         showParticles: !DEFAULT_DIORAMA_TUNING.showParticles, glowIntensity: 0.8, soulIntensity: 1.2, gradientIntensity: 0.4,
+        render: { scale: 2, antialias: 'off' },
     },
     monet_tuning: {
         ...DEFAULT_MONET_TUNING,
         keywordColoringEnabled: !DEFAULT_MONET_TUNING.keywordColoringEnabled, showDescription: !DEFAULT_MONET_TUNING.showDescription,
-        fontScale: 1.2, portraitSource: 'custom', portraitOffsetX: -40, portraitStyle: 'rectangular',
+        audioStyle: 'line', fontScale: 1.2, portraitSource: 'custom', portraitOffsetX: -40, portraitStyle: 'rectangular',
+        descriptionVisibility: 'hidden', portraitHangerVisibility: 'always', mirrorLayout: true, customDescription: 'Late night',
+        render: { scale: 0.5, antialias: 'global' },
     },
     pendolo_tuning: {
         ...DEFAULT_PENDOLO_TUNING,
@@ -150,6 +178,8 @@ const CURRENT: Record<string, unknown> = {
         colorMode: 'vivid', sparkAmount: 1.5, ornamentAmount: 0.5, textMotion: 1.2, blockOpacity: 0.7, riseSpeed: 0.6,
         launches: !DEFAULT_HANABI_TUNING.launches, overlayFrame: !DEFAULT_HANABI_TUNING.overlayFrame, sky: 0.4, collage: 1.5,
     },
+    machi_tuning: { ...DEFAULT_MACHI_TUNING, scene: 'konbini', timeOfDay: 'night', weather: 'snow', camera: 'custom', views: { ...DEFAULT_MACHI_TUNING.views, station: { azimuth: -20, elevation: 6, zoom: 1.6, panX: 1.5, panZ: -0.5 } }, motion: true, dof: 1.4, focus: 'lyrics', quality: { renderScale: 0.75, antialias: 'ssaa', shadows: 'low', reflections: 'off', glow: false, adaptive: false } },
+    nebbia_tuning: { ...DEFAULT_NEBBIA_TUNING, appear: ['write'], fade: ['fingers'], layouts: ['ribbon', 'orbit'], jitter: 1.2, mist: 0.5, refog: 6, spot: 1.2, rainHit: 2, render: { scale: 0.75, antialias: 'global' } },
     monet_background_tuning: {
         ...DEFAULT_MONET_BACKGROUND_TUNING,
         backgroundSource: 'uploaded-global', backgroundLayout: 'half-pane-gradient', backgroundBlurPx: 24, backgroundOverlayOpacity: 0.3,
@@ -180,8 +210,8 @@ const DEFAULTS: Record<string, unknown> = {
     fume_tuning: DEFAULT_FUME_TUNING, claddagh_tuning: DEFAULT_CLADDAGH_TUNING, cappella_tuning: DEFAULT_CAPPELLA_TUNING,
     tilt_tuning: DEFAULT_TILT_TUNING, diorama_tuning: DEFAULT_DIORAMA_TUNING, monet_tuning: DEFAULT_MONET_TUNING,
     pendolo_tuning: DEFAULT_PENDOLO_TUNING, sonnet_tuning: DEFAULT_SONNET_TUNING, tempera_tuning: DEFAULT_TEMPERA_TUNING,
-    lumiere_tuning: DEFAULT_LUMIERE_TUNING, hanabi_tuning: DEFAULT_HANABI_TUNING, monet_background_tuning: DEFAULT_MONET_BACKGROUND_TUNING,
-    nomand_background_tuning: DEFAULT_NOMAND_BACKGROUND_TUNING, latent_background_tuning: DEFAULT_LATENT_BACKGROUND_TUNING,
+    lumiere_tuning: DEFAULT_LUMIERE_TUNING, hanabi_tuning: DEFAULT_HANABI_TUNING, machi_tuning: DEFAULT_MACHI_TUNING, nebbia_tuning: DEFAULT_NEBBIA_TUNING,
+    monet_background_tuning: DEFAULT_MONET_BACKGROUND_TUNING, nomand_background_tuning: DEFAULT_NOMAND_BACKGROUND_TUNING, latent_background_tuning: DEFAULT_LATENT_BACKGROUND_TUNING,
     sora_background_tuning: DEFAULT_SORA_BACKGROUND_TUNING,
 };
 
@@ -227,6 +257,8 @@ describe('what is read at start-up', () => {
             tempera_tuning: json({ colorMode: 'mono' }),
             lumiere_tuning: json({ renderQuality: 'balanced' }),
             hanabi_tuning: json({ colorMode: 'theme' }),
+            machi_tuning: json({ weather: 'rain' }),
+            nebbia_tuning: json({ fadeMode: 'mix' }),
             monet_background_tuning: json({ backgroundBlurPx: 10 }),
             nomand_background_tuning: json({ effect: 'dithering' }),
             latent_background_tuning: json({ displayMode: 'dithering' }),
@@ -261,6 +293,8 @@ describe('what is read at start-up', () => {
             tilt_tuning: json({ splitProbability: 0.5, tiltStyleProbability: 0.5 }),
             nomand_background_tuning: json({ imageSource: 'uploaded-global', ditheringType: '2x2', size: 4, colorSteps: 3 }),
             latent_background_tuning: json({ displayMode: 'both', ditheringSpeed: 0.5 }),
+            // Before nebbia's resolution slider became the shared render override (#929).
+            nebbia_tuning: json({ mist: 0.5, resolution: 1.5 }),
         });
         expect(app.held()).toMatchSnapshot();
     });
@@ -293,7 +327,7 @@ describe('what is read at start-up', () => {
                 cameraSpeed: 9, motionAmount: 0, audioReactivity: -2, particleDensity: 1, particleScale: 99, particleGlowIntensity: 99,
                 glowIntensity: 0, soulIntensity: 9, gradientIntensity: -1, geometryVisibility: { mode: 'corridor', rings: false },
             }),
-            monet_tuning: json({ fontScale: 4, portraitSource: 'mine', portraitOffsetX: 80, portraitStyle: 'round' }),
+            monet_tuning: json({ audioStyle: 'bars', fontScale: 4, portraitSource: 'mine', portraitOffsetX: 80, portraitStyle: 'round' }),
             pendolo_tuning: json({
                 arcRadius: 5, arcAngleDeg: '90', wheelCenterX: -9, wheelCenterY: null, tickSnappiness: 0, activeScale: 9,
                 showGearDecor: 'huge', showCenterGradient: 'yes', showCoverOnWatchFace: 1, enableLineGlow: null,
@@ -319,6 +353,8 @@ describe('what is read at start-up', () => {
                 colorMode: 'neon', sparkAmount: 9, ornamentAmount: -1, textMotion: '1', blockOpacity: 4, riseSpeed: null,
                 launches: 0, overlayFrame: 'no', textOnly: 'yes', sky: -1, collage: 9,
             }),
+            machi_tuning: json({ scene: 'beach', timeOfDay: 7, weather: 'hail', camera: 'orbit', views: { konbini: { azimuth: 200, zoom: -1 } }, motion: 'on', dof: 9, focus: 'eyes', focusOffset: 'near', quality: { renderScale: 3, antialias: 'taa', shadows: 'ultra', reflections: 1, glow: 'yes' } }),
+            nebbia_tuning: json({ appearMode: 'type', fadeMode: 7, mist: 9, hold: -1, refog: '4', spotX: 2, rainHit: null, resolution: 0 }),
             monet_background_tuning: json({
                 backgroundSource: 'web', backgroundLayout: 'tiles', backgroundBlurPx: 999, backgroundOverlayOpacity: -1,
                 backgroundGrayscale: 4, backgroundSaturation: 9, backgroundWash: 'x', backgroundHalfPaneOffsetX: -999,
@@ -388,12 +424,14 @@ const UNITS: Array<{ key: string; field: string; set: string; reset: string; pat
     { key: 'cappella_tuning', field: 'cappellaTuning', set: 'handleSetCappellaTuning', reset: 'handleResetCappellaTuning', patches: [{ showEmoMessages: false }, { avatarSource: 'color' }, { avatarSource: 'photo' }, { emojiPackSource: 'custom' }] },
     { key: 'tilt_tuning', field: 'tiltTuning', set: 'handleSetTiltTuning', reset: 'handleResetTiltTuning', patches: [{ splitProbability: 0.2 }, { splitProbability: 4, tiltStyleProbability: -1 }, { colorScheme: 'primaryAll' }] },
     { key: 'diorama_tuning', field: 'dioramaTuning', set: 'handleSetDioramaTuning', reset: 'handleResetDioramaTuning', patches: [{ cameraSpeed: 1.2 }, { geometryVisibility: { rings: false } }, { particleDensity: 1, particleScale: 99, glowIntensity: 0 }, { showParticles: false, soulEnabled: false }] },
-    { key: 'monet_tuning', field: 'monetTuning', set: 'handleSetMonetTuning', reset: 'handleResetMonetTuning', patches: [{ fontScale: 1.2 }, { fontScale: 9, portraitOffsetX: 50 }, { portraitSource: 'custom', portraitStyle: 'rectangular', showDescription: false }] },
-    { key: 'hanabi_tuning', field: 'hanabiTuning', set: 'handleSetHanabiTuning', reset: 'handleResetHanabiTuning', patches: [{ sparkAmount: 1.4 }, { sparkAmount: 9, sky: -1, blockOpacity: 4 }, { colorMode: 'theme', launches: false, textOnly: true }, { colorMode: 'neon', riseSpeed: Number.NaN }] },
+    { key: 'monet_tuning', field: 'monetTuning', set: 'handleSetMonetTuning', reset: 'handleResetMonetTuning', patches: [{ fontScale: 1.2 }, { fontScale: 9, portraitOffsetX: 50, audioStyle: 'bars' }, { portraitSource: 'custom', portraitStyle: 'rectangular', showDescription: false }] },
     { key: 'pendolo_tuning', field: 'pendoloTuning', set: 'handleSetPendoloTuning', reset: 'handleResetPendoloTuning', patches: [{ arcRadius: 0.5 }, { arcRadius: 9, arcAngleDeg: 1, tickSnappiness: 0, activeScale: 9 }, { showGearDecor: 'none', enableLineGlow: true }, { showGearDecor: 'huge', wheelCenterX: '0.2' }] },
     { key: 'sonnet_tuning', field: 'sonnetTuning', set: 'handleSetSonnetTuning', reset: 'handleResetSonnetTuning', patches: [{ cameraIntensity: 1.3 }, { cameraIntensity: 9, textureResolution: 0.1, postProcessGrain: 4 }, { outerFrameMode: 'none', showOnlyText: true, showGuide: false }, { outerFrameMode: 'thick', mgDensity: '2' }] },
     { key: 'tempera_tuning', field: 'temperaTuning', set: 'handleSetTemperaTuning', reset: 'handleResetTemperaTuning', patches: [{ glyphMotion: 1.3 }, { cameraIntensity: 9, layerImageFrequency: 4, textureResolution: 99 }, { colorMode: 'duo', layerImageDepth: 'front', wholeLineLyrics: true }, { layerImages: [{ id: 'p', name: 'P', align: 'free', verticalAlign: 'bottom', scale: 9, opacity: 0.5 }, { name: 'no id' }] }, { colorMode: 'rainbow', layerImageDepth: 'middle' }] },
     { key: 'lumiere_tuning', field: 'lumiereTuning', set: 'handleSetLumiereTuning', reset: 'handleResetLumiereTuning', patches: [{ lightIntensity: 1.4 }, { lightIntensity: 9, fogOctaves: 4.6, unlitOpacity: 0 }, { renderQuality: 'low', hideTrails: true, windowNeighbors: 2 }, { renderQuality: 'ultra', windowNeighbors: 3 }] },
+    { key: 'hanabi_tuning', field: 'hanabiTuning', set: 'handleSetHanabiTuning', reset: 'handleResetHanabiTuning', patches: [{ sparkAmount: 1.4 }, { sparkAmount: 9, sky: -1, blockOpacity: 4 }, { colorMode: 'theme', launches: false, textOnly: true }, { colorMode: 'neon', riseSpeed: Number.NaN }] },
+    { key: 'machi_tuning', field: 'machiTuning', set: 'handleSetMachiTuning', reset: 'handleResetMachiTuning', patches: [{ weather: 'snow' }, { scene: 'beach', timeOfDay: 'noon' }, { scene: 'konbini', timeOfDay: 'dusk', weather: 'fog' }, { weather: 'hail' }, { camera: 'custom', views: { konbini: { azimuth: 30, elevation: -5, zoom: 1.2, panX: 0, panZ: 2 } } }, { motion: true }, { dof: 5, focus: 'manual', focusOffset: -3 }, { quality: { renderScale: 0.5, antialias: 'fxaa', shadows: 'off', reflections: 'low', glow: true, adaptive: false } }] },
+    { key: 'nebbia_tuning', field: 'nebbiaTuning', set: 'handleSetNebbiaTuning', reset: 'handleResetNebbiaTuning', patches: [{ mist: 0.4 }, { mist: 9, refog: -1, spotX: 4 }, { appearMode: 'fade', fadeMode: 'fingers' }, { appearMode: 'type', busSpeed: Number.NaN }] },
     { key: 'monet_background_tuning', field: 'monetBackgroundTuning', set: 'handleSetMonetBackgroundTuning', reset: 'handleResetMonetBackgroundTuning', patches: [{ backgroundBlurPx: 20 }, { backgroundBlurPx: 999, backgroundSaturation: -1, backgroundHalfPaneOffsetX: 99 }, { backgroundLayout: 'half-pane-gradient', backgroundWashColorMode: 'custom', backgroundWashCustomColor: 'AABBCC' }, { backgroundWashCustomColor: 'red', backgroundSource: 'web' }] },
     { key: 'nomand_background_tuning', field: 'nomandBackgroundTuning', set: 'handleSetNomandBackgroundTuning', reset: 'handleResetNomandBackgroundTuning', patches: [{ size: 5 }, { size: 999, colorSteps: 4.6, halftoneDotsRadius: 9, lensDistortionBulge: -9 }, { effect: 'paper-texture', ditheringType: '2x2', overlayEnabled: true }, { effect: 'blur', overlayOpacity: 4 }] },
     { key: 'latent_background_tuning', field: 'latentBackgroundTuning', set: 'handleSetLatentBackgroundTuning', reset: 'handleResetLatentBackgroundTuning', patches: [{ meshSpeed: 1.2 }, { ditheringSize: 99, ditheringOpacity: -1, meshSwirl: 4 }, { displayMode: 'dithering', colorSource: 'cover-only', enhancedBeatResponse: true }, { displayMode: 'stars' }] },
@@ -412,9 +450,12 @@ describe('what is written', () => {
                 // What is held is what was written.
                 expect(json(app.state()[field])).toBe(app.text(key));
             }
+            const held = app.state()[field] as unknown as Record<string, unknown>;
             (app.state()[reset] as () => void)();
             steps.push({ from, reset: true, written: app.text(key) });
-            expect(app.text(key)).toBe(json(DEFAULTS[key]));
+            // 心象的面板上只有「渲染」一组：「默认」只还原它，别的项（只能靠导入得到）留着（cadenza/tuning.ts 的 reset）。
+            const expected = key === 'cadenza_tuning' ? { ...held, render: (DEFAULTS[key] as Record<string, unknown>).render } : DEFAULTS[key];
+            expect(app.text(key)).toBe(json(expected));
             expect(json(app.state()[field])).toBe(app.text(key));
             // No other key is touched.
             expect(app.keys()).toEqual([...new Set([...before, key])].sort());
@@ -428,7 +469,8 @@ describe('what is written', () => {
         fume_tuning: 'notifications.fumeReset', claddagh_tuning: 'notifications.claddaghReset', cappella_tuning: 'notifications.cappellaReset',
         tilt_tuning: 'notifications.tiltReset', diorama_tuning: 'notifications.dioramaReset', monet_tuning: 'notifications.monetReset',
         pendolo_tuning: 'notifications.pendoloReset', sonnet_tuning: 'notifications.sonnetReset', tempera_tuning: 'notifications.temperaReset',
-        lumiere_tuning: 'notifications.lumiereReset', hanabi_tuning: 'notifications.hanabiReset', monet_background_tuning: 'notifications.monetBgReset',
+        lumiere_tuning: 'notifications.lumiereReset', hanabi_tuning: 'notifications.hanabiReset', machi_tuning: 'notifications.machiReset', nebbia_tuning: 'notifications.nebbiaReset',
+        monet_background_tuning: 'notifications.monetBgReset',
         nomand_background_tuning: 'notifications.nomandBgReset', latent_background_tuning: 'notifications.latentBgReset',
         sora_background_tuning: null,
     };

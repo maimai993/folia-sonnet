@@ -30,8 +30,7 @@ const VisualizerPrompt: React.FC<VisualizerSharedProps> = (props) => {
         seed = 'prompt',
         isPlayerChromeHidden = false,
         hideTranslationSubtitle = false,
-        showSubtitleTranslation = true,
-        subtitleContentMode,
+        subtitleOverlayLayout,
         subtitleTheme,
         subtitleFontScale,
         subtitleOverlayOpacity,
@@ -155,8 +154,7 @@ const VisualizerPrompt: React.FC<VisualizerSharedProps> = (props) => {
                 subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
                 isPlayerChromeHidden={isPlayerChromeHidden}
                 hideTranslationSubtitle={hideTranslationSubtitle}
-                showSubtitleTranslation={showSubtitleTranslation}
-                subtitleContentMode={subtitleContentMode}
+                subtitleOverlayLayout={subtitleOverlayLayout}
             />
         </VisualizerShell>
     );

@@ -11,23 +11,23 @@
 
 不用提：
 
-- 新功能、重构、文档：PR 里写清改了什么和为什么就够了。
+- 新功能、重构、文档：PR 里写清改了什么和为什么就够了（issue-link 门禁不要求关联）。
 - 已经有同一条 issue：直接用它的编号，不要重复提。
 
 提 issue 用 `gh issue create --repo maimai993/folia-sonnet`，或在网页 New issue（模板在 `.github/ISSUE_TEMPLATE/`）。标题写现象，正文写复现步骤、预期与实际、版本和平台。
 
 ## 流程
 
-1. 提 issue，记下编号（例如 `#42`）。
-2. 从 `dev` 切 `feat/*` 或 `fix/*` 分支，在分支上修。
-3. 跑本地门禁（PR 模板里的勾选项）。
-4. 开 PR 到 `dev`，正文写一行 `Closes #42`。合并后 GitHub 自动关掉这个 issue。
+1. 修 bug 先提 issue，记下编号（例如 `#42`）；新功能、重构、文档可以跳过这一步。
+2. 从 `dev` 切 `feat/*` 或 `fix/*` 分支，在分支上改。
+3. 跑本地门禁 `npm run ci:local`（第一次跑之前先 `npm --prefix sync-server ci`）。
+4. 开 PR 到 `dev`。修 bug 的 PR 正文写一行 `Closes #42`，合并后 GitHub 自动关掉这个 issue；其他 PR 有相关任务就写 `Refs #N`。
 5. 盯 CI，红了当场修；修完推送会自动重跑。
 6. 合并前至少一次 AI review（见 AGENTS.md「CI」）。
 
 ## PR 关联写法
 
-门禁只认 **PR 正文** 里的动词 + `#编号`，大小写不敏感，动词与 `#` 之间可以有半角或全角空格：
+门禁只对 `fix/*` 分支和带 `bug` 标签的 PR 生效；它只认 **PR 正文** 里的动词 + `#编号`，大小写不敏感，动词与 `#` 之间可以有半角或全角空格：
 
 ```text
 Closes #12
@@ -52,9 +52,11 @@ node ci/checkIssueLink.ts --text "Closes #12"
 
 ## 门禁行为
 
-`.github/workflows/issue-link.yml`：PR 的 opened / edited / synchronize / reopened 事件，目标是 `dev` 或 `main` 时跑 `node ci/checkIssueLink.ts`。它读 `GITHUB_EVENT_PATH` 里这个 PR 的正文，没有关联就红，日志里给出失败原因和下一步。
+`.github/workflows/issue-link.yml`：PR 的 opened / edited / synchronize / reopened / labeled / unlabeled 事件，目标是 `dev` 或 `main` 时跑 `node ci/checkIssueLink.ts`。它读 `GITHUB_EVENT_PATH` 里这个 PR 的分支、标签和正文：
 
-- 改 PR 正文会触发 `edited` 重新判定，不用重新推代码。
+- 分支不是 `fix/*`、也没有 `bug` 标签：通过，日志里说明本次不要求关联。
+- 否则正文没有关联就红，日志里给出失败原因和下一步。
+- 改 PR 正文会触发 `edited` 重新判定；补上或去掉 `bug` 标签会触发 `labeled` / `unlabeled`，都不用重新推代码。
 - 权限只有 `contents: read`。
 - 要不要把它设成必须通过的检查由分支保护决定（Settings → Branches），owner 在网页上配一次；目前没配。
 

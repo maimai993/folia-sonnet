@@ -13,10 +13,12 @@
 // - 路由只认单行的 recv.method('/path', ...) 与 app.route('/前缀', 标识符)：路径必须是单引号字面量，
 //   跨模块只跟一层 app.route 挂载；IIFE 与同文件工厂函数靠顶层的 `})();` / `};` 收尾识别
 //   （仓库现有排版）。Hono 的 .on()/多方法路由不支持，真用到再在这里加。
-// - provider 只认 registerOnlineMusicProvider(标识符)，再顺着 import 取导出对象顶层的 id 字面量；
-//   注册处写成表达式（不是标识符）会明确报错，而不是默默漏掉。
-// 解析是基于源码文本的：字符串、注释、模板字面量里的同形文本不会命中（正则锚在行首），但
-// 正则字面量里的花括号没有做词法级处理；新增这类写法时先跑一遍 --update 看结果对不对。
+// - provider 只认 registerOnlineMusicProvider(标识符)，再顺着 import 取导出对象的顶层 id 字面量；
+//   导出是工厂吐出来的（`export const xProvider = createXProvider(...)`）时，回到本文件里找那个
+//   工厂的返回对象（取缩进最浅的那个 `return {`）。注册处写成表达式（不是标识符）会明确报错，
+//   而不是默默漏掉。
+// 解析是基于源码文本的：字符串、注释、模板字面量里的同形文本不会命中（正则锚在行首），正则字面量
+// 会整体跳过（里面的引号与花括号不算数）；新增这类写法时先跑一遍 --update 看结果对不对。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -343,7 +345,12 @@ export function buildSyncServerRoutesManifest(root: string = repoRoot): SyncServ
 // ---------------------------------------------------------------------------
 // omni provider
 
-/** 跳过字符串、模板字面量与注释，找到与 openIndex 的 { 配对的 }。 */
+/**
+ * 跳过字符串、模板字面量、正则字面量与注释，找到与 openIndex 的 { 配对的 }。
+ *
+ * 正则字面量要单独认：`/itunes:timing="([^"]+)"/` 里有一个引号，当成字符串开头就会一路吃到行尾，
+ * 后面的花括号就再也配不平（Apple Music 的 provider 工厂第一版就是这么挂的）。
+ */
 function matchingBrace(source: string, openIndex: number): number {
     let depth = 0;
     let quote = '';
@@ -366,6 +373,10 @@ function matchingBrace(source: string, openIndex: number): number {
             index += 1;
             continue;
         }
+        if (char === '/' && startsRegexLiteral(source, index)) {
+            index = skipRegexLiteral(source, index);
+            continue;
+        }
         if (char === "'" || char === '"' || char === '`') {
             quote = char;
         } else if (char === '{') {
@@ -376,6 +387,39 @@ function matchingBrace(source: string, openIndex: number): number {
         }
     }
     throw new Error('[contracts] 找不到对象字面量的结尾');
+}
+
+/**
+ * 这个 `/` 是不是正则字面量的开头：看前一个非空白字符。
+ * 前面是标识符、数字、`)`、`]` 或 `}` 时是除号；其余（`=`、`(`、`,`、`return`、行首……）当正则。
+ */
+function startsRegexLiteral(source: string, index: number): boolean {
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        const char = source[cursor];
+        if (char === ' ' || char === '\t' || char === '\r' || char === '\n') continue;
+        return !(/[A-Za-z0-9_$)\]}]/.test(char));
+    }
+    return true;
+}
+
+/** 跳过正则字面量（含末尾的 flags）与字符类里的转义，返回收尾的 `/` 之后一格。 */
+function skipRegexLiteral(source: string, index: number): number {
+    let inClass = false;
+    for (let cursor = index + 1; cursor < source.length; cursor += 1) {
+        const char = source[cursor];
+        if (char === '\\') {
+            cursor += 1;
+        } else if (char === '\n') {
+            return cursor;
+        } else if (inClass) {
+            if (char === ']') inClass = false;
+        } else if (char === '[') {
+            inClass = true;
+        } else if (char === '/') {
+            return cursor;
+        }
+    }
+    return source.length - 1;
 }
 
 /** 对象顶层某个字符串属性；只看 depth 1，避免把方法体里的同名键当成 provider id。 */
@@ -419,12 +463,45 @@ function topLevelStringProperty(objectSource: string, key: string): string | nul
 
 function providerIdFromModule(root: string, file: string, exportName: string): string {
     const source = readSource(root, file);
-    const declaration = new RegExp('export\\s+const\\s+' + exportName + '\\b[^=]*=\\s*\\{').exec(source);
-    if (!declaration) throw new Error(`[contracts] ${file} 里没有对象字面量导出：${exportName}`);
-    const openIndex = declaration.index + declaration[0].length - 1;
-    const id = topLevelStringProperty(source.slice(openIndex, matchingBrace(source, openIndex) + 1), 'id');
-    if (!id) throw new Error(`[contracts] ${file} 的 ${exportName} 没有顶层 id`);
+    // 导出可能就是对象字面量（`export const xProvider = { ... }`），也可能是工厂吐出来的
+    // （`export const xProvider = createXProvider(...)`，Apple Music 那种）：两种都要认。
+    const declaration = new RegExp('export\\s+const\\s+' + exportName + '\\b[^=]*=\\s*').exec(source);
+    if (!declaration) throw new Error(`[contracts] ${file} 里没有导出：${exportName}`);
+    const valueStart = declaration.index + declaration[0].length;
+    if (source[valueStart] === '{') {
+        const id = topLevelStringProperty(source.slice(valueStart, matchingBrace(source, valueStart) + 1), 'id');
+        if (!id) throw new Error(`[contracts] ${file} 的 ${exportName} 没有顶层 id`);
+        return id;
+    }
+    // 工厂调用：顺着它调的那个工厂函数名回到本文件里找它的返回对象。
+    const factory = /^([A-Za-z_$][\w$]*)\s*\(/.exec(source.slice(valueStart));
+    if (!factory) throw new Error(`[contracts] ${file} 的 ${exportName} 既不是对象字面量也不是工厂调用`);
+    const body = factoryReturnObject(source, factory[1]);
+    const id = body === null ? null : topLevelStringProperty(body, 'id');
+    if (!id) throw new Error(`[contracts] ${file} 的 ${exportName}（${factory[1]}）里没有顶层的 id 字面量`);
     return id;
+}
+
+/**
+ * 本文件里某个工厂函数的返回对象字面量；找不到返回 null。
+ *
+ * 工厂体里还有别的小函数也在 `return {`（先把入参整理成对象那种），所以这里先找到函数体的
+ * 收尾，再取**缩进最浅**的那个 `return {` —— 工厂自己的那个写在顶层缩进上。
+ */
+function factoryReturnObject(source: string, functionName: string): string | null {
+    const declared = new RegExp(
+        '(?:export\\s+)?function\\s+' + functionName + '\\s*[\\(<]|(?:export\\s+)?const\\s+' + functionName + '\\s*=\\s*[\\(<]',
+    ).exec(source);
+    if (!declared) return null;
+    const openIndex = source.indexOf('{', declared.index + declared[0].length);
+    if (openIndex < 0) return null;
+    const endIndex = matchingBrace(source, openIndex);
+    const body = source.slice(openIndex, endIndex + 1);
+    const returns = [...body.matchAll(/^([ \t]*)return\s*\{/gm)];
+    if (returns.length === 0) return null;
+    const shallowest = returns.reduce((best, entry) => (entry[1].length < best[1].length ? entry : best));
+    const literalStart = openIndex + shallowest.index + shallowest[0].length - 1;
+    return source.slice(literalStart, matchingBrace(source, literalStart) + 1);
 }
 
 export function buildOmniProvidersManifest(root: string = repoRoot): OmniProvidersManifest {

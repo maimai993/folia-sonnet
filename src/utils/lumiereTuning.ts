@@ -1,4 +1,5 @@
 import { DEFAULT_LUMIERE_TUNING, type LumiereRenderQuality, type LumiereTuning } from '../types';
+import { normalizeLyricRenderOverride } from './lyricRenderQuality';
 
 // src/utils/lumiereTuning.ts
 // 绘光 tuning 的归一化：localStorage、同步、外观短码 / JSON 导入和 store setter 共用同一套钳制规则。
@@ -22,6 +23,8 @@ export const normalizeLumiereTuning = (value: unknown): LumiereTuning => {
     const d = DEFAULT_LUMIERE_TUNING;
     const fogOctaves = clampNumber(raw.fogOctaves, d.fogOctaves, 2, 6);
     return {
+        // 分辨率与抗锯齿的覆盖（#929）：旧存档没有这一项就是全跟随全局。
+        render: normalizeLyricRenderOverride(raw.render),
         lightIntensity: clampNumber(raw.lightIntensity, d.lightIntensity, 0.3, 2),
         audioResponse: clampNumber(raw.audioResponse, d.audioResponse, 0, 2),
         fogDensity: clampNumber(raw.fogDensity, d.fogDensity, 0, 2),
@@ -41,6 +44,7 @@ export const normalizeLumiereTuning = (value: unknown): LumiereTuning => {
         seamlessTransitions: pickBoolean(raw.seamlessTransitions, d.seamlessTransitions),
         overlayFrame: pickBoolean(raw.overlayFrame, d.overlayFrame),
         textOnly: pickBoolean(raw.textOnly, d.textOnly),
+        // 关键字着色（主题 wordColors）：旧存档没有这一项就跟随默认。
         keywordColors: pickBoolean(raw.keywordColors, d.keywordColors),
         themeIcons: pickBoolean(raw.themeIcons, d.themeIcons),
         themeColorMix: clampNumber(raw.themeColorMix, d.themeColorMix, 0, 1),

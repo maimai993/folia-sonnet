@@ -21,10 +21,10 @@ type Input = AppFoundation & AppAudioOutput & AppThemeAndNavigation & AppAccount
 export const useAppLibraryControllers = (model: Input) => {
     const {
         audioQuality, audioRef, blobUrlRef, clearPersistedStagePlaybackCache, currentOnlineAudioUrlFetchedAtRef,
-        currentSong, getNowPlayingDisplayTime, handleSetLyricFilterEnabled, handleSetLyricFilterPattern,
+        currentSong, getNowPlayingDisplayTime, handleSetLyricLineRules,
         handleSetLyricStaffAbsorbMode, handleSetLyricStaffMinDwellSeconds, handleSetLyricStaffPattern,
         handleSetLyricStaffPolicy, handleToggleTransparentPlayerBackground, interruptStagePlaybackForMainTransition,
-        isElectronWindow, lastAudioRecoverySourceRef, lyricFilterEnabled, lyricFilterPattern, lyricsLoadingWritesRef,
+        isElectronWindow, lastAudioRecoverySourceRef, lyricsLoadingWritesRef,
         mainPlaybackSnapshotRef, navigateDirectHome, navigateToCollection, navigateToHome, navigateToPlaybackView,
         navigateToPlayer, nowPlayingLyricPayload, nowPlayingPaused, nowPlayingProgressMs, nowPlayingProgressQuality,
         nowPlayingTrack, pendingResumeTimeRef, persistLastPlaybackCache, playQueue, pushCollection, queueAddBehavior,
@@ -85,12 +85,12 @@ export const useAppLibraryControllers = (model: Input) => {
         onRefreshLocalSongs,
         isLocalSongLiked,
         saveCurrentQueueAsLocalPlaylist,
-        addCurrentSongToLocalPlaylist,
-        createCurrentLocalPlaylist,
-        addCurrentSongToOnlinePlaylist,
-        createCurrentOnlinePlaylist,
-        addCurrentSongToNavidromePlaylist,
-        createCurrentNavidromePlaylist,
+        addPickedSongsToLocalPlaylist,
+        createLocalPlaylistWithSongs,
+        addPickedSongsToOnlinePlaylist,
+        createOnlinePlaylistWithSongs,
+        addPickedSongsToNavidromePlaylist,
+        createNavidromePlaylistWithSongs,
         loadCurrentSongLyricPreview,
         handleLocalQueueAdd,
         onPlayLocalSong,
@@ -135,6 +135,8 @@ export const useAppLibraryControllers = (model: Input) => {
         loadLocalPlaylists,
         canRestoreSession: windowPlaybackHandoffRestoreStatus === 'none',
         shouldAutoPlayRef: shouldAutoPlay,
+        // 「上次听到哪儿」：恢复出来的这一首从那个位置起播（dev 原语义）。
+        pendingResumeTimeRef,
         // 「进入应用后自动播放」下面那一项：同一个开关组，起播的同时切到歌词页。
         jumpToPlayerOnLaunch: navigateToPlayer,
     });
@@ -145,9 +147,7 @@ export const useAppLibraryControllers = (model: Input) => {
         [navigateToCollection],
     );
     const handleSaveLyricFilterPattern = useMemo(() => createLyricFilterPatternSaver({
-        currentEffectivePattern: lyricFilterEnabled ? lyricFilterPattern : '',
-        handleSetLyricFilterPattern,
-        handleSetLyricFilterEnabled,
+        handleSetLyricLineRules,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffAbsorbMode,
@@ -155,10 +155,7 @@ export const useAppLibraryControllers = (model: Input) => {
         loadCurrentSongLyricPreview,
         setLyrics: setLyricsStable,
     }), [
-        lyricFilterPattern,
-        lyricFilterEnabled,
-        handleSetLyricFilterPattern,
-        handleSetLyricFilterEnabled,
+        handleSetLyricLineRules,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffPattern,
@@ -166,7 +163,8 @@ export const useAppLibraryControllers = (model: Input) => {
         setLyricsStable,
     ]);
 
-    const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext, moveQueueSong } = useMemo(() => createQueueMutations({
+    // setQueueOrder：速记簿「播放队列」页的拖动重排走这里（上游 v0.7.26 接进 ScratchpadHost）。
+    const { addNavidromeSongsToQueue, applyQueueBatchOperation, removeQueueSong, moveQueueSongToEnd, moveQueueSongToNext, moveQueueSong, setQueueOrder } = useMemo(() => createQueueMutations({
         currentSong,
         playQueue,
         persistLastPlaybackCache,
@@ -178,9 +176,10 @@ export const useAppLibraryControllers = (model: Input) => {
 
     return {
         ...model,
-        addCurrentSongToLocalPlaylist, addCurrentSongToNavidromePlaylist, addCurrentSongToOnlinePlaylist,
-        addNavidromeSongsToQueue, applyQueueBatchOperation, closeLyricMatch, createCurrentLocalPlaylist,
-        createCurrentNavidromePlaylist, createCurrentOnlinePlaylist, handleAutoMatchBestLyricForCurrentSong,
+        addNavidromeSongsToQueue, addPickedSongsToLocalPlaylist, addPickedSongsToNavidromePlaylist,
+        addPickedSongsToOnlinePlaylist, applyQueueBatchOperation, closeLyricMatch,
+        createLocalPlaylistWithSongs, createNavidromePlaylistWithSongs, createOnlinePlaylistWithSongs,
+        handleAutoMatchBestLyricForCurrentSong,
         handleChangeLyricsSource, handleChangeOnlineLyricsSource, handleClearOnlineLyricsState,
         handleDirectHomeFromPanel, handleImportOnlineLyrics, handleLike, handleLocalQueueAdd,
         handleLyricMatchComplete, handleLyricMatchPureMusicMarkChanged, handleNaviLyricMatchComplete,
@@ -188,7 +187,7 @@ export const useAppLibraryControllers = (model: Input) => {
         handleUpdateLocalLyrics, isLocalSongLiked, isLyricMatchOpen, loadCurrentSongLyricPreview, loadLocalPlaylists,
         loadLocalSongs, localLibraryCatalog, localPlaylists, localSongs, moveQueueSong, moveQueueSongToEnd,
         moveQueueSongToNext, onPlayLocalSong, onPlayNavidromeSong, onRefreshLocalSongs, openHomeCollection,
-        openLyricMatch, removeQueueSong, saveCurrentQueueAsLocalPlaylist, toggleTransparentModeWithHandoff
+        openLyricMatch, removeQueueSong, saveCurrentQueueAsLocalPlaylist, setQueueOrder, toggleTransparentModeWithHandoff
     };
 };
 

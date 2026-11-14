@@ -81,7 +81,7 @@ export const SIDE_PANEL_SOURCE_PAGE = {
  */
 export const SIDE_PANEL_CONTROLS_PAGE = {
     volume: { left: 0, right: 0, top: 0.013, height: 0.061 },
-    /** 三格：循环、智能过渡、音频效果器。 */
+    /** 两格：循环、智能过渡。音频效果器那一格已删（issue #107）。 */
     soundTiles: { left: 0, right: 0, top: 0.103, height: 0.138 },
     /**
      * 一整行：上面是箭头和中间那颗按钮，下面是这个模式其余的小控件。画的是两行都有其余小控件的时候

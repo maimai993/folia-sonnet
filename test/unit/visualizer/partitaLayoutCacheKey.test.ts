@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PARTITA_TUNING, type Line, type Theme } from '@/types';
-import { buildPartitaLayoutCacheKey } from '@/components/visualizer/partita/partitaLayout';
+import { buildPartitaLayoutCacheKey, type PartitaViewport } from '@/components/visualizer/partita/partitaLayout';
 
 // test/unit/visualizer/partitaLayoutCacheKey.test.ts
 // Partita keeps built columns in a Map bounded only by an LRU, so anything that changes the
@@ -17,7 +17,14 @@ const line = (fullText: string, wordSegments?: string[]): Line => ({
 
 const theme = { animationIntensity: 'calm', fontWeight: 600 } as unknown as Theme;
 
-const key = (source: Line) => buildPartitaLayoutCacheKey(source, theme, 900, DEFAULT_PARTITA_TUNING);
+const viewport: PartitaViewport = {
+    height: 900,
+    width: 1440,
+    fontPx: 72,
+    fontMetrics: { fontWeight: 700, fontFamily: 'Test' },
+};
+
+const key = (source: Line) => buildPartitaLayoutCacheKey(source, theme, viewport, DEFAULT_PARTITA_TUNING);
 
 describe('buildPartitaLayoutCacheKey', () => {
     it('separates a saved word segmentation from the default split', () => {

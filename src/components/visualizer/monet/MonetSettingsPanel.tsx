@@ -1,17 +1,22 @@
 import React, { useRef, useState } from 'react';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore';
-import { DEFAULT_MONET_TUNING, type MonetPortraitSource, type MonetTuning } from '../../../types';
-import { Button, Group, PictureGrid, Row, Segmented, type SettingsGroupDef } from '../../modal/settings/kit';
-import { TextField } from '../../ui';
+import { DEFAULT_MONET_TUNING, type MonetAudioStyle, type MonetChromeVisibility, type MonetPortraitSource, type MonetTuning } from '../../../types';
+import { DEFAULT_LYRIC_RENDER_OVERRIDE } from '../../../utils/lyricRenderQuality';
+import { Button, Group, PictureGrid, Reveal, Row, Segmented, TextField, type SettingsGroupDef } from '../../modal/settings/kit';
 import { type VisualizerSettingsPanelProps } from '../definition';
 import { SliderRow, times, ToggleRow } from '../panelRows';
+import LyricRenderQualityRows from '../renderQuality/LyricRenderQualityRows';
+import { MONET_CUSTOM_DESCRIPTION_MAX_LENGTH, resolveMonetChromeVisibility } from './tuning';
 
 // src/components/visualizer/monet/MonetSettingsPanel.tsx
-// Monet-specific lyric, audio, and portrait controls, as three groups of the settings kit.
+// Monet-specific lyric, audio, portrait and render controls, as four groups of the settings kit.
 // Background controls live in the shared background panel.
 const LYRICS_GROUP: SettingsGroupDef = { id: 'vis-monet-lyrics', titleKey: 'options.lyricsStyleSettings' };
 const PORTRAIT_GROUP: SettingsGroupDef = { id: 'vis-monet-portrait', titleKey: 'options.cappellaAvatarSource' };
+const AUDIO_GROUP: SettingsGroupDef = { id: 'vis-monet-audio', titleKey: 'options.monetAudioStyle' };
+// 只有底部音频条是 canvas 2D：只给分辨率一行（#929）。
+const RENDER_GROUP: SettingsGroupDef = { id: 'vis-monet-render', titleKey: 'options.lyricRenderSection' };
 
 type MonetPortraitStyle = 'rectangular' | 'square';
 
@@ -26,6 +31,17 @@ const portraitStylePicture = (style: MonetPortraitStyle) => (
     <span className="absolute inset-0 grid place-items-center">
         <span className={`rounded-sm bg-[var(--st-t2)] ${style === 'square' ? 'aspect-square h-[56%]' : 'aspect-[3/4] h-[76%]'}`} />
     </span>
+);
+
+/** The spectrum at the bottom: bars, or one line. */
+const audioStylePicture = (style: MonetAudioStyle) => (
+    <svg viewBox="0 0 64 40" className="absolute inset-0 h-full w-full text-[color:var(--st-t2)]" fill="none" stroke="currentColor" strokeLinecap="round">
+        {style === 'bar' ? (
+            <path strokeWidth="3" d="M14 30V22M22 30V14M30 30V19M38 30V10M46 30V17M54 30V24" />
+        ) : (
+            <path strokeWidth="2" strokeLinejoin="round" d="M10 26L18 21L26 24L34 12L42 19L50 15L56 23" />
+        )}
+    </svg>
 );
 
 export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuning>> = ({
@@ -47,11 +63,23 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
     const resolvedTuning = {
         keywordColoringEnabled: monetTuning.keywordColoringEnabled ?? DEFAULT_MONET_TUNING.keywordColoringEnabled,
         showDescription: monetTuning.showDescription ?? DEFAULT_MONET_TUNING.showDescription,
+        showAudioVisualization: monetTuning.showAudioVisualization ?? DEFAULT_MONET_TUNING.showAudioVisualization,
+        audioStyle: monetTuning.audioStyle ?? DEFAULT_MONET_TUNING.audioStyle,
         fontScale: clampValue(monetTuning.fontScale ?? DEFAULT_MONET_TUNING.fontScale, 0.7, 1.5, DEFAULT_MONET_TUNING.fontScale),
         portraitSource: monetTuning.portraitSource ?? DEFAULT_MONET_TUNING.portraitSource,
         portraitStyle: monetTuning.portraitStyle ?? DEFAULT_MONET_TUNING.portraitStyle ?? 'rectangular',
         showPortraitDragHanger: monetTuning.showPortraitDragHanger ?? DEFAULT_MONET_TUNING.showPortraitDragHanger,
+        descriptionVisibility: resolveMonetChromeVisibility(monetTuning.descriptionVisibility, monetTuning.showDescription),
+        portraitHangerVisibility: resolveMonetChromeVisibility(monetTuning.portraitHangerVisibility, monetTuning.showPortraitDragHanger),
+        mirrorLayout: monetTuning.mirrorLayout ?? false,
+        customDescription: monetTuning.customDescription ?? '',
     };
+    const showsPortrait = resolvedTuning.portraitSource !== 'none';
+    const visibilityOptions: Array<{ value: MonetChromeVisibility; label: string }> = [
+        { value: 'auto', label: t('options.monetChromeVisibilityAuto') },
+        { value: 'always', label: t('options.monetChromeVisibilityAlways') },
+        { value: 'hidden', label: t('options.monetChromeVisibilityHidden') },
+    ];
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files ?? []);
@@ -85,19 +113,40 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                     onDragEnd={onSliderCommit}
                 />
                 <ToggleRow
+                    label={t('options.monetMirrorLayout')}
+                    checked={resolvedTuning.mirrorLayout}
+                    onChange={(value) => onMonetTuningChange({ mirrorLayout: value })}
+                />
+                <ToggleRow
                     label={t('options.monetKeywordColoring')}
                     checked={resolvedTuning.keywordColoringEnabled}
                     onChange={(value) => onMonetTuningChange?.({ keywordColoringEnabled: value })}
                 />
-                <ToggleRow
-                    label={t('options.monetShowDescription')}
-                    checked={resolvedTuning.showDescription}
-                    onChange={(value) => onMonetTuningChange?.({ showDescription: value })}
-                />
+                <Row label={t('options.monetShowDescription')}>
+                    <Segmented<MonetChromeVisibility>
+                        value={resolvedTuning.descriptionVisibility}
+                        options={visibilityOptions}
+                        onChange={(value) => onMonetTuningChange({ descriptionVisibility: value })}
+                    />
+                </Row>
+                <Reveal when={resolvedTuning.descriptionVisibility !== 'hidden'}>
+                    {/* The field gets a line of its own under the label: beside it, it wrapped under the label's hint. */}
+                    <Row
+                        sub
+                        label={t('options.monetCustomDescription')}
+                        below={(
+                            <TextField
+                                value={resolvedTuning.customDescription}
+                                placeholder={t('options.monetCustomDescriptionPlaceholder')}
+                                onChange={(value) => onMonetTuningChange({ customDescription: value.slice(0, MONET_CUSTOM_DESCRIPTION_MAX_LENGTH) })}
+                            />
+                        )}
+                    />
+                </Reveal>
             </Group>
 
             <Group def={PORTRAIT_GROUP}>
-                <Row label={t('options.monetPortraitSource')}>
+                <Row label={t(resolvedTuning.mirrorLayout ? 'options.monetPortraitSourceMirrored' : 'options.monetPortraitSource')}>
                     <Segmented<MonetPortraitSource>
                         value={resolvedTuning.portraitSource}
                         options={[
@@ -107,6 +156,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                                 label: t('options.monetPortraitSourceCustom'),
                                 disabled: !monetPortraitImage && !isLoadingMonetPortraitImage,
                             },
+                            { value: 'none', label: t('options.monetPortraitSourceNone') },
                         ]}
                         onChange={(value) => onMonetTuningChange?.({ portraitSource: value })}
                     />
@@ -129,7 +179,7 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                     >
                         {t('options.monetClearPortrait')}
                     </Button>
-                    <TextField
+                    <input
                         ref={fileInputRef}
                         type="file"
                         accept=".png,.jpg,.jpeg,.gif,.webp,.svg,image/*"
@@ -137,30 +187,77 @@ export const MonetSettingsPanel: React.FC<VisualizerSettingsPanelProps<MonetTuni
                         onChange={(event) => void handleFileChange(event)}
                     />
                 </Row>
+                <Reveal when={showsPortrait}>
+                    <Row
+                        label={t('options.monetPortraitStyle')}
+                        below={(
+                            <PictureGrid<MonetPortraitStyle>
+                                className="-mx-4"
+                                columns={4}
+                                label={t('options.monetPortraitStyle')}
+                                value={resolvedTuning.portraitStyle}
+                                options={[
+                                    { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') },
+                                    { value: 'square', label: t('options.monetPortraitStyleSquare') },
+                                ]}
+                                picture={portraitStylePicture}
+                                onChange={(value) => onMonetTuningChange?.({ portraitStyle: value })}
+                            />
+                        )}
+                    />
+                    <Row label={t('options.monetPortraitDragHanger')}>
+                        <Segmented<MonetChromeVisibility>
+                            value={resolvedTuning.portraitHangerVisibility}
+                            options={visibilityOptions}
+                            onChange={(value) => onMonetTuningChange({ portraitHangerVisibility: value })}
+                        />
+                    </Row>
+                </Reveal>
+            </Group>
+
+            <Group def={AUDIO_GROUP}>
+                {/*
+                 * 频谱开关。
+                 *
+                 * 这个开关曾经被删掉：安卓 App 里拿不到 Web Audio 的分析数据，
+                 * 频谱画出来永远是趴着的一条死线，与其让人打开一个不动的开关，
+                 * 不如根本不显示（VisualizerMonet 里也同时加了安卓判断不画）。
+                 *
+                 * 现在原生播放那一路的频谱由 nativeSpectrumBridge 接进来了
+                 * （SpectrumAnalyzer → getSpectrum → audioBands），两条播放路径都有数据，
+                 * 所以开关和绘制一起恢复。
+                 */}
+                <ToggleRow
+                    label={t('options.monetShowAudioVisualization')}
+                    checked={resolvedTuning.showAudioVisualization ?? true}
+                    onChange={(value) => onMonetTuningChange?.({ showAudioVisualization: value })}
+                />
                 <Row
-                    label={t('options.monetPortraitStyle')}
+                    label={t('options.monetAudioStyle')}
                     below={(
-                        <PictureGrid<MonetPortraitStyle>
+                        <PictureGrid<MonetAudioStyle>
                             className="-mx-4"
                             columns={4}
-                            label={t('options.monetPortraitStyle')}
-                            value={resolvedTuning.portraitStyle}
+                            label={t('options.monetAudioStyle')}
+                            value={resolvedTuning.audioStyle}
                             options={[
-                                { value: 'rectangular', label: t('options.monetPortraitStyleRectangular') },
-                                { value: 'square', label: t('options.monetPortraitStyleSquare') },
+                                { value: 'bar', label: t('options.monetAudioStyleBar') },
+                                { value: 'line', label: t('options.monetAudioStyleLine') },
                             ]}
-                            picture={portraitStylePicture}
-                            onChange={(value) => onMonetTuningChange?.({ portraitStyle: value })}
+                            picture={audioStylePicture}
+                            onChange={(value) => onMonetTuningChange?.({ audioStyle: value })}
                         />
                     )}
                 />
-                <ToggleRow
-                    label={t('options.monetPortraitDragHanger')}
-                    checked={resolvedTuning.showPortraitDragHanger ?? true}
-                    onChange={(value) => onMonetTuningChange?.({ showPortraitDragHanger: value })}
-                />
             </Group>
 
+            <Group def={RENDER_GROUP}>
+                <LyricRenderQualityRows
+                    value={monetTuning.render ?? DEFAULT_LYRIC_RENDER_OVERRIDE}
+                    onChange={(patch) => onMonetTuningChange?.({ render: { ...(monetTuning.render ?? DEFAULT_LYRIC_RENDER_OVERRIDE), ...patch } })}
+                    antialias={false}
+                />
+            </Group>
         </>
     );
 };

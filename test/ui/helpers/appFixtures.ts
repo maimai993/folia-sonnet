@@ -231,7 +231,7 @@ export async function installBaseState(
     });
 
     localStorage.clear();
-    localStorage.setItem('i18nextLng', 'en');
+    localStorage.setItem('folia_app_language', 'en');
     localStorage.setItem('default_theme_daylight', 'true');
     localStorage.setItem('static_mode', 'true');
     // 动效不再跟随系统偏好（issue #370），所以 emulateMedia({ reducedMotion: 'reduce' }) 自己
@@ -266,6 +266,8 @@ export async function installBaseState(
         // WindowControls 一挂载就订阅全屏变化并查询一次；桩里缺了它们，整个应用在首屏就抛错。
         isWindowFullscreen: async () => false,
         onWindowFullscreenChanged: () => () => {},
+        // AppShell 一挂载就问窗口带不带系统红绿灯。
+        hasNativeTrafficLights: async () => false,
       },
     });
 

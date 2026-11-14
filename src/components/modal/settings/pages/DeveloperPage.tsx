@@ -2,6 +2,7 @@ import React, { useSyncExternalStore } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ConsoleLogPanel from '../../../shared/ConsoleLogPanel';
+import AudioPipelinePanel from '../../../AudioPipelinePanel';
 import {
     getDebugModuleSnapshot,
     openDebugLogsFolder,
@@ -117,6 +118,12 @@ const DeveloperPage: React.FC = () => {
                     />
                 </Row>
             </Reveal>
+
+            {/*
+             * 音频链路读数。桌面端可以在浮层的 Perf 页看，手机上没有键盘、叫不出浮层，
+             * 所以同一份快照在这里再摆一处 —— 安卓真机上「音质在哪一段被削」只能靠它。
+             */}
+            <Row label={t('options.audioPipeline')} hint={t('options.audioPipelineDesc')} below={<AudioPipelinePanel />} />
         </Group>
     );
 };

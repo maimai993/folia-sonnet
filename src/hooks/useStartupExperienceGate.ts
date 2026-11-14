@@ -10,8 +10,11 @@ import { isAndroidNativeRuntime } from '../services/nativeLocalMusic';
 
 const LAST_SEEN_RELEASE_NOTES_VERSION_STORAGE_KEY = 'folia_last_seen_guide_version';
 const FREE_SOFTWARE_NOTICE_SEEN_STORAGE_KEY = 'folia_free_software_notice_seen';
+/** 登录按钮那一层：点了就记下，每个安装只有一次。 */
+const SIGN_IN_SPOTLIGHT_DONE_STORAGE_KEY = 'folia_sign_in_spotlight_done';
 
-export type StartupExperienceStep = 'free-software-notice' | 'release-notes' | 'playback-entry-view' | 'ponder' | null;
+export type StartupExperienceStep =
+    | 'free-software-notice' | 'release-notes' | 'playback-entry-view' | 'ponder' | 'sign-in-spotlight' | null;
 
 type StartupExperienceState = {
     /** 免费软件声明还没看过。按安装计，不看版本。 */
@@ -40,6 +43,12 @@ type StartupExperienceState = {
     needsDeviceTypePrompt: boolean;
     isPlaybackEntryViewPromptOpen: boolean;
     isPonderOnboardingOpen: boolean;
+    /**
+     * 首启最后一步还欠着：还没有人登录、有能登录的平台、而且这一层没有弹过。
+     * 排在序列的最后 —— 前面该确认的都确认完了，才轮到它。
+     */
+    needsSignInSpotlight: boolean;
+    isSignInSpotlightOpen: boolean;
 };
 
 /** Chooses the next blocking surface while ensuring that two startup dialogs never overlap. */
@@ -56,8 +65,10 @@ export const resolveStartupExperienceStep = ({
     needsDeviceTypePrompt,
     isPlaybackEntryViewPromptOpen,
     isPonderOnboardingOpen,
+    needsSignInSpotlight,
+    isSignInSpotlightOpen,
 }: StartupExperienceState): StartupExperienceStep => {
-    if (isFreeSoftwareNoticeOpen || isReleaseNotesOpen || isPlaybackEntryViewPromptOpen || isPonderOnboardingOpen) {
+    if (isFreeSoftwareNoticeOpen || isReleaseNotesOpen || isPlaybackEntryViewPromptOpen || isPonderOnboardingOpen || isSignInSpotlightOpen) {
         return null;
     }
     // 声明排在最前面，而且不受版本门控：它回答的是「这是什么」，不是「这次更新了什么」，
@@ -79,7 +90,14 @@ export const resolveStartupExperienceStep = ({
     if ((releaseDue && !hasChosenPlaybackEntryView) || needsLibrarySuitePrompt || needsDeviceTypePrompt) {
         return 'playback-entry-view';
     }
-    return releaseDue && !hasSeenPonder ? 'ponder' : null;
+    if (releaseDue && !hasSeenPonder) return 'ponder';
+    /*
+     * 最后一步：把登录按钮送到脸上。
+     *
+     * 它排在序列末尾之外还有一个理由：前面每一层都是「知道有这么回事」，这一层是「必须做
+     * 一件事才能过去」，被它压住的是整个应用，所以它只能等前面都走完。
+     */
+    return needsSignInSpotlight ? 'sign-in-spotlight' : null;
 };
 
 const readLastSeenReleaseNotesVersion = (): string | null => (
@@ -92,13 +110,23 @@ const readHasSeenFreeSoftwareNotice = (): boolean => (
     typeof window !== 'undefined' && localStorage.getItem(FREE_SOFTWARE_NOTICE_SEEN_STORAGE_KEY) === '1'
 );
 
+const readHasPressedSignInSpotlight = (): boolean => (
+    typeof window !== 'undefined' && localStorage.getItem(SIGN_IN_SPOTLIGHT_DONE_STORAGE_KEY) === '1'
+);
 
 /**
  * Runs the first-launch sequence: release notes, the two-page choice prompt (library interface, then
- * playback destination), then the Ponder shortcut gate. The prompt is gated by the playback choice alone,
- * so installs that answered the older single-page prompt are not asked again.
+ * playback destination), the Ponder shortcut gate, and at the end the sign-in button brought to the
+ * face. The prompt is gated by the playback choice alone, so installs that answered the older
+ * single-page prompt are not asked again.
+ *
+ * `signedIn` and `canSignIn` are what the last step needs to know: there is no pointing at the
+ * sign-in button for someone who already signed in, and none where no platform can be signed in to.
+ * Both are read from the account by the caller — this hook holds no account of its own.
  */
-export const useStartupExperienceGate = () => {
+export const useStartupExperienceGate = (
+    { signedIn = false, canSignIn = false }: { signedIn?: boolean; canSignIn?: boolean } = {},
+) => {
     const lastSeenPonderVersion = useSettingsModalStore(state => state.lastSeenGuideVersion);
     const isPonderOnboardingOpen = useSettingsModalStore(state => state.isUserGuideModalOpen);
     const setIsPonderOnboardingOpen = useSettingsModalStore(state => state.setIsUserGuideModalOpen);
@@ -112,6 +140,8 @@ export const useStartupExperienceGate = () => {
     const [hasSeenFreeSoftwareNotice, setHasSeenFreeSoftwareNotice] = useState(readHasSeenFreeSoftwareNotice);
     const [isFreeSoftwareNoticeOpen, setIsFreeSoftwareNoticeOpen] = useState(false);
     const [isReleaseNotesOpen, setIsReleaseNotesOpen] = useState(false);
+    const [hasPressedSignInSpotlight, setHasPressedSignInSpotlight] = useState(readHasPressedSignInSpotlight);
+    const [isSignInSpotlightOpen, setIsSignInSpotlightOpen] = useState(false);
     const appVersion = typeof __APP_VERSION__ === 'undefined' ? null : __APP_VERSION__;
 
     const nextStep = resolveStartupExperienceStep({
@@ -127,6 +157,8 @@ export const useStartupExperienceGate = () => {
         needsDeviceTypePrompt,
         isPlaybackEntryViewPromptOpen,
         isPonderOnboardingOpen,
+        needsSignInSpotlight: !signedIn && canSignIn && !hasPressedSignInSpotlight,
+        isSignInSpotlightOpen,
     });
 
     useEffect(() => {
@@ -143,6 +175,8 @@ export const useStartupExperienceGate = () => {
             });
         } else if (nextStep === 'ponder') {
             setIsPonderOnboardingOpen(true);
+        } else if (nextStep === 'sign-in-spotlight') {
+            setIsSignInSpotlightOpen(true);
         }
     }, [nextStep, setIsPonderOnboardingOpen]);
 
@@ -166,10 +200,28 @@ export const useStartupExperienceGate = () => {
         setIsFreeSoftwareNoticeOpen(false);
     }, []);
 
+    /*
+     * 点了那个按钮：这一层让位，并且从此不再出现。
+     *
+     * 它不按版本记：这是「认得那个按钮在哪」这件事，一个安装只有一次。写不进去（隐私模式、
+     * 存储满了）也照样让位 —— 记不下最多是下次再指一次，把人关在这一层里才是真的错。
+     */
+    const pressSignInSpotlight = useCallback(() => {
+        try {
+            localStorage.setItem(SIGN_IN_SPOTLIGHT_DONE_STORAGE_KEY, '1');
+        } catch (error) {
+            console.warn('[startup] Failed to persist the sign-in spotlight flag:', error);
+        }
+        setHasPressedSignInSpotlight(true);
+        setIsSignInSpotlightOpen(false);
+    }, []);
+
     return {
         isFreeSoftwareNoticeOpen,
         closeFreeSoftwareNotice,
         isReleaseNotesOpen,
         closeReleaseNotes,
+        isSignInSpotlightOpen,
+        pressSignInSpotlight,
     };
 };

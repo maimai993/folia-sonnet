@@ -233,6 +233,24 @@ await attempt('feedModes', async () => {
     return modes.length + ' modes';
 });
 
+// 发现页「模式探索」：公开 /luna/discover，卡片和曲目都要能没登录就读到。
+await attempt('discoverModes', async () => {
+    const cards = await car.discoverModes();
+    if (!Array.isArray(cards) || !cards.length) throw new Error('no mode cards');
+    const first = cards[0];
+    if (!first.id || !first.name || !first.cover) throw new Error('mode card lacks id/name/cover');
+    const res = await fetch(first.cover, { method: 'GET', headers: { Range: 'bytes=0-1' } });
+    if (res.status !== 200 && res.status !== 206) throw new Error('mode cover HTTP ' + res.status);
+    return cards.length + ' cards, cover HTTP ' + res.status;
+});
+await attempt('discoverTracks', async () => {
+    const cards = await car.discoverModes();
+    if (!cards.length) throw new Error('no cards');
+    const page = await car.discoverTracks(cards[0].id, 5, '');
+    if (!page.songs.length || !page.songs[0].name) throw new Error('no tracks');
+    return page.songs.length + ' tracks';
+});
+
 // 二维码创建：授权参数（client_key/signature/scope）还被人认的证明。
 await attempt('login QR created', async () => {
     const result = await car.startLogin();

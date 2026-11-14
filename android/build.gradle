@@ -8,6 +8,22 @@ buildscript {
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:8.13.0'
+        // Kotlin 混编：原生代码正在从 Java 全量迁往 Kotlin（2026-10-25 起新代码一律 .kt）。
+        // android/media/AudioManager.java 与 audio/FoliaAudioManager.java 除外 —— 那一对是
+        // javac sourcepath 的编译期占位技巧（见该文件头注释），必须留在 Java。
+        //
+        // ⚠️ 版本要能**读** lyricon 的 metadata：`lyricon:provider:0.1.70` 与它带的
+        // `lyricon.lyric:model` 是用 Kotlin 2.3 编的，并且对 kotlin-stdlib 下了
+        // strictly 2.3.20。编译器停在 2.1.20 时（哪怕只编自己的 Kotlin）都会报
+        // 「Module was compiled with an incompatible version of Kotlin ... expected 2.1.0」
+        // —— 那是 Internal compiler error，整包编不出来。
+        //
+        // 用 2.2.20 而不是 2.3.20：2.2 起就能读 2.3 的 metadata，而 2.3 的**语法解析**
+        // 收紧了以运算符开头的续行（`+` / `or` / `/`），本仓库几百处这种写法会一起报
+        // 「Expecting member declaration」。2.2 保住老写法的解析，同时满足依赖。
+        // 升 lyricon 之后顺手 `./gradlew :app:dependencyInsight --configuration
+        // releaseCompileClasspath --dependency kotlin-stdlib` 看一眼，再定这个数。
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.2.20'
         classpath 'com.google.gms:google-services:4.4.4'
 
         // NOTE: Do not place your application dependencies here; they belong

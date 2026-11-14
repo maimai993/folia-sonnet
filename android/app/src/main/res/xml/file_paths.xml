@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 应用私有目录：市场下载的字体就放这里。缺这一条会让 fontsDir 里的文件加载失败。 -->
+    <files-path name="internal_files" path="." />
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <!--
+        模组根目录现在的落点是 getExternalFilesDir(null)/folia-userdata
+        （/sdcard/Android/data/<包名>/files/…）。上面那条 external-path 指外部存储的
+        公有部分，不覆盖应用专属的外部目录，所以「打开模组目录」要单独放行
+        external-files-path，否则 FileProvider 会抛 IllegalArgumentException。
+    -->
+    <external-files-path name="external_files" path="." />
 </paths>

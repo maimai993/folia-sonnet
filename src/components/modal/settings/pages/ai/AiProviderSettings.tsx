@@ -1,8 +1,12 @@
 import React from 'react';
-import { Zap } from 'lucide-react';
+import { Copy, ExternalLink, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { AI_PROVIDER_PRESETS, inferAiProviderFromUrl, modelAlwaysThinks, resolveAiConnection, resolveAiProviderPreset, retiredModelHint } from '../../../../../services/aiText';
 import { openAIEndpointOf } from '../../../../../utils/openAIEndpoint';
+import { ensureMachineCode } from '../../../../../services/foliaMachineCode';
+import { FOLIA_WORK_SHARE_PAGE_URL } from '../../../../../services/aiText';
+import { openExternalUrl } from '../../../../../utils/openExternalUrl';
+import { FoliaCreditsRow, copyMachineCode } from './FoliaCreditsRow';
 import { Button, FoldedGroup, NumberField, Reveal, Row, Select, TextField, Toggle, Value, option, parseNumberText, type SettingsGroupDef, type SettingsOptionDef } from '../../kit';
 import { AiConnectionTestReply, AiConnectionTestStatus, useAiConnectionTest } from '../AiConnectionTest';
 import { useSettingsPage, type AiApiKeyName, type ElectronSettingsState } from '../settingsPageContext';
@@ -21,6 +25,9 @@ const O = {
     temperature: option(AI, 'openaiApiTemperature', 'options.openaiApiTemperature'),
     stream: option(AI, 'openaiApiStream', 'options.openaiApiStream'),
     proxy: option(AI, 'useSystemProxyAI', 'options.useSystemProxyAI'),
+    machineCode: option(AI, 'machineCode', 'options.aiMachineCodeTitle'),
+    shareAccount: option(AI, 'shareAccount', 'options.aiShareAccountTitle'),
+    credits: option(AI, 'credits', 'options.aiCreditsTitle'),
 };
 export const AI_SETTINGS_OPTIONS: SettingsOptionDef[] = Object.values(O);
 
@@ -64,6 +71,12 @@ const AiProviderSettings: React.FC = () => {
     const { t } = useTranslation();
     const { electronSettings: settings, setElectronSettings, onSaveElectronSettings, electronSaveStatus, savedAiApiKeys, savedOpenAIKeyEndpoint, onClearAiApiKey } = useSettingsPage().viewProps.desktop.model;
     const preset = resolveAiProviderPreset(settings);
+    /*
+     * 免费渠道（foliawork）单独一套行：机器码 + 剩余额度 + 贡献账号，密钥/模型/流式都藏起来。
+     * 其余服务商照旧（这是「默认选免费」，不是「只能免费」）。
+     */
+    const isFreeChannel = preset.id === 'foliawork';
+    const machineCode = isFreeChannel ? ensureMachineCode() : '';
     const gemini = preset.protocol === 'gemini';
     const keyName: AiApiKeyName = gemini ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
     const key = settings[keyName] || '';
@@ -158,28 +171,59 @@ const AiProviderSettings: React.FC = () => {
                     <TextField value={settings.OPENAI_API_URL} onChange={value => setAi({ OPENAI_API_URL: value })} placeholder={preset.baseUrl} />
                 </Row>
             )}
-            <Row option={gemini ? O.geminiKey : O.key} hint={keyHint}>
-                <AiKeyField value={key} saved={usableSavedKey} onChange={value => setAi({ [keyName]: value })} onClear={() => void onClearAiApiKey(keyName)} />
-            </Row>
-            <AiModelPicker option={gemini ? O.geminiModel : O.model} payload={payload} keySaved={usableSavedKey} presetId={preset.id}
-                suggestedModels={preset.suggestedModels} listsModels={preset.listsModels}
-                defaultModel={model ? undefined : resolved.model || undefined}
-                onChange={value => setAi({ [gemini ? 'GEMINI_API_MODEL' : 'OPENAI_API_MODEL']: value })} />
+            {/* 免费渠道没有密钥可填：它的密钥就是下面那行机器码。 */}
+            {!isFreeChannel && (
+                <Row option={gemini ? O.geminiKey : O.key} hint={keyHint}>
+                    <AiKeyField value={key} saved={usableSavedKey} onChange={value => setAi({ [keyName]: value })} onClear={() => void onClearAiApiKey(keyName)} />
+                </Row>
+            )}
+            {/* 免费渠道的模型写死（白名单里倍率为 0 的还有视频模型，让用户挑会换来「生成失败」）。 */}
+            {isFreeChannel ? (
+                <Row option={O.model} note={t('options.aiProvider_foliaworkModelNote')}>
+                    <Value>
+                        {(resolved.model || preset.recommendedModel) === 'auto'
+                            ? t('options.aiModelAuto')
+                            : (resolved.model || preset.recommendedModel)}
+                    </Value>
+                </Row>
+            ) : (
+                <AiModelPicker option={gemini ? O.geminiModel : O.model} payload={payload} keySaved={usableSavedKey} presetId={preset.id}
+                    suggestedModels={preset.suggestedModels} listsModels={preset.listsModels}
+                    defaultModel={model ? undefined : resolved.model || undefined}
+                    onChange={value => setAi({ [gemini ? 'GEMINI_API_MODEL' : 'OPENAI_API_MODEL']: value })} />
+            )}
             {retired && <Row notice={t('options.aiModelRetired', { model: retired.model, replacement: retired.replacement })} />}
             {alwaysThinks && <Row notice={t('options.aiModelAlwaysThinks')} />}
             {/* Shown only for providers that are sent a temperature, with their own range. */}
             <Reveal when={!gemini && Boolean(temperature)}>
-                <Row option={O.temperature} hint={temperature ? t(adapter.temperaturePerModel ? 'options.aiTemperaturePerModelDesc' : 'options.aiTemperatureRangeDesc', temperature) : undefined}>
+                <Row option={O.temperature} note={t('options.aiTemperatureNote')} hint={temperature ? t(adapter.temperaturePerModel ? 'options.aiTemperaturePerModelDesc' : 'options.aiTemperatureRangeDesc', temperature) : undefined}>
                     <NumberField value={parseNumberText(settings.OPENAI_API_TEMPERATURE)}
                         onChange={value => setAi({ OPENAI_API_TEMPERATURE: value === null ? '' : String(value) })}
                         min={temperature?.min ?? 0} max={temperature?.max ?? 2} step={0.1} placeholder="0.7" />
                 </Row>
             </Reveal>
-            <Reveal when={!gemini && adapter.stream}>
+            <Reveal when={!gemini && adapter.stream && !isFreeChannel}>
                 <Row option={O.stream} note={t('options.openaiApiStreamDesc')}>
                     <Toggle checked={settings.OPENAI_API_STREAM} onChange={enabled => setAi({ OPENAI_API_STREAM: enabled })} />
                 </Row>
             </Reveal>
+            {isFreeChannel && (
+                <>
+                    {/* 机器码：这台设备的身份，也是它的密钥。必须能复制 —— 用户要把它发到群里绑定。 */}
+                    <Row option={O.machineCode} note={t('options.aiMachineCodeNote')} hint={t('options.aiMachineCodeHint')}>
+                        <Value tip={machineCode}>{machineCode}</Value>
+                        <Button icon={Copy} onClick={() => { void copyMachineCode(machineCode, t); }}>
+                            {t('options.aiMachineCodeCopy')}
+                        </Button>
+                    </Row>
+                    <FoliaCreditsRow option={O.credits} />
+                    <Row option={O.shareAccount} hint={t('options.aiShareAccountDesc')} note={t('options.aiShareAccountWarning')}>
+                        <Button icon={ExternalLink} onClick={() => { void openExternalUrl(FOLIA_WORK_SHARE_PAGE_URL); }}>
+                            {t('options.aiShareAccountAction')}
+                        </Button>
+                    </Row>
+                </>
+            )}
             <Row option={O.proxy} hint={t('options.useSystemProxyAIDesc')}>
                 <Toggle checked={settings.USE_SYSTEM_PROXY_FOR_AI} onChange={enabled => setAi({ USE_SYSTEM_PROXY_FOR_AI: enabled })} />
             </Row>

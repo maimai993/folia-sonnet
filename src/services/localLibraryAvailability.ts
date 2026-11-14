@@ -10,7 +10,9 @@ export interface LocalLibraryAvailability {
 
 export const getLocalLibraryAvailability = (): LocalLibraryAvailability => {
   if (typeof window === 'undefined') return { supported: false, reason: 'file-system-api-unavailable' };
-  if (window.electron) return { supported: true, reason: null };
+  // 只认 platform（只有 Electron 的 preload 会写）：安卓端的模组 shim 也装了
+  // `window.electron`，按对象存在与否判断会把安卓错当成桌面。
+  if (typeof window.electron?.platform === 'string') return { supported: true, reason: null };
   /*
    * 安卓走原生：WebView 没有 File System Access API（`showDirectoryPicker`），
    * 但原生那边能扫描设备音乐库、也能用系统文件管理器挑文件/文件夹，

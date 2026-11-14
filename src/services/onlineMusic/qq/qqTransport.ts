@@ -1,5 +1,6 @@
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from '../providerStorage';
+import { announceProviderSessionExpired } from '../providerSessionEvents';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
 import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../../foliaExtensionBridge';
@@ -13,6 +14,10 @@ export const QQ_OPERATIONS = [
     'login_channels', 'login_refresh',
     'user_detail', 'user_playlist', 'user_albums', 'user_liked_songs', 'user_playlist_detail',
     'user_guess_you_like', 'user_daily_songs', 'recommend_playlists',
+    'user_personal_fm', 'user_daily_history_dates', 'user_daily_history', 'user_blacklist_add',
+    'user_listening_rank', 'user_guess_you_like_modes', 'user_guess_you_like_tracks',
+    'recommend_feed',
+    'user_recommendation_preferences', 'user_recommendation_preferences_update',
     'user_playlist_tracks', 'user_playlist_subscribe', 'user_subscription_status',
     'user_song_like', 'user_album_subscribe',
     'user_vip', 'user_cloud', 'user_playlist_create',
@@ -31,7 +36,7 @@ export type QqParams = Record<string, string | number | boolean | undefined>;
 const POST_OPERATIONS: ReadonlySet<QqOperation> = new Set<QqOperation>([
     'login_refresh',
     'user_playlist_tracks', 'user_playlist_subscribe', 'user_song_like', 'user_album_subscribe',
-    'user_playlist_create',
+    'user_playlist_create', 'user_blacklist_add', 'user_recommendation_preferences_update',
 ]);
 
 const ENDPOINTS: Record<QqOperation, string> = {
@@ -56,6 +61,23 @@ const ENDPOINTS: Record<QqOperation, string> = {
     // 旧后端一律 404，transport 照例报成 `unsupported`，由调用方决定回落还是报错。
     user_guess_you_like: '/user/guess-you-like',
     user_daily_songs: '/user/daily-songs',
+    // 3.3.6 的私人 FM（`page` 1–100，后端不记批次位置）。旧后端回 404，调用方回落到猜你喜欢。
+    user_personal_fm: '/user/personal-fm',
+    // 3.3.6 的每日 30 首历史：日期列表与某一天的歌，只读本人。旧后端回 404。
+    user_daily_history_dates: '/user/daily-songs/history/dates',
+    user_daily_history: '/user/daily-songs/history',
+    // 3.3.6 的歌曲不喜欢：只送 `songs` 时默认开放；写一次、读首屏确认，结果不明不重送。
+    user_blacklist_add: '/user/blacklist/add',
+    // 3.3.6 的本人听歌排行（range=week|year）。旧后端回 404，没有排行条目。
+    user_listening_rank: '/user/listening-rank',
+    // 3.3.6 的猜你喜欢听歌模式目录与按模式（pool）取一批，只读，不写账号的模式设置。旧后端 404。
+    user_guess_you_like_modes: '/user/guess-you-like/modes',
+    user_guess_you_like_tracks: '/user/guess-you-like/tracks',
+    // 3.3.6 的客户端首页 feed 第 1 页（只有歌曲与歌单）。旧后端回 404，探索页就不出这几栏。
+    recommend_feed: '/recommend/feed',
+    // 3.3.6 的账号音乐偏好（私人 FM 和每日 30 首共用一份）：读，和只改指定项的写入（写一次、读回核对，不重送）。
+    user_recommendation_preferences: '/user/recommendation-preferences',
+    user_recommendation_preferences_update: '/user/recommendation-preferences/update',
     recommend_playlists: '/recommend/playlists',
     user_playlist_tracks: '/user/playlist/tracks',
     user_playlist_subscribe: '/user/playlist/subscribe',
@@ -416,7 +438,12 @@ const endpointFor = (operation: QqOperation, params: QqParams): { path: string; 
 
 // The session a request carried is dropped; one that was stored since stays.
 const dropSessionSent = (sent: string): void => {
-    if (getWebSessionCookie() === sent) clearQqSession();
+    if (getWebSessionCookie() === sent) {
+        clearQqSession();
+        // 会话自己没了要说一声：界面只在「进首页 / 窗口回来」时问账号，
+        // 播放途中失效的话用户会一直在播放页撞同一堵墙（见 hooks/useAccountReads）。
+        announceProviderSessionExpired('qq');
+    }
 };
 
 // 一个不是 login_status 的请求带着 session 回了 401：问一次 login_status。后端不再认出这个用户、存着的又还是吃了 401 的
@@ -433,6 +460,45 @@ const checkSessionAfterRefusal = (sent: string): void => {
     }).finally(() => {
         sessionCheck = null;
     });
+};
+
+/**
+ * 主动复核一次会话还能不能用（不是 401 的场景）。
+ *
+ * 为什么需要它：播放接口在会话失效时**不返回 401**，而是回 200 + 空链接。那条路上
+ * `checkSessionAfterRefusal` 根本不会被调用，于是过期的 cookie 一直被带着请求 ——
+ * 表现就是「登录明明过期了却没有提示，而且大部分歌都放不出来」。
+ *
+ * 只在真的像是出了这种事时才调（拿不到播放链接），不要放进常规请求路径。
+ * 返回 true 表示会话已判定失效并清掉了，调用方可以按游客重试一次。
+ */
+export const recheckQqSessionAfterEmptyPlayLink = async (): Promise<boolean> => {
+    const sent = getWebSessionCookie();
+    if (!sent) return false;
+    // 已经有一轮在问就等它，不重复发。
+    if (sessionCheck) {
+        await sessionCheck.catch(() => undefined);
+        return getWebSessionCookie() !== sent;
+    }
+    await checkSessionAfterRefusalAsync(sent);
+    return getWebSessionCookie() !== sent;
+};
+
+const checkSessionAfterRefusalAsync = async (sent: string): Promise<void> => {
+    if (sessionCheck) {
+        await sessionCheck.catch(() => undefined);
+        return;
+    }
+    sessionCheck = requestQq<any>('login_status').then(
+        body => !body?.data?.profile,
+        error => error instanceof OnlineProviderError && error.code === 'auth-required',
+    ).then(ended => {
+        console.info(`[QQ] Playback gave no link; login_status ${ended ? 'no longer names the account, the session goes' : 'did not say the sign-in ended, the session stays'}`);
+        if (ended) dropSessionSent(sent);
+    }).finally(() => {
+        sessionCheck = null;
+    });
+    await sessionCheck.catch(() => undefined);
 };
 
 // Routes one provider request through the embedded Electron server or the configured Web base URL.
@@ -495,10 +561,12 @@ const requestQqOnce = async <T = unknown>(
             if (operation !== 'login_status' && cookie) checkSessionAfterRefusal(cookie);
             throw new OnlineProviderError('auth-required', 'QQMusicApi login required', 'qq', body, response.status);
         }
-        // 404 是「这个后端没有这条路由」，不是网络故障 —— 用户可以自行部署任意版本的后端，
-        // 新路由在旧后端上必然 404。报成 `unsupported`，调用方才能据此回落到旧路径，
-        // 而不必去解析错误文案里的状态码。
-        if (response.status === 404) {
+        // 旧后端缺路由会回 404；旧版 Serverless 则回带固定文案的 501。其他 501 仍是配置错误。
+        const missingServerlessRoute = response.status === 501 && typeof body?.message === 'string' && (
+            body.message.endsWith(' is not implemented by the serverless runtime.')
+            || body.message.endsWith(' is not implemented by the serverless runtime. See /login/channels for what this deployment serves.')
+        );
+        if (response.status === 404 || missingServerlessRoute) {
             throw new OnlineProviderError(
                 'unsupported',
                 `QQMusicApi has no ${operation} route`,
@@ -643,7 +711,7 @@ const readMusicuCode = (value: unknown): number | undefined => {
 export const requestQqMusicu = async (
     requests: Readonly<Record<string, QqMusicuRequest>>,
 ): Promise<Record<string, QqMusicuAnswer>> => {
-    const direct = typeof window !== 'undefined' && Boolean(window.electron);
+    const direct = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
     const url = direct ? QQ_MUSICU_URL : lyricProxyWebUrl(QQ_MUSICU_URL);
     const init: RequestInit = {
         method: 'POST',

@@ -19,6 +19,9 @@ import { setIsDevDebugOverlayVisible, setIsMemoryMonitorVisible } from '../../..
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { currentTime } from '../../../../stores/motionSignals';
 import { errorFields } from '../../../../utils/errorText';
+import { hifiTransport, isHifiRoute } from '../../../../services/hifi/hifiPlayback';
+import { seekHifiRoute } from '../../../hifi/hifiRouteTransport';
+import { isExternalPaused, isExternalRoute, seekExternalPlayback } from '../../../../services/onlineMusic/externalPlayback';
 
 // src/components/app/playback/bridges/usePlaybackInteractionBridge.ts
 
@@ -159,6 +162,26 @@ export function usePlaybackInteractionBridge({
             return;
         }
 
+        // mpv plays this song: the deck below is silent and has no source. No fades on that route.
+        if (isHifiRoute()) {
+            if (hifiTransport.isPaused()) {
+                startPlaybackFromInteraction();
+            } else {
+                pausePlayback();
+            }
+            return;
+        }
+
+        // The provider's own player sounds this song; its own paused state is the answer.
+        if (isExternalRoute()) {
+            if (isExternalPaused()) {
+                startPlaybackFromInteraction();
+            } else {
+                pausePlayback();
+            }
+            return;
+        }
+
         // The element is still playing while a pause fades out, so the check below would read it as
         // playing and pause again. A second press during the fade is a resume.
         if (playbackFade.isFadingOut()) {
@@ -193,6 +216,24 @@ export function usePlaybackInteractionBridge({
             } else {
                 startPlaybackFromInteraction();
             }
+            return;
+        }
+
+        /*
+         * 没有 `<audio>` 元素可问 —— 但**不能**因此什么都不做。
+         *
+         * 以前这里直接落下去（除了我后来加的那行日志）：舞台 / hifi / 外部播放器 / 原生
+         * 四条路都没接手、`<audio>` 又是空的时候，按播放键是彻底无操作。用户看到的就是
+         * 「无法暂停和播放」——按下按钮没有任何反应，也没有报错。
+         *
+         * 这时唯一还知道「现在到底在不在放」的就是 `playerState`（它由各处统一维护，
+         * 包括原生播放事件）。照着它反过来做：在播就停，不在播就开始。这和上面
+         * 原生分支的取舍一致 —— 宁可这一下按了有点偏差，也不要按了没反应。
+         */
+        if (playerState === PlayerState.PLAYING) {
+            pausePlayback();
+        } else {
+            startPlaybackFromInteraction();
         }
     }, [activePlaybackContext, audioRef, audioSrc, isNowPlayingStageActive, isTransitionAudible, nativeTakesRef, pausePlayback, playerState, startPlaybackFromInteraction, stageActiveEntryKind]);
 
@@ -288,7 +329,9 @@ export function usePlaybackInteractionBridge({
                     break;
                 }
                 case 'Space':
-                    if (currentSong && (audioSrc || isNowPlayingStageActive || (activePlaybackContext === 'stage' && stageActiveEntryKind === 'lyrics'))) {
+                    // On the HiFi route `audioSrc` is null: mpv has the song. The external player
+                    // is the same: no source, but it does sound the song.
+                    if (currentSong && (audioSrc || isHifiRoute() || isExternalRoute() || isNowPlayingStageActive || (activePlaybackContext === 'stage' && stageActiveEntryKind === 'lyrics'))) {
                         event.preventDefault();
                         if (isNowPlayingStageActive) {
                             return;
@@ -326,7 +369,7 @@ export function usePlaybackInteractionBridge({
                         // Off the motion value, not the element: during a blend that value is driven
                         // by the deck on screen, which is the track this key is meant to move.
                         const nextTime = Math.max(0, currentTime.get() - 5);
-                        if (!seekDuringTransition?.(nextTime) && audioRef.current) {
+                        if (!seekExternalPlayback(nextTime) && !seekHifiRoute(nextTime) && !seekDuringTransition?.(nextTime) && audioRef.current) {
                             audioRef.current.currentTime = nextTime;
                         }
                     }
@@ -362,7 +405,7 @@ export function usePlaybackInteractionBridge({
                         // the element holds the ARRIVING track's length, and clamping this track's
                         // position against it lands past its end.
                         const nextTime = Math.min(duration || 0, currentTime.get() + 5);
-                        if (!seekDuringTransition?.(nextTime) && audioRef.current) {
+                        if (!seekExternalPlayback(nextTime) && !seekHifiRoute(nextTime) && !seekDuringTransition?.(nextTime) && audioRef.current) {
                             audioRef.current.currentTime = nextTime;
                         }
                     }

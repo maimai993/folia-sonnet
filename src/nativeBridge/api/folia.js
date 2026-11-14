@@ -4,6 +4,7 @@ import { weapiRequest, UA } from './weapi.js';
 // 于是都不带 cookie（csrf_token 取不到，上游一律答 301），探索页每一栏都是空的。
 // 具体实现放在这一家自己的目录下（桥的配额只数共享文件里出现的平台名）。
 import { registerAnonymousCookie } from './netease/anonimous.js';
+import { clearSessionOnLogout } from './netease/logout.js';
 import { noteLibraryStep, describePayload } from './libraryTrace.js';
 import {
   getNeteaseCookie,
@@ -72,6 +73,7 @@ import {
 import { clearQQPlatformSessionCookies } from './qq-login-qr.js';
 import {
   claimKGYouthDayVip,
+  clearKGSessionOnLogout,
   ensureKGCookie,
   getKGYouthUnionVip,
   getKGLoginStatus,
@@ -139,6 +141,14 @@ const EXPLORE_PATHS = new Set([
   '/top/song',
   '/album/new',
   '/top/playlist',
+]);
+
+// 听歌档案那几条读接口的路径（见下面 --- 听歌档案 --- 那段）：与探索页一样留痕，
+// 页面空着的时候先看诊断里有没有这几条。
+const ARCHIVE_PATHS = new Set([
+  '/user/record',
+  '/listen/data/total',
+  '/listen/data/realtime/report',
 ]);
 
 async function eapiJson(path, data, cookie) {
@@ -224,6 +234,25 @@ async function weapiJson(path, data, cookie) {
   const cookies = parseCookieString(cookie || '');
   const payload = Object.assign({}, data, { csrf_token: cookies.__csrf || '' });
   return await weapiRequest(path, payload, cookie || '');
+}
+
+/**
+ * 听歌档案那几条读接口的统一出口（见下面 `--- 听歌档案 ---` 那段）。
+ *
+ * 上游答 5xx 时不再往外抛，回桥自己的错误码：抛出去会被上面那层一律当成 network
+ * （「连不上，请稍后重试」），而这里其实是「上游没答对」，两者的排查方向完全不同。
+ */
+async function archiveAnswer(path, run) {
+  try {
+    return await run();
+  } catch (error) {
+    console.warn('[FoliaBridge] 听歌档案读取失败', path, error);
+    return {
+      __foliaBridgeError: 'NETWORK',
+      path,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function profileFromLoginInfo(info) {
@@ -385,21 +414,30 @@ async function handleSearch(url, cookie) {
   if (!keywords) return { code: 200, result: { songs: [], songCount: 0 } };
   const limit = Math.max(1, Math.min(100, numberValue(url.searchParams.get('limit'), 30)));
   const offset = Math.max(0, numberValue(url.searchParams.get('offset'), 0));
+  /*
+   * 搜什么：1 单曲（默认，URL 上可以不给）、10 专辑、1000 歌单。之前这里写死 1，
+   * 于是安卓上专辑和歌单的搜索永远是空 —— 页面侧的 cloudSearch 把 type 拼进 URL，
+   * 这一侧却只按单曲搜。每种的回答字段不同（songs / albums / playlists），
+   * 按种类取列表、回种类的计数。
+   */
+  const searchType = numberValue(url.searchParams.get('type'), 1);
+  const kindOf = (t) => (t === 10 ? 'albums' : t === 1000 ? 'playlists' : 'songs');
+  const kind = kindOf(searchType);
   const body = await eapiJson('/api/cloudsearch/pc', {
     s: keywords,
-    type: 1,
+    type: searchType,
     limit,
     offset,
     total: true,
   }, cookie);
-  if (Array.isArray(body?.result?.songs) && body.result.songs.length > 0) return body;
+  if (Array.isArray(body?.result?.[kind]) && body.result[kind].length > 0) return body;
   const fallback = await eapiJson('/api/search/pc', {
     s: keywords,
-    type: 1,
+    type: searchType,
     limit,
     offset,
   }, cookie);
-  if (Array.isArray(fallback?.result?.songs) && fallback.result.songs.length > 0) return fallback;
+  if (Array.isArray(fallback?.result?.[kind]) && fallback.result[kind].length > 0) return fallback;
 
   const response = await fetch('https://music.163.com/api/search/get/web', {
     method: 'POST',
@@ -411,15 +449,15 @@ async function handleSearch(url, cookie) {
     },
     body: new URLSearchParams({
       s: keywords,
-      type: '1',
+      type: String(searchType),
       limit: String(limit),
       offset: String(offset),
       total: 'true',
     }).toString(),
   });
-  if (!response.ok) return { code: response.status, result: { songs: [], songCount: 0 } };
+  if (!response.ok) return { code: response.status, result: { [kind]: [], songCount: 0, albumCount: 0, playlistCount: 0 } };
   const publicBody = await response.json();
-  return publicBody?.result ? publicBody : { code: 200, result: { songs: [], songCount: 0 } };
+  return publicBody?.result ? publicBody : { code: 200, result: { [kind]: [], songCount: 0, albumCount: 0, playlistCount: 0 } };
 }
 
 async function handleSongDetail(url, cookie) {
@@ -1243,6 +1281,11 @@ async function routeFoliaQqRequest(operation, params, segments, url, cookie) {
 async function handleFoliaKugouRequest(input, url) {
   const operation = String(input.operation || url.pathname);
   const params = mergeOperationParams(input, url);
+  // 登出不能先恢复会话：宿主读罐不回包时，也必须能进入有界清理。
+  if (operation === 'logout') {
+    await clearKGSessionOnLogout();
+    return { status: 1, error_code: 0, code: 200 };
+  }
   const cookie = await ensureKGCookie();
 
   if (operation === 'register_dev') {
@@ -1254,9 +1297,6 @@ async function handleFoliaKugouRequest(input, url) {
   }
   if (operation === 'login_qr_check') {
     return await handleKGLoginQrCheck(firstValue(params.key, params.qrcode));
-  }
-  if (operation === 'logout') {
-    return { status: 1, error_code: 0, code: 200 };
   }
   if (operation === 'user_detail') {
     const info = await getKGLoginStatus(cookie);
@@ -1557,7 +1597,11 @@ export async function handleFoliaApiRequest(input) {
   }
   if (path === '/login/status') return await handleLoginStatus(cookie);
   if (path === '/user/account') return await handleUserAccount(cookie);
-  if (path === '/logout') return { code: 200 };
+  // 登出必须连罐里的登录态一起清掉，否则重开应用又被自动登录（见该模块的说明）。
+  if (path === '/logout') {
+    await clearSessionOnLogout();
+    return { code: 200 };
+  }
   if (path === '/login/qr/key') {
     const result = await handleLoginQrKey();
     return { code: 200, data: { code: 200, unikey: result.key } };
@@ -1646,9 +1690,10 @@ export async function handleFoliaApiRequest(input) {
    *   /album/new           → albums
    *   /top/playlist        → playlists
    */
-  // 探索页这一组走的路由：留痕能看出哪一条被问过（页面空却一条都没有 = 请求根本没到桥）。
+  // 探索页与听歌档案这两组走的路由：留痕能看出哪一条被问过（页面空却一条都没有 = 请求根本没到桥）。
   // 顺带记 cookie 的长度：0 就是这次请求压根没带登录态，上游只会答 301。
-  if (EXPLORE_PATHS.has(path)) noteLibraryStep('netease', 'explore:route', { path, cookie: cookie ? cookie.length : 0 });
+  const routeTrace = EXPLORE_PATHS.has(path) ? 'explore:route' : ARCHIVE_PATHS.has(path) ? 'archive:route' : '';
+  if (routeTrace) noteLibraryStep('netease', routeTrace, { path, cookie: cookie ? cookie.length : 0 });
   if (path === '/homepage/block/page') {
     // 没有 cursor 时**绝不能带 `cursor: ''`**：首页区块这条带上空游标就答不出 blocks，
     // 探索页于是只剩每日推荐那一栏（看着就是「页面是空的」）。
@@ -1707,6 +1752,90 @@ export async function handleFoliaApiRequest(input) {
       offset: numberValue(params.get('offset')),
       total: true,
     }, cookie);
+  }
+
+  /*
+   * --- 听歌档案（#223）---
+   *
+   * 模组读「听歌档案」不走 omni 的 rpc，而是 `platform.raw` → `omni.requestProviderRaw` →
+   * 平台目录里的 raw 模块（`src/services/onlineMusic/<平台>/` 下那个），落到这个桥。
+   * 路径是上游模块名把下划线换成 `/`：`user_record` → `/user/record`、
+   * `listen_data_total` → `/listen/data/total`、`listen_data_realtime_report` →
+   * `/listen/data/realtime/report`。
+   *
+   * 这三条原先一条都没有，全部落到下面末尾的 `ROUTE_NOT_IMPLEMENTED`。上层见到
+   * `__foliaBridgeError` 就抛错，`raw` 那一层把它归成 network，模组界面于是整页显示
+   * 「无法连接，请稍后重试」—— 看着像断网，其实是桥里没这条路由。桌面端走 Electron
+   * 内置后端，这三条本来就有，所以只补桥这一侧。
+   *
+   * 上游包里这三条模块怎么问就怎么抄（`module/` 下的同名文件）：
+   *   user_record                  → weapi POST /api/v1/play/record                 { uid, type }
+   *   listen_data_total            → eapi  POST /api/content/activity/listen/data/total            {}
+   *   listen_data_realtime_report  → eapi  POST /api/content/activity/listen/data/realtime/report  { type }
+   * 加密方式照上游 `util/option.js` 的 `createOption(query, 'weapi')`：只有 `user_record` 显式写
+   * weapi，另外两条吃该包默认的 eapi（config 里 `encrypt: true`）。所以前者用 `readJson`
+   * （weapi + 未加密网关兜底，与 `/album/new` 那一组读接口一样），后者用 `eapiJson`
+   * （与 `/personalized`、`/fm_trash` 一样）。应答原样交回去：`allData`/`weekData`、
+   * `data.totalDuration`、`data.listenTimeDistributionBlock.playDuration` 都靠上游给。
+   * 其它 `listen_data_*` 模块这次不补：模组只用这三条。
+   */
+  if (path === '/user/record') {
+    // 听歌排行。`uid` 由 omni 的 selfParam 填当前登录账号；没给时回退到会话里的 userId
+    // （与 `/likelist` 那条约定的做法一致）。`type` 是上游的取值：1 最近一周，0 所有时间。
+    const uid = firstValue(params.get('uid'), body.uid) || (await requireLoginInfo(cookie))?.userId || '';
+    const type = numberValue(params.get('type'), body.type);
+    return await archiveAnswer(path, () => readJson('/api/v1/play/record', { uid, type }, cookie));
+  }
+  if (path === '/listen/data/total') {
+    // 总收听时长：上游不带参数，账号只从会话里认。
+    return await archiveAnswer(path, () => eapiJson('/api/content/activity/listen/data/total', {}, cookie));
+  }
+  if (path === '/listen/data/realtime/report') {
+    // 本周/本月收听时长。上游只认 `week` / `month`，缺省是 week。
+    const type = firstValue(params.get('type'), body.type, 'week');
+    return await archiveAnswer(
+      path,
+      () => eapiJson('/api/content/activity/listen/data/realtime/report', { type }, cookie),
+    );
+  }
+
+  /*
+   * 「歌曲评论」模组（song-comments）问的两条：
+   *   comment_hot   → weapi POST /api/v1/resource/comments/hotflow              { id, type, limit, offset }
+   *   comment_music → weapi POST /api/v1/resource/comments/R_SO_4_<id>          { limit, offset }
+   *
+   * 和上面那三条一样，原先这里一条都没有，全落到末尾的 ROUTE_NOT_IMPLEMENTED；
+   * 上层见到 `__foliaBridgeError` 就抛错、`raw` 那层一律归成 network，模组界面于是显示
+   * 「无法连接，请稍后重试」—— 看着像断网，其实是桥里没这条路由。
+   *
+   * 两条都走 weapi（与上游 `module/comment_hot.js`、`module/comment_music.js` 一致）：
+   * `type` 是评论所属的資源类型，歌单/歌曲共用这个接口，模组传的是 0（歌曲）。
+   * `R_SO_4_` 是网易给「单曲」的线程前缀，`comment_music` 要拼在路径里而不是放进参数。
+   * 应答原样交回去：`hotComments` / `comments` / `total` 都由上游给。
+   */
+  if (path === '/comment/hot') {
+    const id = firstValue(params.get('id'), body.id);
+    if (!id) return { __foliaBridgeError: 'INVALID_PARAMS', path, message: 'comment_hot 缺少 id' };
+    const payload = {
+      id,
+      // numberValue 取第一个「能转成数字」的值，所以缺省值要放在取值前面。
+      type: numberValue(body.type, params.get('type'), 0),
+      limit: numberValue(params.get('limit'), body.limit, 20),
+      offset: numberValue(params.get('offset'), body.offset, 0),
+    };
+    return await archiveAnswer(path, () => readJson('/api/v1/resource/comments/hotflow', payload, cookie));
+  }
+  if (path === '/comment/music') {
+    const id = firstValue(params.get('id'), body.id);
+    if (!id) return { __foliaBridgeError: 'INVALID_PARAMS', path, message: 'comment_music 缺少 id' };
+    const payload = {
+      limit: numberValue(params.get('limit'), body.limit, 20),
+      offset: numberValue(params.get('offset'), body.offset, 0),
+    };
+    return await archiveAnswer(
+      path,
+      () => readJson(`/api/v1/resource/comments/R_SO_4_${id}`, payload, cookie),
+    );
   }
 
   return {

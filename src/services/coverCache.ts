@@ -22,7 +22,9 @@ const isStoredCoverDescriptor = (value: unknown): value is StoredCoverDescriptor
 };
 
 const buildCoverRequestUrl = (coverUrl: string): string => {
-    if (typeof window !== 'undefined' && window.electron) return coverUrl;
+    // 只认 platform（只有 Electron 的 preload 会写）：安卓端的模组 shim 也装了
+    // `window.electron`，按对象存在与否判断会让安卓跳过下面那段桥接逻辑。
+    if (typeof window !== 'undefined' && typeof window.electron?.platform === 'string') return coverUrl;
     try {
         const hostname = new URL(coverUrl).hostname;
         if (hostname === 'y.gtimg.cn'
@@ -40,7 +42,9 @@ const buildCoverRequestUrl = (coverUrl: string): string => {
     return coverUrl;
 };
 
-const fetchCoverBlob = async (coverUrl: string): Promise<Blob> => {
+// 也在「从某首歌取一张集合封面」的地方用：那边只要一次远程封面的字节。
+export const fetchCoverBlob = async (coverUrl: string): Promise<Blob> => {
+// Also used where a remote cover's bytes are wanted once (a local collection cover taken from a song).
     const response = await fetch(buildCoverRequestUrl(coverUrl), { mode: 'cors' });
     if (response.ok === false) throw new Error(`Cover request failed: ${response.status}`);
     return await response.blob();

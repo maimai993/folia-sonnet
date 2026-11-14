@@ -131,3 +131,34 @@ test('the Bravais group switches the info strip material and the backdrop', asyn
         expect(await page.evaluate(storageKey => localStorage.getItem(storageKey), key)).toBe('true');
     }
 });
+
+// 信息条方向：「反向」不再是单独的一行开关，而是方向列表里的一档「自动（反向）」，并且是默认值。
+// 这条用例盯的是界面本身：四个选项在、默认选中的是反向那一档、点击写进存储、旧的「Reverse」开关没了。
+test('the seam direction lists the reversed automatic and starts on it', async ({ page }) => {
+    await bootHome(page, 'bravais');
+    await openGeneralSettings(page, 'bravaisSettings');
+    const wall = group(page);
+
+    for (const label of ['Automatic', 'Automatic (reversed)', 'Vertical', 'Horizontal']) {
+        await expect(wall.getByRole('button', { name: label, exact: true })).toHaveCount(1);
+    }
+    // 独立的反向开关已经退休：分组里不该再有「Reverse」这一行。
+    await expect(wall.getByRole('switch', { name: 'Reverse', exact: true })).toHaveCount(0);
+
+    const reversed = wall.getByRole('button', { name: 'Automatic (reversed)', exact: true });
+    await expect(reversed).toHaveAttribute('aria-pressed', 'true');
+    await expect(wall.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'false');
+
+    // 选「自动」：写进存储，并且打上迁移标记，下次启动不会再被旧开关折回反向。
+    await wall.getByRole('button', { name: 'Automatic', exact: true }).click();
+    await expect(wall.getByRole('button', { name: 'Automatic', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => [
+        localStorage.getItem('library_wall_seam_direction'),
+        localStorage.getItem('library_wall_seam_direction_migrated'),
+    ])).toEqual(['auto', '1']);
+
+    // 再选回反向那一档：同一个键，取值换成 auto-reverse。
+    await reversed.click();
+    await expect(reversed).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => localStorage.getItem('library_wall_seam_direction'))).toBe('auto-reverse');
+});

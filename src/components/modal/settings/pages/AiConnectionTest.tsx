@@ -10,8 +10,17 @@ import { canRunAiConnectionTest, runAiConnectionTest } from '../../../../service
 /**
  * Runs the test against the values currently in the form, exactly as typed. An empty key field
  * tests the key the main process has saved; `keySaved` says whether there is one.
+ *
+ * `localRun` overrides where the test runs. The free channel (foliawork) has no credential to keep
+ * in the main process, and its request is a native one the main process does not speak, so that
+ * provider tests itself from the renderer. Everything else goes through the main process, which is
+ * the only place a saved key can be used from.
  */
-export const useAiConnectionTest = (payload: AiConnectionTestPayload, keySaved?: boolean) => {
+export const useAiConnectionTest = (
+    payload: AiConnectionTestPayload,
+    keySaved?: boolean,
+    localRun?: () => Promise<AiConnectionTestResult>,
+) => {
     const [running, setRunning] = React.useState(false);
     const [result, setResult] = React.useState<AiConnectionTestResult | null>(null);
     // Each click gets a number; a reply is only shown if it is still the latest one. Unmounting
@@ -31,7 +40,7 @@ export const useAiConnectionTest = (payload: AiConnectionTestPayload, keySaved?:
     }, [payload.provider, payload.presetId, payload.apiKey, payload.apiUrl, payload.model, payload.stream, payload.useSystemProxy, keySaved]);
 
     const run = async () => {
-        if (running || !canRunAiConnectionTest()) {
+        if (running || (!localRun && !canRunAiConnectionTest())) {
             return;
         }
         const seq = requestSeqRef.current + 1;
@@ -40,7 +49,7 @@ export const useAiConnectionTest = (payload: AiConnectionTestPayload, keySaved?:
         setResult(null);
         let next: AiConnectionTestResult;
         try {
-            next = await runAiConnectionTest(payload);
+            next = localRun ? await localRun() : await runAiConnectionTest(payload);
         } catch (error) {
             next = {
                 ok: false,

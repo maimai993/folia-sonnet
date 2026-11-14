@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { PlayerState, type Theme, type VisualizerMode } from '../../types';
 import type { VisualizerBackgroundConfig } from './backgrounds/definition';
@@ -23,6 +23,7 @@ import {
 } from '../../stores/usePlaybackStore';
 import { getSongAlbumLabel, getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { getVisualizerRegistryEntry } from './registry';
+import { getVisualizerTuning } from './tuningRegistry';
 import { useVisualizerBackgroundConfig } from './useVisualizerBackgroundConfig';
 import { useVisualizerStyleAssets } from './useVisualizerStyleAssets';
 import { useVisualizerTunings } from './useVisualizerTunings';
@@ -32,6 +33,7 @@ import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { selectLibraryPlayerBackdrop, useLibraryPlayerOcclusionStore } from '../../stores/useLibraryPlayerOcclusionStore';
 import { resolveVisualizerShowText } from '../app/presentation/playerVisualizerBackdrop';
 import { useBackgroundLyricHoldStore } from '../app/backgroundThrottling/backgroundLyricHoldStore';
+import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 
 // src/components/visualizer/useVisualizerRendererModel.ts
 //
@@ -85,6 +87,13 @@ export const useVisualizerRendererModel = ({
     const visualizerOpacity = useVisualizerSettingsStore(state => state.visualizerOpacity);
     const disableGeometricBackground = useVisualizerSettingsStore(state => state.disableVisualizerGeometricBackground);
     const onMonetTuningChange = useVisualizerSettingsStore(state => state.handleSetMonetTuning);
+    // A change the style on screen makes to its own tuning (Machi's camera dragged to a pinned view): saved through
+    // the store action its tuning.ts names (an action needs no subscription).
+    const onVisualizerTuningChange = useCallback((patch: object) => {
+        const tuning = getVisualizerTuning(visualizerMode);
+        const save = tuning && (useVisualizerSettingsStore.getState() as unknown as Record<string, unknown>)[tuning.settingsSetterKey];
+        if (typeof save === 'function') save(patch);
+    }, [visualizerMode]);
     const typography = useTypographySettingsStore(useShallow(state => ({
         lyricsFontScale: state.lyricsFontScale,
         subtitleFontScale: state.subtitleFontScale,
@@ -95,6 +104,7 @@ export const useVisualizerRendererModel = ({
         harmonySubtitleBackground: state.harmonySubtitleBackground,
         showSubtitleTranslation: state.showSubtitleTranslation,
         subtitleContentMode: state.subtitleContentMode,
+        subtitleOverlayLayout: state.subtitleOverlayLayout,
     })));
     const assets = useVisualizerStyleAssets();
     const currentLineIndex = usePlaybackStore(state => state.currentLineIndex);
@@ -153,6 +163,9 @@ export const useVisualizerRendererModel = ({
         songArtist,
         songAlbum,
         coverUrl: displayCoverUrl,
+        // 歌词一直画。曾经有个「MV 时只留视频」的开关会把它关掉，但那件事现在由
+        // 「强制 MV」这一款背景自己表达 —— 想要只有画面的视频，选那一款就行，
+        // 不必再单独记一个和背景打架的开关。
         showText: resolveVisualizerShowText({ currentView, isSettingsModalOpen, isPanelOpen, backdropLyrics }),
         seed,
         songHandoff,
@@ -170,6 +183,7 @@ export const useVisualizerRendererModel = ({
         isPlayerChromeHidden,
         hideTranslationSubtitle,
         visualizerTunings,
+        onVisualizerTuningChange,
         onMonetTuningChange,
         ...assets,
         // Only a style that reads a click on a lyric line says so in its entry; the rest have no line

@@ -102,6 +102,11 @@ beforeEach(() => {
         canRunLoginSelfCheck: vi.fn().mockReturnValue(false),
         runLoginSelfCheck: vi.fn().mockResolvedValue(null),
         loginWithPassword: vi.fn(async () => null),
+        checksAfterLogin: vi.fn().mockReturnValue(false),
+        checkAfterLogin: vi.fn().mockResolvedValue(null),
+        hasSetup: vi.fn().mockReturnValue(false),
+        getSetup: vi.fn().mockResolvedValue(null),
+        runSetupAction: vi.fn(),
         dropRequestLimits: vi.fn(),
     };
 });

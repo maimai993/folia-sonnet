@@ -25,17 +25,19 @@ GitHub 只运行 `.github/workflows/*.yml`，子目录不读。所以那里只�
 git switch -c fix/登录超时 origin/dev                  # 1. 从 dev 切一个分支，别再往 main/dev 上写
 # ...改代码...
 git add -A && git commit -m "fix: 登录超时后不再卡住"    # 2. 提交
-npm run pr -- "fix: 登录超时后不再卡住"                  # 3. 本地门禁 → 推分支 → 建 PR（一条命令）
+npm run pr -- "fix: 登录超时后不再卡住" --issue 42       # 3. 本地门禁 → 推分支 → 建 PR（一条命令）
 # 4. 盯 CI：有 gh 用 gh pr checks <PR号> --watch，没有就开 PR 页面的 Checks 标签
 ```
 
 `npm run pr` 会做这些事，做不了就当场说清楚原因：
 
 - 拒绝在 `main` / `dev` 上直接提 PR；
+- `fix/*` 分支要求 `--issue <编号>`：先 `gh issue create` 提 issue，正文会自动写一行 `Closes #编号`（新功能 / 文档不强制，有相关任务自己在正文补 `Refs #编号`）；
 - 拒绝还有没提交的改动；
 - 先跑 `npm run ci:local`（加 `--skip-ci` 可跳过，但 CI 照样拦你）；
 - `git push -u origin` 当前分支（HTTPS 或 SSH 都行，用你 git 自己的凭据）；
-- 有可用的 `gh` 就 `gh pr create --base dev`；没有就打印一个 **compare 链接**，浏览器打开点 Create pull request；
+- **fork 场景**：配了 `upstream` remote 且与 `origin` 不同时，PR 建到 upstream，head 写 `<fork 的 owner>:<分支>`；`--repo owner/repo` 可以手动指定目标仓库。没有 gh 时打印的 compare 链接同样指向目标仓库；
+- 有可用的 `gh` 就 `gh pr create --repo <目标仓库> --base dev`（fork 时加 `--head owner:分支`）；没有就打印一个 **compare 链接**，浏览器打开点 Create pull request；
 - 最后打印「盯 CI」和「要 review」的下一步。
 
 **`gh` 是可选的**，不是硬依赖：

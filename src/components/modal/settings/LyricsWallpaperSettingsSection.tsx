@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Store, Video } from 'lucide-react';
+import { Video } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SettingsRow from './SettingsRow';
 import { settingsDividerClassFor } from './settingsCardClasses';
 import { Button, RangeInput, Reveal, Segmented, Toggle } from './kit';
+import MarketEntryButton from './pages/integration/market/MarketEntryButton';
 import { WALLPAPER } from './pages/appearance/options';
 import { useVisualizerSettingsStore } from '../../../stores/useVisualizerSettingsStore';
 import { encodeWallpaperImage } from '../../../utils/wallpaperImage';
@@ -18,13 +19,7 @@ import {
     openLyricsWallpaperPicker,
     pickWallpaperFont,
     pickWallpaperVideo,
-    setWallpaperFont,
 } from '../../../platform/foliaWallpaper';
-import FontMarketDialog from '../FontMarketDialog';
-import {
-    readFontMarketChoice,
-    type FontMarketSelection,
-} from '../../../services/fontMarket';
 import { Button as UiButton, TextField } from '@/components/ui';
 import LyricsWallpaperFloatingRows from './LyricsWallpaperFloatingRows';
 import LyricsWallpaperOverlayRows from './LyricsWallpaperOverlayRows';
@@ -38,7 +33,7 @@ import LyricsWallpaperOverlayRows from './LyricsWallpaperOverlayRows';
 // 不是一回事；放在图形设置里，调歌词样式的人根本找不到。所以整节搬到「外观 → 歌词
 // 动画」，跟「歌词动画样式」那个入口挨在一起。
 
-/** 壁纸背景四种模式的文案键。列成一张表，加一种模式时只改这一处。 */
+/** 壁纸背景模式的文案键。列成一张表，加一种模式时只改这一处。 */
 const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video', string> = {
     cover: 'options.lyricsWallpaperBackgroundCover',
     color: 'options.lyricsWallpaperBackgroundColor',
@@ -48,12 +43,10 @@ const BACKGROUND_LABEL_KEYS: Record<'cover' | 'color' | 'image' | 'video', strin
 
 type LyricsWallpaperSettingsSectionProps = {
     isDaylight: boolean;
-    rangeInputClass: string;
 };
 
 const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionProps> = ({
     isDaylight,
-    rangeInputClass,
 }) => {
     const { t } = useTranslation();
     const lyricsWallpaperFeed = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
@@ -134,18 +127,31 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
     };
 
     const handleOpenWallpaperPicker = () => {
-        void openLyricsWallpaperPicker();
+        void openLyricsWallpaperPicker().then((outcome) => {
+            /*
+             * 以前这里不看结果，没权限时点按钮毫无反应。
+             * 现在把结果告诉用户：进了系统设置就说明去放行，压根打不开也要说一声。
+             */
+            if (outcome === 'needsPermission') {
+                setWallpaperPickerNotice('settings');
+            } else if (outcome === 'unavailable') {
+                setWallpaperPickerNotice('unavailable');
+            } else if (outcome === 'alreadyActive') {
+                setWallpaperPickerNotice('active');
+            }
+        });
         // 系统选择器要用户手动确认，返回后状态才变，延后复查一次。
         window.setTimeout(() => {
             void isLyricsWallpaperActive().then(setIsWallpaperActive);
         }, 3000);
     };
 
+    /** 打开选择器之后的提示：没权限时要明确告诉用户去授权。 */
+    const [wallpaperPickerNotice, setWallpaperPickerNotice] = useState<'settings' | 'unavailable' | 'active' | null>(null);
+
     // 字体是原生落在私有目录里的文件，应用这边只缓存一个「有没有」用于按钮文案。
     const [hasWallpaperFont, setHasWallpaperFont] = useState(false);
-    const [fontNotice, setFontNotice] = useState<'applied' | 'rejected' | null>(null);
-    const [isFontMarketOpen, setIsFontMarketOpen] = useState(false);
-    const [fontMarketChoice, setFontMarketChoice] = useState(() => readFontMarketChoice());
+    const [fontNotice, setFontNotice] = useState<'applied' | 'appliedAppOnly' | 'rejected' | null>(null);
 
     React.useEffect(() => {
         if (!isAndroid) return;
@@ -188,27 +194,15 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
     };
 
     /*
-     * 从字体市场挑一款：下载字体字节 → 网页侧注册（App 里能立刻看到）→
-     * 字节推给原生（壁纸 / 叠层那两层是自绘的，读不到网页注册的字体）。
+     * 从字体市场挑一款。
+     *
+     * 字体市场现在是 ZeoSeven 的切片 WebFont：它按 unicode-range 拆成几百个 woff2，
+     * 由浏览器按需下发。网页侧（App 界面、歌词）直接就能用，效果立刻可见。
+     *
+     * 但**壁纸与叠层那两层是原生自绘的**，它们要的是一个完整字体文件（base64 推下去落盘），
+     * 而切片字体拼不出整包 —— 所以那里用不了市场字体。这种情况下不假装成功：把提示
+     * 换成「已在应用内生效，壁纸请用本地字体文件」，而不是静默传个空串让壁纸回落到系统字体。
      */
-    const handleUseMarketFont = async (result: FontMarketSelection & { base64?: string }) => {
-        try {
-            await setWallpaperFont(result.base64 ?? null);
-            setFontMarketChoice({
-                id: result.id,
-                family: result.family,
-                label: result.label,
-                previewUrl: result.previewUrl,
-            });
-            setHasWallpaperFont(true);
-            setFontNotice('applied');
-        } catch (error) {
-            setFontNotice('rejected');
-            console.warn('[FontMarket] 安装字体失败', error);
-        }
-        window.setTimeout(() => setFontNotice(null), 3200);
-    };
-
     const dividerClass = settingsDividerClassFor(isDaylight);
 
     /* 非安卓平台整节不渲染 —— 放在 hooks 之后，订阅顺序才稳定。 */
@@ -232,7 +226,19 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                         </Button>
                     )}
                     dividerClass={dividerClass}
-                />
+                >
+                    {/* 提示挂在「设为壁纸」这一行内部，不另起一块 ——
+                        之前插成独立 div 会把下面的「样式」整行顶下去，看着像错位。 */}
+                    {wallpaperPickerNotice && (
+                        <p className="mt-1.5 text-[12px] leading-5 text-[var(--st-t2)]">
+                            {wallpaperPickerNotice === 'settings'
+                                ? t('options.lyricsWallpaperNeedPermission')
+                                : wallpaperPickerNotice === 'active'
+                                    ? t('options.lyricsWallpaperAlreadyActive')
+                                    : t('options.lyricsWallpaperPickerUnavailable')}
+                        </p>
+                    )}
+                </SettingsRow>
                 <SettingsRow
                     option={WALLPAPER.style}
                     description={lyricsWallpaperStyle === 'minimal'
@@ -324,6 +330,8 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                                         ? 'options.lyricsWallpaperReplaceVideo'
                                         : 'options.lyricsWallpaperPickVideo')}
                                 </Button>
+                                {/* 视频背景旁边给市场入口：视频才有「横屏进竖屏」的裁切需求。 */}
+                                <MarketEntryButton tab="background" />
                                 {hasVideo && (
                                     <UiButton
                                         onClick={() => void handleClearVideo()}
@@ -355,7 +363,6 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                             step={5}
                             value={Math.round(lyricsWallpaperBlur * 100)}
                             onChange={value => onSetLyricsWallpaperBlur(value / 100)}
-                            className={rangeInputClass}
                             ariaLabel={t('options.lyricsWallpaperBlurValue')}
                         />
                     </div>
@@ -395,9 +402,8 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                                         ? t('options.lyricsWallpaperReplaceFont')
                                         : t('options.lyricsWallpaperPickFont')}
                                 </Button>
-                                <Button icon={Store} onClick={() => setIsFontMarketOpen(true)}>
-                                    {t('options.fontMarket')}
-                                </Button>
+                                {/* 字体旁边给市场入口，和设置里的「市场」是同一个面板。 */}
+                                <MarketEntryButton tab="font" />
                             </div>
                         )}
                         dividerClass={dividerClass}
@@ -413,9 +419,11 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                             >
                                 {fontNotice === 'applied'
                                     ? t('options.lyricsWallpaperFontApplied')
-                                    : fontNotice === 'rejected'
-                                        ? t('options.lyricsWallpaperFontFailed')
-                                        : ''}
+                                    : fontNotice === 'appliedAppOnly'
+                                        ? t('options.lyricsWallpaperFontAppliedAppOnly')
+                                        : fontNotice === 'rejected'
+                                            ? t('options.lyricsWallpaperFontFailed')
+                                            : ''}
                             </span>
                             {hasWallpaperFont && (
                                 <UiButton
@@ -435,17 +443,6 @@ const LyricsWallpaperSettingsSection: React.FC<LyricsWallpaperSettingsSectionPro
                     dividerClass={dividerClass}
                     isLast
                 />
-            <FontMarketDialog
-                isOpen={isFontMarketOpen}
-                onClose={() => setIsFontMarketOpen(false)}
-                isDaylight={isDaylight}
-                currentFamily={fontMarketChoice?.family ?? null}
-                onUseFont={handleUseMarketFont}
-                onPickLocalFont={() => {
-                    setIsFontMarketOpen(false);
-                    void handlePickWallpaperFont();
-                }}
-            />
         </div>
     );
 };

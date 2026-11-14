@@ -8,7 +8,7 @@ import type { OmniExploreItem, OmniExploreSection } from '@/types/onlineMusic';
 const omni = vi.hoisted(() => ({ getExploreFeed: vi.fn(), getExploreSectionItems: vi.fn() }));
 vi.mock('@/services/onlineMusic/omni', () => ({ omni }));
 import { exploreScroll, useExploreFeedStore } from '@/stores/useExploreFeedStore';
-import { resetExploreMemory } from '@/utils/exploreFeedMemory';
+import { resetExploreMemory } from '@/stores/exploreFeedMemory';
 
 const item = (id: string): OmniExploreItem => ({ kind: 'collection', collection: { providerId: 'ytm', id, name: id, type: 'playlist' } });
 const section = (id: string, extra: Partial<OmniExploreSection> = {}): OmniExploreSection => ({ id, title: id, items: [item(`${id}-1`)], ...extra });
@@ -525,19 +525,23 @@ describe('explore feed store', () => {
         // The whole first batch is of collections the listener took out of their library.
         store().noteSaved({ providerId: 'ytm', type: 'playlist', id: 'l1' }, false);
         store().noteSaved({ providerId: 'ytm', type: 'playlist', id: 'l2' }, false);
-        const page = () => ({ sections: [titled('library', ['l1', 'l2'], { moreCursor: 'library-3' }), titled('other', ['o1'])] });
+        // One page, kept: a provider answers the same headings every time, so `page` must not make new
+        // ids, or the section looked up here is not the one the store keeps.
+        const pageSections = [titled('library', ['l1', 'l2'], { moreCursor: 'library-3' }), titled('other', ['o1'])];
+        const page = () => ({ sections: pageSections });
+        const libraryOf = () => feed().sections.filter(shown => shown.title === 'library');
         omni.getExploreFeed.mockImplementation(async () => page());
         omni.getExploreSectionItems.mockResolvedValueOnce({ items: [item('l3'), item('l4'), item('l5')] });
         store().show('ytm:me:en');
         await vi.waitFor(() => expect(feed().status).toBe('ready'));
         expect(shownIn('library')).toEqual([]);
-        expect(feed().kept[feed().sections[0].id]).toMatchObject({ size: 2, pool: [] });
+        expect(feed().kept[libraryOf()[0].id]).toMatchObject({ size: 2, pool: [] });
         await refreshed();
         expect(shownIn('library')).toEqual(['l3', 'l4']);
         // The one entry behind the ones shown is taken out: the section no longer says it has more.
-        expect(feed().sections[0].moreCursor).toBeTruthy();
+        expect(libraryOf()[0].moreCursor).toBeTruthy();
         store().noteSaved({ providerId: 'ytm', type: 'playlist', id: 'l5' }, false);
-        expect(feed().sections[0].moreCursor).toBeUndefined();
+        expect(libraryOf()[0].moreCursor).toBeUndefined();
         for (const id of ['l1', 'l2', 'l5']) store().noteSaved({ providerId: 'ytm', type: 'playlist', id }, true);
     });
 

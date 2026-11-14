@@ -1,5 +1,6 @@
 import type { ModRuntimeInfo } from '../types';
 import { invokeModRpc, invokeModStorage } from '../ipc';
+import { callBuiltinRpc } from '../builtin/builtinRpc';
 import {
     type FoliumClientApi,
     type FoliumContextKind,
@@ -39,6 +40,7 @@ import { addFoliumRpcListener, FOLIUM_RPC_NAME_PATTERN } from './rpcMessages';
 import { createFoliumAccountService } from './account';
 import { createFoliumOmniService } from './omni/service';
 import { createFoliumEqualizerService } from './equalizer/service';
+import { createFoliumVisualizerService } from './visualizer/service';
 
 // src/mods/folium/api.ts
 // Builds the `folium` object one mod's client entry receives. Everything is
@@ -122,6 +124,15 @@ const unwrap = async <T>(response: Promise<{ ok: boolean; result?: unknown; erro
         throw new Error(settled.error ?? 'folium-call-failed');
     }
     return settled.result as T;
+};
+
+/*
+ * `folium.rpc.call`: 内置模组（随包、没有主进程入口）由渲染进程里的处理表回答，其余照旧问主进程
+ * （builtin/builtinRpc.ts）。问不到处理表时才走 IPC，所以桌面端装的同一个模组还按老路走它的 main 入口。
+ */
+const callFoliumRpc = async <T>(modId: string, name: string, args: unknown[]): Promise<T> => {
+    const builtin = await callBuiltinRpc(modId, name, args);
+    return unwrap<T>(Promise.resolve(builtin ?? invokeModRpc(modId, name, args)));
 };
 
 const createStorage = (modId: string, context: FoliumContextKind): FoliumStorage => {
@@ -252,7 +263,7 @@ export const createFoliumClientApi = (mod: ModRuntimeInfo, options: FoliumClient
     });
     const rpc = Object.freeze({
         call: <T>(name: string, ...args: unknown[]): Promise<T> => (
-            context === 'main' ? unwrap<T>(invokeModRpc(modId, name, args)) : unavailable('rpc', context)
+            context === 'main' ? callFoliumRpc<T>(modId, name, args) : unavailable('rpc', context)
         ),
         on: (name: string, listener: (payload: unknown) => void): FoliumDisposer => {
             if (typeof name !== 'string' || !FOLIUM_RPC_NAME_PATTERN.test(name)) {
@@ -322,6 +333,9 @@ export const createFoliumClientApi = (mod: ModRuntimeInfo, options: FoliumClient
         // Folium 1.7: the host's equalizer (equalizer/service.ts; the main window installs the source,
         // runtime/equalizer/hostEqualizer.ts).
         equalizer: createFoliumEqualizerService(mod, context, stopped),
+        // Folium 1.8: the global lyric render quality, the mode, the builtin modes' tuning and the beat effects
+        // (visualizer/service.ts; the main window installs the source, runtime/visualizer/hostVisualizer.ts).
+        visualizer: createFoliumVisualizerService(mod, context, stopped),
         every: scope.every,
         onDispose: scope.onDispose,
         experimental,

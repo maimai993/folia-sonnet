@@ -12,6 +12,7 @@ import type {
     ModsListPayload,
     ModExportProgress,
 } from './types';
+import { builtinModRuntimeInfos } from './builtin/builtinMods';
 
 // src/mods/ipc.ts
 // Typed access to the preload bridge under window.electron.mods. Every call
@@ -20,7 +21,24 @@ import type {
 
 const bridge = (): NonNullable<typeof window.electron>['mods'] => window.electron?.mods;
 
-export const isModsBridgeAvailable = (): boolean => Boolean(window.electron?.mods);
+/**
+ * 有没有可用的模组通道。
+ *
+ * 桌面：主进程的 `window.electron.mods`。
+ * 安卓：没有主进程，但**随包内置的模组**照样能跑（builtinMods.ts 走同源静态地址，
+ * 绕开安装与清单）。原来这里只问桌面桥，安卓上恒为 false，
+ * 于是设置里的模组页整块变成「模组仅在桌面端可用」——
+ * 而那些内置模组本来就是给这个 App 用的。
+ */
+export const isModsBridgeAvailable = (): boolean => (
+    Boolean(window.electron?.mods) || hasBuiltinMods()
+);
+
+/** 这个构建里有没有随包内置的模组。 */
+const hasBuiltinMods = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    return builtinModRuntimeInfos().length > 0;
+};
 
 const EMPTY_PAYLOAD: ModsListPayload = {
     mods: [],
@@ -32,7 +50,15 @@ const EMPTY_PAYLOAD: ModsListPayload = {
 export const listMods = async (): Promise<ModsListPayload> => {
     const api = bridge();
     if (!api) {
-        return EMPTY_PAYLOAD;
+        /*
+         * 没有桌面桥：把内置模组当成清单交出去。
+         *
+         * 这样模组管理界面能列出它们、能开关，用户也能看到包里有什��� ——
+         * 而在此之前安卓上只会显示一句「仅桌面端可用」。
+         * ffmpeg / directories 留空：这两样是主进程才有的东西，
+         * 面向它们的按钮由界面按这个空值自行收起。
+         */
+        return { ...EMPTY_PAYLOAD, mods: builtinModRuntimeInfos() };
     }
     try {
         const payload = await api.listMods();
@@ -200,6 +226,32 @@ export const installModFromZip = async (
 ): Promise<{ ok: boolean; id?: string; error?: string }> => {
     const response = await bridge()?.installModFromZip(zipPath);
     return response ?? { ok: false, error: 'no-electron-bridge' };
+};
+
+/**
+ * 从 `<input type=file>` 选出来的 zip（字节以 base64 递进来）安装模组。
+ *
+ * 只有安卓的桥提供这个方法：桌面上拿得到真实路径，走 `installModFromZip` 就够了。
+ */
+export const installModFromZipFile = async (
+    file: { name: string; base64: string },
+): Promise<{ ok: boolean; id?: string; error?: string }> => {
+    const api = bridge() as { installModFromZipFile?: (input: { name: string; base64: string }) => Promise<{ ok: boolean; id?: string; error?: string }> } | undefined;
+    if (typeof api?.installModFromZipFile !== 'function') {
+        return { ok: false, error: 'unsupported-on-platform' };
+    }
+    return (await api.installModFromZipFile(file)) ?? { ok: false, error: 'install-failed' };
+};
+
+/** 卸载一个模组（安卓端删目录并回最新清单）。 */
+export const deleteMod = async (
+    modId: string,
+): Promise<{ ok: boolean; error?: string; mods?: ModRuntimeInfo[] }> => {
+    const api = bridge() as { deleteMod?: (id: string) => Promise<{ ok: boolean; error?: string; mods?: ModRuntimeInfo[] }> } | undefined;
+    if (typeof api?.deleteMod !== 'function') {
+        return { ok: false, error: 'unsupported-on-platform' };
+    }
+    return (await api.deleteMod(modId)) ?? { ok: false, error: 'delete-failed' };
 };
 
 /** Bytes a mod keeps on disk (data and cache); disabled mods included, broken entries refused. */

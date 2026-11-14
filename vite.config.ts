@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react';
 import { commandPinyinPlugin } from './dev/pinyin/commandPinyinPlugin.mjs';
 import { traditionalLocalePlugin } from './dev/i18n/traditionalLocalePlugin.mjs';
 import { icuFoliaDataPlugin } from './dev/icuFolia/icuFoliaDataPlugin.mjs';
+import { nebbiaStrokesPlugin } from './dev/nebbia/nebbiaStrokesPlugin.mjs';
 import { normalizeBuildCommit, resolveBuildKind, resolveBuildRepo, resolveDevBuildKindOverride } from './dev/build/buildIdentity.mjs';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
@@ -202,6 +203,12 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
   const buildKind = resolveDevBuildKindOverride(_config.command, process.env) ?? resolveBuildKind(process.env);
 
   const appVersionLabel = process.env.APP_VERSION_LABEL?.trim() || 'Realeco';
+  // 应用内显示的版本号：测试版写在 package.json 的 displayVersion 里（桌面打包只吃三段 semver，
+  // `.devN` 或四段会被 electron-builder 改写），没写就用 version。
+  const packageVersion = ((): string => {
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'));
+    return String(pkg.displayVersion ?? pkg.version);
+  })();
   const appReleaseChannel = process.env.APP_RELEASE_CHANNEL?.trim().toLowerCase() || 'realeco';
   const dockerStackVersion = process.env.DOCKER_STACK_VERSION?.trim() || '';
 
@@ -221,6 +228,9 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       format: 'es'
     },
     optimizeDeps: {
+      // The app's own pages only. Left to its default (every **/*.html under the root) the startup
+      // dep scan also crawls each git worktree under .claude/worktrees, a whole copy of the app apiece.
+      entries: ['*.html'],
       // Only metadataParser.worker.ts imports music-metadata, and the startup dep scan does not
       // follow worker entries. Left out, the first local import discovers it at runtime, Vite
       // re-optimizes, and every open page is force-reloaded ("optimized dependencies changed").
@@ -276,7 +286,10 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
         // extracting Electron into release/win-unpacked.tmp and renaming it to release/win-unpacked.
         // On Windows that rename fails with EPERM while anything holds the directory - so a dev
         // server left running in another terminal kills every `npm run build:electron`.
-        ignored: ['**/release/**', '**/models/**'],
+        // .claude holds the git worktrees of parallel sessions, each a full checkout of the repo:
+        // watched, they cost one handle per file (hundreds of thousands on Windows), and setting
+        // those up starves the dev server for minutes before it answers the first page.
+        ignored: ['**/release/**', '**/models/**', '**/.claude/**'],
       },
     },
     plugins: [
@@ -284,6 +297,7 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       commandPinyinPlugin(),
       traditionalLocalePlugin(),
       icuFoliaDataPlugin(),
+      nebbiaStrokesPlugin(),
       react(),
       ...(isCapacitorBuild ? [] : [VitePWA({
         registerType: 'autoUpdate',
@@ -342,7 +356,8 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       '__BUILD_COMMIT__': JSON.stringify(buildCommit),
       '__BUILD_KIND__': JSON.stringify(buildKind.kind),
       '__BUILD_HOST__': JSON.stringify(buildKind.host ?? ''),
-      '__APP_VERSION__': JSON.stringify(JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8')).version),
+      // 测试版的名字在 displayVersion 里（桌面打包只吃三段 semver，见 android/app/build.gradle）。
+      '__APP_VERSION__': JSON.stringify(packageVersion),
       '__APP_VERSION_LABEL__': JSON.stringify(appVersionLabel),
       '__APP_RELEASE_CHANNEL__': JSON.stringify(appReleaseChannel),
       '__DOCKER_STACK_VERSION__': JSON.stringify(dockerStackVersion)

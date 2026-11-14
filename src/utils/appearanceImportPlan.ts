@@ -17,9 +17,9 @@ import type { UrlBackgroundItem } from '../types';
 // auto-switch value can also flip "prefer custom theme" — a setting that is not in the config at
 // all and would otherwise change with no warning.
 
-export type ImportGroup = 'theme' | 'visualizer' | 'fonts' | 'background' | 'songTheme' | 'trackCard' | 'libraryWall';
+export type ImportGroup = 'theme' | 'visualizer' | 'fonts' | 'background' | 'songTheme' | 'trackCard' | 'libraryWall' | 'liquidGlass';
 
-export const IMPORT_GROUPS: ImportGroup[] = ['theme', 'visualizer', 'fonts', 'background', 'songTheme', 'trackCard', 'libraryWall'];
+export const IMPORT_GROUPS: ImportGroup[] = ['theme', 'visualizer', 'fonts', 'background', 'songTheme', 'trackCard', 'libraryWall', 'liquidGlass'];
 
 export interface ImportChange {
     group: ImportGroup;
@@ -72,9 +72,11 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     randomVisualizerModePerSong: 'visualizer',
     randomVisualizerModes: 'visualizer',
     visualizerOpacity: 'visualizer',
+    lyricRenderQuality: 'visualizer',
     hidePlayerTranslationSubtitle: 'visualizer',
     showSubtitleTranslation: 'visualizer',
     subtitleContentMode: 'visualizer',
+    subtitleOverlayLayout: 'visualizer',
     subtitleOverlayBackground: 'visualizer',
     subtitleUpcomingLyricsBlur: 'visualizer',
     subtitleOverlayOpacity: 'visualizer',
@@ -139,6 +141,8 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     stageTrackPillMode: 'trackCard',
     stageTrackPillTimeoutSec: 'trackCard',
     stageTrackPillOnHome: 'trackCard',
+    stageTrackPillPosition: 'trackCard',
+    stageTrackPillInObs: 'trackCard',
 
     // The bravais wall's collection stack edges. Its own group: it styles the library wall, not the
     // picture or the card, and someone taking a look for its colours has a reason to leave it alone.
@@ -149,7 +153,22 @@ const FIELD_GROUPS: Record<string, ImportGroup> = {
     libraryWallBackdropLyrics: 'libraryWall',
     libraryWallBackdropBlur: 'libraryWall',
     libraryWallSeamDirection: 'libraryWall',
-    libraryWallSeamDirectionReverse: 'libraryWall',
+
+    // 播放页标题栏后面的磨砂底。归在 visualizer 组，和同样会跟着导出的
+    // hidePlayerTranslationSubtitle 一起：它属于「播放页长什么样」。
+    playerHeaderBlur: 'visualizer',
+
+    // 液态玻璃自成一组：它改的是整个界面的材质，不是播放页的画面；只换配色的人没有理由
+    // 连它也一起换过来，而想要这套观感的人会一次全取。
+    liquidGlass: 'liquidGlass',
+    // Numbering only the playing song styles the tiles of both walls (queue collage and bravais): the
+    // library wall group is where the other tile looks are.
+    latticeBadgeCurrentOnly: 'libraryWall',
+    // The scratchpad's side tab sits on the library's edge and follows the wall's look: same group.
+    scratchpadHandleStyle: 'libraryWall',
+
+    // The frosted bar behind the player page's titlebar. Under visualizer with the other player-page
+    // switch that travels (hidePlayerTranslationSubtitle): it is part of how the playing screen looks.
 };
 
 // Fields the import applies only when the incoming value is truthy, so an incoming null means "the
@@ -161,6 +180,8 @@ const TRUTHY_GUARDED_FIELDS = new Set([
     // applyImportedConfig only applies subtitleContentMode for the known enum values, all of which
     // are truthy strings, so an empty/absent one is skipped there the same as here.
     'subtitleContentMode',
+    // Likewise applied only when it parses as a layout, every one of which is a non-empty string.
+    'subtitleOverlayLayout',
     'lyricsFontStyle',
     'lyricsFontFallbackFamilies',
     'lyricsCustomFontFamily',
@@ -193,8 +214,10 @@ const TRUTHY_GUARDED_FIELDS = new Set([
     'stageTrackPillMode',
     // applyImportedConfig only applies a known info strip preset, all of which are truthy strings.
     'libraryWallSeamStyle',
-    // Likewise a known info strip direction (auto / vertical / horizontal).
+    // Likewise a known info strip direction (auto / auto-reverse / vertical / horizontal).
     'libraryWallSeamDirection',
+    // Likewise a known scratchpad side tab style.
+    'scratchpadHandleStyle',
 ]);
 
 // Per-renderer tunings the import skips whenever the visualizerTunings bundle is present. The three
@@ -338,6 +361,12 @@ const diffLeaves = (from: unknown, to: unknown, group: ImportGroup, prefix = '')
     return leaves;
 };
 
+// Fields carried as one object that the apply path writes whole, so the plan reports them as a
+// single row instead of opening them into leaves. A child key here is a dotted path
+// (`liquidGlass.blur`), which `applyImportedConfig`'s `keys` never contains — the row would be
+// checkable and do nothing.
+const WHOLE_OBJECT_FIELDS = new Set(['liquidGlass']);
+
 export interface ImportPlanInput {
     // decompressConfig output.
     incoming: Record<string, unknown>;
@@ -348,7 +377,7 @@ export interface ImportPlanInput {
     // Only a system font family is portable, so an uploaded font is never in the config — but
     // accepting a family replaces it and deletes the stored file. Pass the current source so that
     // loss can be shown rather than discovered afterwards.
-    customFontSource?: 'system' | 'uploaded' | null;
+    customFontSource?: 'system' | 'uploaded' | 'market' | null;
     // What the user sees named in the font picker. An uploaded font exports as null, so without this
     // the row would claim the user currently has no font at all.
     customFontLabel?: string | null;
@@ -474,15 +503,22 @@ export function buildImportPlan({
             const children = diffLeaves(current[key], incoming[key], group)
                 .filter(child => !isPinnedLeaf(key, child.key, child.to, assets));
             same = children.length === 0;
-            if (!same) change.children = children;
+            // 液态玻璃整组应用（applyImportedConfig 一次写回整对象），所以不展开子行：子行的 key 是
+            // `liquidGlass.blur` 这样的路径，不在 keys 里，勾了也不会生效。
+            if (!same && !WHOLE_OBJECT_FIELDS.has(key)) change.children = children;
         }
 
         record(change, same);
     }
 
-    // Derived: taking a system font family evicts an uploaded one, and the stored file is deleted
-    // with it. The config cannot carry an uploaded font, so this loss is invisible in the diff above.
-    if (incoming.lyricsCustomFontFamily && customFontSource === 'uploaded') {
+    /*
+     * Derived: taking a system font family evicts an uploaded one, and the stored file is deleted
+     * with it. The config cannot carry an uploaded font, so this loss is invisible in the diff above.
+     *
+     * The market font goes the same way, and for the same reason: a config only names a family,
+     * never the font itself (market families are injected @font-face rules, restored by id).
+     */
+    if (incoming.lyricsCustomFontFamily && (customFontSource === 'uploaded' || customFontSource === 'market')) {
         changes.push({
             group: 'fonts',
             key: 'uploadedLyricsFont',

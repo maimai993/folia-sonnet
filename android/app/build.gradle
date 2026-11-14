@@ -3,6 +3,9 @@ import groovy.json.JsonSlurper
 // 当前文件：Folia Android 应用版本、SDK 与可选发布签名配置。
 
 apply plugin: 'com.android.application'
+// Kotlin 混编（原生代码正从 Java 迁往 Kotlin）。jvmTarget 与本模块 Java 的默认
+// source/target（1.8）对齐，避免 javac/kotlinc 的 JVM-target 不一致报错。
+apply plugin: 'kotlin-android'
 
 def packageJson = new JsonSlurper().parseText(file('../../package.json').text)
 def keystorePropertiesFile = rootProject.file('keystore.properties')
@@ -17,43 +20,100 @@ if (hasReleaseKeystore) {
 // INSTALL_FAILED_VERSION_DOWNGRADE（必须先卸载）。原来硬编码 1，等于装过一次就再也
 // 升不上去了 —— 应用内那个「检查更新」也跟着白做。
 //
-// 由 package.json 的 version 推出来：major*1000000 + minor*100000 + patch*100 + build
-// （0.7.18 → 701800）。patch 与 build 各留两位（超过就截断 —— patch 到三位数本就该升 minor）。
-//
-// 第四位（`0.7.19.1` 里的 1）之前是不存在的：四位版本号被当成三段处理，于是
-// `0.7.19` 和 `0.7.19.1` 得到**同一个** versionCode。同 code 覆盖安装算不上降级、
-// 装得上，但系统会认为应用没变，WebView 那边可能照旧吃缓存 —— 装完还是旧页面。
-// 让第四位也进 code，每一版就真的都在往上涨了。
+// 由 package.json 的 version 推出来：minor*1000000 + patch*10000 + build
+// （0.7.26 → 7026000）。major 恒为 0（0.x），不占位；minor 占百万位、patch 占万位、build
+// 两位（超过截断）。之前 patch 只乘 100，0.7.26 算出 702600 —— 比装过的 dev 版
+// （androidVersionCode 7025108）还小，系统判定「降级安装」拒绝覆盖。
 def versionCodeOf = { String name ->
     def matched = (name =~ /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?/)
     if (!matched.find()) {
         return 1
     }
-    int major = matched.group(1) as int
     int minor = matched.group(2) as int
     int patch = Math.min(matched.group(3) as int, 99)
     int build = matched.group(4) ? Math.min(matched.group(4) as int, 99) : 0
-    return major * 1000000 + minor * 100000 + patch * 100 + build
+    return minor * 1000000 + patch * 10000 + build
 }
 
 android {
     namespace = "top.izuna.foliamajor"
+    /*
+     * NDK 必须钉死。sdk/ndk 下如果还留着一个残缺的旧版本（只有目录、没有 source.properties），
+     * AGP 会挑到它，然后在配置阶段直接失败：
+     *   [CXX1101] NDK at ...\ndk\27.0.12077973 did not have a source.properties file
+     * 本机的 29 是完整的那一份（CMake 3.22.1 也在用它），所以这里显式指过去。
+     */
+    ndkVersion "29.0.14206865"
+    // compileSdk 用 37：Filament 1.77.2 的 AAR 要求 37+，而「莱茵生命」的材质是
+    // 用它编的 —— 运行时降到 1.74 会让 .filamat 版本对不上（Filament 会直接 abort）。
+    // targetSdk 仍是 36，行为面不变，只是编译时能用新 API。
     compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
+        version = release(37)
     }
     defaultConfig {
         applicationId "top.izuna.foliamajor"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode versionCodeOf(packageJson.version.toString())
-        versionName packageJson.version
+        // 测试版（`0.7.25.dev2` 这种）的 code 由 package.json 的 androidVersionCode 显式给出：
+        // 名字里的 dev 序号与 code 的最后一位是两个计数器，靠名字推不出来。正式版没有这个字段，
+        // 仍旧按 A.B.C.D 推导。
+        versionCode packageJson.containsKey('androidVersionCode') && packageJson.androidVersionCode
+                ? (packageJson.androidVersionCode as int)
+                : versionCodeOf(packageJson.version.toString())
+        // 桌面那边（electron-builder 的产物名）只认三段的 semver，四段或 `.devN` 会被它改写，
+        // 所以测试版的名字单独放 displayVersion：应用里与 Android 上用这个名字，包名仍用 version。
+        versionName packageJson.containsKey('displayVersion') && packageJson.displayVersion
+                ? (packageJson.displayVersion as String)
+                : packageJson.version
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            /*
+             * 模型权重（assets/models/*.onnx，合计约 182MB）不能压缩。
+             *
+             * 两个原因：
+             *   1. 它们是已经量化/压缩过的权重，aapt 的 deflate 基本压不动，
+             *      打包时白花几分钟，装到机器上还得再解一次；
+             *   2. 更关键的是首次启动要把它们解压到私有目录（ONNX Runtime 要一个
+             *      真实文件路径，AssetManager 给不了 fd），noCompress 之后这一步
+             *      就是一比一的字节拷贝，快得多。
+             */
+            noCompress 'onnx'
+        }
+        /*
+         * 只打 arm64-v8a。
+         *
+         * onnxruntime-android 的 AAR 自带四种 ABI，每种一个 23~39MB 的 libonnxruntime.so，
+         * 合计 133.9MB —— 其中 arm64 那份 32.6MB 是我们唯一要用的。
+         * x86 / x86_64 只对模拟器有意义，armeabi-v7a 是 32 位机型（这一版已经不带它）。
+         *
+         * 这个取舍不是凭空做的：加进 ONNX 之后 APK 从 25.7MB 涨到 341.8MB，
+         * 剔掉这三个 ABI 能立刻少掉约 101MB。用户的安装包和下载量直接受影响。
+         *
+         * 代价：x86 模拟器上这个 APK 装不了（adb install 会报 no matching ABI）。
+         * 本机验证一直用真机（arm64），所以不影响发布流程。
+         */
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        /*
+         * Node 运行时（nodejs-mobile 18.20.4 移植版，见 src/main/cpp/）。
+         *
+         * Folium 模组系统分两半：渲染端的 client 入口，和主进程的 main 入口。桌面端由
+         * Electron 主进程提供后者；安卓没有主进程，所以带 Node 入口（`main`）的模组
+         * （例如 mod-market 的 catalog 抓取与下载）根本跑不起来。这里把 Node 搬进 App，
+         * 让模组的 main 入口能在真机上真的执行。
+         *
+         * ⚠️ `-DANDROID_STL=c++_shared` 不能去掉：libnode.so 依赖 libc++_shared.so，
+         * 缺了它 dlopen 会失败（UnsatisfiedLinkError）。
+         */
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+                cppFlags "-std=c++17 -fexceptions -frtti"
+            }
         }
     }
     signingConfigs {
@@ -68,18 +128,41 @@ android {
     }
     buildTypes {
         release {
+            /*
+             * R8 关着。试过打开（minify + shrinkResources），dex 从 5.6 MB 掉到 1.8 MB，
+             * 但装上去整个应用不可用 —— 说明被裁掉的东西里有 Capacitor 桥依赖的反射入口，
+             * 而这类破坏在编译期完全不报错。
+             *
+             * 要再试，必须先把「插件方法表在 R8 之后仍然完整」变成一条能跑的自动检查，
+             * 而不是靠肉眼看 proguard 规则。在那之前保持关闭。
+             */
             minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (hasReleaseKeystore) {
                 signingConfig signingConfigs.release
             }
         }
     }
+    /*
+     * Kotlin 的 jvmTarget 见文件末尾（`apply from: 'capacitor.build.gradle'` 之后那段）——
+     * 必须与 Java 的 targetCompatibility 一致，而那一份会被 capacitor 生成的
+     * compileOptions（21）覆盖，所以两边都放在 apply 之后统一钉成 17。
+     */
 }
 
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+// Filament 1.77.2 会拖进来 kotlin-stdlib 2.4.0，而本项目的 Kotlin 编译器是 2.2.0 ——
+// 元数据版本读不了，整个 app 的 Kotlin 编译都会失败。它的 AAR 主体是 Java + 原生库，
+// 对 stdlib 没有 2.4 才有的依赖，钉回 2.2.0 是安全的。
+configurations.configureEach {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:2.2.0"
     }
 }
 
@@ -102,14 +185,75 @@ dependencies {
     // 只在「设置 → 原生播放」打开时被用到；关着的时候这一层不参与任何播放。
     // ⚠️ 版本改动要看 media3 的 release notes：1.x 之间 API 有移动。
     implementation "androidx.media3:media3-exoplayer:1.11.1"
+    /*
+     * Automix 的两个分析模型（beat_this 节拍分析、htdemucs 四轨分离）跑在原生这一侧。
+     *
+     * 权重已经内置在 assets/models/ 里（约 182MB，构建时打包），所以这里只需要推理引擎，
+     * 不需要任何下载器 —— 用户装上就有，首次用到时把 assets 里的文件拷到私有目录即可。
+     *
+     * 为什么在原生算而不是 WebView 里：htdemucs 一次推理的峰值内存接近 500MB，
+     * 而且时间以秒计。放在 WebView 里既会挤爆渲染进程的堆，也会卡住整个界面。
+     * 用 onnxruntime-android 走 NNAPI/CPU，跑在后台线程，界面不受影响。
+     */
+    implementation "com.microsoft.onnxruntime:onnxruntime-android:1.31.1"
+    /*
+     * ffmpeg：安卓端没有 ffmpeg 可执行文件，模组面板那条「未找到 ffmpeg」的提示就是因为
+     * 这个。桌面端可以 spawn ffmpeg，安卓只能把 ffmpeg 编进原生库 —— 用社区维护的
+     * ffmpeg-kit fork（包名仍是 com.arthenica.ffmpegkit）。
+     *
+     * 选 full 而不是 min/gpl：min 少了 libass（歌词视频字幕）与 libmp3lame，而 -gpl 变体
+     * 带 x264/x265，是 GPL-3.0 传染性许可 —— 本应用不分发源码，用不得。full 是 LGPL-3.0。
+     *
+     * 代价：arm64 的 .so 约 30MB，APK 会明显变大（模组市场里的预览与导出都要它）。
+     */
+    implementation "dev.ffmpegkit-maintained:ffmpeg-kit-full:8.1.9"
     implementation project(':capacitor-android')
+    // JVM 单测里 android.jar 的 org.json 是空壳（一调用就 "not mocked"），而设置与队列
+    // 这两层的数据载体就是 JSONObject —— 它们恰恰最该被单测钉住（合并语义、队列推进）。
+    // 给测试类路径放一份真实实现即可，不进包。
+    testImplementation "org.json:json:20240303"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
+    // 「莱茵生命」的三维专辑架已改为内嵌网页（RhineLabUI），不再用 Filament 原生渲染，
+    // 对应的 filament-android 依赖一并去掉。
 }
 
 apply from: 'capacitor.build.gradle'
+
+/*
+ * Java 与 Kotlin 必须编译到**同一个** jvmTarget。
+ *
+ * 本模块是 Kotlin 混编（原生代码已从 Java 迁到 Kotlin）。之前 Kotlin 写 1.8，而 AGP 在
+ * JDK 21 上默认把 compileReleaseJavaWithJavac 放在 21 —— Gradle 直接判
+ * 「Inconsistent JVM-target compatibility」并中止，出包脚本（build-release.sh 设了
+ * JAVA_HOME=jdk-21）连 assembleRelease 都进不去。
+ *
+ * ⚠️ 这段**必须留在 `apply from: 'capacitor.build.gradle'` 之后**：那个文件是
+ * `capacitor update` 生成的（不可手改），它把 compileOptions 设成 21，后应用的会覆盖
+ * 先设置的那份 —— 只改上面 android{} 里的 compileOptions 实测无效。
+ * 同理，改完这个文件之后跑 `npx cap sync` 会重新生成 capacitor.build.gradle，
+ * 但这段在 apply 之后，仍然赢。
+ */
+android {
+    // 新增的跨端回归测试统一留在仓库 test/unit，Gradle 仍直接执行真实 Kotlin 实现。
+    sourceSets.test.java.srcDir '../../test/unit/android'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    // Node 运行时的原生库（libfolia-node-native.so）与其预编译依赖（libnode.so）。
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+}
 
 try {
     def servicesJSON = file('google-services.json')
@@ -119,3 +263,68 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+// capacitor.plugins.json 兜底。
+//
+// 这份清单由 `cap sync` 生成，而它在 .gitignore 里 —— 只跑 gradle（本仓库的常态，
+// 见 MainActivity 里那段说明）时它并不存在。Capacitor 8 的 PluginManager 在缺文件时
+// 不是跳过、而是抛 PluginLoadException，且 BridgeActivity.onCreate 没有 try/catch：
+// 整个 Activity 起不来，开机就是一片黑，logcat 里只有一行
+// `Error loading plugins ... Could not load capacitor.plugins.json`。
+//
+// 官方插件都在 MainActivity 里手动 registerPlugin，所以这里补一份空清单就够了；
+// 有 sync 生成的真清单时不覆盖。
+tasks.register('ensureCapacitorPluginsJson') {
+    def manifest = file('src/main/assets/capacitor.plugins.json')
+    outputs.file(manifest)
+    doLast {
+        if (!manifest.exists()) {
+            manifest.parentFile.mkdirs()
+            manifest.text = '[]'
+        }
+    }
+}
+
+tasks.named('preBuild').configure { dependsOn 'ensureCapacitorPluginsJson' }
+
+/*
+ * 内置分析权重必须真的在包里。
+ *
+ * Kotlin 侧的 AutomixModels 只认 assets/models/beat_this.onnx 与 htdemucs-v2.onnx
+ * （合计约 182MB，.gitignore 里不进 git）。缺了它们 gradle 照样能打出 APK ——
+ * 但那是「装上以后智能动感永远没效果、分轨永远失败」的包，而失败发生在用户手机上，
+ * 构建日志里一个字都没有。所以在这里当硬错误：要么先跑 `npm run models:android`，
+ * 要么显式 `-PskipAutomixModelsCheck=true` 跳过（只给明确不要这两项功能的构建用）。
+ */
+tasks.register('verifyAutomixModels') {
+    doLast {
+        if (project.hasProperty('skipAutomixModelsCheck')) {
+            logger.warn('verifyAutomixModels skipped (skipAutomixModelsCheck)')
+            return
+        }
+        def dir = file('src/main/assets/models')
+        def expected = [
+            'beat_this.onnx'   : 83077778L,
+            'htdemucs-v2.onnx' : 107902864L,
+        ]
+        def problems = []
+        expected.each { name, bytes ->
+            def model = new File(dir, name)
+            if (!model.isFile()) {
+                problems << "${name}: 缺失".toString()
+            } else if (model.length() != bytes) {
+                problems << "${name}: ${model.length()} 字节，应为 ${bytes}".toString()
+            }
+        }
+        if (!problems.isEmpty()) {
+            throw new GradleException(
+                "分析权重不在 assets/models 下，打出来的 APK 里智能动感与分轨会是死的：\n  "
+                + problems.join('\n  ')
+                + "\n先跑 `npm run models:android`（会从镜像下载并按 sha256 校验），"
+                + "或加 -PskipAutomixModelsCheck=true 明确跳过。"
+            )
+        }
+    }
+}
+
+tasks.named('preBuild').configure { dependsOn 'verifyAutomixModels' }

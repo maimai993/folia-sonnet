@@ -1,4 +1,7 @@
 import { registerPlugin } from '@capacitor/core';
+import { isCapacitorAndroid } from './runtime';
+import type { CappellaAvatarImage, CappellaEmojiImage } from '../types';
+import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
 
 // src/platform/foliaWallpaper.ts
 // 歌词动态壁纸的 Web 侧入口。原生实现见 android/.../wallpaper/LyricsWallpaperService。
@@ -127,6 +130,13 @@ export interface FoliaWallpaperAppearance {
 interface FoliaWallpaperPlugin {
     publish(options: FoliaWallpaperPublishOptions): Promise<void>;
     setAppearance(options: FoliaWallpaperAppearance): Promise<void>;
+    /**
+     * 群唱自定义头像 / 表情图（JSON 数组字符串，[{id,name,url}]，url 是 data URL）。
+     *
+     * 叠层是另一个 WebView，读不到主应用 IndexedDB 里的上传图，只能这样推过去；
+     * 不推的话 Cappella 在叠层上会回退到封面。
+     */
+    publishCappellaImages(options: { avatars: string; emojis: string }): Promise<void>;
     clearImage(): Promise<void>;
     /** 打开系统文件选择器挑字体；原生自己拷贝，不走 base64。 */
     pickFont(): Promise<{ picked: boolean; rejected?: boolean }>;
@@ -143,14 +153,70 @@ interface FoliaWallpaperPlugin {
      */
     setFloatingPreview(options: { on: boolean }): Promise<void>;
     getBackground(): Promise<{ mode: FoliaWallpaperBackgroundMode }>;
+    /** 按地址下载视频当壁纸背景（市场用），几十上百 MB 不能过 JS 桥。 */
+    downloadVideo(options: { url: string; rotation?: number; progressId?: string }): Promise<{ downloaded?: boolean }>;
+    /**
+     * 用**已经下载好的**本地文件装成壁纸背景，不再联网。
+     *
+     * 市场里同时勾「桌面壁纸」和「App 内」时，视频由视频层那一路下一次，
+     * 这里直接把那份文件交给壁纸层，避免同一个文件下两遍。
+     */
+    adoptDownloadedVideo(options: { path: string }): Promise<{ downloaded?: boolean }>;
+    /** 按地址下载图片当壁纸背景（市场用）。 */
+    downloadImage(options: {
+        url: string;
+        /** 0 / 90 / 180 / 270，把横图转成竖图用 */
+        rotation?: number;
+        progressId?: string;
+        cropLeft?: number;
+        cropTop?: number;
+        cropRight?: number;
+        cropBottom?: number;
+    }): Promise<{ downloaded?: boolean }>;
+    /**
+     * 订阅字体下载进度。
+     *
+     * 事件来自原生，`total` 在分块传输时可能是 0（只能显示不确定进度）。
+     * 返回一个取消订阅的函数 —— 组件卸载时必须调用，否则监听器会越积越多。
+     */
+    addListener(
+        eventName: 'fontDownloadProgress',
+        listener: (payload: { fontId?: string; downloaded?: number; total?: number }) => void,
+    ): Promise<{ remove: () => void }>;
+    /** 视频下载进度（与上面同一个机制，事件名不同）。原生发的是 0..100 的整数百分比。 */
+    addListener(
+        eventName: 'videoDownloadProgress',
+        listener: (payload: { id?: string; percent?: number }) => void,
+    ): Promise<{ remove: () => void }>;
+    /**
+     * 下字体天下的字体包并解出字体（背景/字体市场用）。
+     * 返回里的 error 是原始失败码，由调用方翻译。
+     */
+    downloadFontArchive(options: { fontId: string }): Promise<{
+        downloaded?: boolean;
+        fileName?: string;
+        /** 落盘后的绝对路径，Web 侧用它拼出可加载的文件地址。 */
+        path?: string;
+        error?: string | null;
+    }>;
+    /** 把落盘的字体文件读成 base64，让它能作为 File 走上传统一的上传链路。 */
+    readFontFile(options: { path: string }): Promise<{
+        found?: boolean;
+        base64?: string;
+        mime?: string;
+        fileName?: string;
+        error?: string;
+    }>;
     /**
      * 把「简易」样式那颗悬浮歌词小窗恢复默认（位置 / 大小 / 锁一起清掉）。
      * 见 FloatingLyricsOverlay.resetLayout。
      */
     resetFloatingLyrics(): Promise<void>;
     clear(): Promise<void>;
+    /** 心跳：只刷新「播放管线还活着」的时间戳，见 wallpaperHeartbeat。 */
+    heartbeat(): Promise<void>;
     isActive(): Promise<{ active: boolean }>;
-    openPicker(): Promise<{ opened: boolean }>;
+    openPicker(): Promise<{ opened?: boolean; active?: boolean; reason?: string }>;
     /** 壁纸的可视化叠层要 SYSTEM_ALERT_WINDOW，没授权时它是静默不工作的。 */
     hasOverlayPermission(): Promise<{ granted: boolean }>;
     openOverlaySettings(): Promise<void>;
@@ -197,10 +263,30 @@ const FoliaWallpaper = registerPlugin<FoliaWallpaperPlugin>('FoliaWallpaper');
 export const publishLyricsWallpaper = async (
     options: FoliaWallpaperPublishOptions,
 ): Promise<void> => {
+    if (isNativePlaybackReconciling()) return;
     try {
         await FoliaWallpaper.publish(options);
     } catch {
         // 壁纸没启用或插件不可用时静默失败：它不该影响播放本身。
+    }
+};
+
+/**
+ * 把群唱的自定义头像 / 表情图推给原生（叠层那个 WebView 读不到我们的 IndexedDB）。
+ *
+ * 只有变的时候才该调：一次可能是几百 KB 的 base64。调用方按数组引用去重即可。
+ */
+export const publishWallpaperCappellaImages = async (
+    avatars: CappellaAvatarImage[],
+    emojis: CappellaEmojiImage[],
+): Promise<void> => {
+    try {
+        await FoliaWallpaper.publishCappellaImages({
+            avatars: JSON.stringify(avatars),
+            emojis: JSON.stringify(emojis),
+        });
+    } catch {
+        // 壁纸 / 叠层没启用或插件不可用时静默失败：它不该影响播放本身。
     }
 };
 
@@ -211,6 +297,64 @@ export const setWallpaperAppearance = async (
         await FoliaWallpaper.setAppearance(options);
     } catch {
         // 同上。
+    }
+};
+
+/**
+ * 心跳：告诉原生「这条播放管线还活着」。
+ *
+ * 什么都不推、什么都不改，只刷新壁纸那边的心跳时间戳。停了（App 被划掉后台 /
+ * WebView 死透）之后，壁纸与两层叠层超时就只画背景，不再画没人听的歌词和进度条。
+ * 前台由这里的定时器发；退到后台 JS 定时器被挂起，由播放服务接管（见
+ * FoliaPlaybackService 的 heartbeatTick）—— 音频还在放，歌词就得继续走。
+ */
+export const wallpaperHeartbeat = async (): Promise<void> => {
+    try {
+        await FoliaWallpaper.heartbeat();
+    } catch {
+        // 同上。
+    }
+};
+
+/**
+ * 告诉原生「背景图 / 视频要保留哪一块」。
+ *
+ * 走 `setAppearance` 的 tuning 通道：视频的裁切是渲染时按 UV 算的，
+ * 不需要重新编码，所以只要把 focus 送过去就能立刻生效。
+ * 图片在下载时就已经裁好了，这里主要是给视频用。
+ *
+ * @param focusX 0 = 留左边，0.5 = 居中，1 = 留右边
+ * @param focusY 0 = 留上边，1 = 留下边
+ */
+export const setWallpaperImageFocus = async (focusX: number, focusY: number): Promise<void> => {
+    try {
+        await FoliaWallpaper.setAppearance({
+            tuning: {
+                'wp.imageFocusX': Math.min(1, Math.max(0, focusX)),
+                'wp.imageFocusY': Math.min(1, Math.max(0, focusY)),
+            },
+        });
+    } catch {
+        // 下发失败时视频会退回居中裁切，不影响其它功能。
+    }
+};
+
+/**
+ * 下发视频背景的旋转角度。
+ *
+ * 视频不做重编码，角度只是记下来交给渲染层。
+ * 必须在视频文件就绪之后再下发，否则会先按 0° 画一帧再跳。
+ *
+ * @param degrees 0 / 90 / 180 / 270
+ */
+export const setWallpaperVideoRotation = async (degrees: number): Promise<void> => {
+    try {
+        const normalized = ((Math.round(degrees / 90) * 90) % 360 + 360) % 360;
+        await FoliaWallpaper.setAppearance({
+            tuning: { 'wp.videoRotation': normalized },
+        });
+    } catch {
+        // 失败时退化成不旋转，不影响其它功能。
     }
 };
 
@@ -328,12 +472,26 @@ export const clearLyricsWallpaper = async (): Promise<void> => {
     }
 };
 
-/** 打开系统动态壁纸选择器，并直接定位到 Folia 的歌词壁纸。 */
-export const openLyricsWallpaperPicker = async (): Promise<void> => {
+/**
+ * 打开系统动态壁纸选择器，并直接定位到 Folia 的歌词壁纸。
+ *
+ * 返回值说明打不开的原因 —— 以前这里把所有失败都吞掉，界面又只看有没有异常，
+ * 于是用户点了按钮毫无反应，连往哪儿查都不知道。
+ *   · ok           打开了选择器（或本来就已经在生效）
+ *   · alreadyActive 已经是当前壁纸
+ *   · needsPermission 进不去，已跳到系统设置让用户放行
+ *   · unavailable  连设置页都打不开
+ */
+export type WallpaperPickerOutcome = 'ok' | 'alreadyActive' | 'needsPermission' | 'unavailable';
+
+export const openLyricsWallpaperPicker = async (): Promise<WallpaperPickerOutcome> => {
     try {
-        await FoliaWallpaper.openPicker();
+        const result = await FoliaWallpaper.openPicker();
+        if (result?.active) return 'alreadyActive';
+        if (result?.opened) return 'ok';
+        return result?.reason === 'settings-opened' ? 'needsPermission' : 'unavailable';
     } catch {
-        // 少数 ROM 没有这个入口，忽略即可。
+        return 'unavailable';
     }
 };
 
@@ -444,5 +602,214 @@ export const isLyricsWallpaperActive = async (): Promise<boolean> => {
         return Boolean(result?.active);
     } catch {
         return false;
+    }
+};
+
+/**
+ * 按地址下载一个视频当桌面/App 内的背景（背景市场用）。
+ *
+ * 由原生下载并落盘，和用户自己挑视频走同一套存储 —— 所以下载完成后
+ * 壁纸层直接就能播，不需要再调一次 pickVideo。
+ *
+ * @returns 下载并落盘成功。
+ */
+export const downloadWallpaperVideoFromUrl = async (url: string, rotation = 0): Promise<boolean> => {
+    try {
+        /*
+         * 必须带 progressId，原生才会发进度事件。
+         *
+         * 少了它，downloadVideo 内部那个 if 直接跳过，
+         * 几十 MB 的视频在界面上就是「一直转圈没有进度」。
+         * 用固定 id 是因为同一时刻只会有一个背景在下载。
+         */
+        const result = await FoliaWallpaper.downloadVideo({
+            url,
+            rotation,
+            progressId: 'background-market',
+        });
+        return Boolean(result?.downloaded);
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * 用已下载的本地文件装成壁纸视频（背景市场用，配合 downloadVideoLayerFile）。
+ *
+ * 只做「安装」这一次事：文件已经在本地，壁纸层自己拷一份到它的位置，
+ * 不再联网。失败返回 false，调用方可以退回原来的「按地址下载」那条路。
+ */
+export const adoptDownloadedVideoAsWallpaperFile = async (path: string): Promise<boolean> => {
+    const file = String(path || '').trim();
+    if (!file) return false;
+    try {
+        const result = await FoliaWallpaper.adoptDownloadedVideo({ path: file });
+        return Boolean(result?.downloaded);
+    } catch {
+        return false;
+    }
+};
+
+/**
+ * 按地址下载一张图当壁纸背景（背景市场用）。
+ *
+ * 原生下载后直接解码压成 JPEG 落盘 —— 不走 base64 过桥，
+ * 因为壁纸要铺满一屏，几百 KB 的字符串每次换图都要过一遍桥。
+ *
+ * 裁切与旋转在原生做：壁纸站多是横屏图，手机是竖屏，cover 会裁掉主体，
+ * 所以由用户在界面上拖框选定范围（可选先转 90°）。
+ */
+export const downloadWallpaperImageFromUrl = async (
+    url: string,
+    options?: { crop?: { left: number; top: number; right: number; bottom: number }; rotation?: number },
+): Promise<boolean> => {
+    try {
+        const result = await FoliaWallpaper.downloadImage({
+            url,
+            rotation: options?.rotation ?? 0,
+            cropLeft: options?.crop?.left ?? 0,
+            cropTop: options?.crop?.top ?? 0,
+            cropRight: options?.crop?.right ?? 1,
+            cropBottom: options?.crop?.bottom ?? 1,
+        });
+        return Boolean(result?.downloaded);
+    } catch {
+        return false;
+    }
+};
+
+export interface MarketFontDownloadResult {
+    /** 拿到并成功落盘了一个字体文件。 */
+    downloaded: boolean;
+    /** 包里的原始文件名（用于显示与排错）。 */
+    fileName: string;
+    /** 落盘后的绝对路径；失败时是空字符串。 */
+    path: string;
+    /**
+     * 失败原因。
+     *
+     * 字体天下的接口失败码原样回传（`FontDownloadPurchaseRequired` 等），
+     * 其它是原生自己的（`DownloadFailed` / `NoFontInArchive`）。
+     */
+    error: string | null;
+}
+
+/**
+ * 下载字体市场的字体包并解出字体文件。
+ *
+ * 走原生而不是 WebView：包是几 MB 的 zip，要下载 + 解压 + 按后缀挑文件，
+ * WebView 里既没有文件系统也扛不住这个内存。
+ *
+ * 落盘位置由原生决定（`filesDir/folia_market_font_<id>.<ext>`），Web 侧只需要
+ * 知道成没成 —— 字体怎么加载由后续的「读文件」接口负责。
+ */
+export const downloadMarketFont = async (fontId: string): Promise<MarketFontDownloadResult> => {
+    try {
+        const result = await FoliaWallpaper.downloadFontArchive({ fontId });
+        return {
+            downloaded: Boolean(result?.downloaded),
+            fileName: result?.fileName ?? '',
+            path: result?.path ?? '',
+            error: result?.error ?? null,
+        };
+    } catch {
+        return { downloaded: false, fileName: '', path: '', error: 'DownloadFailed' };
+    }
+};
+
+/**
+ * 把下载好的字体文件读成 File 对象。
+ *
+ * 市场下载的字体必须走「用户上传字体」那条既有链路才有全局效果，
+ * 而那条链路收的是 File。WebView 读不了 file://，所以让原生把内容读出来。
+ */
+export const readMarketFontFile = async (
+    path: string,
+    fileName?: string,
+): Promise<{ file: File | null; error: string | null }> => {
+    try {
+        const result = await FoliaWallpaper.readFontFile({ path });
+        if (!result?.found || !result.base64) {
+            // 把原生给的具体原因带回去，别让上层只能看到 FontFace 的泛化报错。
+            const code = result?.error ?? 'FileMissing';
+            const message = code === 'NotAFontFile'
+                ? '下载到的文件不是有效字体'
+                : code === 'FontTooLarge'
+                    ? '字体文件过大，无法加载'
+                    : code === 'FileMissing'
+                        ? '字体文件不存在'
+                        : code;
+            return { file: null, error: message };
+        }
+        const binary = atob(result.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+            bytes[index] = binary.charCodeAt(index);
+        }
+        const name = fileName || result.fileName || 'market-font.ttf';
+        return { file: new File([bytes], name, { type: result.mime || 'font/ttf' }), error: null };
+    } catch (error) {
+        return { file: null, error: (error as Error)?.message ?? '读取字体失败' };
+    }
+};
+
+/**
+ * 订阅视频下载进度，返回取消订阅函数。
+ *
+ * 原生发的是 `{ id, percent }`（percent 是 0..100 的整数），
+ * 这里统一换算成 0..1 交给上层 —— 别在上层再各算一遍。
+ *
+ * 与字体那条同一个思路：只在安卓上有事件，其它环境给个空函数。
+ */
+export const subscribeVideoDownloadProgress = async (
+    listener: (progress: number) => void,
+): Promise<() => void> => {
+    if (!isCapacitorAndroid()) return () => {};
+    try {
+        const handle = await FoliaWallpaper.addListener('videoDownloadProgress', (payload) => {
+            const percent = payload?.percent;
+            if (typeof percent === 'number' && Number.isFinite(percent)) {
+                listener(Math.min(1, Math.max(0, percent / 100)));
+            }
+        });
+        return () => {
+            try {
+                handle?.remove();
+            } catch {
+                // 已经卸载过了。
+            }
+        };
+    } catch {
+        return () => {};
+    }
+};
+
+/**
+ * 订阅字体下载进度。
+ *
+ * 返回取消订阅的函数。拿不到插件（浏览器里跑）时返回一个什么都不做的函数，
+ * 调用方就不用到处判断环境了。
+ */
+export const fontDownloadProgress = async (
+    listener: (payload: { fontId: string; downloaded: number; total: number }) => void,
+): Promise<() => void> => {
+    if (!isCapacitorAndroid()) return () => {};
+    try {
+        const handle = await FoliaWallpaper.addListener('fontDownloadProgress', (payload) => {
+            listener({
+                fontId: typeof payload?.fontId === 'string' ? payload.fontId : '',
+                downloaded: typeof payload?.downloaded === 'number' ? payload.downloaded : 0,
+                total: typeof payload?.total === 'number' ? payload.total : 0,
+            });
+        });
+        return () => {
+            try {
+                handle?.remove();
+            } catch {
+                // 已经卸载过了。
+            }
+        };
+    } catch {
+        return () => {};
     }
 };

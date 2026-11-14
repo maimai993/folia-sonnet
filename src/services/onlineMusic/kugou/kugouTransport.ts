@@ -11,7 +11,7 @@ import { withLoginRequestLimit } from '../login/loginRequestLimit';
 export const KUGOU_OPERATIONS = [
     'register_dev', 'login_qr_key', 'login_qr_create', 'login_qr_check', 'logout',
     'user_detail', 'user_vip_detail', 'youth_union_vip', 'youth_day_vip', 'youth_day_vip_upgrade',
-    'user_playlist', 'user_cloud', 'user_cloud_url', 'search',
+    'user_playlist', 'user_cloud', 'user_cloud_url', 'user_listen', 'search',
     'audio', 'krm_audio', 'song_url', 'song_climax', 'search_lyric', 'lyric', 'playlist_track_all',
     'playlist_detail',
     'album_detail', 'album_songs', 'artist_detail', 'artist_albums', 'artist_audios',
@@ -39,6 +39,7 @@ const ENDPOINTS: Record<KugouOperation, string> = {
     user_playlist: '/user/playlist',
     user_cloud: '/user/cloud',
     user_cloud_url: '/user/cloud/url',
+    user_listen: '/user/listen',
     search: '/search',
     audio: '/audio',
     krm_audio: '/krm/audio',
@@ -282,7 +283,7 @@ export const requestKugouAnonymousSearch = async (
 
     const targetUrl = new URL('http://complexsearch.kugou.com/v2/search/song');
     Object.entries(params).forEach(([key, value]) => targetUrl.searchParams.set(key, String(value)));
-    const requestUrl = typeof window !== 'undefined' && window.electron
+    const requestUrl = typeof window !== 'undefined' && typeof window.electron?.platform === 'string'
         ? targetUrl.toString()
         : resolveProxiedUrl(targetUrl.toString());
     const response = await fetch(requestUrl, {
@@ -367,7 +368,7 @@ export const requestKugouLegacyPlayInfo = async (hash: string): Promise<any> => 
         }
     }
 
-    const requestUrl = typeof window !== 'undefined' && window.electron
+    const requestUrl = typeof window !== 'undefined' && typeof window.electron?.platform === 'string'
         ? targetUrlString
         : resolveProxiedUrl(targetUrlString);
     const response = await fetch(requestUrl, {
@@ -402,21 +403,169 @@ const clearWebDeviceIdentity = (): void => {
     }
 };
 
-const persistWebSession = (response: any): void => {
-    // 安卓内置那份酷狗接口（src/nativeBridge/api/kugou.js）登录成功时**不回 cookie 字段**：
-    // 凭据已经写进原生的 cookie 罐了，返回体里只有 userId / token。只认 cookie 就等于
-    // 「扫码确认了、会话却没存」，下一步 user_detail 读不到账号。
-    const cookies = response?.cookie || response?.data?.cookie || response?.session?.cookie;
-    if (typeof cookies === 'string' && cookies) writeProviderSessionValue('kugou', 'cookie', cookies);
-    if (Array.isArray(cookies) && cookies.length) writeProviderSessionValue('kugou', 'cookie', cookies.join('; '));
+const responsePayload = (response: any): any => response?.data || response?.body?.data || response?.body || response;
 
-    const payload = response?.data || response?.body?.data || response?.body || response;
-    const token = payload?.token;
-    const userId = payload?.userid ?? payload?.user_id ?? payload?.userId;
-    const dfid = payload?.dfid;
-    if (token) writeProviderSessionValue('kugou', 'token', String(token));
-    if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
+/**
+ * The account a confirmed QR sign-in (status 4) brings, as a whole pair, or null. Other answers
+ * carry the userid of whoever owns what was read (a public playlist's creator), not of who is
+ * signed in, so they never change the account (#1101).
+ */
+const confirmedSignIn = (operation: KugouOperation, response: any): { token?: string; userId: string } | null => {
+    if (operation !== 'login_qr_check') return null;
+    const payload = responsePayload(response);
+    /*
+     * 判定必须和 kugouProvider.checkLogin 那侧**完全一致**，否则就会出现
+     * 「界面说扫上了、账号却永远出不来」。
+     *
+     * 以前这里是 `Number(payload?.status) !== 4` 直接 return null，而 checkLogin 认的是
+     * `status === 4 || data?.token` —— 两种情况下两边会打架：
+     *   · status 是字符串 "4"（酷狗有时就这么给）→ checkLogin 认，这里 Number 后其实是 4，
+     *     但只要有 token 而 status 缺失，这里就直接判死；
+     *   · **status 缺失但给了 token** → checkLogin 判 confirmed，这里判 null，
+     *     于是 token / userid 一个都没写进会话，随后 getLoginStatus 因为
+     *     `!userId && !hasElectronTransport` 直接 return null，账号面板永远显示未登录。
+     *
+     * 现在第一道门统一成「status 4 或带 token」，status 只作为辅助信号；
+     * 能不能真正落盘另有一道成对要求（见函数末尾）。
+     */
+    const status = Number(payload?.status ?? payload?.code ?? response?.status);
+    const token = payload?.token ? String(payload.token) : '';
+    const confirmed = status === 4 || Boolean(token);
+    if (!confirmed) return null;
+
+    /*
+     * userId 可能藏在不同字段里：酷狗不同版本分别叫 userid / user_id / uid，
+     * 有时候干脆只给在 cookie 或外层 data 上。挨个试，别因为缺一个字段就整单作废
+     * （作废的代价是凭据全部留不下来，用户得重新扫一次）。
+     */
+    /*
+     * userId 的字段名各家不一样，**必须包含驼峰 `userId`**。
+     *
+     * 真机抓到的确认响应长这样（status=4）：
+     *   keys=[provider,status,code,loggedIn,message,userId,token,hasAppToken,
+     *         hasVipToken,hasCookie,nickname,avatar,vipType,isVip,vipLevel,
+     *         vipLabel,expireTime,session,hasKuGooSession]
+     *
+     * 以前只认 `userid` / `user_id`，于是驼峰这个**唯一存在的**字段被漏掉，
+     * userId 解析成空串 → token/userid 都不落盘 → 随后 getLoginStatus 里
+     * `!userId && !hasElectronTransport` 直接 return null →
+     * 「扫码成功了却一直显示未登录」。
+     */
+    const directUserId = payload?.userId ?? payload?.userid ?? payload?.user_id ?? payload?.uid
+        ?? response?.userId ?? response?.userid ?? response?.user_id;
+    const userId = directUserId != null && String(directUserId).length > 0
+        ? String(directUserId)
+        : readUserIdFromResponseCookies(response);
+    /*
+     * 半对不取：落盘的前提是**认得出是谁**。
+     *
+     * 上面那套「有 token 就算确认」只用来过第一道门（status 缺失但给了 token 时别直接判死，
+     * 否则扫码成功了界面却一直显示未登录）。真正写进会话之前，必须能解析出账号 id：
+     * 只带 token、不带 userid 的应答一律不落盘，否则会把新 token 接到旧 userid 上，
+     * 会话变成「别人的账号 + 自己的 token」，正是 #1101 里取歌 20018 的形态。
+     * 真机确认响应本来就带 userId（见上面的 keys 记录），这里不写只是异常形态下不动账号。
+     */
+    if (!userId) return null;
+    return { token: token || undefined, userId };
+};
+
+/** 从响应带回的 cookie 里把 userid 抠出来（有些版本只在这里给）。 */
+const readUserIdFromResponseCookies = (response: any): string => {
+    const cookies = response?.cookie || response?.data?.cookie;
+    const entries: string[] = typeof cookies === 'string' ? cookies.split(';')
+        : Array.isArray(cookies) ? cookies.map(String) : [];
+    for (const entry of entries) {
+        const separator = entry.indexOf('=');
+        if (separator <= 0) continue;
+        const key = entry.slice(0, separator).trim().toLowerCase();
+        if (key !== 'userid' && key !== 'user_id') continue;
+        const value = entry.slice(separator + 1).trim();
+        if (value) return value;
+    }
+    return '';
+};
+
+/**
+ * The one place the web session's account is written (registered for Dedicatus D604): the cookies,
+ * the token and the account id of a confirmed sign-in, the token and the id as a whole pair.
+ */
+const rememberConfirmedSignIn = (signIn: { token: string; userId: string }, cookieEntries: string[]): void => {
+    if (cookieEntries.length) writeProviderSessionValue('kugou', 'cookie', cookieEntries.join('; '));
+    writeProviderSessionValue('kugou', 'token', signIn.token);
+    writeProviderSessionValue('kugou', 'userid', signIn.userId);
+};
+
+const ACCOUNT_COOKIE_ENTRY = /^(token|userid|user_id)=/i;
+
+/**
+ * The cookies any other answer brings (registered for Dedicatus D604): it drops the account ones
+ * itself, which only a confirmed sign-in writes (#1101).
+ */
+const rememberSessionCookies = (cookieEntries: string[]): void => {
+    const kept = cookieEntries.filter(entry => !ACCOUNT_COOKIE_ENTRY.test(entry));
+    if (kept.length) writeProviderSessionValue('kugou', 'cookie', kept.join('; '));
+};
+
+/**
+ * The desktop app's hint of who is signed in (registered for Dedicatus D604): passed only the account id
+ * of a confirmed sign-in, or the one the bridge writes into the profile answer from its own session.
+ */
+const rememberSignedInAccountId = (userId: string): void => {
+    writeProviderSessionValue('kugou', 'userid', userId);
+};
+
+const persistWebSession = (operation: KugouOperation, response: any): void => {
+    const signIn = confirmedSignIn(operation, response);
+    /*
+     * 扫码这一步必须留下现场。
+     *
+     * 「扫上了却登不上」只有一个可能：确认响应里的凭据没被认出来 / 没落盘。
+     * 之前这条路上一点日志都没有，只能靠猜响应的形状 —— 现在把关键字段和
+     * 解析结果一起打出来，一眼就能看出是哪一步断的。
+     */
+    if (operation === 'login_qr_check') {
+        const payload = responsePayload(response);
+        /*
+         * 打成一行人话，别用对象 —— 对象在控制台里是折叠的，真机上根本看不到值，
+         * 之前就是这么一直查不出形状的。
+         */
+        const rawToken = payload?.token ?? response?.token;
+        const rawUserId = payload?.userid ?? payload?.user_id ?? payload?.uid
+            ?? response?.userid ?? response?.user_id;
+        const cookieValue = response?.cookie ?? response?.data?.cookie;
+        console.info(
+            '[KugouTransport] qr_check |'
+            + ' status=' + String(payload?.status ?? payload?.code ?? response?.status)
+            + ' token=' + (rawToken ? String(rawToken).slice(0, 12) + '…' : 'none')
+            + ' userid=' + (rawUserId != null ? String(rawUserId) : 'none')
+            + ' cookie=' + (typeof cookieValue === 'string'
+                ? cookieValue.slice(0, 80) + (cookieValue.length > 80 ? '…' : '')
+                : Array.isArray(cookieValue) ? 'array(' + cookieValue.length + ')' : String(typeof cookieValue))
+            + ' keys=[' + Object.keys(payload || {}).slice(0, 30).join(',') + ']'
+            + ' outerKeys=[' + Object.keys(response || {}).slice(0, 15).join(',') + ']',
+        );
+    }
+    if (signIn) {
+        console.info(
+            '[KugouTransport] sign-in accepted |'
+            + ' token=' + (signIn.token ? 'yes' : 'NO')
+            + ' userid=' + (signIn.userId || 'EMPTY'),
+        );
+    }
+    const cookies = response?.cookie || response?.data?.cookie;
+    const cookieEntries = (typeof cookies === 'string' ? cookies.split(';')
+        : Array.isArray(cookies) ? cookies.map(String) : [])
+        .map(entry => entry.trim())
+        .filter(Boolean);
+    // Half of a pair is not taken: the other half would be the previous account's. Account cookies of
+    // any other answer are left out, like its account fields.
+    if (signIn?.token) rememberConfirmedSignIn({ token: signIn.token, userId: signIn.userId }, cookieEntries);
+    else rememberSessionCookies(cookieEntries);
+    const dfid = responsePayload(response)?.dfid;
     if (dfid) writeProviderSessionValue('kugou', 'dfid', String(dfid));
+    // 会话变了就同步一遍原生网关：原生兜底切歌拼 /v5/url 读的是推送过来的那份
+    // （cookie 罐不可靠，issue #103）。
+    syncKugouGatewayCredentials();
 };
 
 /**
@@ -429,9 +578,12 @@ const persistElectronAccountHint = (operation: KugouOperation, response: any): v
         removeProviderSessionValue('kugou', 'userid');
         return;
     }
-    const payload = response?.data || response?.body?.data || response?.body || response;
-    const userId = payload?.userid ?? payload?.user_id;
-    if (userId) writeProviderSessionValue('kugou', 'userid', String(userId));
+    // The bridge strips the token from the sign-in answer, and writes the session's own account id
+    // into the profile answer: those two are the only answers that say who is signed in.
+    const userId = operation === 'user_detail'
+        ? responsePayload(response)?.userid
+        : confirmedSignIn(operation, response)?.userId;
+    if (userId) rememberSignedInAccountId(String(userId));
 };
 
 export const getKugouTransportAvailability = () => {
@@ -439,6 +591,27 @@ export const getKugouTransportAvailability = () => {
     return getWebApiBase()
         ? { configured: true } as const
         : { configured: false, reason: 'not-configured' as const };
+};
+
+/**
+ * 把酷狗的会话三件套（userid / token / dfid）推给原生网关。
+ *
+ * 原生兜底切歌要自己拼 /v5/url，凭据只读 WebView 的 cookie 罐不可靠：罐子空了
+ * （系统清理 WebView 数据、登录没走到写 cookie 那步等）原生就按「游客」瞬间放弃，
+ * 自动跳过会把酷狗歌单连跳 5 首停住（issue #103）。凭据真正落在 providerStorage，
+ * 登录 / 登出（providerStorage 变化、账号刷新）时各推一次。没装插件（网页 / 桌面端、
+ * worker、单测）时空操作；userid/token 空＝登出，原生清掉。
+ */
+export const syncKugouGatewayCredentials = (): void => {
+    if (typeof window === 'undefined') return;
+    const plugin = (window as any).Capacitor?.Plugins?.FoliaNative;
+    if (!plugin?.setGatewayCredentials) return;
+    void plugin.setGatewayCredentials({
+        provider: 'kugou',
+        userId: readProviderSessionValue('kugou', 'userid') || '',
+        token: readProviderSessionValue('kugou', 'token') || '',
+        dfid: readProviderSessionValue('kugou', 'dfid') || '',
+    }).catch(() => undefined);
 };
 
 // Routes one provider request through Electron IPC or an explicitly configured Web backend.
@@ -492,7 +665,7 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
                 }
                 throw new OnlineProviderError('network', bridged.message || bridged.__foliaBridgeError, 'kugou', bridged);
             }
-            persistWebSession(bridged);
+            persistWebSession(operation, bridged);
             return bridged as T;
         } catch (error) {
             if (error instanceof OnlineProviderError) throw error;
@@ -521,7 +694,8 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
         // Every request made for a sign-in operation is limited, the device registration it may need too.
         const responseBody = await (limited ? withLoginRequestLimit(send) : send());
         // What a sign-out is answered with is the session that just left: it is not written back.
-        if (targetOperation !== 'logout') persistWebSession(responseBody);
+        if (targetOperation !== 'logout') persistWebSession(targetOperation, responseBody);
+        else syncKugouGatewayCredentials();
         const body = responseBody?.body ?? responseBody;
         return body;
     };

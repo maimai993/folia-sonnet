@@ -1,4 +1,5 @@
 import { createAiFetch } from './aiNativeFetch';
+import { requestAiCompletionViaNative } from './aiNativeCompletion';
 import {
     aiProtocolOf,
     isAiConfigured,
@@ -140,7 +141,8 @@ const describeUnexpected = (error: unknown): Error => {
     return new Error(`ai-request-failed: ${redact(message).slice(0, 300)}`);
 };
 
-/** The model's answer out of an OpenAI-compatible response body. */
+/** The model's answer out of an OpenAI-compatible response body.
+ */
 const extractOpenAiText = (payload: unknown): string => {
     const choice = (payload as { choices?: { message?: unknown }[] } | null)?.choices?.[0];
     const message = choice?.message as { content?: unknown; refusal?: unknown } | undefined;
@@ -294,6 +296,14 @@ export const requestAiCompletion = async (request: AiCompletionRequest): Promise
     const { target, configured } = readAiTarget();
     if (!configured) throw new Error(AI_NOT_CONFIGURED);
 
+    /*
+     * 安卓先走原生补全：请求由原生发起后，WebView 冻不冻结都与它无关 —— OkHttp 在
+     * 自己的线程池里跑完，答案照样回来。没有这个方法（老版本 App / 非安卓）回落到
+     * 下面那条（它经 aiNativeFetch 也是原生 OkHttp 发，只是发起那一刻需要 JS 活着）。
+     */
+    const native = await requestAiCompletionViaNative(request);
+    if (native !== null) return { text: native, target };
+
     const send = createAiFetch();
     try {
         /*
@@ -303,9 +313,10 @@ export const requestAiCompletion = async (request: AiCompletionRequest): Promise
          * 它判成 Gemini，于是去读空的 geminiApiKey 并抛「未配置」。表现就是：测试连接
          * 明明成功（那条路认的是 isOpenAiCompatibleProvider），点生成却说没配置密钥。
          */
-        const text = aiProtocolOf(target.provider) === 'gemini'
+        const protocol = aiProtocolOf(target.provider);
+        const text = protocol === 'gemini'
             ? await runGemini(request, send)
-            : aiProtocolOf(target.provider) === 'anthropic'
+            : protocol === 'anthropic'
                 ? await runAnthropic(request, send)
                 : await runOpenAi(request, send);
         return { text, target };
@@ -330,6 +341,19 @@ export const translateAiCompletionError = (message: string): string => {
     if (text.startsWith('ai-empty-response')) return 'AI 返回的内容是空的。';
     if (text.startsWith('ai-refused')) return `AI 拒绝了这个请求：${text.slice('ai-refused:'.length).trim()}`;
     if (text.startsWith('ai-bad-response')) return 'AI 返回的不是合法 JSON。';
+    /*
+     * 免费渠道的「Key 无效 / 已停用」不是用户填错了什么 —— 他压根没有可填的东西。
+     * 这两条要说清楚该干什么：去群里发机器码、签到，然后就能用。
+     */
+    if (
+        (text.startsWith('ai-http-error:401') || text.startsWith('ai-http-error:403'))
+        && readAiSettings().provider === 'foliawork'
+    ) {
+        return '请在群里发送机器码，完成绑定签到后即可使用。';
+    }
+    if (text.startsWith('ai-not-lyrics')) {
+        return `免费渠道只接受歌词，这次没有生成：${text.slice('ai-not-lyrics:'.length).trim()}`;
+    }
     if (text.startsWith('ai-http-error')) return `接口返回错误：${text.slice('ai-http-error:'.length).trim()}`;
     if (text.startsWith('ai-request-failed')) return `请求失败：${text.slice('ai-request-failed:'.length).trim()}`;
     if (text.startsWith('permission-denied')) {

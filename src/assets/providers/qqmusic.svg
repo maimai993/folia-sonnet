@@ -5,7 +5,11 @@
       <stop offset="1" stop-color="#8638F9"/>
     </linearGradient>
   </defs>
-  <rect x="4" y="4" width="56" height="56" rx="18" fill="url(#music-gradient)"/>
+    <!--
+    Fills the whole canvas so a circular clip reaches the rim. An inset background used to
+    leave a transparent ring that read as a pale edge around the icon.
+  -->
+  <rect x="0" y="0" width="64" height="64" fill="url(#music-gradient)"/>
 
   <g fill="#FFFFFF">
     <circle cx="23.4" cy="43.0" r="6"/>

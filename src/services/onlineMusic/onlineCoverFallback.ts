@@ -1,6 +1,7 @@
 import type { SongResult, UnifiedSong } from '../../types';
 import type { OmniProviderId } from '../../types/onlineMusic';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
+import { loadCachedOrFetchCover } from '../coverCache';
 import { announceLocalCoverReady } from '../localCoverReadyEvent';
 import { proxyNativeScopedResourceUrl, unregisterNativeRemoteAudioUrl } from '../nativeRemoteAudio';
 import { getFeiniuResourceSession, isFeiniuCoverUrl, onFeiniuResourceSessionChange } from './feiniuTransport';
@@ -41,6 +42,12 @@ const MAX_PER_BATCH = 60;
 
 const coverCache = new Map<string, string>();
 const pendingKeys = new Set<string>();
+
+/** 走字节缓存那一路的封面：原地址 → 缓存出来的 blob URL（见 resolveByteFallbackCover）。 */
+const byteFallbackCovers = new Map<string, string>();
+/** 正在取的那批，避免同一张图在首屏被十几处同时触发下载。 */
+const pendingByteFallback = new Set<string>();
+
 let budget = SEARCH_BUDGET;
 
 /** 串行闸门：渲染时一次会撞进来十几首，不能让它们同时去搜。 */
@@ -85,6 +92,7 @@ const pendingCovers = new Map<string, Promise<string>>();
 onFeiniuResourceSessionChange(() => {
     for (const proxied of proxiedCovers.values()) void unregisterNativeRemoteAudioUrl(proxied);
     proxiedCovers.clear();
+    proxiedCollectionCovers.clear();
     pendingCovers.clear();
 });
 
@@ -133,9 +141,58 @@ const proxyFeiniuCoverUrl = (url: string, session: FeiniuResourceSession): Promi
  * 并广播，界面下一次渲染就是代理地址（歌曲本身仍保留原地址）。渲染路径不能 await（那会把界面卡住），
  * 列表出口那一侧（见 {@link backfillSongCovers}）是 await 的，所以首屏通常直接就是好的。
  */
+/** 集合（歌单 / 专辑）封面的代理缓存：与歌曲共用同一套换址逻辑，只是没有 song 可写回。 */
+const proxiedCollectionCovers = new Map<string, string>();
+
+/**
+ * 集合封面的代理地址。与 {@link resolveProxiedSongCover} 同样的三条规矩（缓存、串行、广播），
+ * 但集合没有可写回的对象，所以这里只回缓存：命中的下一次渲染就拿到代理地址，没命中先给原地
+ * 址并排一次换址。
+ */
+export const resolveProxiedCollectionCover = (coverUrl: string | null | undefined): string => {
+    const url = String(coverUrl ?? '').trim();
+    const session = getFeiniuResourceSession();
+    if (!url || !session || !isFeiniuCoverUrl(url, session)) return url;
+    const cached = proxiedCollectionCovers.get(url);
+    if (cached !== undefined) return cached;
+    void proxyFeiniuCoverUrl(url, session).then((proxied) => {
+        if (proxied === url || getFeiniuResourceSession() !== session) return;
+        proxiedCollectionCovers.set(url, proxied);
+    }).catch(() => {
+        // 换不到就继续用原地址：下一次渲染会再试一次。
+    });
+    return url;
+};
+
+/**
+ * 出列表时预热一批集合封面（{@link resolveProxiedCollectionCover} 的 await 版）：
+ * 等前 {@link PROXY_PER_PAGE_LIMIT} 张换好，首屏直接就有图，不必等异步那一趟回来。
+ */
+export const prewarmCollectionCovers = async (
+    covers: ReadonlyArray<string | null | undefined>,
+): Promise<void> => {
+    const session = getFeiniuResourceSession();
+    if (!session) return;
+    const targets = covers
+        .map(cover => String(cover ?? '').trim())
+        .filter(url => url && isFeiniuCoverUrl(url, session) && !proxiedCollectionCovers.has(url))
+        .slice(0, PROXY_PER_PAGE_LIMIT);
+    await Promise.all(targets.map(url => proxyFeiniuCoverUrl(url, session).then((proxied) => {
+        if (proxied !== url && getFeiniuResourceSession() === session) {
+            proxiedCollectionCovers.set(url, proxied);
+        }
+    }).catch(() => undefined)));
+};
+
 export const resolveProxiedSongCover = (song: SongResult, coverUrl: string): string => {
     const session = coverSession(song, coverUrl);
-    if (!session) return coverUrl;
+    if (!session) {
+        // 这个平台之外的封面：地址本身是好的，但直连有时拿不到字节 —— 那些图床会按
+        // Referer 防盗链、或者没下发 CORS 头，WebView 里 <img> 拉不下来就是空白或占位图。
+        // 这里走一遍 coverCache：fetch 取字节存进 IndexedDB，回一个 blob URL。
+        // 取不到就原样返回原地址，下一次渲染再试（和上面那条路同一个兜底姿势）。
+        return resolveByteFallbackCover(song, coverUrl);
+    }
     const cached = proxiedCovers.get(coverUrl);
     if (cached !== undefined) return cached;
     void proxyFeiniuCoverUrl(coverUrl, session).then((proxied) => {
@@ -144,6 +201,37 @@ export const resolveProxiedSongCover = (song: SongResult, coverUrl: string): str
     });
     return coverUrl;
 };
+
+/**
+ * 其余平台的封面：用 coverCache 把字节存下来，换成 blob URL。
+ *
+ * 只在**真的拿不到**时才需要它，但「拿不到」在浏览器里没有可提前判断的信号
+ * （`<img>` 的 onerror 我们不接管），所以这里对每个地址做一次尽力而为的缓存。
+ * 缓存是幂等的：命中就立刻回同一个 blob URL，不会重复下载。
+ */
+function resolveByteFallbackCover(song: SongResult, coverUrl: string): string {
+    const url = String(coverUrl || '').trim();
+    // data:/blob: 已经是本地字节，没什么可代理的。
+    if (!url || url.startsWith('data:') || url.startsWith('blob:')) return coverUrl;
+    const cacheKey = `cover_fallback_${url}`;
+    const cached = byteFallbackCovers.get(url);
+    if (cached !== undefined) return cached;
+    if (!pendingByteFallback.has(url)) {
+        pendingByteFallback.add(url);
+        void loadCachedOrFetchCover(cacheKey, url).then((resolved) => {
+            pendingByteFallback.delete(url);
+            if (!resolved) return;
+            byteFallbackCovers.set(url, resolved);
+            // 和上面那条路一样要广播：队列磁贴存的是建队时的快照，不通知就看不到。
+            if (resolved !== url) {
+                announceLocalCoverReady({ songId: String(song.id ?? ''), coverUrl: resolved });
+            }
+        }).catch(() => {
+            pendingByteFallback.delete(url);
+        });
+    }
+    return coverUrl;
+}
 
 /**
  * 搜一次，取**匹配最高**的那条的封面。

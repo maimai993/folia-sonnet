@@ -84,7 +84,12 @@ export const buildExploreTiles = (
                 coverUrl: face.coverUrl || face.pictureUrl || undefined,
                 section: 'upcoming' as const,
                 label: t(KIND_LABEL_KEYS[entryKind]),
-                heading: section.title,
+                /*
+                 * 分区标题和探索页同一套翻法：title 存的是词条 key（zone211 之类），
+                 * 带 home. 前缀查；查不到原样显示 —— 拼贴墙以前直接摆原文，用户看到
+                 * 的就是「探索还是 zone」。
+                 */
+                heading: sectionTitleOf(section.title, t),
                 sectionKey: section.id,
                 entryKind,
             };
@@ -94,6 +99,17 @@ export const buildExploreTiles = (
         }
     }
     return tiles;
+};
+
+/**
+ * 分区标题的翻法，和探索页（ExploreSections 的 sectionTitle）同一套规则：
+ * title 存的是词条 key（zone211 之类），带 home. 前缀查；查不到原样显示。
+ * 拼贴墙直接摆原文的那条路（heading: section.title）就是「探索还是 zone」的出处。
+ */
+const sectionTitleOf = (title: string, t: (key: string) => string): string => {
+    const key = `home.${title}`;
+    const keyed = t(key);
+    return keyed === key ? title : keyed;
 };
 
 /**

@@ -9,17 +9,19 @@ import type { OnlineProviderId, ProviderAccountSummary } from '../../types/onlin
  *
  * 'off'：不能选，也不能开始一次新登录 —— 要么这个运行环境够不着它（`configured` 为假），
  * 要么路还没走全（`canSignIn` 为假）。两种都不能点，但只有前一种会清掉已登录的账号。
+ * 'checking'：账号还在问（会话没水合完），先别急着画成「没登录」。
  */
-export type RowStatus = 'signed-in' | 'ran-out' | 'signed-out' | 'accountless' | 'off';
+export type RowStatus = 'signed-in' | 'ran-out' | 'signed-out' | 'accountless' | 'off' | 'checking';
 
 export const rowStatus = (provider: ProviderAccountSummary): RowStatus => {
     if (!provider.availability.configured || provider.availability.canSignIn === false) return 'off';
     if (provider.requiresAccount === false) return 'accountless';
     if (provider.status === 'authenticated') return 'signed-in';
+    if (provider.status === 'unknown' || provider.hydration === 'loading') return 'checking';
     return provider.error === 'auth-required' ? 'ran-out' : 'signed-out';
 };
 
-const RANK: Record<RowStatus, number> = { 'signed-in': 1, 'ran-out': 2, 'signed-out': 3, accountless: 3, off: 3 };
+const RANK: Record<RowStatus, number> = { 'signed-in': 1, 'ran-out': 2, 'signed-out': 3, accountless: 3, off: 3, checking: 3 };
 
 /**
  * 那一列的顺序：正在用的（也就是上次用的）平台在最前，然后是已登录的、登录失效的，其余按注册的顺序。

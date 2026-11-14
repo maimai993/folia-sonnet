@@ -20,8 +20,9 @@ export type GridSurfaceActionId =
     | 'sort-play-count-desc'
     | 'sort-play-count-asc'
     | 'sort-default'
+    | 'collect-filtered'
     | 'sort-file-name'
-    | 'sort-file-modified'
+    | 'sort-modified-date'
     | 'sort-album-track'
     | 'sort-toggle-direction'
     | 'toggle-info-panel'
@@ -31,6 +32,7 @@ export type GridSurfaceActionId =
     | 'organize-song-info'
     | 'export-playlist'
     | 'edit-entity'
+    | 'set-cover'
     | 'toggle-edit-mode'
     | 'reload-online-collection'
     | 'toggle-subscribe';
@@ -42,7 +44,7 @@ export type GridSurfaceState = {
      * stay written once, next to the buttons that already obey them.
      */
     availableActions: readonly GridSurfaceActionId[];
-    /** How many songs `play-filtered` / `enqueue-filtered` would act on right now. */
+    /** How many songs `play-filtered` / `enqueue-filtered` / `collect-filtered` would act on right now. */
     filteredTrackCount: number;
     isFilterActive: boolean;
     sortField: SongSortField;

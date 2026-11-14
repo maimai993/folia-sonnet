@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { ChosenSceneName } from '../../../scenes/settings/SceneWindow';
 import { getVisualizerModeLabel } from '../../../visualizer/registry';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { openSettings } from '../../../../stores/useSettingsModalStore';
@@ -13,7 +14,6 @@ import { isCapacitorAndroid } from '../../../../platform/runtime';
 import { settingsCardClassFor } from '../settingsCardClasses';
 import AndroidForceLandscapeSetting from '../AndroidForceLandscapeSetting';
 import DeviceTypeSetting from '../DeviceTypeSetting';
-import GlassSurfaceSetting from '../GlassSurfaceSetting';
 import LyricFlatSetting from '../LyricFlatSetting';
 import LyricsWallpaperSettingsSection from '../LyricsWallpaperSettingsSection';
 import { AI, LYRICS_WALLPAPER_OPTIONS, LYRICS, LYRICS_WALLPAPER, O, SONG_THEME, THEME, VIEW } from './appearance/options';
@@ -22,7 +22,8 @@ import { AiConnectionTestReply, useAiConnectionTest } from './AiConnectionTest';
 import { useSettingsPage, type AiApiKeyName } from './settingsPageContext';
 
 // src/components/modal/settings/pages/AppearancePage.tsx
-// The 外观 page: which lyric animation the player uses, light or dark, the colour theme, how a
+// The 外观 page: which lyric animation the player uses, which scene (its window holds each scene's
+// settings and sound tracing), light or dark, the colour theme, how a
 // song's own theme is made and applied, and (desktop app) the AI provider that makes those themes.
 // The lyric animation workbench and the theme colour editor are the existing overlays; their rows
 // here only open them.
@@ -37,18 +38,15 @@ export const OPTIONS: SettingsOptionDef[] = [...Object.values(O), ...LYRICS_WALL
  * 所以整块挂在「歌词动画」那一组下面；组件内部非安卓直接返回 null，这里不用再判端。
  * 它整块落在这一组的 kit 卡片里，所以不自己画卡、不自己带边框；里面的开关、分段器、
  * 按钮都用 kit 的那几个，跟下面「主题」「歌曲主题」两组是同一副样子。
+ *
+ * 滑条不再从外面传长相了：那一串 `rangeInputClass` 是给原生 input 的
+ * `::-webkit-slider-thumb` 伪元素写的，还写死了 `bg-white` / `bg-zinc-700` ——
+ * 换成组件库的滑杆之后这些类既不起作用，又会和主题色打架，所以删掉。
+ * 现在整节里的滑条和设置窗口别处是同一个控件、同一套配色。
  */
 const LyricsWallpaperSection: React.FC<{ isDaylight: boolean }> = ({ isDaylight }) => (
     <LyricsWallpaperSettingsSection
         isDaylight={isDaylight}
-        rangeInputClass={[
-            'w-full h-1.5 rounded-full appearance-none cursor-pointer',
-            '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full',
-            '[&::-moz-range-thumb]:w-3 [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0',
-            isDaylight
-                ? 'bg-black/15 [&::-webkit-slider-thumb]:bg-zinc-700 [&::-moz-range-thumb]:bg-zinc-700'
-                : 'bg-white/10 [&::-webkit-slider-thumb]:bg-white [&::-moz-range-thumb]:bg-white',
-        ].join(' ')}
     />
 );
 
@@ -56,7 +54,7 @@ type DaylightChoice = 'light' | 'dark' | 'system';
 
 const AppearancePage: React.FC = () => {
     const { t } = useTranslation();
-    const { isElectron, themeControls, onOpenVisPlayground, onOpenThemePark } = useSettingsPage();
+    const { isElectron, themeControls, onOpenVisPlayground, onOpenThemePark, onOpenSceneWindow } = useSettingsPage();
     const { isDaylight, followSystemTheme, setDaylightPreference, setFollowSystemTheme } = useThemeSettingsStore(useShallow(state => ({
         isDaylight: state.isDaylight,
         followSystemTheme: state.followSystemTheme,
@@ -65,6 +63,8 @@ const AppearancePage: React.FC = () => {
     })));
     const visualizerMode = useVisualizerSettingsStore(state => state.visualizerMode);
     const randomEnabled = useVisualizerSettingsStore(state => state.randomVisualizerModePerSong);
+    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    const handleSetKeywordColoringEnabled = useVisualizerSettingsStore(state => state.handleSetKeywordColoringEnabled);
     const nativeBlurEnabled = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
 
     return (
@@ -73,6 +73,9 @@ const AppearancePage: React.FC = () => {
                 {nativeBlurEnabled && <Row notice={t('options.nativeBlurBackgroundNotice')} />}
                 <Row option={O.lyricsAnimation} hint={t('options.lyricsRendererDesc')} onClick={onOpenVisPlayground}>
                     <Value>{randomEnabled ? t('ui.visualizerRandom') : getVisualizerModeLabel(visualizerMode, t)}</Value>
+                </Row>
+                <Row option={O.scene} tag={t('ui.sceneBeta')} onClick={onOpenSceneWindow}>
+                    <Value><ChosenSceneName /></Value>
                 </Row>
             </Group>
 
@@ -84,9 +87,9 @@ const AppearancePage: React.FC = () => {
                 </Group>
             )}
 
-            {/* 显示那四项：排在歌词那组之后、主题之前；每行自带左右两栏的行式排布。 */}
+            {/* 显示那三项：排在歌词那组之后、主题之前；每行自带左右两栏的行式排布。
+                液态玻璃的开关与参数在「性能与动效」页那一组里（它同时是性能设置）。 */}
             <Group def={VIEW}>
-                <GlassSurfaceSetting />
                 <LyricFlatSetting />
                 {/* 下面两项组件内部自行判断运行时：非安卓直接返回 null，这里不用再判端。 */}
                 <DeviceTypeSetting />
@@ -171,6 +174,9 @@ const AppearancePage: React.FC = () => {
                         onChange={themeControls.onToggleCustomThemePreferred}
                         disabled={!themeControls.hasCustomTheme}
                     />
+                </Row>
+                <Row option={O.keywordColoring} note={t('options.keywordColoringDesc')}>
+                    <Toggle checked={keywordColoringEnabled} onChange={handleSetKeywordColoringEnabled} />
                 </Row>
             </Group>
 

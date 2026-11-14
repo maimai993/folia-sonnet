@@ -157,6 +157,22 @@ export const WALLPAPER_GLOBAL_KEYS = {
      * `reloadOnTuningChange` 会把页面重载一份 —— 新页面重新读存储，改动就到位了。
      */
     settingsStamp: 'wp.settingsStamp',
+    /*
+     * 背景图/视频的裁切位置。
+     *
+     * 壁纸站上多是横屏图，手机是竖屏，cover 之后必然裁掉一段，居中常裁到主体。
+     * 这两项让用户拖框决定保留哪一块（0 = 留左/上，0.5 = 居中，1 = 留右/下）。
+     * 图片在下载时就裁好了，视频走渲染时的 UV 裁切 —— 所以视频这边必须下发。
+     */
+    imageFocusX: 'wp.imageFocusX',
+    imageFocusY: 'wp.imageFocusY',
+    /**
+     * 视频背景的旋转角度（0 / 90 / 180 / 270）。
+     *
+     * 视频不能像图片那样在下载时重编码（几十 MB 转一遍太慢），
+     * 所以角度只记录，由原生在画的时候转 —— 这张表就是把它送过去的通道。
+     */
+    videoRotation: 'wp.videoRotation',
 } as const;
 
 export const withGlobalSettings = (
@@ -164,6 +180,16 @@ export const withGlobalSettings = (
     settings: Record<string, unknown>,
 ): Record<string, number> => {
     const out: Record<string, number> = { ...(tuning ?? {}) };
+    /*
+     * 视频背景的旋转每次都带上。
+     *
+     * tuning 是整体下发的：这次不带，原生那份就会被覆盖成「没转过」——
+     * 表现就是重启（或改任何别的设置）之后旋转自己回去了。
+     */
+    const videoRotation = settings.wallpaperVideoRotation;
+    if (typeof videoRotation === 'number' && Number.isFinite(videoRotation)) {
+        out[WALLPAPER_GLOBAL_KEYS.videoRotation] = videoRotation;
+    }
     const stamp = settings.settingsStamp;
     if (typeof stamp === 'number' && Number.isFinite(stamp)) {
         out[WALLPAPER_GLOBAL_KEYS.settingsStamp] = Math.abs(Math.trunc(stamp)) % 1000000;

@@ -1,6 +1,7 @@
 import type { LibraryAccountActionId } from '../../core/account/account.contract';
-import type { LibraryHomeActionId, LibrarySuiteManifest } from '../../core/suite/suite.contract';
+import type { LibraryHomeActionId, LibraryCardRailProps, LibrarySurfaceComponent, LibrarySuiteManifest } from '../../core/suite/suite.contract';
 import Grid3D from './home/Grid3D';
+import { Grid3DSlider } from './home/Grid3DSlider';
 import GridCollectionSurface from './collection/GridCollectionSurface';
 import GridArtistSurface from './artist/GridArtistSurface';
 import GridAccountSurface from './account/GridAccountSurface';
@@ -71,6 +72,11 @@ const grid: LibrarySuiteManifest = {
                 'enqueue',
                 'play-scope',
                 'enqueue-scope',
+                // 速记簿：卡片封面右上角悬浮的「加入速记簿」、曲目侧栏行上的一颗、信息面板的「全部加入速记簿」。
+                'collect',
+                'collect-scope',
+                // 卡片封面右上角悬浮的「收藏到歌单」（应用的歌单选择器，含「我喜欢」）。
+                'save-to-playlist',
                 'filter',
                 'sort',
                 'reload',
@@ -83,6 +89,7 @@ const grid: LibrarySuiteManifest = {
                 'resync-all-folders',
                 'export-playlist',
                 'edit-entity',
+                'set-cover',
                 'organize-song-info',
                 'match-song',
                 'add-to-playlist',
@@ -98,7 +105,7 @@ const grid: LibrarySuiteManifest = {
             component: GridArtistSurface,
             // 歌手页：播放 / 入队单曲（卡片）与热门歌曲（「加入热门歌曲」按钮；播放全部只经命令面板）、筛选专辑、
             // 错误态与专辑分页失败的「重试」（重新加载 / 续页）、编辑本地歌手实体（信息面板），专辑卡与歌曲卡上的
-            // 专辑 / 歌手链接。
+            // 专辑 / 歌手链接，以及在线歌手左上角的「全部歌曲」（#918，压进一层 artist_songs 集合，由上面的集合页渲染）。
             actions: [
                 'play',
                 'enqueue',
@@ -110,6 +117,7 @@ const grid: LibrarySuiteManifest = {
                 'edit-entity',
                 'open-album',
                 'open-artist',
+                'open-all-songs',
             ],
         },
         account: { component: GridAccountSurface, actions: GRID_ACCOUNT_ACTIONS },
@@ -120,6 +128,9 @@ const grid: LibrarySuiteManifest = {
     },
     // 「完成」时宿主让网格忘掉这一层的集合 / 歌手页布局记录（sessionStorage）。
     layout: gridLayout,
+    // 首页这套横滑卡流也给宿主之外的界面复用（洛雪工作台的歌单 / 电台 / 专辑 / 榜单页），只能经 registry 取到。
+    // 两边 props 同形；契约在 core 层、不引 React 的节点类型，所以在这里桥接一次。
+    cardRail: Grid3DSlider as unknown as LibrarySurfaceComponent<LibraryCardRailProps>,
 };
 
 export default grid;

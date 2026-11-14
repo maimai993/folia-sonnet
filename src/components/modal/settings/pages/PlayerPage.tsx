@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { getActiveLibrarySuiteId, isWallLibrarySuite, useActiveLibrarySuiteId } from '../../../../library/app/librarySuiteChoice';
 import { PLAYER_CONTROL_SLOT_OPTIONS } from '../../../floating-player/playerControlSlotActions';
 import FastColorPicker from '../../../shared/FastColorPicker';
 import { useColorPreviewThrottle } from '../../../shared/useColorPreviewThrottle';
@@ -9,20 +10,25 @@ import { playerBottomBarLiveOffset } from '../../../../stores/motionSignals';
 import { useLatticeSettingsStore } from '../../../../stores/useLatticeSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../../stores/usePlaybackEntryViewStore';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { useRhineOverlayStore } from '../../../../stores/useRhineOverlayStore';
 import { usePlayerBottomBarLayoutStore } from '../../../../stores/usePlayerBottomBarLayoutStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
+import { hasNowPlayingCardSong, useNowPlayingCardLayoutStore } from '../../../app/overlays/now-playing-toast/nowPlayingCardLayoutStore';
 import { useStageSettingsStore } from '../../../../stores/useStageSettingsStore';
 import { useTypographySettingsStore } from '../../../../stores/useTypographySettingsStore';
 import { ensureVideoLayerFileRestored, useVideoLayerSettingsStore, VIDEO_LAYER_OPACITY_BOUNDS } from '../../../../stores/useVideoLayerSettingsStore';
 import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, resolvePlayerBottomBarMaxOffset } from '../../../../utils/playerBottomBarLayout';
 import { Button, FoldedGroup, Group, PictureChoice, Reveal, Row, Segmented, Select, Slider, TextField, Toggle, Value, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import MarketEntryButton from './integration/market/MarketEntryButton';
 import { EntryViewPicture } from './pictures';
+import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/PlayerPage.tsx
 // The 播放页 page: what the playing screen looks like. Which view play opens and the look of the
 // queue collage, the control bar, the now-playing card, the video behind the lyrics, and a folded
-// group of switches that hide or pin parts of the player.
+// group of switches that hide or pin parts of the player. The card's 在首页显示 switch is not drawn
+// while the home screen is a wall (bravais): the card is always on the wall, whatever it says.
 
 const VIEW: SettingsGroupDef = { id: 'playbackEntryView', titleKey: 'options.settingsHeadingView' };
 const BAR: SettingsGroupDef = { id: 'bottomUiSettings', titleKey: 'options.settingsHeadingControlBar' };
@@ -32,11 +38,13 @@ const PLAYER_UI: SettingsGroupDef = { id: 'labPlayerUi', titleKey: 'options.labP
 
 const O = {
     entryView: option(VIEW, 'playbackEntryViewChoice', 'options.playbackEntryView'),
+    rhineCardVisualizer: option(VIEW, 'rhineCardVisualizer', 'options.rhineCardVisualizer'),
     vignette: option(VIEW, 'latticeSettings', 'options.latticeVignette'),
     tint: option(VIEW, 'latticePosterTint', 'options.latticePosterTint'),
     tintCustomColor: option(VIEW, 'latticePosterTintCustomColor', 'options.latticePosterTintCustomColor'),
     tintColor: option(VIEW, 'latticePosterTintColor', 'options.latticePosterTintColor'),
     tintIntensity: option(VIEW, 'latticePosterTintIntensity', 'options.latticePosterTintIntensity'),
+    badgeCurrentOnly: option(VIEW, 'latticeBadgeCurrentOnly', 'options.latticeBadgeCurrentOnly'),
     autoHide: option(BAR, 'autoHidePlayerChrome', 'options.autoHidePlayerChrome'),
     autoHideCursor: option(BAR, 'autoHideCursorWithPlayerChrome', 'options.autoHideCursorWithPlayerChrome'),
     idleCursorHide: option(BAR, 'hideCursorWhenIdle', 'options.hideCursorWhenIdle'),
@@ -45,7 +53,9 @@ const O = {
     controlSlots: option(BAR, 'playerControlSlots', 'options.playerControlSlots'),
     cardMode: option(CARD, 'stageTrackPillMode', 'options.stageTrackPillMode'),
     cardTimeout: option(CARD, 'stageTrackPillTimeout', 'options.stageTrackPillTimeout'),
-    cardOnHome: option(CARD, 'stageTrackPillOnHome', 'options.stageTrackPillOnHome'),
+    cardPosition: option(CARD, 'stageTrackPillReposition', 'options.stageTrackPillReposition'),
+    cardOnHome: option(CARD, 'stageTrackPillOnHome', 'options.stageTrackPillOnHome', { available: () => !isWallLibrarySuite(getActiveLibrarySuiteId()) }),
+    cardInObs: option(CARD, 'stageTrackPillInObs', 'options.stageTrackPillInObs'),
     cardCloseButton: option(CARD, 'showOpenPanelCloseButton', 'options.showOpenPanelCloseButton'),
     videoEnabled: option(VIDEO, 'videoLayerEnabled', 'options.videoLayerEnabled'),
     videoFile: option(VIDEO, 'videoLayerLocalFile', 'options.videoLayerLocalFile'),
@@ -57,6 +67,8 @@ const O = {
     hidePanelButton: option(PLAYER_UI, 'hidePlayerRightPanelButton', 'options.hidePlayerRightPanelButton'),
     alwaysBackButton: option(PLAYER_UI, 'alwaysShowPlayerBackButton', 'options.alwaysShowPlayerBackButton'),
     alwaysTrackSwitch: option(PLAYER_UI, 'alwaysShowTrackSwitchButtons', 'options.alwaysShowTrackSwitchButtons'),
+    // The titlebar it sits behind is only drawn by the desktop window.
+    headerBlur: option(PLAYER_UI, 'playerHeaderBlur', 'options.playerHeaderBlur', { electronOnly: true }),
 };
 
 export const OPTIONS: SettingsOptionDef[] = Object.values(O);
@@ -65,9 +77,14 @@ const percent = (value: number) => `${Math.round(value * 100)}%`;
 
 const PlayerPage: React.FC = () => {
     const { t } = useTranslation();
+    const { isElectron } = useSettingsPage();
     const { playbackEntryView, setPlaybackEntryView } = usePlaybackEntryViewStore(useShallow(state => ({
         playbackEntryView: state.playbackEntryView,
         setPlaybackEntryView: state.setPlaybackEntryView,
+    })));
+    const { rhineCardVisualizer, handleToggleRhineCardVisualizer } = useRhineOverlayStore(useShallow(state => ({
+        rhineCardVisualizer: state.cardVisualizer,
+        handleToggleRhineCardVisualizer: state.handleToggleCardVisualizer,
     })));
     const lattice = useLatticeSettingsStore(useShallow(state => ({
         vignette: state.latticeVignette,
@@ -75,11 +92,13 @@ const PlayerPage: React.FC = () => {
         tintUseCustomColor: state.latticePosterTintUseCustomColor,
         tintColor: state.latticePosterTintColor,
         tintIntensity: state.latticePosterTintIntensity,
+        badgeCurrentOnly: state.latticeBadgeCurrentOnly,
         setVignette: state.handleToggleLatticeVignette,
         setTintEnabled: state.handleToggleLatticePosterTint,
         setTintUseCustomColor: state.handleToggleLatticePosterTintCustomColor,
         setTintColor: state.handleSetLatticePosterTintColor,
         setTintIntensity: state.handleSetLatticePosterTintIntensity,
+        setBadgeCurrentOnly: state.handleToggleLatticeBadgeCurrentOnly,
     })));
     const chrome = usePlayerChromeSettingsStore(useShallow(state => ({
         autoHide: state.autoHidePlayerChrome,
@@ -92,6 +111,7 @@ const PlayerPage: React.FC = () => {
         hidePanelButton: state.hidePlayerRightPanelButton,
         alwaysBackButton: state.alwaysShowPlayerBackButton,
         alwaysTrackSwitch: state.alwaysShowTrackSwitchButtons,
+        headerBlur: state.playerHeaderBlur,
         cardCloseButton: state.showOpenPanelCloseButton,
         setAutoHide: state.handleToggleAutoHidePlayerChrome,
         setAutoHideCursor: state.handleToggleAutoHideCursorWithPlayerChrome,
@@ -102,15 +122,18 @@ const PlayerPage: React.FC = () => {
         setHidePanelButton: state.handleToggleHidePlayerRightPanelButton,
         setAlwaysBackButton: state.handleToggleAlwaysShowPlayerBackButton,
         setAlwaysTrackSwitch: state.handleToggleAlwaysShowTrackSwitchButtons,
+        setHeaderBlur: state.handleTogglePlayerHeaderBlur,
         setCardCloseButton: state.handleToggleOpenPanelCloseButton,
     })));
     const card = useStageSettingsStore(useShallow(state => ({
         mode: state.stageTrackPillMode,
         timeoutSec: state.stageTrackPillTimeoutSec,
         onHome: state.stageTrackPillOnHome,
+        inObs: state.stageTrackPillInObs,
         setMode: state.handleSetStageTrackPillMode,
         setTimeoutSec: state.handleSetStageTrackPillTimeoutSec,
         setOnHome: state.handleToggleStageTrackPillOnHome,
+        setInObs: state.handleToggleStageTrackPillInObs,
     })));
     const video = useVideoLayerSettingsStore(useShallow(state => ({
         enabled: state.videoLayerEnabled,
@@ -131,6 +154,10 @@ const PlayerPage: React.FC = () => {
     const hideSubtitle = useTypographySettingsStore(state => state.hidePlayerTranslationSubtitle);
     const setHideSubtitle = useTypographySettingsStore(state => state.handleToggleHidePlayerTranslationSubtitle);
     const hasCurrentSong = usePlaybackStore(state => Boolean(state.currentSong));
+    const canPositionCard = usePlaybackStore(hasNowPlayingCardSong);
+    const requestCardPosition = useNowPlayingCardLayoutStore(state => state.requestPositioning);
+    // Same test App asks the card with (homeIsWall).
+    const homeIsWall = isWallLibrarySuite(useActiveLibrarySuiteId());
     const requestPositioning = usePlayerBottomBarLayoutStore(state => state.requestPositioning);
     const tintColorPreview = useColorPreviewThrottle(lattice.setTintColor);
 
@@ -185,6 +212,15 @@ const PlayerPage: React.FC = () => {
                         onChange={setPlaybackEntryView}
                     />
                 </Row>
+                <Row
+                    option={O.rhineCardVisualizer}
+                    note={t('options.rhineCardVisualizerDesc')}
+                >
+                    <Toggle
+                        checked={rhineCardVisualizer}
+                        onChange={handleToggleRhineCardVisualizer}
+                    />
+                </Row>
                 <Row option={O.vignette} note={t('options.latticeVignetteDesc')}>
                     <Toggle checked={lattice.vignette} onChange={lattice.setVignette} />
                 </Row>
@@ -212,6 +248,9 @@ const PlayerPage: React.FC = () => {
                         <Slider value={lattice.tintIntensity} min={0} max={1} step={0.01} onChange={lattice.setTintIntensity} format={percent} />
                     </Row>
                 </Reveal>
+                <Row option={O.badgeCurrentOnly} note={t('options.latticeBadgeCurrentOnlyDesc')}>
+                    <Toggle checked={lattice.badgeCurrentOnly} onChange={lattice.setBadgeCurrentOnly} />
+                </Row>
             </Group>
 
             <Group def={BAR}>
@@ -264,6 +303,12 @@ const PlayerPage: React.FC = () => {
             </Group>
 
             <Group def={CARD}>
+                <Row
+                    option={O.cardPosition}
+                    hint={canPositionCard ? undefined : t('options.stageTrackPillRepositionUnavailable')}
+                    onClick={requestCardPosition}
+                    disabled={!canPositionCard}
+                />
                 <Row option={O.cardMode} note={t('options.stageTrackPillDesc')}>
                     <Segmented
                         value={card.mode}
@@ -280,9 +325,16 @@ const PlayerPage: React.FC = () => {
                         <Slider value={card.timeoutSec} min={3} max={60} onChange={card.setTimeoutSec} format={value => `${value}s`} />
                     </Row>
                 </Reveal>
+                {!homeIsWall && (
+                    <Reveal when={card.mode !== 'never'}>
+                        <Row option={O.cardOnHome} note={t('options.stageTrackPillOnHomeDesc')}>
+                            <Toggle checked={card.onHome} onChange={card.setOnHome} />
+                        </Row>
+                    </Reveal>
+                )}
                 <Reveal when={card.mode !== 'never'}>
-                    <Row option={O.cardOnHome} note={t('options.stageTrackPillOnHomeDesc')}>
-                        <Toggle checked={card.onHome} onChange={card.setOnHome} />
+                    <Row option={O.cardInObs} note={t('options.stageTrackPillInObsDesc')}>
+                        <Toggle checked={card.inObs} onChange={card.setInObs} />
                     </Row>
                 </Reveal>
                 <Row option={O.cardCloseButton} hint={t('options.showOpenPanelCloseButtonDesc')}>
@@ -319,6 +371,8 @@ const PlayerPage: React.FC = () => {
                             <Button onClick={() => void video.regrantLocalFile()}>{t('options.videoLayerRegrant')}</Button>
                         )}
                         <Button onClick={() => void pickVideo()}>{t('options.videoLayerPickFile')}</Button>
+                        {/* 视频层也要有市场入口：从这里直接挑视频，不用先去别的页面找。 */}
+                        <MarketEntryButton tab="background" />
                     </Row>
                 </Reveal>
                 <Reveal when={video.enabled}>
@@ -370,6 +424,11 @@ const PlayerPage: React.FC = () => {
                 <Row option={O.alwaysTrackSwitch} note={t('options.alwaysShowTrackSwitchButtonsDesc')}>
                     <Toggle checked={chrome.alwaysTrackSwitch} onChange={chrome.setAlwaysTrackSwitch} />
                 </Row>
+                {isElectron && (
+                    <Row option={O.headerBlur} hint={t('options.playerHeaderBlurDesc')}>
+                        <Toggle checked={chrome.headerBlur} onChange={chrome.setHeaderBlur} />
+                    </Row>
+                )}
             </FoldedGroup>
         </>
     );

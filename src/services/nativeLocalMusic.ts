@@ -1,4 +1,5 @@
 import type { LocalSong } from '../types';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { getLocalSongs, saveLocalSongs } from './db';
 import { stageLocalCoverAsset } from './localCoverAssetService';
 import { fetchOnlineCoversForImportedSongs } from './localCoverAutoFetch';
@@ -86,11 +87,25 @@ export const ANDROID_IMPORTED_FOLDER_NAME = 'Android 文件导入';
 
 export const isAndroidNativeRuntime = (): boolean => (
     typeof window !== 'undefined'
-    && (window as any).Capacitor?.getPlatform?.() === 'android'
+    && Capacitor.getPlatform() === 'android'
 );
 
+/**
+ * `FoliaNative` 的那只手。
+ *
+ * ⚠️ 不能读 `window.Capacitor?.Plugins?.FoliaNative`：那是**没注册过的插件**所在的口袋，
+ * Capacitor 只会往里面放 Web 端实现了的插件（@capacitor/*），我们自己那些原生插件一个都不在，
+ * 于是这里恒为 null —— `pickAudioFolder` 判不可用、直接抛「Android audio picker is unavailable」，
+ * 表现就是「点本地音乐选择文件夹，什么都不弹」。必须走 `registerPlugin`，它给的是代理，
+ * 方法名问过去就是一次 native 调用。
+ *
+ * 代理对象不能拿 `typeof plugin.x === 'function'` 判存在（任何名字都是 function），
+ * 所以「有没有这个方法」只能问 isPluginAvailable，或者干脆调一次让它自己报错。
+ */
+const FoliaNative = registerPlugin<NativePlugin>('FoliaNative');
+
 const getPlugin = (): NativePlugin | null => (
-    (window as any).Capacitor?.Plugins?.FoliaNative ?? null
+    Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('FoliaNative') ? FoliaNative : null
 );
 
 const titleFromFileName = (fileName: string): string => (
@@ -480,25 +495,48 @@ const buildAndStoreImportedTracks = async (tracks: NativeAudioTrack[]): Promise<
 
 export const pickAndroidLocalMusic = async (): Promise<LocalSong[]> => {
     const plugin = getPlugin();
-    const source = plugin?.pickAudioFolder ? 'folder' : 'files';
-    const picker = plugin?.pickAudioFolder ?? plugin?.pickAudioFiles;
-    if (!picker) {
+    if (!plugin) {
+        const platform = Capacitor.getPlatform();
+        const available = Capacitor.isPluginAvailable('FoliaNative');
         noteLibraryStep('local', 'pick:no-plugin', {
-            hasPlugin: Boolean(plugin),
-            methods: plugin ? Object.keys(plugin).join(',') : 'none',
+            hasPlugin: false,
+            platform,
+            pluginAvailable: available,
         });
-        throw new Error('Android audio picker is unavailable');
+        /*
+         * 把判据一起说出来。
+         *
+         * 以前这里只抛一句「Android audio picker is unavailable」，
+         * 真机上用户看到的就是「点了没反应」—— 分不清是
+         * 「跑在浏览器里」、「原生插件没注册」还是「插件注册了但方法不在」。
+         * 这三种的修法完全不同，所以把 platform / available 一起带上。
+         */
+        throw new Error(
+            `Android audio picker is unavailable（platform=${platform}, pluginAvailable=${available}）`,
+        );
     }
+    // 代理上任何名字都是 function，所以「选文件夹」这条入口默认就在；挑不到时原生侧会 reject，
+    // 那一次再回落成「选单个文件」。这份回落只为「插件比页面旧」这一种情况留着。
+    const source = 'folder';
 
     noteLibraryStep('local', 'pick:start', { source });
     let response: NativePickResponse;
     try {
-        response = await picker();
+        response = await plugin.pickAudioFolder!();
     } catch (error) {
-        noteLibraryStep('local', 'pick:error', {
-            message: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        noteLibraryStep('local', 'pick:error', { message });
+        /*
+         * 插件比页面旧（原生侧还没有 pickAudioFolder）时，代理把调用送过去会以
+         * 「not implemented on Android」回来。那不是用户的错，也不该让整条导入链断掉 ——
+         * 回落到「选单个文件」那条老路，用户照样能把歌导进来。
+         */
+        if (/not implemented|unavailable|not found/i.test(message) && !/already open/i.test(message)) {
+            noteLibraryStep('local', 'pick:fallback-files', { message });
+            response = await plugin.pickAudioFiles!();
+        } else {
+            throw error;
+        }
     }
 
     const failures = Array.isArray(response.failures) ? response.failures : [];

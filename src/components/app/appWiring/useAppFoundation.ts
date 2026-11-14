@@ -17,6 +17,11 @@ import { currentTime } from '../../../stores/motionSignals';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
+import { writeNativeLoopMode } from '../../../services/nativeQueueBridge';
+import { writeNativeSettings } from '../../../services/nativeSettingsBridge';
+import { startNativeEqualizerSync } from '../../../services/playbackEngine/nativeEqualizer';
+import { useNativeAiConfigSync } from '../../../hooks/useNativeAiConfigSync';
+import { useFoliaMachineCodeSync } from '../../../hooks/useFoliaMachineCodeSync';
 import { useAutomixSettingsStore } from '../../../stores/useAutomixSettingsStore';
 import { selectDesktopSettingsSnapshot, useDesktopSettingsStore } from '../../../stores/useDesktopSettingsStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
@@ -38,6 +43,9 @@ import { useBackgroundLyricHoldStore } from '../backgroundThrottling/backgroundL
 import { useBackgroundLyricHold } from '../backgroundThrottling/useBackgroundLyricHold';
 import { usePlaybackRuntimeRefs } from '../playback/usePlaybackRuntimeRefs';
 import { useProviderNotices } from '../useProviderNotices';
+import { useAndroidPlaybackOrientation } from '../../../hooks/useAndroidPlaybackOrientation';
+import { useNativeLyricsSubscription } from '../../../hooks/useNativeLyricsSubscription';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
@@ -50,14 +58,11 @@ export const useAppFoundation = () => {
     const {
         navidromeEnabled, setNavidromeEnabledState,
         starredNavidromeSongIds, setStarredNavidromeSongIds,
-        isProviderSyncing, setIsProviderSyncing,
     } = useLibraryStore(useShallow(state => ({
         navidromeEnabled: state.navidromeEnabled,
         setNavidromeEnabledState: state.setNavidromeEnabledState,
         starredNavidromeSongIds: state.starredNavidromeSongIds,
         setStarredNavidromeSongIds: state.setStarredNavidromeSongIds,
-        isProviderSyncing: state.isProviderSyncing,
-        setIsProviderSyncing: state.setIsProviderSyncing,
     })));
     const {
         currentSong, setCurrentSong,
@@ -116,7 +121,10 @@ export const useAppFoundation = () => {
         isDevDebugOverlayVisible: state.isDevDebugOverlayVisible,
     })));
     const isDev = import.meta.env.DEV;
-    const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
+    // 只认 platform（只有 Electron 的 preload 会写）。安卓端的模组 shim 装了
+    // `window.electron.mods` 但没有 platform，若按对象存在与否判断，安卓会拿到
+    // 桌面标题栏、桌面快捷键与桌面窗口行为。
+    const isElectronWindow = typeof (window as typeof window & { electron?: { platform?: unknown }; }).electron?.platform === 'string';
 
     // Subscribed only while the debug snapshot is actually being built: a plain subscription
     // re-rendered the whole App on every lyric-line change for a debug-only value.
@@ -175,6 +183,72 @@ export const useAppFoundation = () => {
     const updatePrompt = useStartupUpdatePrompt();
 
     useEffect(() => initializeSyncCoordinator(), []);
+
+    // 「进入可视化自动横屏」：Web 只上报「在不在播放页」，转不转由原生按设置判。
+    useAndroidPlaybackOrientation();
+
+    // 循环模式的启动同步：Web 这边从 localStorage 恢复了模式，但原生设置里还没有 ——
+    // 不发一次的话，放完往哪走（原生的队列状态机）会一直按默认顺序，直到用户再动一次
+    // 循环开关。放这里只做一次，后续变化由 handleSetLoopMode 自己下发。
+    useEffect(() => {
+        const mode = useAudioSettingsStore.getState().loopMode;
+        void writeNativeLoopMode(
+            mode === 'shuffle' ? 'all' : mode,
+            mode === 'shuffle',
+        );
+    }, []);
+
+    // AI 配置的启动同步与变化跟随：凭据只存原生，真正发请求的是原生。
+    useNativeAiConfigSync();
+    // 免费渠道：把本机的机器码同步进桌面端的凭据库（它就是那个渠道的 Key）。
+    useFoliaMachineCodeSync();
+
+    /*
+     * 原生均衡器：启动对一次表，之后跟随 store。
+     *
+     * 安卓上出声的是 ExoPlayer，Web Audio 图不在信号路径上 —— 界面这边改了参数，
+     * 必须推给原生才有人执行。非安卓 / 桥不在时 start 自己会跳过，这里不用判平台。
+     */
+    useEffect(() => {
+        startNativeEqualizerSync();
+    }, []);
+
+    /*
+     * 「无法播放时自动跳过」的启动同步，理由同上面的循环模式：这一项原生也读
+     * （FoliaPlaybackService.onEntryUnplayable），而 Web 这边只写在 localStorage 里。
+     * 不推一次的话，原生永远按默认的 true 走 —— Web 侧默认是 false，两边相反：
+     * 用户明明关着，WebView 一冻结，原生兜底照样一首首跳过去。
+     */
+    useEffect(() => {
+        let cancelled = false;
+        let attempts = 0;
+        const push = async () => {
+            const merged = await writeNativeSettings({
+                autoSkipUnplayable: useAudioSettingsStore.getState().autoSkipUnplayable,
+                backgroundSilentSkip: useAudioSettingsStore.getState().backgroundSilentSkip,
+                // 「播放淡入淡出」也归原生执行（音量斜坡在播放器里），启动时对一次表。
+                playbackFade: useAudioSettingsStore.getState().playbackFadeEnabled,
+                // 交叉淡化也是原生执行：开关、时长（秒 → 毫秒）与音量曲线在启动时对一次表。
+                crossfadeEnabled: useAutomixSettingsStore.getState().automixEnabled,
+                crossfadeMs: Math.round(useAutomixSettingsStore.getState().crossfadeMaxSec * 1000),
+                crossfadeCurve: useAutomixSettingsStore.getState().crossfadeCurve,
+            });
+            if (merged || cancelled || attempts >= 20) return;
+            attempts += 1;
+            setTimeout(() => {
+                void push();
+            }, 500);
+        };
+        void push();
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    // 歌词由原生拉、原生推：这里只按 songKey 认领并渲染。
+    // 自己拉会挂在 currentSong 的 effect 上，而原生派发的点歌绕过它 ——
+    // 「切了歌单歌词不换」就是这么来的。
+    useNativeLyricsSubscription(currentSong ? getPlaybackSongKey(currentSong) : null);
 
     const loadNavidromeFavorites = useCallback(async () => {
         if (!navidromeEnabled) {
@@ -342,14 +416,12 @@ export const useAppFoundation = () => {
     useBackgroundRenderPause();
     const {
         globalLyricTimelineOffsetMs,
-        lyricFilterPattern,
-        lyricFilterEnabled,
+        lyricLineRules,
         lyricStaffPolicy,
         lyricStaffMinDwellSeconds,
         lyricStaffAbsorbMode,
         lyricStaffPattern,
-        handleSetLyricFilterPattern,
-        handleSetLyricFilterEnabled,
+        handleSetLyricLineRules,
         handleSetLyricStaffPolicy,
         handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffAbsorbMode,
@@ -411,22 +483,22 @@ export const useAppFoundation = () => {
         backgroundLyricHeld, blobUrlRef, cachedCoverUrl, canUseTransitionPerformance,
         currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongFullRef, currentSongRef,
         cyclePlayerChromeVisibilityMode, devDebugCurrentLineIndex, disableHomeDynamicBackground, duration,
-        enablePlayerPageNativeBlur, gainNodeRef, globalLyricTimelineOffsetMs, handleSetLyricFilterEnabled,
-        handleSetLyricFilterPattern, handleSetLyricStaffAbsorbMode, handleSetLyricStaffMinDwellSeconds,
+        enablePlayerPageNativeBlur, gainNodeRef, globalLyricTimelineOffsetMs, handleSetLyricLineRules,
+        handleSetLyricStaffAbsorbMode, handleSetLyricStaffMinDwellSeconds,
         handleSetLyricStaffPattern, handleSetLyricStaffPolicy, handleToggleLoopMode, handleToggleNavidromeEnabled,
         handleToggleTransparentPlayerBackground, hideCursorWhenIdle, hideFullscreenButton, hidePlayerChromeOnTap,
         hidePlayerProgressBar, hidePlayerRightPanelButton, hidePlayerTranslationSubtitle,
         isClickThroughToggleHotspotActive, isDaylight, isDev, isDevDebugOverlayVisible, isElectronWindow, isFmMode,
         isHomeFullyHidden, isLyricsLoading, isMainWindowClickThroughEnabled, isMuted, isNowPlayingControlDisabledRef,
-        isPanelOpen, isPlayerChromeHidden, isProviderSyncing, isTitlebarRevealed, lastAudioRecoverySourceRef,
-        loopMode, lyricFilterEnabled, lyricFilterPattern, lyricStaffAbsorbMode, lyricStaffMinDwellSeconds,
+        isPanelOpen, isPlayerChromeHidden, isTitlebarRevealed, lastAudioRecoverySourceRef,
+        loopMode, lyricLineRules, lyricStaffAbsorbMode, lyricStaffMinDwellSeconds,
         lyricStaffPattern, lyricStaffPolicy, lyricTimelineOffsetMs, lyrics, lyricsCustomFontFamily,
         lyricsFontFallbackFamilies, lyricsFontStyle, lyricsFontWeight, lyricsLoadingWritesRef,
         onlinePlaybackRecoveryRef, pendingResumeTimeRef, pendingVolumePreviewRef, playQueue,
         playbackAutoSkipCountRef, playerBottomBarOffset, playerChromeVisibilityMode, playerState, queueAddBehavior,
         queueScrollRef, setAudioSrc, setCachedCoverUrl, setCurrentSong, setDaylightPreference, setDuration,
         setIsClickThroughToggleHotspotActive, setIsHomeFullyHidden, setIsLyricsLoading, setIsPanelOpen,
-        setIsPlayerChromeHidden, setIsPlayerPanelGuideHotspotActive, setIsProviderSyncing, setLyricTimelineOffsetMs,
+        setIsPlayerChromeHidden, setIsPlayerPanelGuideHotspotActive, setLyricTimelineOffsetMs,
         setLyricsState, setPanelTab, setPlayQueue, setPlayerChromeVisibilityModeTo, setPlayerState,
         settingsModalState, shouldAutoPlay, showTransparentWindowBorder, sleepTimerClockHour, sleepTimerClockMinute,
         sleepTimerEnabled, sleepTimerEndAction, sleepTimerHours, sleepTimerMinutes, sleepTimerMode,

@@ -430,7 +430,8 @@ const requestDecision = async (input: {
             require: 'decision',
         });
         if (!decision) throw new Error('AI 没有返回可用的动画决策。');
-        return { decision, source, contributed: source !== 'cloud' && reused !== true };
+        /* 只有真去问了模型才算「这台机器贡献过」。本地那一层跟云端命中一样，都是白拿。 */
+        return { decision, source, contributed: source === 'ai' && reused !== true };
     } finally {
         inFlight.delete(controller);
     }
@@ -462,9 +463,14 @@ export const runLyricDirectorDecision = async (options: { announce?: boolean; fo
      * 掉时一样，答案照样算、照样推上云端。
      *
      * 亲手点「重新决策」不受影响（`force`）：那一刻人是冲着 AI 的答案来的，不是被自动覆盖。
+     *
+     * 两个开关都开着时听谁的由「自动切换谁说了算」定（settings.autoDecisionPriority）：
+     * 默认 AI 优先 —— AI 的答案覆盖随机那一票，随机兜 AI 没给的底；选「随机优先」才是
+     * 上面注释里那条老规矩 —— 随机先定，AI 照算照上传但不应用。
      */
     const randomAnimation = useVisualizerSettingsStore.getState().randomVisualizerModePerSong === true;
-    const applyAllowed = options.apply !== false && (force || (!randomAnimation && settings.autoOnSongChange));
+    const randomPriority = randomAnimation && settings.autoDecisionPriority === 'random';
+    const applyAllowed = options.apply !== false && (force || (!randomPriority && settings.autoOnSongChange));
     const songKey = currentSongKey();
     if (!songKey || !songInfoOf(displaySong())) return { kind: 'no-song' };
 
@@ -518,7 +524,7 @@ export const runLyricDirectorDecision = async (options: { announce?: boolean; fo
         if (!applyAllowed) {
             // 让位给「随机动画」也得说出来：否则导演面板上停着上一次的说明，看上去像这一趟
             // 什么都没发生（其实答案已经算出来并推上云端了）。
-            if (randomAnimation) {
+            if (randomPriority) {
                 lastSummary = translate('aiDirector.randomWins');
                 lastReason = '';
                 refreshRuntime();

@@ -43,6 +43,8 @@ const MODE_NAMES: Record<string, string> = {
   sonnet: '商籁',
   tempera: '凝彩',
   lumiere: '绘光',
+  hanabi: '花火',
+  prompt: '提示词',
 };
 
 const MODE_HINTS: Record<string, string> = {
@@ -60,6 +62,8 @@ const MODE_HINTS: Record<string, string> = {
   sonnet: '日式 MV 分镜、相机运动与转场，电影感强',
   tempera: '印刷色块与拼贴、逐字入场',
   lumiere: '光场与烟雾、辉光崩解，华丽',
+  hanabi: '花火粒子与夜空、升空绽放与拼贴，节庆感强',
+  prompt: '提示词输入框风格、逐词 token 与卡拉OK进度，极客感',
 };
 
 /** 与 `src/services/themeSanitizer.ts` 同一条规则：只认 #rgb / #rrggbb。 */

@@ -21,13 +21,28 @@ import {
     type AudioEqualizerModCurve,
 } from '../utils/audioEqualizerModCurve';
 import { getStoredBoolean, getStoredString, removeStoredKey, setStoredBoolean, setStoredString } from './storagePrimitives';
+import { writeNativeLoopMode } from '../services/nativeQueueBridge';
+import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { setStatusMessage } from './useStatusMessageStore';
 import { setAudioFocusPolicy } from '../platform/foliaNative';
+import { isCapacitorAndroid } from '../platform/runtime';
+import { nativePlayer } from '../services/playbackEngine/nativePlayerPlugin';
 import i18n from '../i18n/config';
 
 export const CACHE_SIZE_KEY = 'folia_cache_size';
 
 export const ENABLE_MEDIA_CACHE_KEY = 'folia_enable_media_cache';
+
+/**
+ * 缓存开关的第二代 key。
+ *
+ * 为什么换名而不是直接改默认值：老版本的包还认着旧 key，同一把 key 上翻转默认值，
+ * 新旧两版对「用户到底选没选过」的判断会互相打架 —— 旧版升级上来读到的语义是错的，
+ * 回退旧版时更可能直接起不来。另起 `folia_enable_media_cache_v2`：
+ * 没写过的安装（绝大多数）默认**开**，写过的按用户自己的选择来。
+ * 旧 key 不再读：谁升级到这一版，缓存就是开的，直到他亲手关掉。
+ */
+export const ENABLE_MEDIA_CACHE_V2_KEY = 'folia_enable_media_cache_v2';
 
 /** What the toggle used to write to, before it was corrected to the prefixed key above. */
 export const LEGACY_ENABLE_MEDIA_CACHE_KEY = 'enable_media_cache';
@@ -64,6 +79,13 @@ export const KEEP_SCREEN_ON_WHILE_PLAYING_KEY = 'folia_keep_screen_on_while_play
  * a skip, like a taken-down one (services/onlineMusic/failure/onlineFailureCase). Off unless asked for.
  */
 export const AUTO_SKIP_UNPLAYABLE_KEY = 'folia_auto_skip_unplayable';
+/**
+ * 后台自动静默跳过（Android）。
+ *
+ * 开（默认）：应用在后台时遇到无法播放的歌曲，原生直接换下一首，不等前台的倒计时或提示。
+ * 关：后台遇到这类歌曲不自动跳过。
+ */
+export const BACKGROUND_SILENT_SKIP_KEY = 'background_silent_skip';
 
 /**
  * 后台与其他音源同时播放（Android）。
@@ -78,17 +100,20 @@ export const AUTO_SKIP_UNPLAYABLE_KEY = 'folia_auto_skip_unplayable';
 export const MIX_WITH_OTHER_AUDIO_KEY = 'folia_mix_with_other_audio';
 
 /**
- * 原生播放（Android，P1）。
+ * 关闭人声（中置相消）的存储键。
  *
- * 打开后音频不再由 WebView 的 `<audio>` 出声，改由原生 ExoPlayer 解码播放。
- * 默认关，且**只在原生播放器真的在**时才生效（Capacitor.isPluginAvailable）——
- * 桌面端、以及还没编进这个插件的包里，这一项既不显示也不起作用。
- *
- * ⚠️ 打开意味着 Web 音频图整体失效：均衡器、音效链、淡入淡出、automix 交叉淡化、
- * 以及播放页的频谱都是挂在 `createMediaElementSource` 上的，而它是单向不可逆的
- * —— 原生一出声，那些节点就都成了空跑。这是已知代价，不是 bug。
+ * 从没发布过，是这次新加的，所以名字现在定下来就不改了（见 AGENTS.md「存下来的数据」）。
  */
-export const NATIVE_PLAYBACK_KEY = 'folia_native_playback';
+export const VOCAL_CANCEL_KEY = 'folia_vocal_cancel';
+
+/*
+ * 原来的 `folia_native_playback`（原生播放开关）已经删掉：安卓上原生播放恒开，
+ * 不再给用户一条「回到网页音频图」的岔路。留在这里的说明是给读代码的人看的：
+ *
+ * 原生播放意味着 Web 音频图整体不参与出声 —— 均衡器、音效链、淡入淡出、automix
+ * 交叉淡化、播放页频谱都挂在 `createMediaElementSource` 上，而它是单向不可逆的。
+ * 这是已知代价，不是 bug。
+ */
 
 /**
  * Folium 1.7: the equalizer curve a mod put in place over the listener's own sound (utils/audioEqualizerModCurve.ts),
@@ -106,30 +131,18 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
 );
 
 /**
- * Reads the media cache toggle, honouring the key its own setter used to write to.
+ * Reads the media cache toggle from the v2 key: default **on**.
  *
- * The setter wrote a bare 'enable_media_cache' while startup read the folia-prefixed key, so the
- * setting silently reverted to off on every restart. Anyone who switched it on has their real
- * preference sitting under the legacy key, and simply correcting the setter would throw that
- * away once more - so read it as a fallback and promote it to the canonical key.
+ * 旧 key（folia_enable_media_cache / enable_media_cache）不再参与：那是上一代
+ * 默认关的开关，新 key 一换，这一版的语义是「默认缓存，除非用户亲手关」。
  */
 export const readStoredEnableMediaCache = (): boolean => {
     if (typeof window === 'undefined') {
-        return false;
+        return true;
     }
 
-    const canonical = localStorage.getItem(ENABLE_MEDIA_CACHE_KEY);
-    if (canonical !== null) {
-        return canonical === 'true';
-    }
-
-    const legacy = localStorage.getItem(LEGACY_ENABLE_MEDIA_CACHE_KEY);
-    if (legacy === null) {
-        return false;
-    }
-
-    localStorage.setItem(ENABLE_MEDIA_CACHE_KEY, legacy);
-    return legacy === 'true';
+    const stored = localStorage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
+    return stored === null ? true : stored === 'true';
 };
 
 export const readStoredMediaCacheLimitGb = (): number => {
@@ -251,12 +264,19 @@ export type AudioSettingsState = {
     playbackFadeEnabled: boolean;
     /** Count down to a skip when a song is restricted or fails for an unknown reason. Off by default. */
     autoSkipUnplayable: boolean;
+    /** 后台遇到无法播放的歌曲时静默跳过（Android）。默认开，见 BACKGROUND_SILENT_SKIP_KEY。 */
+    backgroundSilentSkip: boolean;
     /** 播放时保持屏幕常亮（Android 的 FLAG_KEEP_SCREEN_ON）。Off by default. */
     keepScreenOnWhilePlaying: boolean;
     /** 后台与其他音源同时播放（Android）。Off by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
     mixWithOtherAudio: boolean;
-    /** 原生播放（Android，P1）。Off by default，见 NATIVE_PLAYBACK_KEY。 */
-    nativePlaybackEnabled: boolean;
+    /**
+     * 关闭人声（中置相消）。Off by default，见 VOCAL_CANCEL_KEY。
+     *
+     * 安卓上由原生 AudioSink 的处理链实时做（VocalCancelProcessor）；
+     * 桌面端没有这条链路，开关不出现。
+     */
+    vocalCancelEnabled: boolean;
     audioOutputDeviceId: string;
     /** The listener's own sound, always: a mod's curve is never written into it. */
     audioEqualizerSettings: AudioEqualizerSettings;
@@ -283,9 +303,10 @@ export type AudioSettingsState = {
     handleToggleNeteaseScrobble: (enable: boolean) => void;
     handleTogglePlaybackFade: (enable: boolean) => void;
     handleToggleAutoSkipUnplayable: (enable: boolean) => void;
+    handleToggleBackgroundSilentSkip: (enable: boolean) => void;
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleToggleMixWithOtherAudio: (enable: boolean) => void;
-    handleToggleNativePlayback: (enable: boolean) => void;
+    handleToggleVocalCancel: (enable: boolean) => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     /*
      * The equalizer actions below return whether anything changed: the listener's settings they leave
@@ -375,12 +396,12 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     playbackFadeEnabled: getStoredBoolean(PLAYBACK_FADE_KEY, true),
     // Off unless asked for: skipping a song the listener picked is not something to do by default.
     autoSkipUnplayable: getStoredBoolean(AUTO_SKIP_UNPLAYABLE_KEY, false),
+    backgroundSilentSkip: getStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, true),
     // 默认关：常亮等于放弃系统那套自动熄屏，该由用户点头，不该替他决定。
     keepScreenOnWhilePlaying: getStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, false),
     mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, false),
-    // 默认开：切后台更稳、更省电，也少一层撕裂。代价是均衡器 / 音效 / 频谱整体失效，
-    // 所以设置里仍留着开关 —— 想回到网页那张音频图，拨一下就行。
-    nativePlaybackEnabled: getStoredBoolean(NATIVE_PLAYBACK_KEY, true),
+    // 默认关：它改变的是这首歌本来的样子，该由用户自己拨。
+    vocalCancelEnabled: getStoredBoolean(VOCAL_CANCEL_KEY, false),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
     audioEqualizerModCurve: readStoredAudioEqualizerModCurve(initialAudioEqualizerSettings),
@@ -397,7 +418,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         set({ audioQuality: quality });
     },
     handleToggleMediaCache: (enable) => {
-        setStoredBoolean(ENABLE_MEDIA_CACHE_KEY, enable);
+        setStoredBoolean(ENABLE_MEDIA_CACHE_V2_KEY, enable);
         set({ enableMediaCache: enable });
     },
     handleSetMediaCacheLimitGb: (gigabytes) => {
@@ -444,10 +465,32 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleTogglePlaybackFade: (enable) => {
         setStoredBoolean(PLAYBACK_FADE_KEY, enable);
         set({ playbackFadeEnabled: enable });
+        /*
+         * 这一项现在由原生执行：出声交给 ExoPlayer 之后，Web Audio 上那条 gain 斜坡不再参与，
+         * 淡入淡出改成播放器自己做的音量斜坡（见 FoliaNativePlayer.rampVolume）。不推过去，
+         * 界面上关掉它也不会有任何变化。
+         */
+        void writeNativeSettings({ playbackFade: enable });
     },
     handleToggleAutoSkipUnplayable: (enable) => {
         setStoredBoolean(AUTO_SKIP_UNPLAYABLE_KEY, enable);
         set({ autoSkipUnplayable: enable });
+        /*
+         * 原生也要知道。这一项不止 Web 那条路在用：WebView 冻结时、换源失败时，
+         * 原生兜底（FoliaPlaybackService.onEntryUnplayable）自己决定跳不跳，读的是
+         * 原生设置。以前没人推过它，原生永远按默认的 true 走 —— 用户把开关关掉，
+         * 后台那条路照样一路跳。
+         */
+        void writeNativeSettings({ autoSkipUnplayable: enable });
+    },
+    handleToggleBackgroundSilentSkip: (enable) => {
+        setStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, enable);
+        set({ backgroundSilentSkip: enable });
+        /*
+         * 后台那条路由原生自己判断（FoliaPlaybackService），它读的是落盘的原生设置：
+         * 不推过去，界面上关掉它，后台遇到无法播放的歌照样会跳。
+         */
+        void writeNativeSettings({ backgroundSilentSkip: enable });
     },
     handleToggleKeepScreenOnWhilePlaying: (enable) => {
         setStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, enable);
@@ -464,9 +507,18 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
          */
         void setAudioFocusPolicy(enable);
     },
-    handleToggleNativePlayback: (enable) => {
-        setStoredBoolean(NATIVE_PLAYBACK_KEY, enable);
-        set({ nativePlaybackEnabled: enable });
+    handleToggleVocalCancel: (enable) => {
+        setStoredBoolean(VOCAL_CANCEL_KEY, enable);
+        set({ vocalCancelEnabled: enable });
+        /*
+         * 立刻推给原生：处理器每帧读 NativeEqualizerState.vocalCancelEnabled，
+         * 所以拨过去正在响的这首当场就变，不用等下一次播放。
+         *
+         * 只落在安卓：桌面端没有 AudioSink 那条链，也没有这个插件方法。
+         * 失败就忽略 —— 开关状态已经存下了，下次播放时会重新推一次。
+         */
+        if (!isCapacitorAndroid()) return;
+        void nativePlayer.setVocalCancelEnabled(enable).catch(() => undefined);
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });
@@ -571,6 +623,18 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             localStorage.setItem('player_loop_mode', mode);
         }
         set({ loopMode: mode });
+        /*
+         * 下发原生。**放完往哪走是原生按这个决定的**（NativePlayQueue 的 loopMode/shuffle），
+         * 不下发的话原生永远按默认的「顺序」行事 —— 用户在界面里切成列表循环/单曲循环/
+         * 随机，后台放完一首就停，切回来才发现没接着放。
+         *
+         * 随机在 Web 这边是一个独立的模式值（'shuffle'），在原生那边是「列表循环 + 随机
+         * 标志」两个东西 —— 换算在这里做一次，别让原生猜 Web 的枚举。
+         */
+        void writeNativeLoopMode(
+            mode === 'shuffle' ? 'all' : mode,
+            mode === 'shuffle' ? true : false,
+        );
         const loopModeKey = mode === 'off'
             ? 'loopOff'
             : mode === 'one'

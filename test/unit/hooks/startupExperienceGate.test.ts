@@ -17,6 +17,8 @@ const readyState = {
     needsDeviceTypePrompt: false,
     isPlaybackEntryViewPromptOpen: false,
     isPonderOnboardingOpen: false,
+    needsSignInSpotlight: false,
+    isSignInSpotlightOpen: false,
 };
 
 describe('startup experience gate', () => {
@@ -94,5 +96,29 @@ describe('startup experience gate', () => {
         // 问过就不再问；开着时等它关。
         expect(resolveStartupExperienceStep({ ...answered, needsLibrarySuitePrompt: false })).toBeNull();
         expect(resolveStartupExperienceStep({ ...answered, isPlaybackEntryViewPromptOpen: true })).toBeNull();
+    });
+
+    // 首启最后一步：把登录按钮送到脸上。前面该确认的都确认完了才轮到它，而且不受版本门控。
+    it('brings the sign-in button to the face only once everything else is confirmed', () => {
+        const confirmed = {
+            ...readyState,
+            hasSeenReleaseNotes: true,
+            hasChosenPlaybackEntryView: true,
+            hasSeenPonder: true,
+            hasFinishedThisRelease: true,
+        };
+        // 不欠这一层时，序列走完就什么都没有。
+        expect(resolveStartupExperienceStep(confirmed)).toBeNull();
+
+        const owed = { ...confirmed, needsSignInSpotlight: true };
+        expect(resolveStartupExperienceStep(owed)).toBe('sign-in-spotlight');
+        // 不是自动弹发版说明的那一版也指：它回答的是「那个按钮在哪」，不是「这次更新了什么」。
+        expect(resolveStartupExperienceStep({ ...owed, isCurrentRelease: false })).toBe('sign-in-spotlight');
+        // 每一层都压在它前面。
+        expect(resolveStartupExperienceStep({ ...owed, needsFreeSoftwareNotice: true })).toBe('free-software-notice');
+        expect(resolveStartupExperienceStep({ ...owed, hasSeenReleaseNotes: false, hasFinishedThisRelease: false })).toBe('release-notes');
+        expect(resolveStartupExperienceStep({ ...owed, needsLibrarySuitePrompt: true })).toBe('playback-entry-view');
+        // 它自己开着时不再弹第二层。
+        expect(resolveStartupExperienceStep({ ...owed, isSignInSpotlightOpen: true })).toBeNull();
     });
 });

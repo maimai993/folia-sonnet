@@ -13,6 +13,7 @@ import type { VisualizerBackgroundMode, VisualizerMode } from '../types';
 // 悄悄少两个。
 
 export const BUILTIN_VISUALIZER_MODES = [
+    'blank',
     'cadenza',
     'cappella',
     'claddagh',
@@ -20,8 +21,12 @@ export const BUILTIN_VISUALIZER_MODES = [
     'diorama',
     'fume',
     'hanabi',
+    'kinetic',
     'lumiere',
+    'machi',
     'monet',
+    'mv',
+    'nebbia',
     'partita',
     'pendolo',
     'prompt',
@@ -35,7 +40,10 @@ export const BUILTIN_VISUALIZER_BACKGROUND_MODES = [
     'common',
     'latent',
     'monet',
+    'mv',
     'nomand',
+    'particles',
+    'sonic',
     'sora',
     'url',
 ] as const;

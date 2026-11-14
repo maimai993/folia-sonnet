@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { COVER_SIZE_STEPS, getOriginalCoverUrl, getSizedCoverUrl, resolveCoverSizeStep } from '../../utils/coverUrl';
+import { COVER_MAX_SIZE, COVER_SIZE_STEPS, getOriginalCoverUrl, getSizedCoverUrl, resolveCoverSizeStep } from '../../utils/coverUrl';
+import { isHdslbImageUrl, hdslbImageBlobUrl, hdslbImageBlobUrlSync } from '../../services/bilibili/hdslbImage';
 
 // src/components/wall/useWallPosterArtwork.ts
 // Picks which variant of a cover one poster paints. The wall draws the same list (the play queue,
@@ -24,7 +25,7 @@ const decodingVariants = new Map<string, Promise<boolean>>();
  */
 const failedVariants = new Map<string, true>();
 
-/** Ladder step the URL was cut at; `Infinity` stands for the provider's own asset. */
+/** Ladder step the URL was cut at; `Infinity` stands for `COVER_MAX_SIZE`, or the provider's own asset where a poster keeps it. */
 type PosterArtwork = {
     /** Cover this variant came from. A queue shift can point one slot at a different song. */
     cover: string;
@@ -42,9 +43,13 @@ const remember = (registry: Map<string, true>, url: string): void => {
     }
 };
 
-const variantUrl = (cover: string, step: number): string => (
-    Number.isFinite(step) ? getSizedCoverUrl(cover, step) : getOriginalCoverUrl(cover)
-);
+// Past the top step a poster gets COVER_MAX_SIZE, not the provider's original: a wall of distinct
+// multi-megapixel covers outgrows Chromium's decode cache and each tile raster decodes one again.
+// A poster that is one picture spread over a whole block (`keepOriginal`) keeps the original.
+const variantUrl = (cover: string, step: number, keepOriginal = false): string => {
+    if (Number.isFinite(step)) return getSizedCoverUrl(cover, step);
+    return keepOriginal ? getOriginalCoverUrl(cover) : getSizedCoverUrl(cover, COVER_MAX_SIZE);
+};
 
 // Waits for a decoded frame rather than a load event: the swap that follows is then a repaint of
 // something already rasterized, instead of a decode landing in the middle of the expansion spring.
@@ -53,14 +58,30 @@ const decodeVariant = (url: string): Promise<boolean> => {
     const pending = decodingVariants.get(url);
     if (pending) return pending;
 
+    // B 站图床的图不经 <img> 直连：i0.hdslb.com 按热点封来源，直连隔三差五 403。
+    // 这里换成原生代理取字节 → blob URL（带 B 站 Referer + 登录 cookie，风控认这个），
+    // 取回来的就是一张本地图，decode 走的完全是本地字节。取不到（null）就退回原地址
+    // 让它按老样子试。
     const image = new Image();
     image.decoding = 'async';
-    image.src = url;
-    const request = (typeof image.decode === 'function'
-        ? image.decode()
-        : new Promise<void>((resolve, reject) => {
-            image.onload = () => resolve();
-            image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+    const request = (isHdslbImageUrl(url)
+        ? hdslbImageBlobUrl(url).then(local => {
+            image.src = local ?? url;
+            return typeof image.decode === 'function'
+                ? image.decode()
+                : new Promise<void>((resolve, reject) => {
+                    image.onload = () => resolve();
+                    image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+                });
+        })
+        : Promise.resolve().then(() => {
+            image.src = url;
+            return typeof image.decode === 'function'
+                ? image.decode()
+                : new Promise<void>((resolve, reject) => {
+                    image.onload = () => resolve();
+                    image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+                });
         }))
         .then(() => {
             remember(decodedVariants, url);
@@ -82,8 +103,8 @@ const decodeVariant = (url: string): Promise<boolean> => {
  * hand a thumbnail-sized card the full-size bitmap some other card pulled, which is the cost this
  * whole path exists to avoid. With nothing decoded the box's own step is returned and simply loads.
  */
-const pickDisplay = (cover: string, targetStep: number): PosterArtwork => {
-    const targetUrl = variantUrl(cover, targetStep);
+const pickDisplay = (cover: string, targetStep: number, keepOriginal: boolean): PosterArtwork => {
+    const targetUrl = variantUrl(cover, targetStep, keepOriginal);
     if (decodedVariants.has(targetUrl)) return { cover, step: targetStep, url: targetUrl };
 
     for (let index = COVER_SIZE_STEPS.length - 1; index >= 0; index -= 1) {
@@ -111,20 +132,27 @@ export const prewarmWallPosterArtwork = (cover: string | undefined, sizePx: numb
  * so a card that changes gear keeps painting what it already had for the length of the reflow
  * instead of blanking. It never trades back down either: a collapsed card holding a sharper copy
  * costs nothing to keep, while dropping to a smaller variant would buy a refetch and a second swap.
+ *
+ * `keepOriginal` lets a box past the top step paint the provider's original instead of
+ * `COVER_MAX_SIZE` - for one picture spread over many tiles, where there is only one to decode.
  */
-export const useWallPosterArtwork = (cover: string | undefined, sizePx: number): string => {
+export const useWallPosterArtwork = (
+    cover: string | undefined,
+    sizePx: number,
+    { keepOriginal = false }: { keepOriginal?: boolean } = {},
+): string => {
     const source = cover ?? '';
     const targetStep = resolveCoverSizeStep(sizePx);
-    const [ready, setReady] = useState<PosterArtwork>(() => pickDisplay(source, targetStep));
+    const [ready, setReady] = useState<PosterArtwork>(() => pickDisplay(source, targetStep, keepOriginal));
     // Recomputed only when this slot changes song; the artwork of the previous one must not linger.
     const current = useMemo(
-        () => (ready.cover === source ? ready : pickDisplay(source, targetStep)),
-        [ready, source, targetStep],
+        () => (ready.cover === source ? ready : pickDisplay(source, targetStep, keepOriginal)),
+        [ready, source, targetStep, keepOriginal],
     );
 
     useEffect(() => {
         if (!source || (current.cover === source && current.step >= targetStep)) return;
-        const url = variantUrl(source, targetStep);
+        const url = variantUrl(source, targetStep, keepOriginal);
         const upgrade = () => setReady({ cover: source, step: targetStep, url });
         if (decodedVariants.has(url)) {
             upgrade();
@@ -135,7 +163,17 @@ export const useWallPosterArtwork = (cover: string | undefined, sizePx: number):
             if (decoded && !cancelled) upgrade();
         });
         return () => { cancelled = true; };
-    }, [current, source, targetStep]);
+    }, [current, source, targetStep, keepOriginal]);
 
-    return current.url;
+    // B 站图床的地址不能直接摆到 <img src> 上（403 见上文）：decode 已把字节经原生
+    // 代理换成本地 blob，这里渲染出口同样换 —— URL 还没换好时给空串，卡片按「图未到」
+    // 画占位，blob 一到下一次渲染就是它。
+    const display = useMemo(() => {
+        const url = current.url;
+        if (!url || !isHdslbImageUrl(url)) return url;
+        const local = hdslbImageBlobUrlSync(url);
+        return local ?? '';
+    }, [current.url]);
+
+    return display;
 };

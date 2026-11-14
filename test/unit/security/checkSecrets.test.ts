@@ -129,7 +129,9 @@ describe('产物扫描', () => {
 });
 
 describe('仓库当前状态', () => {
+    // 整个源码树（src / electron / shared / api，约 2800 个文件）都要读一遍：
+    // 默认的 5 秒只够快到当时的树，慢了就报「超时」而不是「扫出了什么」。
     it('源码里没有 VITE_ 凭据变量名，也没有明文密钥', () => {
         expect(scanSources(repoRoot)).toEqual([]);
-    });
+    }, 120_000);
 });

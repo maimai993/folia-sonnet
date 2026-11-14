@@ -1,4 +1,4 @@
-import type { Theme } from '../types';
+import type { CappellaAvatarImage, CappellaEmojiImage, Theme } from '../types';
 
 // src/entries/wallpaperSurfaceTypes.ts
 // The payloads the native side pushes into the wallpaper WebView, and the globals it installs.
@@ -71,6 +71,18 @@ export type WallpaperPayload = {
      * `applyPushedPhoneInsets` 落到同一份 CSS 变量 / `getPhoneInsets()` 上。
      */
     insets?: { top?: number; right?: number; bottom?: number; left?: number };
+    /**
+     * 群唱（Cappella）自定义头像 / 表情图。
+     *
+     * 叠层是另一个 WebView，它**读不到**主应用 IndexedDB 里用户上传的那几张图，
+     * 所以只能由原生把图（data URL）跟着单独那条通道推下来 —— 见
+     * WallpaperOverlay.pushCappellaImagesIfChanged。
+     *
+     * 缺了这份数据时 Cappella 会按「没有自定义头像」回退到封面：用户看到的正是
+     * 「群唱自定义头像显示的是封面」。
+     */
+    cappellaAvatarImages?: CappellaAvatarImage[];
+    cappellaEmojiImages?: CappellaEmojiImage[];
 };
 
 /**
@@ -139,6 +151,17 @@ declare global {
          * 而歌词看起来还在正常走（位置是页面自己按墙钟外推的），症状很隐蔽。
          */
         __foliaWallpaperPushCover?: (payload: { url?: string; data?: string }) => void;
+        /**
+         * 群唱自定义头像 / 表情图那条通道。
+         *
+         * 与封面同一条纪律：几百 KB 的 base64 不能跟着整包每 250ms 走一遍，也不能被
+         * 签名去重吞掉 —— 图是主应用从 IndexedDB 现解出来的，晚到一步就意味着叠层上
+         * 这一整首歌都在显示封面。
+         */
+        __foliaWallpaperPushCappellaImages?: (payload: {
+            avatars?: CappellaAvatarImage[];
+            emojis?: CappellaEmojiImage[];
+        }) => void;
         /**
          * 音频单独那条通道。
          *

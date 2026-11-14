@@ -25,11 +25,20 @@ export type UpdateDownloadProgress = {
     done: boolean;
 };
 
-/** 原生桥 `httpRequest` 的返回。headers 两种形状都可能出现（见 FoliaNativePlugin 那边）。 */
+/**
+ * 原生桥 `httpRequest` 的返回。headers 两种形状都可能出现（见 FoliaNativePlugin 那边）。
+ *
+ * 响应体是二选一（#262）：文本类回 `bodyText`，其余回 `bodyBase64`。读它一律走
+ * `nativePayloadBytes` / `decodeNativePayload`，不要自己猜是哪一种。
+ */
 export type NativeHttpResponse = {
     status: number;
     headers?: Array<{ name?: string; value?: string }> | Record<string, string>;
+    /** 文本类响应：原生已按 UTF-8 解好（严格解码失败时会退回 base64）。 */
+    bodyText?: string;
     bodyBase64?: string;
+    /** 原生读到的实际字节数；排查「谁把响应撑大了」时用。 */
+    byteLength?: number;
 };
 
 interface FoliaNativePlugin {
@@ -105,6 +114,10 @@ interface FoliaNativePlugin {
         bodyBase64: string;
         redirect: string;
         timeoutMs?: number;
+        /** 允许回传的最大字节数；原生还会按硬上限再夹一次（见 FoliaNativePlugin）。 */
+        maxBytes?: number;
+        /** auto（默认，按 Content-Type 猜）| text | base64。 */
+        responseMode?: 'auto' | 'text' | 'base64';
     }): Promise<NativeHttpResponse>;
     /** 往 WebView 的 cookie 罐里写一条。`<img>` / `<audio>` 加不了请求头，只能靠它带凭据。 */
     cookiesSet(options: {
@@ -141,6 +154,15 @@ interface FoliaNativePlugin {
      * 与用户取消（`picked` 与 `rejected` 都假）分开，界面才好分别给提示。
      */
     pickVideoLayerFile(): Promise<{ picked?: boolean; rejected?: boolean; name?: string; url?: string }>;
+    /** 下载网络视频并存成视频层文件（市场背景用）。 */
+    downloadVideoLayerFile(options: { url: string; progressId?: string }): Promise<{
+        stored?: boolean;
+        name?: string;
+        url?: string;
+        /** 落盘后的真实路径（`url` 是回环播放地址，文件操作要用这个）。 */
+        path?: string;
+        error?: string;
+    }>;
     /**
      * 挑过的那个视频此刻还在不在，地址是什么。
      *
@@ -153,6 +175,16 @@ interface FoliaNativePlugin {
     addListener(
         eventName: 'updateDownloadProgress',
         listener: (progress: UpdateDownloadProgress) => void,
+    ): Promise<FoliaNativeListenerHandle>;
+    /**
+     * 视频层文件（`downloadVideoLayerFile`）的下载进度，`percent` 是 0-100。
+     *
+     * 原生发在**这个**插件上，和 FoliaWallpaper 那个同名事件不是一个来源，
+     * 两边各订各的（见 services/backgroundMarket/progress.ts）。
+     */
+    addListener(
+        eventName: 'videoDownloadProgress',
+        listener: (progress: { id?: string; percent?: number }) => void,
     ): Promise<FoliaNativeListenerHandle>;
 }
 
@@ -344,6 +376,40 @@ export const pickNativeVideoLayerFile = async (): Promise<NativeVideoLayerPick> 
     }
 };
 
+/**
+ * 把一个网络视频下载成视频层文件。
+ *
+ * 走原生：视频地址多半带签名和防盗链，直接塞给 <video> 播，
+ * 过几天签名过期就黑屏；而且边走边播容易被限速卡顿。
+ * 下载完后原生会把它放进视频层自己的位置，回一个回环地址。
+ *
+ * @returns 成功时的回环地址与显示名；失败时 error 有说明。
+ */
+export const downloadNativeVideoLayerFile = async (
+    url: string,
+    progressId?: string,
+): Promise<{ ok: boolean; url: string | null; name: string | null; error: string | null; path: string | null }> => {
+    if (!isCapacitorAndroid()) {
+        return { ok: false, url: null, name: null, error: '仅安卓支持', path: null };
+    }
+    try {
+        const result = await FoliaNative.downloadVideoLayerFile({ url, progressId });
+        if (result?.stored && result.url) {
+            /*
+             * path 是落盘后的真实路径，交给壁纸层做「安装」用。
+             *
+             * url 是回环播放地址，文件操作拿不到它。市场里两个目标同时勾选时，
+             * 靠这个路径避免同一个视频下两遍（FoliaWallpaper.adoptDownloadedVideo）。
+             */
+            return { ok: true, url: result.url, name: result.name ?? '', error: null, path: result.path ?? null };
+        }
+        return { ok: false, url: null, name: null, error: result?.error ?? '视频下载失败', path: null };
+    } catch (error) {
+        console.warn('[FoliaNative] downloadVideoLayerFile failed', error);
+        return { ok: false, url: null, name: null, error: (error as Error)?.message ?? '视频下载失败', path: null };
+    }
+};
+
 /** 上一次挑的那个视频还在不在（重启后靠它把地址重新拿回来）。 */
 export const readNativeVideoLayerFile = async (): Promise<NativeVideoLayerFile | null> => {
     if (!isCapacitorAndroid()) return null;
@@ -379,24 +445,92 @@ export const downloadUpdate = (
     options: { url: string; fileName: string },
 ): Promise<{ path: string; bytes: number }> => FoliaNative.downloadUpdate(options);
 
+/**
+ * 监听 `downloadVideoLayerFile` 的下载进度（0..1）。
+ *
+ * 原生在 `FoliaNativePlugin` 上发 `videoDownloadProgress`，**不是** FoliaWallpaper
+ * 那个同名事件 —— 桌面壁纸和 App 内的视频下载分别发在两处，各自要订各的。
+ * 以前只订了壁纸那一侧，所以「选 App 内」时进度条永远是 0%。
+ *
+ * 返回取消订阅的函数，组件卸载时要调用。
+ */
+export const subscribeNativeVideoLayerProgress = async (
+    listener: (progress: number) => void,
+): Promise<() => void> => {
+    if (!isCapacitorAndroid()) return () => {};
+    try {
+        const handle = await FoliaNative.addListener('videoDownloadProgress', (payload) => {
+            const percent = payload?.percent;
+            if (typeof percent === 'number' && Number.isFinite(percent)) {
+                listener(Math.min(1, Math.max(0, percent / 100)));
+            }
+        });
+        return () => {
+            try {
+                handle?.remove();
+            } catch {
+                // 已经卸载过了。
+            }
+        };
+    } catch {
+        return () => {};
+    }
+};
+
 /** 拉起系统安装器。 */
 export const installUpdate = (
     options: { path: string },
 ): Promise<{ status: string }> => FoliaNative.installUpdate(options);
 
-/** 原生桥给的 base64 响应体 → UTF-8 文本。清单里可能有中文更新日志，必须按 UTF-8 解。 */
-export const decodeNativeBody = (bodyBase64?: string): string => {
-    if (!bodyBase64) return '';
+/** base64 里偶尔会带换行（Java 的 MIME 编码器），atob 不认，先清掉。 */
+const body64Safe = (value: string): string => value.replace(/\s+/g, '');
+
+/** 原生桥给的 base64 → 字节。空值给空数组。 */
+export const nativeBase64ToBytes = (bodyBase64?: string): Uint8Array => {
+    if (!bodyBase64) return new Uint8Array();
     const binary = atob(body64Safe(bodyBase64));
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) {
         bytes[index] = binary.charCodeAt(index);
     }
-    return new TextDecoder().decode(bytes);
+    return bytes;
 };
 
-/** base64 里偶尔会带换行（Java 的 MIME 编码器），atob 不认，先清掉。 */
-const body64Safe = (value: string): string => value.replace(/\s+/g, '');
+/** 原生桥给的 base64 响应体 → UTF-8 文本。清单里可能有中文更新日志，必须按 UTF-8 解。 */
+export const decodeNativeBody = (bodyBase64?: string): string => (
+    new TextDecoder().decode(nativeBase64ToBytes(bodyBase64))
+);
+
+/**
+ * 原生回包 → 字节。
+ *
+ * 文本类响应原生直接给 `bodyText`（#262），这里按 UTF-8 编回字节即可 —— 不再走
+ * 「先 base64 再 atob」那条 1.33× 的往返；二进位才是 `bodyBase64`。
+ */
+export const nativePayloadBytes = (payload: NativeHttpResponse | null | undefined): Uint8Array => {
+    if (!payload) return new Uint8Array();
+    if (typeof payload.bodyText === 'string') return new TextEncoder().encode(stripUtf8Bom(payload.bodyText));
+    return nativeBase64ToBytes(payload.bodyBase64);
+};
+
+/** 原生回包 → UTF-8 文本（文本响应直接用原生解好的那一份）。 */
+export const decodeNativePayload = (payload: NativeHttpResponse | null | undefined): string => {
+    if (!payload) return '';
+    if (typeof payload.bodyText === 'string') return stripUtf8Bom(payload.bodyText);
+    return decodeNativeBody(payload.bodyBase64);
+};
+
+/**
+ * 去掉开头的 UTF-8 BOM。
+ *
+ * 走 base64 的旧路径由 `TextDecoder` 负责剥（默认 ignoreBOM = false），而 #262 之后
+ * 文本响应是原生用 `CharsetDecoder` 严格解码出来的 —— 它**不剥** BOM。不在这里补一刀，
+ * 带 BOM 的 JSON（更新清单、自建 NAS 的资料库接口）就会 `JSON.parse` 失败，被误报成
+ * 「不是接口 / 非 JSON 响应」。
+ */
+const stripUtf8Bom = (value: string): string => (
+    value.charCodeAt(0) === 0xfeff ? value.slice(1) : value
+);
 
 /** 一次原生转发的结果：状态码 + 按 UTF-8 解出来的响应体。 */
 export type NativeHttpRequestResult = {
@@ -441,7 +575,7 @@ export const nativeHttpRequest = async (options: {
     });
     return {
         status: Number(response?.status) || 0,
-        text: decodeNativeBody(response?.bodyBase64),
+        text: decodeNativePayload(response),
         ...(response?.headers ? { headers: response.headers } : {}),
     };
 };
@@ -553,5 +687,125 @@ export const disposeQishuiNative = async (): Promise<void> => {
         await FoliaQishui.dispose();
     } catch (error) {
         console.warn('[FoliaQishui] dispose failed', error);
+    }
+};
+
+// ─── bilibili MV（FoliaBilibili）──────────────────────────────────────
+// api.bilibili.com 不给任意来源 CORS 头，WebView 里直连一定被拦。安卓这边由
+// FoliaBilibili 插件用 OkHttp 代发只读 GET —— 和 FoliaNative.httpRequest 是同一套思路。
+//
+// 不需要登录：实测 nav / search / playurl 在未登录时都回 code=0，只有画质上限停在
+// 480p（1080p 要大会员）。所以这里没有任何账号状态。
+
+interface FoliaBilibiliPlugin {
+    request(options: {
+        url: string;
+        headers?: Record<string, string>;
+        /** 停在第一跳不跟随 3xx：扫码登录换 cookie 要读 302 自己的 Set-Cookie。 */
+        noRedirect?: boolean;
+    }): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }>;
+    /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
+    authStatus(): Promise<{ signedIn: boolean; uid: string }>;
+    /**
+     * 把一条流挂到本机中转上，回一个可直接播放的地址。
+     *
+     * `urls` 是候选地址（主地址在前）：中转按顺序试，一台回 403 就换下一台。
+     */
+    proxyStream(options: {
+        urls: string[];
+        headers?: Record<string, string>;
+    }): Promise<{ url: string | null }>;
+    /**
+     * 把扫码登录拿到的 cookie 落进原生 CookieManager。
+     *
+     * 之后所有 request 都会自动带上 —— 插件自己不发登录请求，也不持有凭据。
+     */
+    setCookies(options: { cookie: string }): Promise<{ ok: boolean }>;
+    clearCookies(): Promise<{ ok: boolean }>;
+}
+
+const FoliaBilibili = registerPlugin<FoliaBilibiliPlugin>('FoliaBilibili');
+
+/** 安卓上能不能替我们发 bilibili 请求。 */
+export const isBilibiliNativeAvailable = (): boolean => (
+    isCapacitorAndroid() && typeof FoliaBilibili?.request === 'function'
+);
+
+/**
+ * 通过原生代发一次 bilibili GET。
+ *
+ * 回 `{ ok, status, bodyText }`：`ok` 只表示 HTTP 通不通，业务码（code）由调用方解析。
+ * 这样「bilibili 说没有这条视频」和「网络断了」在 JS 那边分得开。
+ */
+/**
+ * 把一条流挂到原生中转上，回本机地址（`http://127.0.0.1:<port>/stream/<token>`）。
+ *
+ * `urls` 是同一个流的候选地址，主地址在前：中转会按顺序试，一台回 403 就换下一台。
+ * 起不来就回空串，调用方退回直连。
+ */
+export const proxyBilibiliNative = async (
+    urls: string[],
+    headers?: Record<string, string>,
+): Promise<string> => {
+    if (!isBilibiliNativeAvailable()) return '';
+    try {
+        const result = await FoliaBilibili.proxyStream({ urls, headers });
+        return result?.url ?? '';
+    } catch {
+        return '';
+    }
+};
+
+export const requestBilibiliNative = async (
+    url: string,
+    headers?: Record<string, string>,
+    /** 停在第一跳不跟随 3xx：扫码登录那一步要读 302 自己的 Set-Cookie。 */
+    noRedirect?: boolean,
+): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }> => {
+    if (!isBilibiliNativeAvailable()) {
+        return { ok: false, status: 0, bodyText: '' };
+    }
+    try {
+        const result = await FoliaBilibili.request({ url, headers, noRedirect: noRedirect === true });
+        if (result && typeof result === 'object' && 'status' in result) return result;
+        return { ok: false, status: 0, bodyText: '' };
+    } catch (error) {
+        console.warn('[FoliaBilibili] request failed', error);
+        return { ok: false, status: 0, bodyText: '' };
+    }
+};
+
+/** 当前 bilibili 登录态。没有原生桥就是未登录。 */
+export const readBilibiliAuthNative = async (): Promise<{ signedIn: boolean; uid: string }> => {
+    if (!isBilibiliNativeAvailable()) return { signedIn: false, uid: '' };
+    try {
+        const result = await FoliaBilibili.authStatus();
+        if (result && typeof result === 'object') return result;
+        return { signedIn: false, uid: '' };
+    } catch (error) {
+        console.warn('[FoliaBilibili] authStatus failed', error);
+        return { signedIn: false, uid: '' };
+    }
+};
+
+/** 保存扫码登录得到的 cookie。 */
+export const saveBilibiliCookiesNative = async (cookie: string): Promise<boolean> => {
+    if (!isBilibiliNativeAvailable()) return false;
+    try {
+        const result = await FoliaBilibili.setCookies({ cookie });
+        return Boolean(result?.ok);
+    } catch (error) {
+        console.warn('[FoliaBilibili] setCookies failed', error);
+        return false;
+    }
+};
+
+/** 清掉 bilibili 登录态。 */
+export const clearBilibiliCookiesNative = async (): Promise<void> => {
+    if (!isBilibiliNativeAvailable()) return;
+    try {
+        await FoliaBilibili.clearCookies();
+    } catch (error) {
+        console.warn('[FoliaBilibili] clearCookies failed', error);
     }
 };

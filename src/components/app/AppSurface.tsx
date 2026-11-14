@@ -14,16 +14,21 @@ import type { AppPlayerPanel } from './appWiring/useAppPlayerPanel';
 import type { AppOverlayModels } from './appWiring/useAppOverlayModels';
 import { FoliumStageLayerSlot } from '../../mods/folium/registries/stageLayers';
 import { type AutomixDeckId } from '../../services/automix/useAutomixDecks';
+// HiFi 路线上 mpv 拿着设备：两块网页 deck 既不该有 src，它们的事件也不该改动传输状态。
+import { isHifiRoute } from '../../services/hifi/hifiPlayback';
 import { consumeProgrammaticPause, playbackFade } from '../../services/playbackFade';
 import { hasLoopedToStart } from '../../services/playedTrackCache';
 import { currentTime, lyricCurrentTime } from '../../stores/motionSignals';
-import { endLoadingToPlay } from '../../stores/usePlaybackStore';
+import { endLoadingToPlay, usePlaybackStore } from '../../stores/usePlaybackStore';
+import ScratchpadHost from './scratchpad/ScratchpadHost';
+import { useAppChromeStore } from '../../stores/useAppChromeStore';
 import { PlayerState } from '../../types';
 import { isLocalPlaybackSong, isNavidromePlaybackSong, isStagePlaybackSong } from '../../utils/appPlaybackGuards';
 import { noteAudioEvent } from '../../utils/mediaDiagnostics';
 import CommandPalette from '../command-palette/CommandPalette';
 import { PlayerBottomBarLayoutContext } from '../floating-player/PlayerBottomBarLayoutContext';
 import LoginHost from '../login/LoginHost';
+import SignInSpotlight from '../login/SignInSpotlight';
 import AnalysisModelsPrompt from '../modal/AnalysisModelsPrompt';
 import AppUpdatePromptDialog from '../modal/AppUpdatePromptDialog';
 import FreeSoftwareNoticeModal from '../modal/FreeSoftwareNoticeModal';
@@ -34,7 +39,9 @@ import ReleaseNotesDialog from '../modal/ReleaseNotesDialog';
 import { UserGuideModal } from '../modal/UserGuideModal';
 import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
-import VisualizerRenderer from '../visualizer/VisualizerRenderer';
+import SceneHost from '../scenes/engine/SceneHost';
+import BilibiliMvLayer from '../bilibili/BilibiliMvLayer';
+import BilibiliVideoStage from '../bilibili/BilibiliVideoStage';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
@@ -44,6 +51,7 @@ import Home from './Home';
 import { createOnlineGridViewCollection } from './home/gridViewCollectionAdapters';
 import { wallExitCompleted, WALL_LAYER } from './lattice/wallLayer';
 import MediaCacheMigrationNotice from './MediaCacheMigrationNotice';
+import TestBuildNotice from './notices/TestBuildNotice';
 import AppOverlays from './overlays/AppOverlays';
 import { handleOnlineMediaFailure } from './playback/handleOnlineMediaFailure';
 import { notePreviewPlaying } from './playback/source/previewNotice';
@@ -67,11 +75,11 @@ export type AppModel = AppFoundation & AppAudioOutput & AppThemeAndNavigation & 
 
 const AppSurface = ({ model }: { model: AppModel }) => {
     const {
-        accountController, activeProviderId, addCurrentSongToLocalPlaylist, addCurrentSongToNavidromePlaylist,
-        addCurrentSongToOnlinePlaylist, alwaysShowMainWindowTitlebar, appDialogsModel, appOverlaysModel, appStyle,
+        accountController, activeProviderId, addPickedSongsToLocalPlaylist, addPickedSongsToNavidromePlaylist,
+        addPickedSongsToOnlinePlaylist, alwaysShowMainWindowTitlebar, appDialogsModel, appOverlaysModel, appStyle,
         audioSrc, automix, backgroundLyricHeld, blursVisualizerBackdrop, cacheSongAssets, canToggleCurrentPlayback,
-        commandPalette, commandPaletteContext, createCurrentLocalPlaylist, createCurrentNavidromePlaylist,
-        createCurrentOnlinePlaylist, currentSong, currentView, displayDuration, displayPlayerState, displaySong,
+        commandPalette, commandPaletteContext, createLocalPlaylistWithSongs, createNavidromePlaylistWithSongs,
+        createOnlinePlaylistWithSongs, currentSong, currentView, displayDuration, displayPlayerState, displaySong,
         duration, effectiveLoopMode, handleNextTrack, handleSwipePointerCancel, handleSwipePointerDown,
         handleSwipePointerMove, handleSwipePointerUp, handleTranscodeFallback, handleVisualSurfaceClick,
         hideFullscreenButton, holdsHomeForFlight, homeModel, idleCursorHidden, isClickThroughToggleHotspotActive,
@@ -79,15 +87,17 @@ const AppSurface = ({ model }: { model: AppModel }) => {
         isMainWindowClickThroughEnabled, isNowPlayingControlDisabled, isNowPlayingStageActive, isPlayerSwipeEnabled,
         isPlayerView, isShowingTail, isTitlebarRevealed, lastAudioRecoverySourceRef, localPlaylists, loopPositionRef,
         nativeTakes, navigateBackFromLattice, navigateToHome, navigateToPlayer, nowPlayingConnectionStatus,
-        onlinePlaylists, openHomeCollection, pendingResumeTimeRef, playQueue, playSong, playbackAutoSkipCountRef,
+        onClickThroughTransportAction, openHomeCollection, pendingResumeTimeRef, playQueue, playSong, playbackAutoSkipCountRef,
         playerCapConnectionStatus, playerPanelModel, playerState, recoverOnlinePlaybackSource, reduceLatticeMotion,
         saveCustomDualTheme, saveEditedAiDualTheme, seekMainAudio, setDuration, setIsClickThroughToggleHotspotActive,
         setPlayerState, setupAudioAnalyzer, shouldAutoPlay, shouldHidePlayerCursor, shouldMountVisualizer,
         shouldShowHomeSurface, showTransparentWindowBorder, signOutDialog, skipAfterPlaybackFailure,
+        scratchpadPlayback, scratchpadQueue,
         stageActiveEntryKind, stageSource, startupExperience, t, theme, togglePlay, transitionAnimation,
         transitionMode, transparentPlayerBackground, updatePrompt, usesCustomWindowChrome, visualizerAroundWall,
-        visualizerRendererModel, wallHandoff, wallToolsHost, wallpaperMode
+        visualizerRendererModel, songThemePair, wallHandoff, wallToolsHost, wallpaperMode
     } = model;
+    const isPlayerChromeHidden = useAppChromeStore(state => state.isPlayerChromeHidden);
     // The two automix decks are identical and interchangeable. Every handler below ignores the
     // deck that is not currently active, so a track fading out in the background can never drive
     // the progress bar, the duration, the queue, or the player state.
@@ -95,8 +105,12 @@ const AppSurface = ({ model }: { model: AppModel }) => {
         <audio
             key={deck}
             ref={register}
+            // 让「哪块 deck 在放」在 DOM 里看得见：排查原生/HiFi 与网页两路争设备时，
+            // 这是唯一能一眼确认某块 deck 是否真被挂上的地方。
+            data-playback-deck={deck}
             // 原生接管的这一首，元素必须空着：它有 src 就会自己播一份，两处同时出声。
-            src={nativeTakes ? '' : automix.deckSrc(deck)}
+            // HiFi 路线上 mpv 拿着设备，两块 deck 同样什么都不该有。
+            src={nativeTakes || isHifiRoute() ? '' : automix.deckSrc(deck)}
             preload="auto"
             crossOrigin="anonymous"
             loop={effectiveLoopMode === 'one' && automix.activeDeck === deck}
@@ -126,6 +140,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 }
             }}
             onPlay={(e) => {
+                if (isHifiRoute()) return;
                 if (!automix.isActiveDeck(e.currentTarget)) return;
                 shouldAutoPlay.current = false;
                 // The same split onTimeUpdate, onSeeked and onLoadedMetadata all make, and the two
@@ -140,6 +155,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             onRateChange={(e) => noteAudioEvent('ratechange', e.currentTarget)}
             onCanPlay={(e) => noteAudioEvent('canplay', e.currentTarget)}
             onPlaying={(e) => {
+                if (isHifiRoute()) return;
                 noteAudioEvent('playing', e.currentTarget);
                 if (!automix.isActiveDeck(e.currentTarget)) return;
                 shouldAutoPlay.current = false;
@@ -158,6 +174,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 // A pause that flushing a fade-out made, while a new song is already being set up:
                 // the transport state and play intent belong to that song now.
                 if (consumeProgrammaticPause(e.currentTarget)) return;
+                // The Web engine yielding to mpv pauses the deck: the HiFi song's autoplay intent stays.
+                if (isHifiRoute()) return;
                 if (!automix.isActiveDeck(e.currentTarget)) return;
                 // A deck whose source failed fires `pause` immediately AFTER `error` - Chromium
                 // clears the play state as part of failing the load - and that is not the listener
@@ -173,6 +191,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 }
             }}
             onTimeUpdate={(e) => {
+                if (isHifiRoute()) return;
                 const audioElement = e.currentTarget;
                 const isActive = automix.isActiveDeck(audioElement);
                 // The clock and the transport are driven by different decks during a transition.
@@ -219,6 +238,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 automix.checkTransitionPoint(audioElement.currentTime);
             }}
             onSeeked={(e) => {
+                if (isHifiRoute()) return;
                 noteAudioEvent('seeked', e.currentTarget);
                 // Same split as onTimeUpdate: whichever deck the bar is showing is the one a seek
                 // on it has to be reflected from.
@@ -252,6 +272,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             //     }
             // }}
             onEnded={(e) => {
+                // mpv's own end advances the queue on the HiFi route (useHifiPlaybackBridge).
+                if (isHifiRoute()) return;
                 // A track finishing in the background has already handed the queue over.
                 if (!automix.isActiveDeck(e.currentTarget)) {
                     automix.handleTailEnded();
@@ -273,10 +295,11 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 // If single loop is active, native loop handles it.
                 // If not, we handle queue logic.
                 if (effectiveLoopMode !== 'one') {
-                    void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+                    void handleNextTrack({ allowStopOnMissing: true, playedToEnd: true, shouldNavigateToPlayer: false });
                 }
             }}
             onLoadedMetadata={(e) => {
+                if (isHifiRoute()) return;
                 const audioElement = e.currentTarget;
                 if (!automix.isActiveDeck(audioElement)) return;
                 setDuration(audioElement.duration);
@@ -301,6 +324,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 currentTime.set(0); // Ensure currentTime is reset when new audio loads
             }}
             onError={(e) => {
+                if (isHifiRoute()) return;
                 noteAudioEvent('error', e.currentTarget);
                 const audioElement = e.currentTarget;
                 const isActiveDeck = automix.isActiveDeck(audioElement);
@@ -333,7 +357,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                         return;
                     }
 
-                    void handleNextTrack({ allowStopOnMissing: true, shouldNavigateToPlayer: false });
+                    void handleNextTrack({ allowStopOnMissing: true, playedToEnd: true, shouldNavigateToPlayer: false });
                     return;
                 }
 
@@ -391,6 +415,7 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                     void window.electron?.setMainWindowClickThroughUnlockHover?.(false);
                 }
             }}
+            onClickThroughTransportAction={onClickThroughTransportAction}
             audioElement={<>
                 {renderAudioDeck('A', automix.registerDeckA)}
                 {renderAudioDeck('B', automix.registerDeckB)}
@@ -409,7 +434,15 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                     transition: isHomeSurfaceRevealed
                         ? 'visibility 0s linear 0s'
                         : 'visibility 0s linear 0.25s',
-                    display: isHomeFullyHidden && !wallHandoff.keepsHome ? 'none' : 'block',
+                    /*
+                     * 不用 `display: none`。
+                     *
+                     * 首页里嵌着三维曲库（rhine）的 iframe，`display: none` 会让
+                     * 浏览器暂停它的渲染、甚至丢掉 WebGL 上下文；切到歌词页再
+                     * 回来，3D 场景就得重建，镜头位置也跟着回到初始值。
+                     * 保持 `display: block` 只改 `visibility`，页面原地待命。
+                     */
+                    display: 'block',
                 }}
             >
                 <motion.div
@@ -422,13 +455,26 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                     // lets what is under them through.
                     transition={{ duration: wallHandoff.active || !visualizerAroundWall.hasWallLeft ? 0 : 0.25, ease: 'easeInOut' }}
                 >
-                    {currentView === 'home' || currentView === 'player' || wallHandoff.keepsHome || holdsHomeForFlight ? (
-                        <Home
-                            model={homeModel}
-                            isHomeFullyHidden={isHomeFullyHidden && !wallHandoff.keepsHome}
-                            isInteractive={shouldShowHomeSurface}
-                        />
-                    ) : null}
+                    {/*
+                        首页常驻挂载。
+
+                        原来这里是个三元表达式，视图切到集合页 / 歌单页时整个
+                        `Home` 被卸载，里面内嵌的三维曲库 iframe 也跟着销毁 ——
+                        从歌词可视化退回来就是重新加载一遍、3D 场景重建、镜头
+                        归位。改成一直挂着，只靠外层的 visibility / inert 控制
+                        显示与交互，返回时画面原封不动。
+                    */}
+                    <Home
+                        model={homeModel}
+                        isHomeFullyHidden={
+                            isHomeFullyHidden ||
+                            (currentView !== 'home' &&
+                                currentView !== 'player' &&
+                                !wallHandoff.keepsHome &&
+                                !holdsHomeForFlight)
+                        }
+                        isInteractive={shouldShowHomeSurface}
+                    />
                 </motion.div>
             </div>
 
@@ -465,7 +511,6 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                                     isStageActive: isNowPlayingStageActive, disabled: isNowPlayingControlDisabled }}
                                 lyrics={commandPaletteContext.shared.lyrics}
                                 lyricSource={visualizerRendererModel}
-                                lyricKeywordColoringEnabled={visualizerRendererModel.visualizerTunings.monet.keywordColoringEnabled}
                                 currentSong={displaySong}
                                 playerState={displayPlayerState}
                                 currentTime={currentTime}
@@ -521,8 +566,13 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 onPointerCancel={handleSwipePointerCancel}
             >
                 <PlayerBottomBarLayoutContext.Provider value={currentView === 'player'}>
-                    {shouldMountVisualizer && <VisualizerRenderer {...visualizerRendererModel} animateStyleSwitch />}
+                    {shouldMountVisualizer && <SceneHost {...visualizerRendererModel} songThemePair={songThemePair} animateStyleSwitch />}
                 </PlayerBottomBarLayoutContext.Provider>
+                {/* B 站 MV 背景：铺在歌词样式之上（见 BilibiliMvLayer 的文件头）。
+                    只在开关打开时自己挂出来，没开就是 null，不占任何东西。 */}
+                <BilibiliMvLayer />
+                {/* 歌本身就是一条投稿时，把它的画面铺上来（与上面那条 MV 匹配互不相干）。 */}
+                <BilibiliVideoStage />
             </div>
 
             <StageSessionEmptyState
@@ -578,18 +628,25 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             <AddToPlaylistHost
                 isDaylight={isDaylight}
                 localPlaylists={localPlaylists}
-                onlinePlaylists={onlinePlaylists}
-                onAddCurrentSongToLocalPlaylist={addCurrentSongToLocalPlaylist}
-                onCreateCurrentLocalPlaylist={createCurrentLocalPlaylist}
-                onAddCurrentSongToOnlinePlaylist={addCurrentSongToOnlinePlaylist}
-                onCreateCurrentOnlinePlaylist={createCurrentOnlinePlaylist}
-                onAddCurrentSongToNavidromePlaylist={addCurrentSongToNavidromePlaylist}
-                onCreateCurrentNavidromePlaylist={createCurrentNavidromePlaylist}
+                onAddSongsToLocalPlaylist={addPickedSongsToLocalPlaylist}
+                onCreateLocalPlaylistWithSongs={createLocalPlaylistWithSongs}
+                onAddSongsToOnlinePlaylist={addPickedSongsToOnlinePlaylist}
+                onCreateOnlinePlaylistWithSongs={createOnlinePlaylistWithSongs}
+                onAddSongsToNavidromePlaylist={addPickedSongsToNavidromePlaylist}
+                onCreateNavidromePlaylistWithSongs={createNavidromePlaylistWithSongs}
             />
 
             {/* 从别的应用「用 Folia 打开」音频：问「是否导入 / 导入到哪个歌单」。
                 非安卓或没有这个插件时它自己渲染成 null，桌面端与 Web 不受影响。 */}
             <ExternalAudioImportHost isDaylight={isDaylight} />
+
+            {/* 速记簿：左缘的把手与滑出的抽屉，非模态，三个视图里都在；播放页隐藏 UI 时把手跟着藏起来。 */}
+            <ScratchpadHost
+                isDaylight={isDaylight}
+                playback={scratchpadPlayback}
+                queue={scratchpadQueue}
+                isHandleHidden={currentView === 'player' && isPlayerChromeHidden}
+            />
 
             <CommandPalette
                 activeIndex={commandPalette.activeIndex}
@@ -621,12 +678,25 @@ const AppSurface = ({ model }: { model: AppModel }) => {
             />
 
             <AppDialogs model={appDialogsModel} />
+            {/* 测试版提醒：不是 main / release/* 构建的包，启动时说一句它是什么来路。 */}
+            <TestBuildNotice />
             {/* 启动那一次：把上一版的媒体缓存搬进私有目录，搬的时候给一条提示。 */}
             <MediaCacheMigrationNotice />
             <FreeSoftwareNoticeModal
                 isOpen={startupExperience.isFreeSoftwareNoticeOpen}
                 isDaylight={isDaylight}
                 onClose={startupExperience.closeFreeSoftwareNotice}
+            />
+            {/*
+                首启最后一步：把首页那个登录按钮送到脸上来。
+                App.tsx 拆成一层层装配之后这一处挂了漏 —— 状态和动作用 useStartupExperienceGate
+                早就备好了，只有 JSX 没接上，于是这一层对用户等于不存在。
+                放在登录窗口之前：它点下去正是 openLoginWindow，窗口要能盖在它上面。
+            */}
+            <SignInSpotlight
+                isOpen={startupExperience.isSignInSpotlightOpen}
+                account={accountController}
+                onPressed={startupExperience.pressSignInSpotlight}
             />
             {/* 登录窗口挂在最外层：每个资料库界面（网格、Bravais、文本）都用 openLoginWindow 打开同一个窗口。 */}
             <LoginHost account={accountController} />

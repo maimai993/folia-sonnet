@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind 自动扫描整个仓库找类名，而且在 dev 服务器的主线程上同步扫。dev/prototypes 里是独立的原型页面，
+   不用 Tailwind，却可能放着几 MB 的单行数据文件（fog-write/strokes.js 一行 4.4 MB），类名提取器碰上
+   这种文件要扫好几分钟，期间 dev 服务器一个请求都不回，页面和 Electron 窗口就一直停在开屏。 */
+@source not "../dev/prototypes";
+
 /* Folium mod stylesheets (registries.styles) live in this layer. Declaring it
    after Tailwind's layers makes mod rules win over host utilities without
    !important, independent of when a mod's <style> is injected. */
@@ -14,6 +19,13 @@
   --font-cjk-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun", "Noto Serif JP", "Source Han Serif JP";
   --font-sans: ui-sans-serif, system-ui, var(--font-cjk-sans), sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, var(--font-cjk-serif), serif;
+}
+
+/* 越南语一个字母上常叠两个符号（ệ、ộ、ở）。中文 Windows 上 system-ui 解析成 Microsoft YaHei UI，没装 Inter 时
+   body 也落到 Microsoft YaHei；它们缺大部分越南语预组合字母，排版时拆成字母加组合符号，符号落在字母旁边。
+   界面是越南语时把越南语字形齐全的 Segoe UI 放到它们前面；别的系统没有 Segoe UI，照旧往后找（macOS 的 system-ui 本身就齐全）。 */
+:root:lang(vi) {
+  --font-sans: "Segoe UI", ui-sans-serif, system-ui, var(--font-cjk-sans), sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 }
 
 @font-face {
@@ -38,6 +50,10 @@ body {
   color: #e4e4e7;
   font-family: 'Inter', var(--font-cjk-sans), sans-serif;
   overflow: hidden;
+}
+
+body:lang(vi) {
+  font-family: 'Inter', "Segoe UI", system-ui, var(--font-cjk-sans), sans-serif;
 }
 
 /* 播放页空闲时隐藏鼠标指针。挂点在播放页的视觉层容器上，弹窗和浮动控件都在它外面，
@@ -334,43 +350,70 @@ html[data-folia-background='1'] * {
     -webkit-backdrop-filter: none !important;
 }
 
-/* 关掉毛玻璃（设置 → 常规里的开关，由 useGlassSurfaceSettingsStore 挂 data-glass）。
+/* 液态玻璃（设置 → 性能与动效里的开关，由 useGlassSurfaceSettingsStore 挂 data-liquid-glass）。
 
-   全站一百多处 backdrop-blur 面板一次性覆盖掉，不去逐个组件加判断 —— 它们散在各处，
-   还有不少是第三方组件自带的，枚举必然漏。伪元素一起管：有几处玻璃是 ::before 铺的。
+   打开之后玻璃面板的折射滤镜由 src/shinoinject/ 的脚本逐元素写 backdrop-filter（内联样式），
+   不需要这里的覆盖规则；保留一条防线：退后台时（上面 data-folia-background）本来就会把
+   backdrop-filter 全撤，与玻璃开不开无关。 */
 
-   底色要一起压实：原来那层 40%~85% 的半透明是配着模糊用的，模糊一撤，身后的歌词和封面
-   会直接透上来糊成一团。这里换成主题背景色，面板重新变成一块实心的面。
-
-   **只撤模糊是不够的** —— 半透明底色留着，眼睛看到的还是一块玻璃（只是不再模糊）。
-   所以下面那一串要把「哪些元素是玻璃」点清楚，玻璃有三条来路，少一条就有一处关不掉：
-
-   ① Tailwind 的 backdrop-blur-* 类名（一百多处）：按类名子串挑，新增的自动进；
-   ② 组件里写成行内的 backdropFilter（搜索工作区、网格 / 地图面板）：行内样式没有类名可挑，
-      只能按 style 属性里的 backdrop-filter 子串挑；
-   ③ 自己写 CSS 的玻璃 —— Lattice 与 bravais 那一整面墙的面板不在 Tailwind 体系里，
-      类名里既没有 blur 也没有 glass，只能点名。这一串跟着 backdrop-filter 的声明走：
-      哪天新增了一个带模糊的类，这里就要补一行（2026-10-12：补上上游合并进来的
-      墙面工具面板 / 队列浮岛那两块新玻璃，以及墙上的返回按钮、bravais 的缝与聚焦菜单）。 */
-html[data-glass='off'] *,
-html[data-glass='off'] *::before,
-html[data-glass='off'] *::after {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
+/* 玻璃开着时把两块实底压透：折射滤镜折射的是「元素背后的画面」，背景 95% / 85% 不透明时
+   背后的画面只剩一线，挂了滤镜也看不出来。色相照旧，只降不透明度；关掉开关即恢复原样。
+   这两条与上面的 .theme-polaroid-card / .theme-glass-panel 同优先级但排在其后，同带
+   !important，后者赢。 */
+html[data-liquid-glass='on'] .theme-polaroid-card {
+  background-color: color-mix(in srgb, var(--bg-color) 72%, transparent) !important;
+}
+html[data-liquid-glass='on'] .theme-glass-panel {
+  background-color: color-mix(in srgb, var(--bg-color) 72%, transparent) !important;
 }
 
-html[data-glass='off'] [class*='backdrop-blur'],
-html[data-glass='off'] [style*='backdrop-filter'],
-html[data-glass='off'] .theme-glass-panel,
-html[data-glass='off'] .lattice-back,
-html[data-glass='off'] .lattice-tools-panel,
-html[data-glass='off'] .lattice-tools-island,
-html[data-glass='off'] .bravais-root.has-seam-blur .bravais-seam,
-html[data-glass='off'] .bravais-root.has-seam-blur .bravais-seam-tab,
-html[data-glass='off'] .bravais-focus-menu {
-    /* 只压实底色，不动 background-image：玻璃上的那层渐变是半透明的，压在实心底色之上照样不透，
-       而逼掉它会把本来就该有渐变的面板一起弄花（不少 backdrop-blur 的卡是渐变底）。 */
-    background-color: var(--bg-color, #09090b) !important;
+/* 同理，凡是自带 backdrop-blur 的面（首页胶囊、下拉、搜索框、播放页右下角卡片……几十处，
+   无法逐个改组件）：玻璃开着时背景统一压透，让折射有东西可看。
+   只在 data-liquid-glass='on' 时生效，关掉开关这些类回到 Tailwind 原值。
+   强度 72%：压太透（55%）会让遮罩层、大背景 Container 透出后面的层；72% 够折射看又不破层次。
+   副作用说明：这些面原本各有自己的深浅（bg-white/95、bg-black/60……），压透后统一成
+   --bg-color 的 72% —— 观感是「整站玻璃同一材质」；若某个面需要保留自己的底色，给它加
+   data-glass-keep-bg，这里会跳过它。遮罩类（全屏、无圆角）不是玻璃面板，一并排除。 */
+html[data-liquid-glass='on'] [class*="backdrop-blur"]:not([data-glass-keep-bg]):not(.glass-no-tint) {
+  background-color: color-mix(in srgb, var(--bg-color) 72%, transparent) !important;
+}
+
+/* 全屏遮罩层（弹窗底衬）：它们不是玻璃面板，压透会漏出后面的层。标注类豁免。 */
+html[data-liquid-glass='on'] [class*="backdrop-blur"].fixed,
+html[data-liquid-glass='on'] [class*="backdrop-blur"][class*="inset-0"] {
+  background-color: unset !important;
+}
+
+/* 圆角自裁（issue #279）。
+
+   问题：backdrop-filter 的模糊/折射是浏览器在元素背后**单独合成**的一层，它不跟着
+   元素自身的 border-radius 收角，也不跟父级 overflow-hidden 的圆角裁。于是凡是
+   「rounded + backdrop-blur」的面 —— 设置窗口、各个 Sheet 弹层、正在播放卡、
+   首页胶囊 —— 圆角处都会露出四个直角，玻璃像贴歪了一张方纸。
+
+   这里让这些面**按自己的圆角把自己裁掉**：border-radius 加 !important，是因为
+   Lattice 那套会把墙内子元素的圆角压成直角（和光晕层 border-radius:inherit 同源）。
+   用 :where() 归零特异度，各处具体的圆角值照常生效，这条只补裁切。
+
+   isolation 一并给上：玻璃面要独立成叠加上下文，否则它内部的负 z 子层
+   （underlay、光晕）会漏到父级去，同样把直角带出来。 */
+html[data-liquid-glass='on'] :where([class*="backdrop-blur"], .theme-glass-panel, .theme-polaroid-card) {
+  isolation: isolate;
+}
+
+/* 裁切只给「自身带圆角」的玻璃面。
+
+   不加到所有 .rounded 上：那会把页面里每个圆角小元素都变成 overflow:hidden，
+   滚动容器和超出边界的提示气泡会一起被切掉。
+   这里要求元素同时命中 backdrop-blur 与 rounded —— 正是会露直角的那一类。 */
+html[data-liquid-glass='on'] :where([class*="backdrop-blur"][class*="rounded"]) {
+  overflow: hidden;
+}
+
+/* 播放页侧面板豁免全站压透：它浮在播放层上，压到 55% 会把后面的层透出来；
+   自己的 --pn-glass 已按 0.72 收过（panelTheme.ts），这里只让它保持原值。 */
+html[data-liquid-glass='on'] [data-testid='unified-panel-surface'][class*="backdrop-blur"] {
+  background-color: var(--pn-glass) !important;
 }
 
 /* 歌词扁平化（设置里的开关，由 useLyricFlatSettingsStore 挂 data-lyric-flat）。

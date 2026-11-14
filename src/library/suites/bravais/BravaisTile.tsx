@@ -2,6 +2,7 @@ import React, { memo, useLayoutEffect, useRef, useState, type MouseEvent, type M
 import { WallTitle } from '../../../components/wall/WallTitle';
 import { useWallPosterArtwork } from '../../../components/wall/useWallPosterArtwork';
 import { parseWallSlotKey } from '../../../components/wall/wallSlots';
+import { isWallDoubleClickOn, noteWallPress } from '../../../components/wall/wallDoubleClick';
 import { countRender } from '../../../dev/renderCount';
 import { getSizedCoverUrl } from '../../../utils/coverUrl';
 import {
@@ -15,6 +16,7 @@ import { resolveTileTransition, type BravaisEntrance, type BravaisFlipStep } fro
 import type { BravaisItem } from './bravaisLayer';
 import { bravaisFaceKey, type BravaisTileKind } from './bravaisLook';
 import BravaisFocusCardBody, { type BravaisFocusCardActions } from './BravaisFocusCardBody';
+import BravaisTileQuickActions, { BRAVAIS_QUICK_ACTIONS_MIN_WIDTH } from './BravaisTileQuickActions';
 import BravaisTileMarks, { BravaisTileBadge } from './BravaisTileMarks';
 import { useBravaisArtistTone } from './bravaisArtistTone';
 import { noteCoverFlightSource } from './bravaisCoverFlight';
@@ -22,7 +24,6 @@ import { BRAVAIS_ALBUM_MOSAIC_PX, mosaicPlacement, shardPlacement, useBravaisCov
 import { resolveBravaisTileForm } from './bravaisTileForm';
 import './bravaisTileKinds.css';
 import { getWaveStagger, WALL_WAVE_IN_MS, WALL_WAVE_LIFT, WALL_WAVE_OUT_MS } from './bravaisWallWave';
-import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
 
 // src/library/suites/bravais/BravaisTile.tsx
 // 墙上的一张磁贴。分两层（给 B6b③ 的底板留结构）：外框（.bravais-tile）只管位置与尺寸，永远不转；内容层
@@ -46,12 +47,6 @@ import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore
 export type BravaisTileRect = { x: number; y: number; width: number; height: number };
 
 /**
- * 性能优先时封面最多按这么大取档（coverUrl.ts 的档位是 256 / 512 / 1024，再往上就是原图）。
- * 展开的聚焦卡不压：它是此刻的主角，糊了比多解一张图更碍眼。
- */
-const PERFORMANCE_COVER_MAX_PX = 512;
-
-/**
  * 指针最后一次真的移动到的位置。墙在指针底下动（海报倾斜转回正、相机补间）时，浏览器也会对新转到指针下的磁贴发
  * mouseenter；那不是悬停，不该去高亮、滚动列表面板。真的移进一张磁贴时，mouseenter 先于这次 mousemove 派发，
  * 坐标与这里记的不同；墙自己动过来的，坐标与这里记的相同。
@@ -67,6 +62,8 @@ const pointerStayed = (event: MouseEvent<HTMLElement>) => (
 export type BravaisTileHandlers = BravaisFocusCardActions & {
     /** 点了这张磁贴（拖动后的残余点击已在外面吞掉）。 */
     activate: (slotKey: string) => void;
+    /** 双击了这张磁贴（#834）：歌曲直接播放，不用再点聚焦卡上的播放键。 */
+    playFromWall: (slotKey: string) => void;
     /** B9：首页歌单类卡片的眼睛按钮（directory-toggle-hidden）。 */
     toggleHidden?: (slotKey: string) => void;
 };
@@ -278,15 +275,10 @@ function BravaisTile({
         outAnimationRef.current?.cancel();
     }, []);
 
-    // 性能优先：封面按世界尺寸封顶（档位 256 / 512，再往上才是 1024 与原图），高 DPR 屏上不再取大一档的图。
-    // 聚焦卡（展开的那张）不压：它是此刻的主角，糊了比多解一张图更碍眼。
-    const performanceMode = useLatticeSettingsStore(state => state.latticePerformanceMode);
-    const lightsOn = useLatticeSettingsStore(state => state.latticeLightsOn);
-    const coverTargetPx = Math.max(rect.width, rect.height) * pixelScale;
     // 透着的磁贴不画封面（2026-10-09 起连封面底条也不画），不取图；聚焦卡与普通磁贴按自己的尺寸取图。
     const coverUrl = useWallPosterArtwork(
         face.seeThrough ? undefined : display?.coverUrl,
-        performanceMode && !expanded ? Math.min(coverTargetPx, PERFORMANCE_COVER_MAX_PX) : coverTargetPx,
+        Math.max(rect.width, rect.height) * pixelScale,
     );
     const isTrack = display?.kind === 'track';
     const isWindow = face.kind === 'window';
@@ -303,13 +295,13 @@ function BravaisTile({
     const tone = useBravaisArtistTone(display?.coverUrl, portraitWanted);
     const drawsPortrait = portraitWanted && tone !== false;
     // 专辑墙（has-album-wall）：整面墙拼成的那一块，或从封面上切下来的碎片（bravaisAlbumWall）。聚焦卡画整张封面。
-    // 性能优先时不画：它是纯装饰，而且拼贴档 CSS 会把磁贴自己的封面压掉（.bravais-tile-face[data-bravais-art="mosaic"]），
-    // 这里不为 undefined 磁贴就只剩空板 —— 所以是连 data-bravais-art 一起不写，让它回落成整张封面，大图也不去取。
-    const art = !performanceMode && display && !face.seeThrough && !isExpanded ? display.coverArt : undefined;
+    const art = display && !face.seeThrough && !isExpanded ? display.coverArt : undefined;
     const artSpots = useBravaisCoverSpots(art?.mode === 'shard' ? art.url : undefined);
+    // 拼贴整块只有一张图，解码一次就够，保留原图；碎片每块一张不同的封面，和墙上一样封顶。
     const artUrl = useWallPosterArtwork(
         art?.url,
         (art?.mode === 'mosaic' ? BRAVAIS_ALBUM_MOSAIC_PX : Math.max(rect.width, rect.height) * 2.75) * pixelScale,
+        { keepOriginal: art?.mode === 'mosaic' },
     );
     // 拼贴的大图到之前垫一张海报封面那档（已经在缓存里，放大后是糊的）：两层背景，大图解码完就盖住它。
     const artStandIn = art?.mode === 'mosaic' ? getSizedCoverUrl(art.url, BRAVAIS_ALBUM_COVER_PX) : '';
@@ -318,8 +310,11 @@ function BravaisTile({
         ? null
         : art.mode === 'mosaic' ? mosaicPlacement(rect, parseWallSlotKey(slotKey) ?? { column: 0, row: 0 }) : artSpots ? shardPlacement(artSpots, display.key, rect) : null;
 
+    const pressKey = `bravais:${slotKey}:${display?.key ?? ''}`;
     const handleClick = (event: MouseEvent<HTMLElement>) => {
-        if (event.target instanceof Element && event.target.closest('button')) return;
+        const onButton = event.target instanceof Element && Boolean(event.target.closest('button'));
+        noteWallPress(event, onButton ? '' : pressKey);
+        if (onButton) return;
         if (didDragRef.current) {
             didDragRef.current = false;
             return;
@@ -329,6 +324,13 @@ function BravaisTile({
             noteCoverFlightSource(event.currentTarget.parentElement, display.key, slotKey, display.coverUrl);
         }
         handlers.activate(slotKey);
+    };
+
+    // 双击 = 两下单击（第一下已经展开了聚焦卡）之后再播放；双击在按钮上的归按钮自己。第一下点的必须就是这张、显示的
+    // 还是同一项：双击歌单 / 专辑卡时第一下已经推入新层、第一首翻进了这个 slot，那不算双击了这首歌。
+    const handleDoubleClick = (event: MouseEvent<HTMLElement>) => {
+        if (event.target instanceof Element && event.target.closest('button')) return;
+        if (isTrack && isWallDoubleClickOn(pressKey)) handlers.playFromWall(slotKey);
     };
 
     const style = {
@@ -372,6 +374,7 @@ function BravaisTile({
                 tabIndex={-1}
                 onMouseDown={isWindow ? preventFocus : undefined}
                 onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
             >
                 {display && isHeading && (
                     <>
@@ -407,29 +410,15 @@ function BravaisTile({
                                 <i />
                             </span>
                         )}
-                        {/* 同 Lattice：shade 留着（标题与徽章的可读性底衬），tint 是纯装饰，
-                            熄灯层开灯时是一层永远透明的黑 —— 性能优先时都不渲染。 */}
                         <span className="lattice-poster-shade" />
                         {/* 实测反馈 1：熄灯层（wall.css；全透明档的窗与聚焦卡等豁免在 bravais.css）。 */}
-                        {(!performanceMode || !lightsOn) && <span className="lattice-poster-lights-out" />}
-                        {!performanceMode && !face.seeThrough && <span className="lattice-poster-tint" />}
+                        <span className="lattice-poster-lights-out" />
+                        {!face.seeThrough && <span className="lattice-poster-tint" />}
                         <BravaisTileBadge item={display} current={isCurrent} />
                         {(display.hideable || display.selected) && (
                             <BravaisTileMarks
                                 item={display}
                                 onToggleHidden={handlers.toggleHidden ? () => handlers.toggleHidden?.(slotKey) : undefined}
-                            />
-                        )}
-                        {/* 「全部」视图：封面右下角的来源图标（哪家平台的歌单）。装饰性的 —— 可访问名由磁贴的
-                            aria-label 给，读屏不念图；点与拖都归磁贴自己（它是 span，不吃事件）。 */}
-                        {display.sourceIcon && (
-                            <img
-                                className="bravais-tile-source"
-                                src={display.sourceIcon}
-                                alt=""
-                                aria-hidden
-                                draggable={false}
-                                data-bravais-source
                             />
                         )}
                         {isExpanded ? (
@@ -442,8 +431,11 @@ function BravaisTile({
                                 actions={handlers}
                             />
                         ) : (
-                            // 有来源图标时给右下角让出一格：标题 / 副标题不压到它下面。
-                            <span className={`lattice-poster-copy${display.sourceIcon ? ' has-source' : ''}`}>
+                            <>
+                            {rect.width >= BRAVAIS_QUICK_ACTIONS_MIN_WIDTH && (
+                                <BravaisTileQuickActions slotKey={slotKey} item={display} actions={handlers} />
+                            )}
+                            <span className="lattice-poster-copy">
                                 <WallTitle
                                     title={display.title}
                                     expanded={false}
@@ -452,6 +444,7 @@ function BravaisTile({
                                 />
                                 {display.subtitle && <small>{display.subtitle}</small>}
                             </span>
+                            </>
                         )}
                     </>
                 )}

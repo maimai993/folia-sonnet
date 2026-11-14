@@ -67,6 +67,7 @@ describe('effective library suite', () => {
         expect(listLibrarySuiteOptions()).toEqual([
             { id: 'grid', labelKey: 'libraryTui.rendererGrid' },
             { id: 'bravais', labelKey: 'libraryBravais.suiteName' },
+            { id: 'rhine', labelKey: 'libraryRhine.rendererRhine' },
             { id: 'tui', labelKey: 'libraryTui.rendererTui' },
         ]);
         expect(listLibrarySuiteOptions()).toBe(listLibrarySuiteOptions());
@@ -164,26 +165,35 @@ describe('whether there is a choice', () => {
                 const actual = await importOriginal<typeof import('@/library/suites/bravais/entry')>();
                 return { ...actual, default: { ...actual.default, available: false } };
             });
+            // rhine 也是正式 suite，同样标成不可用，才复现得出「只剩 grid」的构建。
+            vi.doMock('@/library/suites/rhine/entry', async importOriginal => {
+                const actual = await importOriginal<typeof import('@/library/suites/rhine/entry')>();
+                return { ...actual, default: { ...actual.default, available: false } };
+            });
             const registry = await import('@/library/registry');
             expect(registry.listLibrarySuites().map(suite => suite.id)).toEqual(['grid']);
             expect(registry.hasLibrarySuiteChoice()).toBe(false);
             // 初始选择不可用时回退网格（B0 合入时 bravais 不在 registry 里）。
             expect(registry.resolveActiveLibrarySuiteId('bravais')).toBe('grid');
             vi.doUnmock('@/library/suites/bravais/entry');
+            vi.doUnmock('@/library/suites/rhine/entry');
         });
     });
 });
 
 // 2026-10-10：首启引导第一页只问网格（经典）与 bravais（无限）；TUI 在测试构建里可用也不出现。
+// 之后 ffc42c8d1「首启引导补上 Rhine Lab 选项」把 rhine 也加了进去（仍排在最后、且不默认选中）。
 describe('first-run onboarding suite page', () => {
-    it('lists grid and bravais, in that order, and leaves the dev TUI out', () => {
+    it('lists grid, bravais and rhine, in that order, and leaves the dev TUI out', () => {
         expect(listLibrarySuiteOptions().map(option => option.id)).toContain('tui');
-        expect(listOnboardingLibrarySuiteIds()).toEqual(['grid', 'bravais']);
+        expect(listOnboardingLibrarySuiteIds()).toEqual(['grid', 'bravais', 'rhine']);
         expect(hasOnboardingLibrarySuiteChoice()).toBe(true);
     });
 
     it('keeps the fixed order whatever the registry order is, and drops suites the build lacks', () => {
+        expect(pickOnboardingLibrarySuiteIds(['rhine', 'tui', 'bravais', 'grid'])).toEqual(['grid', 'bravais', 'rhine']);
         expect(pickOnboardingLibrarySuiteIds(['tui', 'bravais', 'grid'])).toEqual(['grid', 'bravais']);
+        expect(pickOnboardingLibrarySuiteIds(['rhine', 'grid', 'tui'])).toEqual(['grid', 'rhine']);
         expect(pickOnboardingLibrarySuiteIds(['grid', 'tui'])).toEqual(['grid']);
         expect(pickOnboardingLibrarySuiteIds(['grid'])).toEqual(['grid']);
     });

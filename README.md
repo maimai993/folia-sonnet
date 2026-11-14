@@ -1,6 +1,6 @@
 # Folia-Sonnet
 
-将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.21** 正式版。
+将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.28**。
 
 > [!IMPORTANT]  
 > **装上去就能用，不需要自建后端。**
@@ -31,6 +31,8 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 | 状态栏歌词     | 与 Lyricon 同步：换歌、播放暂停、拖动跳变、转屏等事件推送，段内推进归原生。                         |
 | 前台播放      | 前台服务 + 媒体通知，通知栏 / 锁屏 / 耳机按键的控制回到 App。                              |
 | 播放时保持常亮   | 可选开关：只在播放中钉住屏幕，暂停 / 退到后台立刻交还给系统。                                   |
+| 模组系统（Node 宿主） | 模组在手机上跑在 APK 内置的 Node.js 运行时里（`folia-node` assets + libnode），桌面版能装的 Folium 模组这里也能装。 |
+| 原生分析模型    | 智能动感模式的两个分析模型（拍点 `beat_this`、分轨 `htdemucs`）在原生侧跑 onnxruntime：熄屏、后台切歌都不断，分析的峰值负载也压得住。 |
 
 上游 Folia 本身具备的能力：
 
@@ -51,12 +53,16 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 
 | 项目                                                                                                | 关系                                                                              |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [chthollyphile/folia-major](https://github.com/chthollyphile/folia-major)                         | Folia 主线仓库。本仓库的 Web 代码跟随它演进，当前对应 **0.7.21**。                                    |
+| [chthollyphile/folia-major](https://github.com/chthollyphile/folia-major)                         | Folia 主线仓库。本仓库的 Web 代码跟随它演进，当前对应 **0.7.28**。                                    |
 | [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)                       | Folia 的 Web / 桌面版本，本仓库 fork 自它，Android 容器是在它的代码外面加的一层壳。                         |
-| [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)                   | 在 Folia 主线基础上新增「汽水音乐」在线音源。本仓库的汽水音乐协议层、Electron 签名宿主与音频解密均来自该项目。 |
+| [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)                   | 「汽水音乐」在线音源最先由它接入 Folia；**上游主线现已内置汽水**，本仓库跟随上游拿到这一音源（协议层、签名宿主与音频解密的原实现出自该项目）。 |
 | [Andrea-lyz/ColorOS-Live-Lyrics-Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) | ColorOS 原生锁屏歌词（「媒体与播放」歌词页）的桥接协议参考。原生锁屏歌词那部分按它的协议写 `MediaMetadata["lyricInfo"]`。 |
 | [RemnantCloudGodofWar/folia-android](https://github.com/RemnantCloudGodofWar/folia-android)       | 同为 Folia 的 Android 化尝试，手机适配（紧凑布局、竖屏 / 横屏）与 AI 主题等做法参考了它。                        |
 | [EasonLai96/folia-major](https://github.com/EasonLai96/folia-major)                               | Android 上 YouTube Music 的真账号登录整套来自它的 [`android-v23`](https://github.com/EasonLai96/folia-major/releases/tag/android-v23) 版本：原生登录 Activity、Android Keystore 加密的会话持久化、secure-only Cookie 的签名与 canonical Origin 修复，以及 BotGuard poToken 加整首下载的音频路线。 |
+| [LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)                                         | 莱茵生命终端界面的复刻（Three.js 三维档案阵列）。播放页的玻璃质感叠层、档案式排版与滚动数字 / 滚动标题等动效细节参考了它的设计与实现。 |
+| [maimai993/koishi-plugin-kkk](https://github.com/maimai993/koishi-plugin-kkk)                     | 同作者的多平台短视频 / 图文解析与动态推送插件。B 站内容解析（BV 号识别、视频信息、封面与作者字段）的取数思路参考了它。 |
+| [852wa/JIZURA](https://github.com/852wa/JIZURA)                                                   | 歌词 PV 自動構成ツール：逐字歌词动画的表达方式（拍点对齐、逐字入场 / 退场、滚动文字、按 seed 变化的自动排版）在歌词动效调优时参考。 |
+| [Timingyyds/Mineradio-Android](https://github.com/Timingyyds/Mineradio-Android)                   | 同类 Android 音乐客户端（横屏 H5 + Kotlin 壳 + Node.js 桥接 + Native C++）。把 Node.js 运行时打进 APK 的 assets 布局、H5 界面加密装载与原生桥的分层方式参考了它的结构。 |
 
 ## Android 上的 YouTube Music
 
@@ -70,7 +76,7 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 
 ## 汽水音乐音源
 
-本项目额外接入了[2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)实现的「汽水音乐」在线音源，能力与网易云、QQ 音乐、酷狗、波点并列：
+「汽水音乐」在线音源最先由 [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui) 接入 Folia，**上游主线现已内置这一音源**，本仓库跟随上游获得它与网易云、QQ 音乐、酷狗、波点、YouTube Music 并列的完整能力：
 
 - 搜索、歌单、专辑、歌手、播放、歌词、扫码登录、我的喜欢、歌单收藏。
 - 封面右下角会显示汽水音乐 App 图标；「全部平台」合并视图也会把它算进去。

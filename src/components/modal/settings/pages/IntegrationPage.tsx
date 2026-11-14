@@ -6,13 +6,17 @@ import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChrome
 import { useStageSettingsStore } from '../../../../stores/useStageSettingsStore';
 import { Button, CopyValue, Group, Reveal, Row, Status, Toggle, Value, type SettingsOptionDef } from '../kit';
 import NavidromeRows from './integration/NavidromeRows';
-import { O, SERVICES, STREAMING, SYSTEM_LYRICS } from './integration/options';
+import { O, LX_SOURCE, SERVICES, STREAMING, SYSTEM_LYRICS } from './integration/options';
+import { MARKET, M } from './integration/market';
+import MarketPage from './integration/MarketPage';
+import { openMarketPanel } from './integration/market/MarketEntryButton';
 import AndroidLyriconSetting from '../AndroidLyriconSetting';
 import AndroidColorOsLyricsSetting from '../AndroidColorOsLyricsSetting';
-import { isCapacitorAndroid } from '../../../../platform/runtime';
+import { hasElectronBridge, isCapacitorAndroid } from '../../../../platform/runtime';
 import { DesktopStageRows, WebStageRows } from './integration/StageModeRows';
 import SyncServerRows from './integration/SyncServerRows';
 import { useSettingsPage } from './settingsPageContext';
+import { LxSourcePanel } from '../../../lxmusic/LxSourcePanel';
 
 // src/components/modal/settings/pages/IntegrationPage.tsx
 // The 连接与集成 page: what Folia connects to and what it shows to other programs. Services first
@@ -69,6 +73,16 @@ const IntegrationPage: React.FC = () => {
                     <Toggle checked={scrobbleEnabled} onChange={setScrobbleEnabled} />
                 </Row>
             </Group>
+
+            {/* 音源脚本：单独一块。 */}
+            <Group def={LX_SOURCE}>
+                <LxSourcePanel />
+            </Group>
+
+            {/*
+             * B 站这一组整个退场：MV 背景收编进「外观 → 歌词壁纸」的背景模式（'mv' 一档），
+             * 登录在通用登录面板里（首页「登录到 xxx」入口）。两边都有家了，这里不留壳。
+             */}
 
             <Group def={STREAMING}>
                 <Row option={O.transparentBackground} hint={t('options.transparentPlayerBackgroundDesc')}>
@@ -127,6 +141,22 @@ const IntegrationPage: React.FC = () => {
                     </>
                 )}
                 {isElectron ? <DesktopStageRows /> : <WebStageRows />}
+            </Group>
+
+            {/*
+             * 背景与字体市场。
+             *
+             * 这两个市场原先散在多处（壁纸设置的字体市场、歌词设置的字体市场、
+             * 可视化字体选择器里的「字体市场」按钮），同一件事三个入口、行为还各不一样。
+             * 现在统一收到这里，应用范围也在这里改。
+             */}
+            <Group def={MARKET}>
+                <Row option={M.background} hint={t('options.backgroundMarketDesc')}>
+                    {/* 市场面板挂在 SettingsModal 顶层，这里只负责广播打开请求。 */}
+                    <Button onClick={() => openMarketPanel('background')}>
+                        {t('options.marketOpen')}
+                    </Button>
+                </Row>
             </Group>
 
             {/*

@@ -24,9 +24,50 @@ type FoliaNativeBridge = {
     localAudioServerPort?: () => Promise<{ port?: number }>;
     mediaCacheStats?: () => Promise<{ size?: number; count?: number }>;
     clearMediaCache?: () => Promise<void>;
+    cacheAudioFromUrl?: (options: {
+        cacheKey: string;
+        url: string;
+        limitBytes?: number;
+        minDurationMs?: number;
+    }) => Promise<{ stored?: number }>;
 };
 
 let cachedPort = 0;
+
+/**
+ * 给一次原生调用或回环请求加截止时间。
+ *
+ * 为什么必须有：原生 `cacheAudioFromUrl` 下载整首歌时没有连接超时，一个不回包的直链
+ * 会让这次调用永远不返回 —— 而等它的正是「分析这首歌」那条链，界面上就停在
+ * 「正在分析」一动不动（真机反馈 2026-11-13）。到点返回 null，调用方走退路，
+ * 或者至少能把原因写进状态里。
+ */
+const withDeadline = <T>(work: Promise<T>, ms: number, what: string): Promise<T | null> => {
+    if (!Number.isFinite(ms) || ms <= 0) return work;
+    return new Promise<T | null>((resolve) => {
+        let settled = false;
+        const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            console.warn(`[MediaCache] ${what}超过 ${Math.round(ms / 1000)} 秒没有返回，先放弃这一次`);
+            resolve(null);
+        }, ms);
+        work.then(
+            (value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            },
+            () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(null);
+            },
+        );
+    });
+};
 
 const getNativePlugin = (): FoliaNativeBridge | null => {
     if (typeof window === 'undefined') return null;
@@ -38,14 +79,10 @@ const resolvePort = async (): Promise<number> => {
     if (cachedPort > 0) return cachedPort;
     const plugin = getNativePlugin();
     if (!plugin || typeof plugin.localAudioServerPort !== 'function') return 0;
-    try {
-        const response = await plugin.localAudioServerPort();
-        const port = Number(response?.port) || 0;
-        if (port > 0) cachedPort = port;
-        return port;
-    } catch {
-        return 0;
-    }
+    const response = await withDeadline(plugin.localAudioServerPort(), 3_000, '询问回环端口');
+    const port = Number(response?.port) || 0;
+    if (port > 0) cachedPort = port;
+    return port;
 };
 
 const MEDIA_CACHE_PATH = '/media-cache/';
@@ -109,25 +146,17 @@ export const hasNativeMediaCache = async (): Promise<boolean> => (await resolveP
 export const readNativeMediaCacheUrl = async (cacheKey: string): Promise<string | null> => {
     const url = await buildUrl(cacheKey);
     if (!url) return null;
-    try {
-        const response = await fetch(url, { method: 'HEAD' });
-        return response.ok ? url : null;
-    } catch {
-        return null;
-    }
+    const response = await withDeadline(fetch(url, { method: 'HEAD' }), 5_000, 'HEAD 媒体缓存');
+    return response?.ok ? url : null;
 };
 
 /** 副本的字节数；不存在返回 0。 */
 export const statNativeMediaCache = async (cacheKey: string): Promise<number> => {
     const url = await buildUrl(cacheKey);
     if (!url) return 0;
-    try {
-        const response = await fetch(url, { method: 'HEAD' });
-        if (!response.ok) return 0;
-        return Number(response.headers.get('content-length')) || 0;
-    } catch {
-        return 0;
-    }
+    const response = await withDeadline(fetch(url, { method: 'HEAD' }), 5_000, 'HEAD 媒体缓存大小');
+    if (!response?.ok) return 0;
+    return Number(response.headers.get('content-length')) || 0;
 };
 
 /** 把整首歌的字节写进私有目录。`limitBytes` 是写完之后要裁到的上限，0 表示不裁。 */
@@ -213,4 +242,36 @@ export const clearNativeMediaCache = async (): Promise<void> => {
     } catch {
         // 清不掉就留着，下次「清除缓存」还会再清一遍。
     }
+};
+
+/**
+ * 原生侧整首歌落盘：让原生自己从 URL 下载，不经 Web 的手。
+ *
+ * 以前写缓存的是 Web（fetch 字节再 PUT 回回环服务），应用退后台 / WebView 冻结时
+ * 这条路经常没机会跑完。挪到原生之后谁叫一声都能存；文件名编码两边一致，
+ * 存出来的就是同一批文件，读回路径不用改。
+ *
+ * `minDurationMs` 是防试听片段的：原生会用 MediaExtractor 探下载文件的时长，
+ * 不足歌长一半的不落盘（stored 回 0）。
+ */
+export const cacheNativeMediaFromUrl = async (
+    cacheKey: string,
+    url: string,
+    limitBytes: number,
+    minDurationMs?: number,
+): Promise<boolean> => {
+    const plugin = getNativePlugin();
+    if (!plugin || typeof plugin.cacheAudioFromUrl !== 'function') return false;
+    /*
+     * 45 秒是「整首歌下载」的上限：慢网下 40MB 大约就是这个量级，再久的话
+     * 那份缓存也更适合等播放自己落盘 —— 不该让一次分析陪着它一起等。
+     * 超时后原生后台仍会把这次下载做完，下次分析直接命中。
+     */
+    const result = await withDeadline(plugin.cacheAudioFromUrl({
+        cacheKey,
+        url,
+        limitBytes: Math.max(0, Math.round(limitBytes)),
+        ...(minDurationMs && minDurationMs > 0 ? { minDurationMs: Math.round(minDurationMs) } : {}),
+    }), 45_000, '把音频落到本地缓存');
+    return Number(result?.stored) > 0;
 };

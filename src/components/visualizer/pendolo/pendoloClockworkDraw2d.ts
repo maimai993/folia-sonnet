@@ -1,4 +1,4 @@
-import { colorWithAlpha } from '../../../utils/visualizer/colorMix';
+import { colorWithAlpha } from '../colorMix';
 import {
     buildPendoloClockworkPalette,
     resolvePendoloClockworkAnchors,
@@ -169,11 +169,6 @@ function drawJewel(
     ctx.stroke();
 }
 
-// 中心渐变的输入（位置 / 半径 / 颜色）只在布局或主题变化时才变，而绘制循环按刷新率跑 ——
-// 缓存建好的渐变，别每帧重建它和那四个 color-stop 字符串。按 ctx 各存一份：
-// CanvasGradient 绑在创建它的 context 上，换 canvas 就不能复用。
-const centerGradientCache = new WeakMap<CanvasRenderingContext2D, { key: string; gradient: CanvasGradient }>();
-
 /** Renders one clockwork frame with Canvas2D (fallback when WebGL2 is unavailable). */
 export const drawPendoloClockwork2d = (
     ctx: CanvasRenderingContext2D,
@@ -187,6 +182,7 @@ export const drawPendoloClockwork2d = (
         phase,
         bassOscillation,
         secondGearAngle,
+        transBeatAngle = 0,
         primaryTextColor,
         accentTextColor,
         backgroundColor,
@@ -201,20 +197,13 @@ export const drawPendoloClockwork2d = (
     // 0. Optional Central Dark Radial Gradient using theme background color
     if (showCenterGradient) {
         const bgCol = backgroundColor || '#000000';
-        // 量化到 1/4 像素：亚像素抖动不该把缓存打穿。
-        const gradientKey = `${bgCol}|${Math.round(centerX * 4)}|${Math.round(centerY * 4)}|${Math.round(anchors.gradientR * 4)}`;
-        const cached = centerGradientCache.get(ctx);
-        let grad = cached && cached.key === gradientKey ? cached.gradient : null;
-        if (!grad) {
-            grad = ctx.createRadialGradient(
-                centerX, centerY, 0, centerX, centerY, anchors.gradientR,
-            );
-            grad.addColorStop(0, colorWithAlpha(bgCol, 0.72));
-            grad.addColorStop(0.35, colorWithAlpha(bgCol, 0.52));
-            grad.addColorStop(0.7, colorWithAlpha(bgCol, 0.20));
-            grad.addColorStop(1, colorWithAlpha(bgCol, 0));
-            centerGradientCache.set(ctx, { key: gradientKey, gradient: grad });
-        }
+        const grad = ctx.createRadialGradient(
+            centerX, centerY, 0, centerX, centerY, anchors.gradientR,
+        );
+        grad.addColorStop(0, colorWithAlpha(bgCol, 0.72));
+        grad.addColorStop(0.35, colorWithAlpha(bgCol, 0.52));
+        grad.addColorStop(0.7, colorWithAlpha(bgCol, 0.20));
+        grad.addColorStop(1, colorWithAlpha(bgCol, 0));
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(centerX, centerY, anchors.gradientR, 0, Math.PI * 2);
@@ -232,6 +221,12 @@ export const drawPendoloClockwork2d = (
         ctx.globalAlpha = 0.42 * (isFullDecor ? 1.0 : 0.6); // Base opacity
         // Draw square image covering the circle
         const size = coverRadius * 2;
+        // 镜像时整个表盘被翻过，封面再翻回来，图里的字不是反的
+        if (input.mirrored) {
+            ctx.translate(centerX, 0);
+            ctx.scale(-1, 1);
+            ctx.translate(-centerX, 0);
+        }
         ctx.drawImage(coverImage, centerX - coverRadius, centerY - coverRadius, size, size);
         ctx.restore();
     }
@@ -374,7 +369,7 @@ export const drawPendoloClockwork2d = (
 
     // Meshing Intermediate Transmission Gear (Lower-Left Offset)
     // Turns with the wheel, plus 智能动感模式's beat turn (0 otherwise).
-    const transAngle = -escapementAngle * 1.4;
+    const transAngle = -escapementAngle * 1.4 + transBeatAngle;
     drawGearTeeth(
         ctx, anchors.transCx, anchors.transCy, anchors.transR, 24, 7, transAngle,
         palette.gearPrimaryAlpha, 1.8,

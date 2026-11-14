@@ -1,28 +1,30 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import { CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC } from '../../../../services/automix/crossfadePlanner';
+import { CROSSFADE_CURVES, CROSSFADE_MAX_SEC, CROSSFADE_MIN_SEC, type CrossfadeCurve } from '../../../../services/automix/crossfadePlanner';
 import { modelsPresent, subscribeModelAvailability } from '../../../../services/analysis/modelAvailability';
+import { isNativeModelsAvailable, modelWillBeAvailable, subscribeModelAvailability as subscribeNativeModels } from '../../../../services/automix/nativeModels';
 import { ANALYSIS_MODELS_ENABLED, modelStoreSnapshot, subscribeModelStore, importModelFile, type DownloadableModel } from '../../../../services/analysis/modelStore';
-import { transitionCapabilities } from '../../../../services/automix/stems';
-import { announceTransition, type TransitionRenderer } from '../../../../services/automix/transitionCue';
-import { canAnalyseTracks } from '../../../../services/automix/transitionStrategy';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { useAnalysisModelStore } from '../../../../stores/useAnalysisModelStore';
 import { useAutomixSettingsStore } from '../../../../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
-import { isCapacitorAndroid } from '../../../../platform/runtime';
-import { isNativePlayerAvailable } from '../../../../services/playbackEngine/nativePlayerPlugin';
+import { isAndroidAppShell, isCapacitorAndroid } from '../../../../platform/runtime';
+
 import { runsOnWindows } from '../../../../utils/platform';
-import { Button, Chips, Group, Reveal, Row, Segmented, Slider, Status, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import { Button, Group, Reveal, Row, Segmented, Select, Slider, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
+import NativeModelsSection from '../NativeModelsSection';
+import AndroidAutoLandscapeSetting from '../AndroidAutoLandscapeSetting';
+import AndroidKeepAliveSetting from '../AndroidKeepAliveSetting';
+import HifiSettings, { HIFI_OPTIONS } from './hifi/HifiSettings';
 import { useSettingsPage } from './settingsPageContext';
 import { TextField } from '@/components/ui';
 
 // src/components/modal/settings/pages/PlaybackPage.tsx
-// The 播放控制 page: how one song hands over to the next (Folia transitions), where the sound goes
-// and how loud it is, what play and add-to-queue do, and (desktop app) the folded group of the
-// analysis models the full transition engine needs.
+// The 播放控制 page: (desktop app) which engine plays local and Navidrome songs, Web Audio or mpv,
+// with mpv's own settings under it (pages/hifi/); how one song hands over to the next (Folia
+// transitions), where the sound goes and how loud it is, what play and add-to-queue do.
 
 const TRANSITION: SettingsGroupDef = { id: 'transitionSettings', titleKey: 'options.transitionSettings' };
 const SOUND: SettingsGroupDef = { id: 'audioOutputSettings', titleKey: 'options.settingsHeadingSound' };
@@ -38,14 +40,54 @@ const BEHAVIOR: SettingsGroupDef = { id: 'queueSettings', titleKey: 'options.set
  */
 const MODELS: SettingsGroupDef = { id: 'analysisModels', titleKey: 'options.analysisModels', available: () => ANALYSIS_MODELS_ENABLED };
 
+/*
+ * 过渡只剩 crossfade 一档。
+ *
+ * AutoMix（那种按节拍对齐、能上分轨的过渡）与它那一组开关（性能档、过渡动画）已经删掉：
+ * 出声交给原生 ExoPlayer 之后，这些都是 Web Audio 图上的东西，开关在那儿也只是空跑。
+ * crossfade 与暂停 / 继续的淡化改由原生做音量斜坡（见 FoliaNativePlayer）。
+ *
+ * 上面那段是 Web 侧 AutoMix 退场时的原话，保留着当历史。现在安卓上多了一层东西：
+ * player/transition/ 里的原生内核接管了换歌，它不依赖 Web Audio，所以「智能过渡」这一档
+ * 在安卓是可用的 —— 档位、接法、强度、表现手势、增强包这五行只在安卓画（见下面的
+ * androidSmart），桌面端仍是固定交叉淡化，一行没变。
+ */
+
+/** 18 种接法的顺序与原生 EffectCatalog.ALL 一致：分组连在一起，Select 里读起来成块。 */
+const EFFECT_IDS = [
+    'plainBlend', 'hardCut', 'fadeOutIn', 'plateauBlend',
+    'bassSwap', 'threeBandSeam', 'filterSweepIn', 'vocalRecede',
+    'beatCut', 'barAlignedBlend', 'tempoBend',
+    'tailRide', 'echoThrow', 'reverbCarry',
+    'buildUp', 'riserDrop', 'vinylBrake', 'reverseCrescendo',
+] as const;
+
+/** 强度四档：值用字符串是因为 Segmented 只吃 string，取用时再 Number 回去。 */
+const INTENSITY_LEVELS = [
+    { value: '0.25', labelKey: 'options.transitionIntensity_light' },
+    { value: '0.5', labelKey: 'options.transitionIntensity_normal' },
+    { value: '0.75', labelKey: 'options.transitionIntensity_strong' },
+    { value: '1', labelKey: 'options.transitionIntensity_max' },
+] as const;
+
 const O = {
     transition: option(TRANSITION, 'transitionEnable', 'options.transitionEnable'),
-    mode: option(TRANSITION, 'transitionMode', 'options.transitionMode'),
     crossfadeMax: option(TRANSITION, 'crossfadeMaxSeconds', 'options.crossfadeMaxSeconds'),
-    performance: option(TRANSITION, 'transitionPerformance', 'options.transitionPerformance'),
-    animation: option(TRANSITION, 'transitionAnimation', 'options.transitionAnimation'),
-    animationRing: option(TRANSITION, 'transitionAnimationRing', 'options.transitionAnimationRing'),
-    animationCard: option(TRANSITION, 'transitionAnimationCard', 'options.transitionAnimationCard'),
+    crossfadeCurve: option(TRANSITION, 'crossfadeCurve', 'options.crossfadeCurve'),
+    handoffMode: option(TRANSITION, 'handoffMode', 'options.handoffMode'),
+    transitionEffect: option(TRANSITION, 'transitionEffect', 'options.transitionEffect'),
+    transitionIntensity: option(TRANSITION, 'transitionIntensity', 'options.transitionIntensity'),
+    transitionPerformance: option(TRANSITION, 'transitionPerformance', 'options.transitionPerformance'),
+    /*
+     * 过渡动画：混音时把这次过渡画出来（屏幕圆环 / 卡片描边）。
+     *
+     * 这两项在 store 里一直有完整的读写实现，但设置页里曾经没有入口 ——
+     * 于是它们只能靠导入配置或别处的默认值决定，用户改不了。
+     * 现在补回来，跟着「智能过渡」一起展开。
+     */
+    transitionAnimation: option(TRANSITION, 'transitionAnimation', 'options.transitionAnimation'),
+    transitionAnimationCard: option(TRANSITION, 'transitionAnimationCard', 'options.transitionAnimationCard'),
+    transitionEnhancer: option(TRANSITION, 'transitionEnhancer', 'options.transitionEnhancer'),
     outputDevice: option(SOUND, 'audioOutputDevice', 'options.audioOutputDevice'),
     replayGain: option(SOUND, 'replayGainSettings', 'options.replayGainMode'),
     fade: option(SOUND, 'playbackFade', 'options.playbackFade'),
@@ -59,33 +101,45 @@ const O = {
      */
     mixWithOtherAudio: option(SOUND, 'mixWithOtherAudio', 'options.mixWithOtherAudio', { available: isCapacitorAndroid }),
     /*
-     * 原生播放（P1）：音频改由 ExoPlayer 出声，不再走 WebView 的 `<audio>`。
+     * 原生播放（P1）不再有开关：安卓上恒开，出声交给 ExoPlayer。
      *
-     * 只在**原生播放器真的编进这个包**时出现（`isNativePlayerAvailable`）—— 桌面端与还没
-     * 带上这一层的包里，这一行既不画也不被搜索索引。说明走 noteKey（收进「i」）：
-     * fork 自建的行一律不占 label 下面那块地方。
+     * 原来这一行是「原生播放（实验）」，它留了一条「一半歌走原生、一半走网页」的岔路
+     * —— 同一个 bug 在两种音频栈上表现不同，最难复现。现在没有岔路可选。
+     * 已知代价（均衡器 / 音效 / 淡入淡出 / 频谱失效）写在 useAudioSettingsStore 的注释里。
      */
-    nativePlayback: option(SOUND, 'nativePlayback', 'options.nativePlayback', {
-        available: isNativePlayerAvailable,
-        noteKey: 'options.nativePlaybackNote',
-    }),
     queueBehavior: option(BEHAVIOR, 'queueDefaultBehavior', 'options.queueDefaultBehavior'),
     autoSkipUnplayable: option(BEHAVIOR, 'autoSkipUnplayable', 'options.autoSkipUnplayable'),
+    backgroundSilentSkip: option(BEHAVIOR, 'backgroundSilentSkip', 'options.backgroundSilentSkip', {
+        noteKey: 'options.backgroundSilentSkipDesc',
+        available: isCapacitorAndroid,
+    }),
     preventSleep: option(BEHAVIOR, 'preventDisplaySleepDuringPlayback', 'options.preventDisplaySleepDuringPlayback', { electronOnly: true }),
     voiceInputPause: option(BEHAVIOR, 'voiceInputPause', 'options.voiceInputPause', { electronOnly: true, available: () => runsOnWindows() }),
+    /*
+     * 「进入可视化自动横屏」：只在播放页生效、离开就还回去，属于「播放时怎么表现」，
+     * 所以放在播放行为组里，不在外观。判定在原生（PhoneLayoutOrientation.resolve），
+     * 这里只是一行开关。
+     */
+    autoLandscapeForVisualizer: option(BEHAVIOR, 'autoLandscapeForVisualizer', 'options.autoLandscapeForVisualizer', {
+        noteKey: 'options.autoLandscapeForVisualizerDesc',
+        available: isCapacitorAndroid,
+    }),
+    /*
+     * 后台运行（保活）：一行业务体检 + 两个跳转按钮，不是开关。
+     *
+     * 它读的是系统的真实状态（电池优化白名单），并把用户送到各家 ROM 的自启动 / 耗电页。
+     * 应用侧没有任何办法自己拿到这些授权 —— 所以这一行不承诺「打开就不断」，只负责
+     * 把路铺到用户面前，并如实显示现在过没过。
+     */
+    keepAlive: option(BEHAVIOR, 'keepAlive', 'options.keepAlive', {
+        noteKey: 'options.keepAliveDesc',
+        available: isCapacitorAndroid,
+    }),
     modelBeatThis: option(MODELS, 'analysisModelBeatThis', 'options.analysisModelBeatThis', { noteKey: 'options.analysisModelBeatThisDesc', available: () => ANALYSIS_MODELS_ENABLED }),
     modelHtdemucs: option(MODELS, 'analysisModelHtdemucs', 'options.analysisModelHtdemucs', { noteKey: 'options.analysisModelHtdemucsDesc', available: () => ANALYSIS_MODELS_ENABLED }),
 };
 
-export const OPTIONS: SettingsOptionDef[] = Object.values(O);
-
-/**
- * The pass an animation chip plays when it is switched on: a ten-second blend at 120 BPM, addressed
- * to the drawing that was switched on, so the other one does not play again with it.
- */
-const previewCue = (renderer: TransitionRenderer) => (
-    { seconds: 10, crossover: 0.55, periodSec: 0.5, preview: renderer } as const
-);
+export const OPTIONS: SettingsOptionDef[] = [...HIFI_OPTIONS, ...Object.values(O)];
 
 /**
  * One model's row: the switch is the listener's wish, and the words under it are what is actually
@@ -163,17 +217,25 @@ const PlaybackPage: React.FC = () => {
     const { voiceInputPause } = viewProps.lab;
     const automix = useAutomixSettingsStore(useShallow(state => ({
         enabled: state.automixEnabled,
-        mode: state.transitionMode,
         crossfadeMaxSec: state.crossfadeMaxSec,
+        crossfadeCurve: state.crossfadeCurve,
+        nativeMode: state.nativeTransitionMode,
+        effect: state.transitionEffect,
+        intensity: state.transitionIntensity,
         performance: state.transitionPerformance,
-        animationRing: state.transitionAnimation,
+        animation: state.transitionAnimation,
         animationCard: state.transitionAnimationCard,
+        enhancer: state.transitionEnhancer,
         setEnabled: state.handleToggleAutomix,
-        setMode: state.handleSetTransitionMode,
         setCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
+        setCrossfadeCurve: state.handleSetCrossfadeCurve,
+        setNativeMode: state.handleSetNativeTransitionMode,
+        setEffect: state.handleSetTransitionEffect,
+        setIntensity: state.handleSetTransitionIntensity,
         setPerformance: state.handleToggleTransitionPerformance,
-        setAnimationRing: state.handleToggleTransitionAnimation,
+        setAnimation: state.handleToggleTransitionAnimation,
         setAnimationCard: state.handleToggleTransitionAnimationCard,
+        setEnhancer: state.handleToggleTransitionEnhancer,
     })));
     const audio = useAudioSettingsStore(useShallow(state => ({
         mediaCache: state.enableMediaCache,
@@ -181,15 +243,15 @@ const PlaybackPage: React.FC = () => {
         transcode: state.enableTranscodeFallback,
         queueBehavior: state.queueAddBehavior,
         autoSkipUnplayable: state.autoSkipUnplayable,
+        backgroundSilentSkip: state.backgroundSilentSkip,
         mixWithOtherAudio: state.mixWithOtherAudio,
-        nativePlayback: state.nativePlaybackEnabled,
         setMediaCache: state.handleToggleMediaCache,
         setFade: state.handleTogglePlaybackFade,
         setTranscode: state.handleToggleTranscodeFallback,
         setQueueBehavior: state.handleSetQueueAddBehavior,
         setAutoSkipUnplayable: state.handleToggleAutoSkipUnplayable,
+        setBackgroundSilentSkip: state.handleToggleBackgroundSilentSkip,
         setMixWithOtherAudio: state.handleToggleMixWithOtherAudio,
-        setNativePlayback: state.handleToggleNativePlayback,
     })));
     const preventSleep = useDesktopSettingsStore(state => state.preventDisplaySleepDuringPlayback);
     const setPreventSleep = useDesktopSettingsStore(state => state.handleTogglePreventDisplaySleepDuringPlayback);
@@ -197,103 +259,121 @@ const PlaybackPage: React.FC = () => {
     // Asked on every render, not kept: whether the models are on disk can change while the page is
     // open, and the subscription below only makes the page render again when it does.
     React.useSyncExternalStore(subscribeModelAvailability, modelsPresent);
-    const analysable = canAnalyseTracks();
-    const capabilities = transitionCapabilities();
-    const usesAutomix = automix.mode === 'automix';
-    // Automix without a full engine says why in place of what Automix does.
-    const modeHint = !usesAutomix
-        ? t('options.transitionCrossfadeDesc')
-        : !analysable || capabilities.full
-            ? t('options.transitionAutomixDesc')
-            : t(capabilities.desktop ? 'options.transitionEngineNeedsModels' : 'options.transitionEngineLiteDesc');
 
-    // Switching a drawing on plays it once at once; otherwise it would wait for the next long blend.
-    const animationChip = (def: SettingsOptionDef, renderer: TransitionRenderer, checked: boolean, set: (enabled: boolean) => void) => ({
-        id: def.id,
-        label: t(def.labelKey),
-        checked,
-        onChange: (next: boolean) => {
-            set(next);
-            if (next) announceTransition(previewCue(renderer));
-        },
-    });
+    /*
+     * 分轨模型能不能跑。
+     *
+     * 两条来源分开问：安卓问原生（内置在包里），桌面问 WebGPU 那一套。
+     * 上层只关心结果，所以这里压成一个布尔值。
+     */
+    const nativeStems = React.useSyncExternalStore(
+        subscribeNativeModels,
+        () => (isNativeModelsAvailable() ? modelWillBeAvailable('htdemucs') : false),
+        () => false,
+    );
+    const wgslStems = React.useSyncExternalStore(subscribeModelAvailability, modelsPresent, modelsPresent).htdemucs_gpu;
+    const stemModelReady = isNativeModelsAvailable() ? nativeStems : wgslStems;
+
+    /*
+     * 原生过渡内核只在安卓的壳里。桌面端没有这个内核，两档都是老的固定交叉淡化，
+     * 所以这里用一对方便读的布尔值把「有没有这层东西」和「它现在是不是智能档」分开，
+     * 下面的条件就不是一串混在一起的平台判断。
+     *
+     * 用 isAndroidAppShell 而不是 isCapacitorAndroid：前者不依赖 Capacitor 桥
+     * 初始化完（后者在启动头几秒会答 false）。用错的话设置页刚打开时
+     * 整块原生选项都不画，看起来就是「这些开关没了」——
+     * 而它们只是还没到能回答的时机。
+     */
+    const hasNativeHandoff = isAndroidAppShell();
+    const smartHandoff = hasNativeHandoff && automix.nativeMode === 'smart';
 
     return (
         <>
+            {isElectron && <HifiSettings />}
             <Group def={TRANSITION}>
                 <Row option={O.transition}>
                     <Toggle checked={automix.enabled} onChange={automix.setEnabled} />
                 </Row>
                 <Reveal when={automix.enabled}>
-                    <Row sub option={O.mode} hint={modeHint}>
-                        {/* The mode that runs is not always the chosen one: Automix that cannot
-                            measure a track runs as a crossfade, and without the models as the
-                            lighter engine. */}
-                        {usesAutomix && (analysable ? (
-                            <Status tone={capabilities.full ? 'ok' : undefined}>
-                                {t(capabilities.full ? 'options.transitionEngineFull' : 'options.transitionEngineLite')}
-                            </Status>
-                        ) : (
-                            <Status tone="warn">{t('options.transitionFellBack')}</Status>
-                        ))}
-                        <Segmented
-                            value={automix.mode}
-                            options={[
-                                { value: 'crossfade', label: t('options.transitionCrossfade') },
-                                { value: 'automix', label: t('options.transitionAutomix'), disabled: !analysable },
-                            ]}
-                            onChange={automix.setMode}
+                    {/* 安卓：换歌方式。桌面端整行不画，那里只有固定淡化一种。 */}
+                    {hasNativeHandoff && (
+                        <Row sub option={O.handoffMode} hint={t('options.handoffModeDesc')}>
+                            <Segmented
+                                value={automix.nativeMode}
+                                options={[
+                                    { value: 'crossfade' as const, label: t('options.handoffMode_crossfade') },
+                                    { value: 'smart' as const, label: t('options.handoffMode_smart') },
+                                ]}
+                                onChange={automix.setNativeMode}
+                            />
+                        </Row>
+                    )}
+                    {/* 接法：18 种，末尾的「自动」放在最前面 —— 绝大多数人用这一项。 */}
+                    {smartHandoff && (
+                        <Row sub option={O.transitionEffect} hint={t('options.transitionEffectDesc')}>
+                            <Select
+                                value={automix.effect ?? 'auto'}
+                                options={[
+                                    { value: 'auto', label: t('options.transitionEffectAuto') },
+                                    ...EFFECT_IDS.map(id => ({ value: id as string, label: t(`options.transitionEffect_${id}`) })),
+                                ]}
+                                onChange={next => automix.setEffect(next === 'auto' ? null : next)}
+                                name={t('options.transitionEffect')}
+                            />
+                        </Row>
+                    )}
+                    {/* 时长：固定淡化是「淡多久」，智能过渡是「最长允许多久」。 */}
+                    <Row sub option={O.crossfadeMax} hint={t(smartHandoff ? 'options.transitionMaxDesc' : 'options.transitionCrossfadeDesc')}>
+                        <Slider
+                            value={automix.crossfadeMaxSec}
+                            min={CROSSFADE_MIN_SEC}
+                            max={CROSSFADE_MAX_SEC}
+                            onChange={automix.setCrossfadeMaxSec}
+                            format={seconds => t('options.crossfadeSecondsValue', { seconds })}
                         />
                     </Row>
-                    <Reveal when={!usesAutomix}>
-                        <Row sub option={O.crossfadeMax}>
-                            <Slider
-                                value={automix.crossfadeMaxSec}
-                                min={CROSSFADE_MIN_SEC}
-                                max={CROSSFADE_MAX_SEC}
-                                onChange={automix.setCrossfadeMaxSec}
-                                format={seconds => t('options.crossfadeSecondsValue', { seconds })}
+                    {/* 曲线只影响重叠那几秒的音量怎么交叠：等功率中点不塌，线性是旧行为。
+                        智能过渡下曲线由效果自己定（平台混音要 plateau、回声抛掷要快切），
+                        所以这一行在智能档收起，免得写着一个不起作用的选项。 */}
+                    {!smartHandoff && (
+                        <Row sub option={O.crossfadeCurve} hint={t('options.crossfadeCurveDesc')}>
+                            <Segmented<CrossfadeCurve>
+                                value={automix.crossfadeCurve}
+                                options={CROSSFADE_CURVES.map(curve => ({
+                                    value: curve,
+                                    label: t(`options.crossfadeCurve_${curve}`),
+                                }))}
+                                onChange={automix.setCrossfadeCurve}
                             />
                         </Row>
-                    </Reveal>
-                    <Reveal when={usesAutomix}>
-                        {!analysable && <Row sub notice={t('options.transitionAutomixUnavailable')} />}
-                        <Reveal when={analysable && !audio.mediaCache}>
-                            <Row sub notice={t('options.transitionAutomixNeedsCache')}>
-                                <Button onClick={() => audio.setMediaCache(true)}>{t('options.transitionAutomixEnableCache')}</Button>
+                    )}
+                    {smartHandoff && (
+                        <>
+                            <Row sub option={O.transitionIntensity} hint={t('options.transitionIntensityDesc')}>
+                                <Segmented
+                                    value={String(automix.intensity)}
+                                    options={INTENSITY_LEVELS.map(level => ({ value: level.value as string, label: t(level.labelKey) }))}
+                                    onChange={next => automix.setIntensity(Number(next))}
+                                />
                             </Row>
-                        </Reveal>
-                        {/* Kept in view when the app cannot separate a track: the reason is under the label. */}
-                        <Row
-                            sub
-                            option={O.performance}
-                            hint={t(capabilities.stems
-                                ? 'options.transitionPerformanceDesc'
-                                : capabilities.desktop ? 'options.transitionPerformanceNeedsModel' : 'options.transitionPerformanceNeedsStems')}
-                            disabled={!capabilities.stems}
-                        >
-                            <Toggle checked={automix.performance && capabilities.stems} onChange={automix.setPerformance} />
-                        </Row>
-                        <Row
-                            sub
-                            option={O.animation}
-                            hint={t('options.transitionAnimationDesc')}
-                            note={(
-                                <>
-                                    <span className="text-[color:var(--st-t1)]">{t('options.transitionAnimationRing')}</span> {t('options.transitionAnimationRingDesc')}
-                                    <br />
-                                    <span className="text-[color:var(--st-t1)]">{t('options.transitionAnimationCard')}</span> {t('options.transitionAnimationCardDesc')}
-                                </>
+                            <Row sub option={O.transitionPerformance} hint={t('options.transitionPerformanceDesc')}>
+                                <Toggle checked={automix.performance} onChange={automix.setPerformance} />
+                            </Row>
+                            {/*
+                             * 性能档需要 htdemucs 分轨；缺了才提示，有就不画。
+                             *
+                             * 这里原来问的是 modelsPresent（WebGPU 那套），
+                             * 而那一套在安卓整体关着，于是不管装没装都会挂着
+                             * 「这次安装缺少音轨分离模型」。现在问原生那一份。
+                             */}
+                            {automix.performance && !stemModelReady && (
+                                <Row notice={t('options.transitionPerformanceNeedsModel')} />
                             )}
-                        >
-                            <Chips
-                                items={[
-                                    animationChip(O.animationRing, 'ring', automix.animationRing, automix.setAnimationRing),
-                                    animationChip(O.animationCard, 'card', automix.animationCard, automix.setAnimationCard),
-                                ]}
-                            />
-                        </Row>
-                    </Reveal>
+                            <Row sub option={O.transitionEnhancer} hint={t('options.transitionEnhancerDesc')}>
+                                <Toggle checked={automix.enhancer} onChange={automix.setEnhancer} />
+                            </Row>
+                        </>
+                    )}
                 </Reveal>
             </Group>
 
@@ -304,6 +384,7 @@ const PlaybackPage: React.FC = () => {
                         value={replayGainMode}
                         options={[
                             { value: 'off', label: t('localMusic.replayGainOff') },
+                            { value: 'auto', label: t('localMusic.replayGainAuto') },
                             { value: 'track', label: t('localMusic.replayGainTrack') },
                             { value: 'album', label: t('localMusic.replayGainAlbum') },
                         ]}
@@ -324,11 +405,6 @@ const PlaybackPage: React.FC = () => {
                         <Toggle checked={audio.mixWithOtherAudio} onChange={audio.setMixWithOtherAudio} />
                     </Row>
                 )}
-                {isNativePlayerAvailable() && (
-                    <Row option={O.nativePlayback}>
-                        <Toggle checked={audio.nativePlayback} onChange={audio.setNativePlayback} />
-                    </Row>
-                )}
             </Group>
 
             <Group def={BEHAVIOR}>
@@ -345,6 +421,11 @@ const PlaybackPage: React.FC = () => {
                 <Row option={O.autoSkipUnplayable} note={t('options.autoSkipUnplayableDesc')}>
                     <Toggle checked={audio.autoSkipUnplayable} onChange={audio.setAutoSkipUnplayable} />
                 </Row>
+                {isCapacitorAndroid() && (
+                    <Row option={O.backgroundSilentSkip} note={t('options.backgroundSilentSkipDesc')}>
+                        <Toggle checked={audio.backgroundSilentSkip} onChange={audio.setBackgroundSilentSkip} />
+                    </Row>
+                )}
                 {isElectron && (
                     <Row option={O.preventSleep} hint={t('options.preventDisplaySleepDuringPlaybackDesc')}>
                         <Toggle checked={preventSleep} onChange={setPreventSleep} />
@@ -355,7 +436,20 @@ const PlaybackPage: React.FC = () => {
                         <Toggle checked={voiceInputPause.enabled} onChange={voiceInputPause.onToggle} />
                     </Row>
                 )}
+                {/* 组件内部自己判端：非安卓返回 null。 */}
+                <AndroidAutoLandscapeSetting def={O.autoLandscapeForVisualizer} />
+                {/* 保活体检：只在安卓原生壳里出现，读不到状态时整行不画。 */}
+                <AndroidKeepAliveSetting def={O.keepAlive} />
             </Group>
+
+            {/*
+             * 安卓这一条：模型内置在安装包里，所以只要有这层原生能力就画。
+             *
+             * 与上面那组（ANALYSIS_MODELS_ENABLED，从 CDN 取、跑 WebGPU）是两套东西：
+             * 那边关着是因为手机 WebGPU 不稳；这里走 onnxruntime-android，不依赖 WebGPU。
+             * 组件内部自己判端，非安卓返回 null。
+             */}
+            <NativeModelsSection />
 
             {/* The whole group answers to ANALYSIS_MODELS_ENABLED, same as the rows inside it say:
                 while the models are not offered there is nothing here to draw or to offer. */}

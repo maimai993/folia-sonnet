@@ -7,6 +7,7 @@ import { loadOnlineLyricsState, markOnlineLyricsPureMusic, resolveOnlineLyrics, 
 import { autoMatchBestLyric } from '../utils/lyrics/autoMatchBestLyric';
 import { getPlatformLyricSource } from '../utils/lyrics/lyricSources';
 import { resolveLyricSourcePreference } from '../utils/lyrics/lyricSourcePreference';
+import { settlesOnOwnWordTiming } from '../utils/lyrics/ownWordTiming';
 import { createSafeObjectUrl } from '../utils/blobGuards';
 import type { AudioQualityPreference, MediaId, ProviderAudioSource } from '../types/onlineMusic';
 import { omni } from './onlineMusic/omni';
@@ -115,8 +116,14 @@ export async function loadOnlineSongAudioSource(
     };
     // Where no URL can be had (offline, a sign-in that has ended, a song taken down), the copy that
     // was passed over for its level is what plays: another level is better than no song.
+    //
+    // 不再要求 `level` 有值再救：平台解析不出档位（provider 不声明它区分得出的档位、账号又
+    // 没有权限时会降级返回，见 #158）时 `level` 是 undefined，那时恰恰最需要这份副本 —— 旧写法
+    // 在这里直接放弃，用户看到的是「缓存了但断网播不了」。不传档位时 `getCachedSongAudioBlob`
+    // 不做“另一档就跳过”的判定（resourceCache.ts 的 `isCopyOfAnotherLevel` 对空档位返回 false），
+    // 所以读到的就是盘上那份副本，正是“another level is better than no song”要说的事。
     const playCopyOfAnyLevel = async () => {
-        const played = level ? await playCopy(await readCopy()) : null;
+        const played = await playCopy(await readCopy());
         if (played) console.log(`[Cache] No URL for "${song.name}": its copy of another level plays`);
         return played;
     };
@@ -200,10 +207,11 @@ export async function loadOnlineSongLyrics(
         onPureMusicChange?: (isPureMusic: boolean) => void;
         onStateChange?: (state: OnlineLyricsState | null) => void;
         onAutoMatchStart?: () => void;
+        onAutoMatchError?: () => void;
         onDone: () => void;
     }
 ): Promise<void> {
-    const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onAutoMatchStart, onDone } = callbacks;
+    const { isCurrent, onLyrics, onPureMusicChange, onStateChange, onAutoMatchStart, onAutoMatchError, onDone } = callbacks;
     const lyricCacheKey = getSongResourceCacheKey('lyric', song);
     const onlineLyricsState = await loadOnlineLyricsState(song);
   const initialSettingsLyricSettings = useLyricSettingsStore.getState();
@@ -216,6 +224,18 @@ export async function loadOnlineSongLyrics(
     const preferredCachedLyrics = resolveOnlineLyrics(onlineLyricsState, cachedLyrics);
     const hasAuthoritativeLyricsSelection = onlineLyricsState?.lyricsSource === 'imported'
         || Boolean(onlineLyricsState?.hasOnlineOverride);
+    // A platform whose own word timing is kept as it is (`prefersOwnWordByWord`) is not searched
+    // for another source when it is also the preferred one: the automatic pick would replace the
+    // timing the song actually has. Any other preferred source is still asked (issue #1127).
+    const keepsOwnWordByWord = (candidate: LyricData | null | undefined) => {
+        const lyricSettings = useLyricSettingsStore.getState();
+        return settlesOnOwnWordTiming({
+            ownSource: getPlatformLyricSource(song.sourceRef?.kind === 'online' ? song.sourceRef.providerId : null)?.id,
+            prefersOwn: omni.prefersOwnWordByWordLyrics(song),
+            lyrics: candidate,
+            keepOwn: lyricSettings.keepProviderWordTiming,
+        }, resolveLyricSourcePreference(lyricSettings, song));
+    };
     if (preferredCachedLyrics && (hasAuthoritativeLyricsSelection || !initialSettingsLyricSettings.autoUseBestLyric)) {
         const cachedText = preferredCachedLyrics.lines.map(line => line.fullText).join('\n');
         onPureMusicChange?.(resolveOnlineLyricsPureMusic(onlineLyricsState, cachedText));
@@ -237,7 +257,8 @@ export async function loadOnlineSongLyrics(
         const effectiveLyrics = preferredPrefetchedLyrics ?? prefetched.lyrics;
 
   const settingsLyricSettings = useLyricSettingsStore.getState();
-        const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
+        const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride
+            && !keepsOwnWordByWord(effectiveLyrics);
 
         if (!shouldAutoMatch) {
             const effectiveText = effectiveLyrics?.lines.map(line => line.fullText).join('\n') ?? '';
@@ -282,7 +303,8 @@ export async function loadOnlineSongLyrics(
     let finalState = onlineLyricsState;
 
   const settingsLyricSettings = useLyricSettingsStore.getState();
-    const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride;
+    const shouldAutoMatch = settingsLyricSettings.autoUseBestLyric && !onlineLyricsState?.hasOnlineOverride
+        && !keepsOwnWordByWord(parsedLyrics);
 
     if (shouldAutoMatch) {
         // The lyrics in hand are already displayable, so hand them over and report done BEFORE the
@@ -295,6 +317,19 @@ export async function loadOnlineSongLyrics(
         if (resolvedLyrics) onLyrics(resolvedLyrics);
         onDone();
 
+        /*
+         * 视频平台的歌不去自动匹配。
+         *
+         * 自动匹配是拿歌名去别的平台的曲库里找同名歌曲 —— 对一首音乐是对的，对一条
+         * 视频是错的：视频标题和别的平台的歌曲没有对应关系，找出来的东西不相干
+         * （标题带「教程」「实况」的那种更是一定错）。这类平台自己就带歌词来源
+         * （字幕），有就有，没有就没有。
+         */
+        if (omni.ownsItsLyricsOnly(song)) {
+            onDone();
+            return;
+        }
+
         try {
             onAutoMatchStart?.();
             const metadata = getProviderSongMetadata(song);
@@ -304,7 +339,9 @@ export async function loadOnlineSongLyrics(
             const bestMatch = await autoMatchBestLyric(song.name, artistName, metadata.durationMs, {
                 album: metadata.album?.name,
                 preferredSource: resolveLyricSourcePreference(settingsLyricSettings, song),
+                keepOwnWordTiming: settingsLyricSettings.keepProviderWordTiming,
                 alternateArtist: () => omni.getAlternateArtistName(song),
+                searchAlias: () => omni.getLyricSearchAlias(song),
                 providerCandidate: ownLyricSource
                     ? {
                         providerId: ownLyricSource.id,
@@ -346,6 +383,7 @@ export async function loadOnlineSongLyrics(
             }
         } catch (error) {
             console.warn('[OnlinePlayback] Failed to auto-match best lyric:', error);
+            if (isCurrent()) onAutoMatchError?.();
         }
     }
 

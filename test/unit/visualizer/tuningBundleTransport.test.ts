@@ -55,12 +55,17 @@ describe('lyric style tunings travel in the bundle alone', () => {
         useVisualizerSettingsStore.setState(structuredClone(defaults));
     };
 
+    // A style whose fields are all named choices (no switch or number to nudge) gets a hand-picked change.
+    const CHOICE_PATCHES: Record<string, Record<string, unknown>> = {
+        machi: { weather: 'snow' },
+    };
+
     // Moves every style off its defaults through the store's own setter, so what is exported is a
     // value the store accepts. Returns the tunings the store then holds.
     const customiseEveryStyle = () => {
-        for (const { settingsKey, settingsSetterKey } of tuningFiles) {
+        for (const { mode, settingsKey, settingsSetterKey } of tuningFiles) {
             const current = readStore()[settingsKey] as Record<string, unknown>;
-            const patch: Record<string, unknown> = {};
+            const patch: Record<string, unknown> = { ...CHOICE_PATCHES[mode] };
             for (const [field, value] of Object.entries(current)) {
                 if (typeof value === 'boolean') patch[field] = !value;
                 if (typeof value === 'number') patch[field] = value * 0.9;
@@ -69,6 +74,8 @@ describe('lyric style tunings travel in the bundle alone', () => {
         }
         const customised = readTunings();
         for (const { mode, settingsKey } of tuningFiles) {
+            // 空对象 tuning（如 kinetic，参数都在它自己的编辑器里调）没有可改的字段，跳过比较。
+            if (Object.keys(defaults[settingsKey] as Record<string, unknown>).length === 0) continue;
             expect(customised[mode], `${mode} left its defaults`).not.toEqual(defaults[settingsKey]);
         }
         return customised;
@@ -110,15 +117,18 @@ describe('lyric style tunings travel in the bundle alone', () => {
         const incoming = decompressConfig(compressConfig(withoutSingleFields(buildVisualSettingsConfig())));
         restoreDefaults();
 
-        // The confirmation dialog offers one row for the bundle, with something to change in every style.
+        // The confirmation dialog offers one row for the bundle, with something to change in every
+        // style that has fields. An empty tuning (kinetic, parameters live in its own editor) has
+        // no leaves to diff, so the bundle row does not open to it.
         const plan = buildImportPlan({
             incoming,
             current: buildVisualSettingsConfig(),
             switches: { isCustomThemePreferred: false, songThemeAutoSwitchEnabled: false, songThemeAutoGenerateEnabled: false },
         });
         const offered = plan.changes.find(change => change.key === 'visualizerTunings');
+        const withFields = tuningFiles.filter(file => Object.keys(defaults[file.settingsKey] as Record<string, unknown>).length > 0);
         expect(new Set(offered?.children?.map(child => child.key.split('.')[0])))
-            .toEqual(new Set(tuningFiles.map(file => file.mode)));
+            .toEqual(new Set(withFields.map(file => file.mode)));
 
         // What applyImportedConfig (pages/storage/visualConfigTransfer.ts) does when that row is taken.
         applyVisualizerTuningsToSettings(readStore(), incoming.visualizerTunings);

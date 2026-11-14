@@ -122,7 +122,8 @@ describe('歌词窗口按需构建', () => {
             played.destroy();
             jumped.destroy();
         }
-    });
+        // 顺着 1/30 秒一步步播到中间那一段，帧数按歌长算；默认 5 秒在慢机器上不够。
+    }, 120_000);
 
     it('爆闪选字用的逐字时刻与关键字不必构建那一行', () => {
         const window = buildWindow('vertical');

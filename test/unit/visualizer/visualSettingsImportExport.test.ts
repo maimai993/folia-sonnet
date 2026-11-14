@@ -56,6 +56,7 @@ describe('Visual Settings Import and Export', () => {
         hidePlayerTranslationSubtitle: true,
         showSubtitleTranslation: false,
         subtitleContentMode: 'romanization' as const,
+        subtitleOverlayLayout: 'current+next+translation' as const,
         subtitleOverlayBackground: true,
         subtitleUpcomingLyricsBlur: false,
         showHarmonySubtitle: false,
@@ -140,7 +141,9 @@ describe('Visual Settings Import and Export', () => {
             soulActiveEnabled: true,
             gradientEnabled: true,
             gradientIntensity: 0.7,
-            keywordColoringEnabled: false,
+            // v0.7.26 给立体模型（diorama）的 tuning 加了关键词着色开关：这是上游新特性，
+            // 往返用例的样本要带上它，否则 `toEqual` 会因为解码多出这一项而失败。
+            keywordColoringEnabled: true,
         },
         monetBackgroundTuning: {
             backgroundSource: 'cover-derived' as const,
@@ -181,7 +184,6 @@ describe('Visual Settings Import and Export', () => {
             overlayOpacity: 0.5,
         },
         monetTuning: {
-            keywordColoringEnabled: false,
             showDescription: false,
             fontScale: 1.1,
             portraitSource: 'cover' as const,
@@ -208,6 +210,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
+        expect(decoded.subtitleOverlayLayout).toBe('current+next+translation');
         expect(decoded.subtitleOverlayBackground).toBe(true);
         expect(decoded.subtitleUpcomingLyricsBlur).toBe(false);
         expect(decoded.showHarmonySubtitle).toBe(false);
@@ -266,6 +269,7 @@ describe('Visual Settings Import and Export', () => {
         expect(decoded.hidePlayerTranslationSubtitle).toBe(true);
         expect(decoded.showSubtitleTranslation).toBe(false);
         expect(decoded.subtitleContentMode).toBe('romanization');
+        expect(decoded.subtitleOverlayLayout).toBe('current+next+translation');
         expect(decoded.subtitleOverlayBackground).toBe(true);
         expect(decoded.subtitleUpcomingLyricsBlur).toBe(false);
         expect(decoded.showHarmonySubtitle).toBe(false);
@@ -402,6 +406,9 @@ describe('Visual Settings Import and Export', () => {
             glyphMotion: 0.6,
             wholeLineLyrics: true,
             glyphSettleStretch: 0.85,
+            depthOfField: 1.6,
+            depthPan: 0.3,
+            glyphDepth: 0,
             colorMode: 'gradient' as const,
             showBlocks: false,
             showDecor: false,
@@ -429,7 +436,9 @@ describe('Visual Settings Import and Export', () => {
         };
         const decoded = decompressConfig(compressConfig({ temperaTuning }));
 
-        expect(decoded.temperaTuning).toEqual(temperaTuning);
+        // 旧的单独短码字段不带 render（分辨率与抗锯齿的覆盖随 visualizerTunings 那一包走），导入时本机的保留。
+        const { render: _render, ...carried } = temperaTuning;
+        expect(decoded.temperaTuning).toEqual(carried);
     });
 
     it('gracefully throws error on invalid configuration input strings', () => {

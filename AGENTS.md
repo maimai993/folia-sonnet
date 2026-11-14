@@ -9,6 +9,8 @@
 3. 按 skill 中的触发条件和执行规则完成工作。
 4. 如果多个 skill 同时相关，可以组合使用，但只加载当前任务真正需要的内容。不需要 skill 的任务不要读它们。
 
+改代码的任务（文档、文案、简单修复和发版准备除外）按 `development-workflow` 走到交付：每次修改都自检；一个 PR 或完整功能做完时（不是每次提交或修改）派独立子代理审查，逐条核实再修复。算不算简单修复，读这个 skill 的“什么时候审查”一节判断（碰了时序、持久化、平台接口、依赖版本、凭据、热路径的都不算），拿不准就走完整流程。
+
 ## 开发规范
 
 ### 目录
@@ -22,10 +24,11 @@
 
 ### 模块边界
 
-- **依赖方向**：`stores`、`utils`、`types`、`services` 不在运行时依赖 `components`；`utils` 也不依赖 `hooks`、`stores`；`types` 不依赖任何实现；`components`、`hooks`、`stores` 不直接用平台的 `*Provider.ts`、`*Transport.ts`。检查规则是 `dev/mcp/ts-code-map/codemap.mjs` 的 `BOUNDARY_RULES`，现有的违规列在 `docs/CODEMAP.md` 的“分层边界违规”，不再加新的。
+- **依赖方向**：`stores`、`utils`、`types`、`services` 不在运行时依赖 `components`；`utils` 也不依赖 `hooks`、`stores`；`types` 不依赖任何实现；`components`、`hooks`、`stores` 不直接用平台的 `*Provider.ts`、`*Transport.ts`。检查规则是 `dev/dedicatus/rules.mjs` 的 `BOUNDARY_RULES`（Dedicatus，`npm run dedicatus`，CI 上也跑）；现有的违规和循环依赖记在 `dev/dedicatus/baseline.json`，只减不增：修好一条就 `npm run dedicatus -- --prune` 删掉，不往里加新的。
 - **在线歌曲只走 omni。** 搜索、播放、歌词、歌单、账户都调 `src/services/onlineMusic/omni.ts`；只有各平台的 `<id>Provider.ts` 和 `<id>Transport.ts` 碰平台的原始接口（网易云没有 Transport，请求在 `src/services/onlineMusic/netease/netease.ts`）。omni 缺一项能力时，在 `src/types/onlineMusic.ts` 和 `omni.ts` 加上，再在各平台实现，不另开旁路。细则见 `online-song-omni-routing`。
 - **一个平台的规则留在那个平台的目录里。** 只是看着像的不要合并成共用规则。平台目录外每个文件提到平台名的次数记在 `test/unit/onlineMusic/platformNamePlaces.ts`，`test/unit/onlineMusic/omniArchitecture.test.ts` 核对它。
 - **加一个同类的东西只动它自己的目录和注册点**：歌词样式和背景放各自的 `entry.tsx`，由 registry 自动发现；平台在 `providerRegistry.ts` 登记；命令放 `src/components/command-palette/commands/`，一组命令一个 `<组>Commands.ts`，自带界面的单条命令一个 `*Command.ts`，都用 `commandFactories.ts` 里的函数建，切换歌词样式的命令写在那个样式的 `entry.tsx` 里。不在 `App.tsx` 里加分支。衡量一个模块看“再加一个平台、一个歌词样式、一种模组要改哪些地方”。
+- **账号凭据只在登记过的入口写。** 处理一般响应的代码不改登录账号。代表“谁登录着”的 token、userid、cookie 只在小而专一的函数里写：要么只在确认的登录（或同一会话的续期）之后调用，要么函数自己挡掉账号项。写入点登记在 `dev/dedicatus/credentialWriters.mjs`，Dedicatus D604 检查渲染进程经 `providerStorage` 的写入和酷狗桥接层的会话对象；其他平台主进程里的会话仓库还没纳入检查，照同样的规矩写。
 - **渲染进程只经 `electron/preload.cjs` 暴露的接口找主进程。** 窗口都开 `contextIsolation`、关 `nodeIntegration`。
 
 ### 命名
@@ -39,6 +42,7 @@
 - 几个功能之间共用的类型（契约）放 `src/types.ts`（全局设置）和 `src/types/`（如 `onlineMusic.ts`）；只给一个功能用的类型放在那个功能的目录里。
 - TypeScript 开着 `strict`；类型检查跑 `npm run typecheck`。
 - 仓库没有自动格式化工具：4 个空格缩进、单引号；文件用 LF 换行、末尾留一个换行（这两条写在 `.editorconfig`）。
+- ESLint 检查这些格式和更多规则（`typescript-eslint` 的 strictTypeChecked、react-hooks、项目约定）：先 `npm run lint:install`（装在 `dev/dedicatus/lint/` 的隔离环境里），再 `npm run lint`。旧代码的违规记在 `eslint-suppressions.json`，只减不增：修好后跑 `npm run lint:prune`，不要往里加。问题按 Dedicatus 的代码（如 `D401`）报，含义见 `dev/dedicatus/codes.mjs`。
 
 ### 注释
 
@@ -56,7 +60,8 @@
 ### 存下来的数据
 
 - 设置值放在 `src/stores/` 对应领域的 `use*SettingsStore` 里，组件里不另起一套 localStorage 读写。新写的读写用 `src/stores/storagePrimitives.ts`；一些旧文件还直接调 localStorage。
-- 已经发布的存储键不改名。`src/stores/` 和各样式 `tuning.ts` 里的键由 `test/unit/stores/storeContract.test.ts` 记着快照；别处的键没有测试钉住，同样不改名。
+- 已经发布的存储键不改名。`src/stores/` 和各样式 `tuning.ts` 里的键由 `test/unit/stores/storeContract.test.ts` 记着快照；全仓的键（含平台会话、主进程 electron-store）登记在 `dev/dedicatus/storageKeys.mjs`（D507），新键追加进去。外观类 store 的新键还要在 `dev/dedicatus/appearanceDestinations.mjs` 写明进不进配置导入导出（D511）。
+- 主进程新加 IPC 通道，先在 `dev/dedicatus/ipcChannels.mjs` 登记信任级别（D605）。
 
 ### 日志
 
@@ -75,8 +80,8 @@
 ### Bug 与 issue（先提 issue 再修）
 
 - **发现 bug（包括 CI 红掉时暴露的行为问题）先提 issue，再修。** 不许没有 issue 直接改代码：事后无从追溯「为什么改这里」。
-- issue 写清：现象、复现步骤、期望行为、影响范围；用 `gh issue create` 提。修完在 PR 正文里关联：`Closes #<编号>`（不是修 bug 的改动也至少写 `Refs #<编号>` 关联到相关 issue/任务）。
-- CI 门禁：`.github/workflows/issue-link.yml` 检查 PR 正文有没有 `Closes/Fixes/Resolves/Refs + #编号`，没有就红（job 名 `Pull request links an issue`）；PR 模板里有对应勾选项。
+- issue 写清：现象、复现步骤、期望行为、影响范围；用 `gh issue create` 提。修 bug 的 PR 在正文写 `Closes #<编号>`（`npm run pr` 加 `--issue <编号>` 会自动写入）；新功能、重构、文档有相关任务就写 `Refs #<编号>`，没有可以不写。
+- CI 门禁：`.github/workflows/issue-link.yml` 对 `fix/*` 分支和带 `bug` 标签的 PR 检查正文有没有 `Closes/Fixes/Resolves/Refs + #编号`，没有就红（job 名 `Pull request links an issue`）；其他 PR 跳过。PR 模板里有对应说明。
 - CI 红掉时，`.github/workflows/ci-failure-notice.yml` 会在 PR 上自动留一条指引评论（附运行链接）——先按它确认是不是 bug，是就先提 issue，并重读本文件再动手。
 - 流程细节见 `docs/issue-workflow.md`。
 
@@ -90,12 +95,14 @@
 
 - 四种分支：`main`（只接受发版合并）、`dev`（日常开发，所有 PR 的目标）、`feat/*` 与 `fix/*`（源分支，合并后删）、`release/x.y.z`（出包，从 main 切）。
 - **main 和 dev 都不直接 push**，一律走 PR。这条靠 GitHub 分支保护落实：Settings → Branches 给 `main`、`dev` 开保护，勾「Require a pull request before merging」与「Do not allow bypassing」。owner 在网页上配一次；CI 用的账号不是 admin，脚本改不了。
-- 日常：从 `dev` 切 `feat/*` 或 `fix/*` → 改 → 本地门禁 → PR 到 `dev` → 远端 CI 全绿 → 合并。不熟 GitHub 的用一条命令跑完推分支和建 PR：`npm run pr -- "fix: 标题"`（只是 `ci/openPr.ts` 的包装，细节见 `ci/README.md`）。
+- 日常：从 `dev` 切 `feat/*` 或 `fix/*` → 改 → 本地门禁 → **真机验过** → PR 到 `dev` → 远端 CI 全绿 → 合并。不熟 GitHub 的用一条命令跑完推分支和建 PR：`npm run pr -- "fix: 标题"`（只是 `ci/openPr.ts` 的包装，细节见 `ci/README.md`）。
 - 发版：先在 `dev` 上把 `package.json` 版本改好（走 PR），再 `dev` → PR → `main`；然后从 `main` 切 `release/<package.json 的 version>`（如 `release/0.7.22`）推上去。推这个分支会触发 `android-release.yml`：校验分支名与版本一致 → 出 APK/AAB → 打 `v<版本>` 标签 → 发 Release。release 分支上不再改版本号。
+- **本地出包不改版本号。** 为了验收、侧装或给别人试而构建的 APK，`version`、`displayVersion`、`androidVersionCode` 一律照抄当前 `package.json`，不自己往上加。版本号只在上面的发版流程里动；上游没动，这一版就还是这个号，`versionCode` 相同只是覆盖安装，不是问题。要区分产物就改文件名（`-lyric-calibration`、`-scanfix` 这种）；一改 `versionCode`，手上那个旧包就装不回去了（`INSTALL_FAILED_VERSION_DOWNGRADE`）。
 
 ### CI
 
-- **开 PR 之前**跑 `npm run ci:local`（typecheck + 单测 + `vite build` + 版本约束，与 `.github/workflows/ci.yml` 同一套），红了不许开 PR。Windows 上 `test/unit/mod-system/modSignature.test.ts` 的符号链接用例会因权限失败（要开发者模式/管理员），这是环境限制：其余全绿照常开 PR，这一项以 Linux 的 CI 为准。
+- **开 PR 之前必须在真机上验过。** 门禁和单测只能证明代码没坏，证明不了「用起来没问题」。功能和界面、原生与平台接入、播放与后台行为这类改动，要出包装到真机上把改动涉及的实际路径走一遍，确认没问题才开 PR：安卓端 `npm run cap:sync:android` 后 `gradlew.bat assembleRelease` 出 APK 侧装，桌面端用 `run-desktop` skill 驱动真的 Electron 构建。PR 正文写清机型与系统版本、验了哪几项、结论是什么；截图和量化结论不能代替真机。验过之前代码留在本地分支，不建 PR，也不许先开个「占位 PR 等 CI 绿」。纯文档、纯测试、纯注释的改动不涉及真机，正文写一句「不涉及真机」即可。
+- **开 PR 之前**跑 `npm run ci:local`（控件/体积/版本/密钥扫描 + typecheck + sync-server typecheck + 单测 + `vite build` + 产物密钥扫描，与 `.github/workflows/ci.yml` 同一套），红了不许开 PR。第一次跑之前先装 sync-server 的依赖：`npm --prefix sync-server ci`。Windows 上 `test/unit/mod-system/modSignature.test.ts` 的符号链接用例会因权限失败（要开发者模式/管理员），这是环境限制：其余全绿照常开 PR，这一项以 Linux 的 CI 为准。
 - **开 PR 之后**盯 CI，全绿才合并：有 gh 用 `gh pr checks <编号> --watch`；没有 gh（或走 SSH 认证）就开 PR 页面的 **Checks** 标签。红了当场修，不要交给别人。
 - **合并前必须 review，至少一次 AI review**，而且报告要发在 GitHub 上：有 gh 用 `gh pr review <编号> --comment --body-file review.md`；没有 gh 就在 **Files changed → Review changes → Comment** 里写。只在聊天里说「看过了」不算，PR 的 Reviews 里能查到才算。有未处理的 CHANGES_REQUESTED 不许合。
 - **`gh` 只是便利工具，不是硬依赖。** 走 SSH 认证、没装 gh、或不想在本机登录 gh 的人都照常提 PR：`npm run pr -- "标题"` 会先跑本地门禁再 push（SSH 用自己的 key），检测不到可用的 gh 时打印 compare 链接，浏览器里点 Create pull request；之后的盯 CI 与写 review 都在网页完成。
@@ -105,6 +112,14 @@
 - 密钥泄漏门禁：`node ci/checkSecrets.ts` 扫源码、`node ci/checkSecrets.ts --dist dist` 扫构建产物；`VITE_` 变量名带 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL/AUTH 一律失败（会被内联进前端包）。误报写进 `ci/secretsAllowlist.json` 并写理由。规则细节见 `docs/contracts/secrets-guard.md` 与 `docs/contracts/secrets.md`。
 - 版本约束实现在 `ci/checkVersionPolicy.ts`，单独跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
 - `.github/workflows/android-release.yml`：推 `release/*` 分支、`v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；标签与分支名都必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。配了 secrets 时 CI 会当场校验 keystore 的口令/alias，并对产物 APK 验签、比对证书指纹；换 keystore 必须同时更新那 4 个 secrets 和 workflow 里的 `EXPECTED_CERT_SHA256`（当前证书 `BC:10:0C:6E:…:50:DA`，`keytool -list -v` 可查）。
+
+### CI
+
+- 新 CI 的检查逻辑都放 `ci/`，`.github/workflows/` 只留入口；沿用的旧 workflow 之后逐个替换，新流程不要再直接往 `.github/workflows/` 里加。
+- `.github/workflows/ci.yml`：PR 与 main 上并行跑类型检查、单测、`vite build` 打包冒烟、版本约束。出包不在这里。
+- 版本约束实现在 `ci/checkVersionPolicy.ts`，本地跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
+- `.github/workflows/android-release.yml`：推 `v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；手动那条可以涨版本、打标签、发 Release，标签必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。
+- 本地跑一遍与 CI 相同的门禁：`npm run typecheck && npm run test:unit && npm run check:versions`。
 
 ### 生成的文件不手改
 
@@ -120,6 +135,7 @@
 
 ## 当前项目内 skills
 
+- `development-workflow`：一次代码改动（文档、文案、简单修复和发版准备除外）从开工到交付的标准流程：每次修改自检，PR 或完整功能收尾时派独立子代理审查，逐条核实并修复；最多连续两轮，直到没有中等及以上严重度的问题，第二轮的修复不再审查，在交付报告里写明。
 - `codebase-navigation`：代码定位的三层顺序，定位之后改动要守的依赖方向，以及几个已经不存在、但仍会被搜到的旧名字。
 - `file-modularization`：新代码放在哪里（一个功能的代码放在一起）、什么时候加子目录、哪些文件不能挪、怎么挪，以及入口文件和 `App.tsx` 的大小警戒值。
 - `testing-strategy`：什么时候写新测试，以及该看热加载报错、跑单测、跑 UI 截图测试，还是不要误跑构建。
@@ -131,6 +147,7 @@
 - `online-song-omni-routing`：在线歌曲的搜索、播放、歌词、歌单、账户和跨平台数据流都经过 Omni，只有平台的 adapter 和 transport 直接接触原始接口。
 - `kugou-provider-alignment`：开发时按 `docs/ku-go-api-docs.md`、`.env.local` 中的真实酷狗服务和 `.dev-credentials/kugou.json` 对齐酷狗 provider 的请求与响应，不猜接口结构。
 - `prepare-folia-release`：稳定版本发布流程：汇总上个稳定版本以来用的人能感到的变化，更新新功能介绍、桌面与 Docker 版本号，并生成可手动粘贴的 Markdown release note。
+- `coven-supervisor`：维护者让 Coven 处理一个范围（v1 只做“按 Dedicatus 基线重构”）时，本 session 当监控者：认领、交 planner 写契约、递给维护者批准、派 generator 工作 session、每轮新开 evaluator 评审、开指向集成分支的 PR、收尾；写 GitHub 只走 coven 的脚本（harness 在 `packages/coven/`，不依赖 Folia；Folia 的适配层在 `dev/coven/`）。
 - `run-desktop`：启动并驱动 Electron 桌面版（隔离的 profile，后台驱动加单条命令的客户端：截图、点击、填表、在页面和主进程里求值、读日志），在真的桌面构建里验证主进程、preload IPC 和桌面专属设置的改动。
 
 四份开发者指南：

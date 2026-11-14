@@ -1,25 +1,25 @@
 import { create } from 'zustand';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import type { HomeViewTab, LocalSong, SongResult, UnifiedSong } from '../types';
-import { DEFAULT_ONLINE_PROVIDER_ID, OnlineProviderError, type OnlineProviderId } from '../types/onlineMusic';
-import { noteProviderAuthExpired } from '../services/onlineMusic/authExpiry';
+import { DEFAULT_ONLINE_PROVIDER_ID, OnlineProviderError } from '../types/onlineMusic';
+import type { OmniCollection, OmniSearchKind, OnlineProviderId } from '../types/onlineMusic';
 import {
     applyLocalLibraryEntityDisplay,
     buildUnifiedLocalSong,
     type LocalLibraryDisplayCatalog,
 } from '../services/playbackAdapters';
 import { omni } from '../services/onlineMusic/omni';
+import { noteProviderAuthExpired } from '../services/onlineMusic/authExpiry';
 import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
-import { supportsLocalMusicImport } from '../platform/runtime';
 import { listAiCloudCacheSongs } from '../services/aiCloudCache';
 import { resolveCloudThemeSong } from '../library/core/collection/resource/cloudThemeCollectionDeps.service';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
-/** 'cloud' = 「AI 主题」：在云端缓存的歌名里搜（曲目由客户端拿名字去平台上搜出来）。 */
-/** 'all' = 「全部」：每个能搜的在线平台各匀一点，掺上本地曲库一起出。 */
-export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'all';
+export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'bilibili' | 'all';
 export type SearchReturnView = 'home' | 'player';
+/** 搜什么：单曲、专辑或歌单。专辑和歌单只有在线平台搜得到（omni.getProviderSearchKinds），本地与 Navidrome 只搜单曲。 */
+export type SearchKind = OmniSearchKind;
 
 type SearchExecutorDeps = {
     localSongs: LocalSong[];
@@ -28,67 +28,109 @@ type SearchExecutorDeps = {
 };
 
 type SearchExecutionResult = {
+    /** 单曲搜索的结果；搜专辑、歌单时是空的。 */
     results: UnifiedSong[];
+    /** 专辑、歌单搜索的结果；搜单曲时是空的。 */
+    collections: OmniCollection[];
     hasMore: boolean;
     nextOffset: number;
+    total?: number;
 };
-
-/**
- * 流式回吐：某一路搜完了就先把它那批结果送上来（当前只有「全部」用）。
- *
- * **不保证是最终结果**：后面还有别的平台在跑，送上来的是「此刻已经有的全部」，
- * 下一次回调会把它整份再送一遍（不是增量追加），所以调用方直接整份替换即可。
- */
-type SearchPartialSink = (results: UnifiedSong[], hasMore: boolean) => void;
 
 type SearchCacheEntry = {
     results: UnifiedSong[];
+    collections: OmniCollection[];
     offset: number;
     hasMore: boolean;
+    total: number | null;
     scrollTop: number;
 };
+
+/**
+ * 「全部」中间那几批结果的出口：每次带上「此刻已经有的全部」，调用方整份替换即可。
+ * 只在 `sourceTab === 'all'` 时会被叫（见 searchAllSources）。
+ */
+type SearchPartialSink = (results: UnifiedSong[], hasMore: boolean) => void;
 
 interface SearchNavigationState {
     homeViewTab: HomeViewTab;
     searchQuery: string;
+    /** 结果是按哪个词搜出来的（提交或恢复时定下）；searchQuery 是输入框里正在打的字。 */
+    submittedQuery: string;
     searchSourceTab: SearchSource;
+    searchKind: SearchKind;
     searchResults: UnifiedSong[] | null;
+    /** 搜专辑、歌单时的结果（searchKind 不是 'song'）；还没搜过是 null。 */
+    collectionResults: OmniCollection[] | null;
+    /** 平台说一共有多少条；没说是 null。 */
+    resultTotal: number | null;
     searchReturnView: SearchReturnView;
     isSearchOpen: boolean;
     isSearching: boolean;
     isLoadingMore: boolean;
     searchError: string | null;
-    /**
-     * 搜索撞到“登录态失效”的那个平台。
-     *
-     * `searchError` 存的是 provider 抛出来的英文原话（"FeiNiu is not signed in"），
-     * 直接摆到界面上没人看得懂；而这里要的是**能点名平台**的中文提示，
-     * 那是展示层（能拿到 i18n 和平台显示名）的事，store 只负责把事实记下来。
-     */
-    searchAuthExpiredProvider: OnlineProviderId | null;
     requestId: number;
     offset: number;
     limit: number;
     hasMore: boolean;
     scrollTop: number;
+    /**
+     * 搜索时平台说「要重新登录」（登录过期）：记下是哪一家，由展示层去提示。
+     * 那是展示层（能拿到 i18n 和平台显示名）的事，store 只负责把事实记下来。
+     */
+    searchAuthExpiredProvider: OnlineProviderId | null;
+    /**
+     * 搜索结果列表往下滚时把底部播放条收到屏幕下面（它挡住列表末尾的「查看更多」），
+     * 往上滚再放回来。只在搜索页成立：不写缓存、不持久化，关掉搜索页就复位。
+     */
+    isResultsBarHidden: boolean;
     searchCache: Record<string, SearchCacheEntry>;
     setHomeViewTab: (tab: HomeViewTab) => void;
     setSearchQuery: (query: string) => void;
     setSearchScrollTop: (scrollTop: number) => void;
-    restoreSearch: (payload: { query: string; sourceTab: SearchSource; returnView?: SearchReturnView; }) => void;
+    /** 搜索结果列表滚动时收起 / 放回底部播放条（只在搜索页成立，不持久化）。 */
+    setResultsBarHidden: (hidden: boolean) => void;
+    restoreSearch: (payload: { query: string; sourceTab: SearchSource; kind?: SearchKind; returnView?: SearchReturnView; }) => void;
     hideSearchOverlay: () => void;
-    resetRuntime: (onlineProviderId?: OnlineProviderId) => void;
-    followOnlineProvider: (providerId: OnlineProviderId) => void;
-    submitSearch: (payload: { query?: string; sourceTab: SearchSource; deps: SearchExecutorDeps; returnView?: SearchReturnView; }) => Promise<boolean>;
+    /**
+     * 选着的来源不在 `sources` 里了（退出了那个平台的登录、mod 源被关掉、本地曲库清空）：换成 `fallback`，那个来源的
+     * 结果与在途的搜索一起作废。还在里面就什么都不动（切换当前平台不重置搜索）。
+     */
+    keepSearchSourceWithin: (sources: readonly SearchSource[], fallback: SearchSource) => boolean;
+    /** `kind` 不给就沿用当前的；来源搜不到这一种时退回单曲（resolveSearchKind）。 */
+    submitSearch: (payload: { query?: string; sourceTab: SearchSource; kind?: SearchKind; deps: SearchExecutorDeps; returnView?: SearchReturnView; }) => Promise<boolean>;
     loadMoreSearchResults: (payload: { deps: SearchExecutorDeps; }) => Promise<void>;
 }
 
-const getSearchCacheKey = (query: string, sourceTab: SearchSource) => (
-    `${sourceTab}:${query.trim().toLowerCase()}`
+const getSearchCacheKey = (query: string, sourceTab: SearchSource, kind: SearchKind) => (
+    `${sourceTab}:${kind}:${query.trim().toLowerCase()}`
 );
 
+/**
+ * 这个来源能搜的种类：在线平台问 omni，本地 / Navidrome / 云缓存 /「全部」只有单曲。
+ *
+ * 以前无论平台声明了什么都会把单曲补到最前面。视频站不能这么补：它搜出来的每条本来就
+ * 是一条投稿，「单曲」和「视频」是同一份结果，补上去就多一个点开全是重复内容的页签。
+ * 现在只在这个平台**什么种类都没声明**时才退回单曲。
+ */
+export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
+    // 这几种不是某一个平台：云缓存是按歌名去各家搜，「全部」是把各家掺起来 ——
+    // 它们都没有「这家平台能搜什么」可问，问了会拿到 unsupported 而把整次搜索打断。
+    if (sourceTab === 'local' || sourceTab === 'navidrome' || sourceTab === 'cloud' || sourceTab === 'all') {
+        return ['song'];
+    }
+    const kinds = omni.getProviderSearchKinds(sourceTab);
+    return kinds.length > 0 ? kinds : (['song'] as SearchKind[]);
+};
+
+/** 来源搜不到要的那一种（换到了没有专辑搜索的平台）就退到这个来源的第一种。 */
+export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): SearchKind => {
+    const kinds = getSearchKinds(sourceTab);
+    return kinds.includes(kind) ? kind : (kinds[0] ?? 'song');
+};
+
 export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSource => {
-    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'all') {
+    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'bilibili' || tab === 'all') {
         return tab;
     }
     if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio' && tab !== 'explore') return tab as OnlineProviderId;
@@ -147,6 +189,7 @@ const searchLocalSongs = (
 
     return {
         results,
+        collections: [],
         hasMore: false,
         nextOffset: results.length,
     };
@@ -155,7 +198,7 @@ const searchLocalSongs = (
 const searchNavidromeSongs = async (query: string): Promise<SearchExecutionResult> => {
     const config = getNavidromeConfig();
     if (!config) {
-        return { results: [], hasMore: false, nextOffset: 0 };
+        return { results: [], collections: [], hasMore: false, nextOffset: 0 };
     }
 
     const response = await navidromeApi.search(config, query, 0, 0, DEFAULT_SEARCH_LIMIT);
@@ -166,19 +209,70 @@ const searchNavidromeSongs = async (query: string): Promise<SearchExecutionResul
 
     return {
         results,
+        collections: [],
         hasMore: false,
         nextOffset: results.length,
     };
 };
 
-/**
- * 一批并发跑，跑完再换下一批。
- *
- * 「AI 主题」那一屏每一首都要拿歌名去平台上搜一次 —— 一次 30 个并发会把 Capacitor
- * 那座桥占死（别的平台跟着一起超时，见 Capacitor 桥那节），所以压到 6 个。
- */
+/** 「AI 主题」来源同时解析几首歌名（去平台上搜出曲目）：再高就要占住 Capacitor 那座桥。 */
 const CLOUD_RESOLVE_CONCURRENCY = 6;
 
+const searchCloudThemeSongs = async (
+    query: string,
+    limit: number,
+    offset: number,
+): Promise<SearchExecutionResult> => {
+    const browsing = !query.trim();
+    let start = offset;
+    if (browsing && offset === 0) {
+        // 浏览（没有词）时随机起一页：每次进来看到的都不一样，和首页那一屏同一个意思。
+        const probe = await listAiCloudCacheSongs({ limit: 1, offset: 0 }).catch(() => null);
+        const total = Number(probe?.total ?? 0);
+        if (total > limit) {
+            start = Math.floor(Math.random() * (total - limit + 1));
+        }
+    }
+    const page = await listAiCloudCacheSongs({ limit, offset: start, query }).catch(() => null);
+    const names = page?.songs ?? [];
+    if (names.length === 0) return { results: [], collections: [], hasMore: false, nextOffset: offset };
+    const found = await mapWithConcurrency(
+        names,
+        CLOUD_RESOLVE_CONCURRENCY,
+        entry => resolveCloudThemeSong(entry.songTitle, entry.key).catch(() => null),
+    );
+    const results = found.filter((song): song is UnifiedSong => Boolean(song));
+    const total = Number(page?.total ?? 0);
+    const consumed = start + names.length;
+    return { results, collections: [], hasMore: consumed < total, nextOffset: consumed };
+};
+
+const searchOnlineProviderSongs = async (
+    providerId: OnlineProviderId,
+    query: string,
+    limit: number,
+    offset: number,
+): Promise<SearchExecutionResult> => {
+    const page = await omni.searchProviderSongs(providerId, query, { limit, offset });
+    return { results: page.items, collections: [], hasMore: page.hasMore, nextOffset: page.nextOffset, total: page.total };
+};
+
+const searchOnlineProviderCollections = async (
+    providerId: OnlineProviderId,
+    kind: Exclude<SearchKind, 'song'>,
+    query: string,
+    limit: number,
+    offset: number,
+): Promise<SearchExecutionResult> => {
+    const page = await omni.searchProviderCollections(providerId, kind, query, { limit, offset });
+    return { results: [], collections: page.items, hasMore: page.hasMore, nextOffset: page.nextOffset, total: page.total };
+};
+
+const totalOf = (result: SearchExecutionResult): number | null => (
+    typeof result.total === 'number' && Number.isFinite(result.total) && result.total >= 0 ? result.total : null
+);
+
+/** 并行地图，最多 `limit` 个同时在跑（「全部」与云缓存那两条路共用）。 */
 const mapWithConcurrency = async <T, R>(
     items: readonly T[],
     limit: number,
@@ -198,58 +292,7 @@ const mapWithConcurrency = async <T, R>(
     return results;
 };
 
-/**
- * 「AI 主题」：在云端缓存的歌名里**搜**，或者不带词地**逛**。
- *
- * 云端只存歌名，所以先按名字在云端要一批（给了词就是筛），再拿这些名字去当前登着的
- * 平台把曲目搜出来 —— 与首页那一屏同一条路（cloudThemeCollectionDeps）。
- * 平台上搜不到的名字直接不出结果：列一行播不了的歌没有意义。
- *
- * **不带词 = 逛**：服务端按 `updated_at DESC` 排，永远从最新那一条开始翻，于是每次
- * 进来都是同一批歌。这里先问一次总数，再随机挑一个起点，从那儿顺序往下翻 —— 每次
- * 看到的是库里不同的一个窗口。剩下的交给 `loadMoreSearchResults` 接着往下懒加载。
- *
- * 随机起点只在第一页算：翻页时沿用传进来的 offset，否则每翻一页都跳到别处去。
- */
-const searchCloudThemeSongs = async (
-    query: string,
-    limit: number,
-    offset: number,
-): Promise<SearchExecutionResult> => {
-    const browsing = !query.trim();
-    let start = offset;
-    if (browsing && offset === 0) {
-        const probe = await listAiCloudCacheSongs({ limit: 1, offset: 0 }).catch(() => null);
-        const total = Number(probe?.total ?? 0);
-        if (total > limit) {
-            start = Math.floor(Math.random() * (total - limit + 1));
-        }
-    }
-    const page = await listAiCloudCacheSongs({ limit, offset: start, query }).catch(() => null);
-    const names = page?.songs ?? [];
-    if (names.length === 0) return { results: [], hasMore: false, nextOffset: offset };
-    const found = await mapWithConcurrency(
-        names,
-        CLOUD_RESOLVE_CONCURRENCY,
-        entry => resolveCloudThemeSong(entry.songTitle, entry.key).catch(() => null),
-    );
-    const results = found.filter((song): song is UnifiedSong => Boolean(song));
-    const total = Number(page?.total ?? 0);
-    const consumed = start + names.length;
-    return { results, hasMore: consumed < total, nextOffset: consumed };
-};
-
-const searchOnlineProviderSongs = async (
-    providerId: OnlineProviderId,
-    query: string,
-    limit: number,
-    offset: number,
-): Promise<SearchExecutionResult> => {
-    const page = await omni.searchProviderSongs(providerId, query, { limit, offset });
-    return { results: page.items, hasMore: page.hasMore, nextOffset: page.nextOffset };
-};
-
-/** 「全部」里同时跑几个平台：再高就要占住 Capacitor 那座桥（见 mapWithConcurrency 那条注释）。 */
+/** 「全部」里同时跑几个平台：再高就要占住 Capacitor 那座桥（见 mapWithConcurrency）。 */
 const ALL_SEARCH_CONCURRENCY = 4;
 
 /** 同一首歌在几家平台上重复出现时用的比对键。 */
@@ -333,7 +376,7 @@ const searchAllSources = async (
         takeBucket(searchLocalSongs(deps, query).results);
     }
 
-    await mapWithConcurrency(providerIds, ALL_SEARCH_CONCURRENCY, async providerId => {
+    await mapWithConcurrency(providerIds, ALL_SEARCH_CONCURRENCY, async (providerId) => {
         try {
             const page = await searchOnlineProviderSongs(providerId, query, perProvider, offset);
             takeBucket(page.results, page.hasMore);
@@ -347,16 +390,17 @@ const searchAllSources = async (
         if (navidrome) takeBucket(navidrome.results);
     }
 
-    return { results: rows.map(row => row.song), hasMore, nextOffset: offset + perProvider };
+    return { results: rows.map(row => row.song), collections: [], hasMore, nextOffset: offset + perProvider };
 };
 
 const executeSearch = async (
     query: string,
     sourceTab: SearchSource,
+    kind: SearchKind,
     offset: number,
     limit: number,
     deps: SearchExecutorDeps,
-    onPartial?: SearchPartialSink
+    onPartial?: SearchPartialSink,
 ): Promise<SearchExecutionResult> => {
     if (sourceTab === 'local') {
         return searchLocalSongs(deps, query);
@@ -366,15 +410,29 @@ const executeSearch = async (
         return searchNavidromeSongs(query);
     }
 
+    // 「AI 主题」：在云端缓存的歌名里搜（曲目由客户端拿名字去平台上搜出来）。
     if (sourceTab === 'cloud') {
         return searchCloudThemeSongs(query, limit, offset);
     }
 
+    // 「全部」只掺单曲：专辑与歌单是各家自己的东西，混在一起分不出是谁的。
+    // 它路由到 `executeSearch` 之后才判种类，所以这里先把它挡住（getSearchKinds 也只给它 'song'）。
     if (sourceTab === 'all') {
         return searchAllSources(query, offset, limit, deps, onPartial);
     }
 
-    return searchOnlineProviderSongs(sourceTab, query, limit, offset);
+    /*
+     * 「视频」那一档走单曲的路。
+     *
+     * 视频站搜出来的每条本来就是一条投稿 —— 「视频」和「单曲」是同一份结果（见
+     * omni.getProviderSearchKinds 的注释）。以前这里只判 `kind === 'song'`，
+     * 「视频」落进了集合路径，集合路径里又没有 video 的实现（落到歌单那档的守卫，
+     * 回一个空页）—— 用户看到的就是「视频搜不出来」。现在视频也交给单曲路径，
+     * 结果照常摆进 `searchResults`。
+     */
+    return kind === 'song' || kind === 'video'
+        ? searchOnlineProviderSongs(sourceTab, query, limit, offset)
+        : searchOnlineProviderCollections(sourceTab, kind, query, limit, offset);
 };
 
 const getInitialHomeViewTab = (): HomeViewTab => {
@@ -382,12 +440,7 @@ const getInitialHomeViewTab = (): HomeViewTab => {
         return 'playlist';
     }
     const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
-    return savedTab === 'playlist'
-        || (savedTab === 'local' && supportsLocalMusicImport())
-        || savedTab === 'albums'
-        || savedTab === 'navidrome'
-        || savedTab === 'radio'
-        || savedTab === 'explore'
+    return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio' || savedTab === 'explore'
         ? savedTab
         : 'playlist';
 };
@@ -395,30 +448,37 @@ const getInitialHomeViewTab = (): HomeViewTab => {
 export const useSearchNavigationStore = create<SearchNavigationState>((set, get) => ({
     homeViewTab: getInitialHomeViewTab(),
     searchQuery: '',
+    submittedQuery: '',
     searchSourceTab: DEFAULT_ONLINE_PROVIDER_ID,
+    searchKind: 'song',
     searchResults: null,
+    collectionResults: null,
+    resultTotal: null,
     searchReturnView: 'home',
     isSearchOpen: false,
     isSearching: false,
     isLoadingMore: false,
     searchError: null,
-    searchAuthExpiredProvider: null,
     requestId: 0,
     offset: 0,
     limit: DEFAULT_SEARCH_LIMIT,
     hasMore: false,
     scrollTop: 0,
+    searchAuthExpiredProvider: null,
+    isResultsBarHidden: false,
     searchCache: {},
     setHomeViewTab: (tab) => {
-        const resolvedTab = tab === 'local' && !supportsLocalMusicImport() ? 'playlist' : tab;
         if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, resolvedTab);
+            localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
         }
-        set({ homeViewTab: resolvedTab });
+        set({ homeViewTab: tab });
     },
     setSearchQuery: (query) => set({ searchQuery: query }),
+    // 相等就原样返回：列表的 onScroll 会反复调用，卸载时也会补一次复位，不能每次都让订阅者重渲染。
+    setResultsBarHidden: (hidden) => set(state => (state.isResultsBarHidden === hidden ? state : { isResultsBarHidden: hidden })),
     setSearchScrollTop: (scrollTop) => set(state => {
-        const cacheKey = getSearchCacheKey(state.searchQuery, state.searchSourceTab);
+        // 滚的是按 submittedQuery 搜出来的那组结果；输入框里改了字也还是它。
+        const cacheKey = getSearchCacheKey(state.submittedQuery, state.searchSourceTab, state.searchKind);
         const cached = state.searchCache[cacheKey];
         return {
             scrollTop,
@@ -430,55 +490,53 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
                 : state.searchCache,
         };
     }),
-    restoreSearch: ({ query, sourceTab, returnView = 'home' }) => set(state => {
-        const cached = state.searchCache[getSearchCacheKey(query, sourceTab)];
+    // 旧的历史记录没有 kind：按当前的种类恢复。requestId 往前走一格：还在途的搜索或加载更多晚到时不再写进恢复出来的这一组。
+    restoreSearch: ({ query, sourceTab, kind, returnView = 'home' }) => set(state => {
+        const searchKind = resolveSearchKind(sourceTab, kind ?? state.searchKind);
+        const cached = state.searchCache[getSearchCacheKey(query, sourceTab, searchKind)];
         return {
+            requestId: state.requestId + 1,
             searchQuery: query,
+            submittedQuery: query,
             searchSourceTab: sourceTab,
+            searchKind,
             searchReturnView: returnView,
             searchResults: cached?.results ?? null,
+            collectionResults: cached?.collections ?? null,
+            resultTotal: cached?.total ?? null,
             offset: cached?.offset ?? 0,
             hasMore: cached?.hasMore ?? false,
             scrollTop: cached?.scrollTop ?? 0,
-            searchError: null,
+            // 播放条是否收起跟着这一次滚动，不跟着缓存：重新进这一页时它是露着的。
+            isResultsBarHidden: false,
             searchAuthExpiredProvider: null,
+            searchError: null,
             isSearching: false,
             isLoadingMore: false,
             isSearchOpen: true,
         };
     }),
-    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home' }),
-    resetRuntime: (onlineProviderId) => set(state => ({
-        searchQuery: '',
-        searchSourceTab: onlineProviderId ?? state.searchSourceTab,
-        searchResults: null,
-        searchReturnView: 'home',
-        isSearchOpen: false,
-        isSearching: false,
-        isLoadingMore: false,
-        searchError: null,
-        searchAuthExpiredProvider: null,
-        requestId: state.requestId + 1,
-        offset: 0,
-        hasMore: false,
-        scrollTop: 0,
-    })),
-    // The overlay's online source is the active provider. A switch moves it through resetRuntime, but
-    // the active provider also changes without one (startup, session restore, a Folium mod source going
-    // away), so this keeps it in step. Local and Navidrome are left alone, and the results stay: clearing
-    // them is the switch's job.
-    followOnlineProvider: (providerId) => set(state => (
-        // 「本地」「Navidrome」「AI 主题」「全部」都不是某个在线平台：换了当前平台也不该把用户
-        // 从这几个页签上挪走（原来只放了前两个，于是停在「AI 主题」时换平台会被踢回网易云）。
-        state.searchSourceTab === 'local'
-            || state.searchSourceTab === 'navidrome'
-            || state.searchSourceTab === 'cloud'
-            || state.searchSourceTab === 'all'
-            || state.searchSourceTab === providerId
-            ? state
-            : { searchSourceTab: providerId }
-    )),
-    submitSearch: async ({ query, sourceTab, deps, returnView = 'home' }) => {
+    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home', isResultsBarHidden: false }),
+    keepSearchSourceWithin: (sources, fallback) => {
+        const state = get();
+        if (sources.includes(state.searchSourceTab)) return false;
+        set({
+            searchSourceTab: fallback,
+            searchKind: resolveSearchKind(fallback, state.searchKind),
+            searchResults: null,
+            collectionResults: null,
+            resultTotal: null,
+            isSearching: false,
+            isLoadingMore: false,
+            searchError: null,
+            requestId: state.requestId + 1,
+            offset: 0,
+            hasMore: false,
+            scrollTop: 0,
+        });
+        return true;
+    },
+    submitSearch: async ({ query, sourceTab, kind, deps, returnView = 'home' }) => {
         const trimmedQuery = (query ?? get().searchQuery).trim();
         /*
          * 「AI 主题」那一屏是**逛**云端缓存里都有什么歌：点那个页签时手上还没有词，
@@ -488,18 +546,22 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             return false;
         }
 
+        const searchKind = resolveSearchKind(sourceTab, kind ?? get().searchKind);
         const requestId = get().requestId + 1;
         set({
             searchQuery: trimmedQuery,
+            submittedQuery: trimmedQuery,
             searchSourceTab: sourceTab,
+            searchKind,
             searchReturnView: returnView,
             isSearchOpen: true,
             isSearching: true,
             isLoadingMore: false,
             searchError: null,
-            searchAuthExpiredProvider: null,
             requestId,
             searchResults: null,
+            collectionResults: null,
+            resultTotal: null,
             offset: 0,
             hasMore: false,
             scrollTop: 0,
@@ -513,27 +575,36 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
          * `searchResults` 有没有东西来决定画不画转圈，所以先出结果和「还在搜」能同时成立。
          * 缓存也只写最终那一份 —— 中途那几批不是完整结果，写进去会把半屏结果当缓存。
          */
-        const applyPartial = (results: UnifiedSong[], partialHasMore: boolean) => {
+        const applyPartial = (partial: UnifiedSong[], partialHasMore: boolean) => {
             if (get().requestId !== requestId) return;
-            set({ searchResults: results, hasMore: partialHasMore });
+            set({ searchResults: partial, hasMore: partialHasMore });
         };
 
         try {
-            const result = await executeSearch(trimmedQuery, sourceTab, 0, get().limit, deps, applyPartial);
+            const result = await executeSearch(trimmedQuery, sourceTab, searchKind, 0, get().limit, deps, applyPartial);
+            // 被另一次提交或一次历史恢复作废了：回 false，调用方不再拿它压历史。作废它的那一次自己会导航；
+            // 恢复时历史已经是恢复后的样子，再压一条就会把人拉回一个没有结果的搜索页。
             if (get().requestId !== requestId) {
-                return true;
+                return false;
             }
+            const total = totalOf(result);
             set(state => ({
                 searchResults: result.results,
+                collectionResults: result.collections,
+                resultTotal: total,
                 hasMore: result.hasMore,
                 offset: result.nextOffset,
                 isSearching: false,
+                // 上一组结果的列表卸载时会把它的滚动位置写回来（SearchResultsList 的 cleanup）：新结果从顶上开始。
+                scrollTop: 0,
                 searchCache: {
                     ...state.searchCache,
-                    [getSearchCacheKey(trimmedQuery, sourceTab)]: {
+                    [getSearchCacheKey(trimmedQuery, sourceTab, searchKind)]: {
                         results: result.results,
+                        collections: result.collections,
                         hasMore: result.hasMore,
                         offset: result.nextOffset,
+                        total,
                         scrollTop: 0,
                     },
                 },
@@ -542,7 +613,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         } catch (error) {
             console.error('[SearchStore] submitSearch failed:', error);
             if (get().requestId !== requestId) {
-                return true;
+                return false;
             }
             /*
              * 登录态失效是最该被看见的一类失败：它就发生在搜索这一下，
@@ -559,9 +630,12 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             }
             set({
                 searchResults: [],
+                collectionResults: [],
+                resultTotal: null,
                 hasMore: false,
                 offset: 0,
                 isSearching: false,
+                scrollTop: 0,
                 searchError: error instanceof Error ? error.message : 'search_failed',
                 searchAuthExpiredProvider: authProviderId,
             });
@@ -569,19 +643,19 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         }
     },
     loadMoreSearchResults: async ({ deps }) => {
+        // 接着翻的是已经显示的那组结果，按搜出它的词翻，不按输入框里改到一半的字。
         const {
-            searchQuery,
+            submittedQuery: searchQuery,
             searchSourceTab,
+            searchKind,
             searchResults,
+            collectionResults,
             hasMore,
             isSearching,
             isLoadingMore,
             offset,
             limit,
         } = get();
-        // 翻页也走流式：中途那几批都挂在「进来时那一份」后面，最终那一次用同一个底，
-        // 所以不会出现「中途插了一批、最后又把整页追加一遍」的重复。
-        const baseResults = searchResults || [];
 
         if (
             searchSourceTab === 'local'
@@ -589,23 +663,26 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             || !hasMore
             || isSearching
             || isLoadingMore
-            // 「AI 主题」是逛：它本来就没有词，空词也要能接着往下翻（见 submitSearch 那条注释）。
-            || (!searchQuery.trim() && searchSourceTab !== 'cloud')
+            || !searchQuery.trim()
         ) {
             return;
         }
 
         const requestId = get().requestId;
+        // 翻页也走流式：中途那几批都挂在「进来时那一份」后面，最终那一次用同一个底，
+        // 所以不会出现「中途插了一批、最后又把整页追加一遍」的重复。
+        const baseResults = searchResults || [];
         set({ isLoadingMore: true, searchError: null });
 
         try {
-            const applyPartial = (page: UnifiedSong[], partialHasMore: boolean) => {
+            const applyPartial = (partial: UnifiedSong[], partialHasMore: boolean) => {
                 if (get().requestId !== requestId) return;
-                set({ searchResults: [...baseResults, ...page], hasMore: partialHasMore });
+                set({ searchResults: [...baseResults, ...partial], hasMore: partialHasMore });
             };
             const result = await executeSearch(
                 searchQuery,
                 searchSourceTab,
+                searchKind,
                 offset,
                 limit,
                 deps,
@@ -616,17 +693,23 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             }
             set(state => {
                 const results = [...baseResults, ...result.results];
+                const collections = [...(collectionResults || []), ...result.collections];
+                const total = totalOf(result) ?? state.resultTotal;
                 return {
                     searchResults: results,
+                    collectionResults: collections,
+                    resultTotal: total,
                     hasMore: result.hasMore,
                     offset: result.nextOffset,
                     isLoadingMore: false,
                     searchCache: {
                         ...state.searchCache,
-                        [getSearchCacheKey(searchQuery, searchSourceTab)]: {
+                        [getSearchCacheKey(searchQuery, searchSourceTab, searchKind)]: {
                             results,
+                            collections,
                             hasMore: result.hasMore,
                             offset: result.nextOffset,
+                            total,
                             scrollTop: state.scrollTop,
                         },
                     },

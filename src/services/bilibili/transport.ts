@@ -1,0 +1,92 @@
+import type { BilibiliBridgeResponse } from '../../types/bilibili';
+import { isBilibiliNativeAvailable, proxyBilibiliNative, requestBilibiliNative } from '../../platform/foliaNative';
+
+// src/services/bilibili/transport.ts
+//
+// 一次 bilibili 请求该从哪儿出去。
+//
+// api.bilibili.com 不给任意来源 CORS 头，WebView / 浏览器里直连一定被拦下。
+// 所以正常路径是走原生桥（安卓的 FoliaBilibili 插件用 OkHttp 代发）。
+//
+// 桌面版这里没接：上游那套是靠 electron/bilibili.cjs 在主进程转发，我们还没移植。
+// 但请求层不该因此分叉 —— 原生桥不在时退回 fetch 直连，失败时明确说
+// 「这个平台发不出去」，而不是把跨域错误伪装成「没找到 MV」。
+//
+// 这一层只负责「把请求发出去、把响应文本拿回来」，解析和业务判定在 api.ts。
+
+export interface BilibiliTransportResponse {
+    ok: boolean;
+    status: number;
+    bodyText: string;
+    /** 响应的 Set-Cookie 头（扫码登录换 cookie 要用）。 */
+    setCookies?: string[];
+}
+
+/** 这个平台发不出去时的失败标记：调用方据此说「仅安卓 App 可用」。 */
+export const BRIDGE_UNAVAILABLE_CODE = -2;
+const BRIDGE_UNAVAILABLE = 'bilibili requests need the Android app';
+
+export const isBilibiliAvailable = (): boolean => isBilibiliNativeAvailable();
+
+/**
+ * 把一条视频/音频流挂到原生中转上，回一个可以直接喂给 `<video>` / 播放器的地址。
+ *
+ * 为什么要中转：这些 CDN 的地址是一串候选（主地址 + 若干备用），其中**有些节点
+ * 会回 403** —— 直连时一旦抽到坏节点，这首歌就是放不出来。中转由原生按顺序试，
+ * 403 就换下一条，播放器那边完全不用知道。
+ *
+ * 中转起不来就回 null，调用方退回直连（至少还有一次机会）。
+ */
+export const proxyBilibiliStream = async (
+    urls: string[],
+    headers: Record<string, string> = {},
+): Promise<string | null> => {
+    if (!isBilibiliAvailable()) return null;
+    const usable = urls.filter(url => typeof url === 'string' && url.length > 0);
+    if (usable.length === 0) return null;
+    try {
+        const local = await proxyBilibiliNative(usable, headers);
+        return local || null;
+    } catch {
+        return null;
+    }
+};
+
+export const requestBilibiliUrl = async (
+    url: string,
+    init: {
+        method?: string;
+        body?: string;
+        headers?: Record<string, string>;
+        /**
+         * 停在第一跳，不跟随 3xx。
+         *
+         * 扫码登录最后一步请求的是个跨域跳转地址，SESSDATA 就在 302 那一跳的
+         * Set-Cookie 里；跟着跳过去，最终响应里什么也没有。
+         */
+        noRedirect?: boolean;
+    } = {},
+): Promise<BilibiliTransportResponse> => {
+    if (isBilibiliNativeAvailable()) {
+        return requestBilibiliNative(url, init.headers, init.noRedirect) as Promise<BilibiliBridgeResponse>;
+    }
+
+    // 没有原生桥：试着直连。失败时把话说清楚。
+    try {
+        const response = await fetch(url, {
+            method: init.method ?? 'GET',
+            body: init.body,
+            headers: init.headers,
+            credentials: 'include',
+            mode: 'cors',
+        });
+        return { ok: response.ok, status: response.status, bodyText: await response.text() };
+    } catch (error) {
+        console.warn('[Bilibili] Direct request blocked:', error);
+        return {
+            ok: false,
+            status: 0,
+            bodyText: JSON.stringify({ code: BRIDGE_UNAVAILABLE_CODE, message: BRIDGE_UNAVAILABLE }),
+        };
+    }
+};

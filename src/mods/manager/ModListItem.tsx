@@ -1,9 +1,10 @@
 import React from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CheckSquare, ChevronDown, CircleCheck, CircleOff, FlaskConical, ShieldAlert, ShieldCheck, ShieldQuestion, Square, TriangleAlert } from 'lucide-react';
+import { CheckSquare, ChevronDown, CircleCheck, CircleOff, FlaskConical, ShieldAlert, ShieldCheck, ShieldQuestion, Square, Trash2, TriangleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Theme } from '@/types';
 import { SettingsToggle } from '../../components/modal/settings/SettingsRow';
+import { Button } from '../../components/ui';
 import type { ModRuntimeInfo } from '../types';
 import { ModSurfaceRenderer } from './ModSurfaceRenderer';
 import { modSettingsRowId } from '../useModsStore';
@@ -152,6 +153,8 @@ type ModListItemProps = {
     onToggleExpand: () => void;
     onToggleEnabled: () => void;
     onToggleSelected: () => void;
+    /** Uninstall (delete) this mod. */
+    onDelete: () => void;
     /** Reports an outcome in the manager's notice line (the storage section's "clear cache"). */
     onNotice: (notice: ModNotice) => void;
 };
@@ -159,7 +162,7 @@ type ModListItemProps = {
 const NO_OLD_NAMES: readonly string[] = [];
 
 export const ModListItem: React.FC<ModListItemProps> = ({
-    mod, cost, expanded, selected, selectionMode, isLast, isDaylight, theme, classes, onToggleExpand, onToggleEnabled, onToggleSelected, onNotice,
+    mod, cost, expanded, selected, selectionMode, isLast, isDaylight, theme, classes, onToggleExpand, onToggleEnabled, onToggleSelected, onDelete, onNotice,
 }) => {
     // Only a running mod has a cost to show.
     const runningCost = mod.status === 'loaded' ? cost : undefined;
@@ -223,6 +226,24 @@ export const ModListItem: React.FC<ModListItemProps> = ({
                         ariaLabel={mod.enabled ? t('mods.enabled') : t('mods.disabled')}
                     />
                 </div>
+                {/*
+                    删除只在展开时露出来：列表里全是开关时多一颗删除按钮很容易误触，
+                    而误删是没有撤销的。
+                */}
+                {expanded && !selectionMode ? (
+                    <Button
+                        onClick={(event) => {
+                            event.stopPropagation();
+                            onDelete();
+                        }}
+                        title={t('mods.deleteMod')}
+                        aria-label={t('mods.deleteMod')}
+                        variant="bare"
+                        className={`shrink-0 !p-1 ${isDaylight ? 'text-zinc-500 hover:text-red-600' : 'text-white/45 hover:text-red-400'}`}
+                    >
+                        <Trash2 size={14} />
+                    </Button>
+                ) : null}
                 <motion.span
                     animate={{ rotate: expanded ? 180 : 0 }}
                     transition={{ duration: 0.2 }}
@@ -279,6 +300,39 @@ export const ModListItem: React.FC<ModListItemProps> = ({
                             {mod.permissions.includes('equalizer.control') ? (
                                 <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
                                     {t('mods.equalizerControlHint')}
+                                </div>
+                            ) : null}
+                            {/* Folium 1.8: the global lyric render quality, which every canvas or WebGL style follows. */}
+                            {mod.permissions.includes('visualizer.renderQuality') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.renderQualityHint')}
+                                </div>
+                            ) : null}
+                            {/* Folium 1.8: the mode, the styles' options and the beat effects, each its own permission. */}
+                            {mod.permissions.includes('visualizer.mode') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.visualizerModeHint')}
+                                </div>
+                            ) : null}
+                            {mod.permissions.includes('visualizer.tuning') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.visualizerTuningHint')}
+                                </div>
+                            ) : null}
+                            {mod.permissions.includes('visualizer.beatEffects') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.visualizerBeatEffectsHint')}
+                                </div>
+                            ) : null}
+                            {/* Folium 1.9: the background type and the animation intensity. */}
+                            {mod.permissions.includes('visualizer.background') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.visualizerBackgroundHint')}
+                                </div>
+                            ) : null}
+                            {mod.permissions.includes('visualizer.animationIntensity') ? (
+                                <div className="text-[11px] opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('mods.visualizerAnimationIntensityHint')}
                                 </div>
                             ) : null}
                             {mod.trustStale ? (

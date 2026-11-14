@@ -56,6 +56,9 @@ const DEFAULT_SUITE_EAGER_IMPORTS = [
     './transitions/gridHostTransitions',
     // 「完成」时忘掉布局记录（P4.5）：只碰 sessionStorage，依赖的两个键函数所在的模块上面几项本来就即时加载。
     './gridLayout',
+    // 横滑卡流（B2，cardRail）：首页 Grid3D 本来就静态 import 它，entry 再声明一次不增加任何加载量；
+    // 声明在这里是为了让洛雪工作台的歌单 / 电台 / 专辑 / 榜单页经 registry 取到同一套卡片。
+    './home/Grid3DSlider',
 ];
 
 describe('library suite entries', () => {

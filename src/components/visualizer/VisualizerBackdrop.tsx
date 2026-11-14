@@ -8,6 +8,7 @@ import VisualizerBackgroundTransition from './styleTransition/VisualizerBackgrou
 import type { LayerTransition } from './styleTransition/layerTransition';
 import { getSizedCoverUrl } from '../../utils/coverUrl';
 import { isMainAppSurface } from '../../utils/appSurface';
+import { hasFreeCamera } from './backgrounds/freeCameraModes';
 import { FoliumStageLayerSlot } from '../../mods/folium/registries/stageLayers';
 
 // src/components/visualizer/VisualizerBackdrop.tsx
@@ -119,6 +120,23 @@ const VisualizerBackdrop: React.FC<VisualizerBackdropProps> = ({ entry, props, t
     // Folium stage layers exist on the real player page only, never in previews.
     const showStageLayers = !props.isPreviewMode && !props.staticMode;
     const stageProps = { theme: props.theme, isDaylight: props.isDaylight ?? false, paused: props.paused ?? false };
+    /*
+     * 自由相机的 3D 背景（粒子 / 星河 / 安魂 / 音域回响）：内容层必须放行指针。
+     *
+     * ★ 拖不动视角的根因在这里，不在背景自己。
+     *
+     * 背景层 z-0、内容层 z-10（见下面的注释 —— 那个 z-10 是为了让粒子能看见，
+     * 不能删）。elementFromPoint 证实：屏幕上每一个点命中的都是内容层，
+     * OrbitStage 的拖动监听挂在背景宿主上，一次 pointerdown 都收不到。
+     *
+     * 解法是反过来：内容层 pointer-events-none，让事件穿到背景；
+     * 内容里真正要点的控件自己声明 pointer-events-auto（现在大多已经带了，
+     * 没带的补上即可）。只对自由相机的背景这么做 —— 别的背景（莫奈的
+     * 歌词点按跳转、町景的镜头栏）要收指针，不能一刀切。
+     */
+    const resolvedSharedProps = entry.background ? { ...props, background: entry.background(props) } : props;
+    const backgroundMode = resolvedSharedProps.background?.mode ?? null;
+    const freeCamera = hasFreeCamera(backgroundMode);
 
     return (
         <div ref={setPointerArea} className="relative w-full h-full overflow-hidden" style={{ opacity: props.visualizerOpacity ?? 1 }}>
@@ -126,14 +144,30 @@ const VisualizerBackdrop: React.FC<VisualizerBackdropProps> = ({ entry, props, t
                 theme={props.theme}
                 audioPower={props.audioPower}
                 audioBands={props.audioBands}
-                sharedProps={entry.background ? { ...props, background: entry.background(props) } : props}
+                sharedProps={resolvedSharedProps}
                 renderBackground={entry.background !== false}
                 transition={transition}
                 waits={waits}
             />
             {showStageLayers && <FoliumStageLayerSlot slot="player.stage.back" {...stageProps} />}
             <VisualizerBackdropContext.Provider value={frame}>
-                {children}
+                {/*
+                 * ★ relative z-10 是必须的。
+                 *
+                 * 这里和上面的背景层（VisualizerBackdropLayers）都是 absolute inset-0、
+                 * 且都没有 z-index。两者在 DOM 里是兄弟，谁在上面只由书写顺序决定：
+                 * 背景在前、内容在后，所以内容层正常会盖住背景 —— 对 Sora 这类
+                 * 背景没影响（它们在内容层下方本来就该被遮住一部分），
+                 * 但对粒子背景是致命的：canvas 完全被这块透明的内容层压住，
+                 * 于是「渲染一切正常、屏幕上什么都看不到」。
+                 *
+                 * 显式给内容层 z-10、让背景层留在 z-0 以下的层级，
+                 * 顺序就不再依赖书写位置，也不受各背景自己的 DOM 结构影响。
+                 *
+                 * 自由相机的背景再加 pointer-events-none：事件穿过去给背景的
+                 * 轨道相机（见上面的 freeCamera 注释）。
+                 */}
+                <div className={`relative z-10 h-full w-full ${freeCamera ? 'pointer-events-none' : ''}`}>{children}</div>
             </VisualizerBackdropContext.Provider>
             {showStageLayers && (
                 <FoliumStageLayerSlot slot="player.stage.front" {...stageProps} className="absolute inset-0 pointer-events-none z-20" />

@@ -83,8 +83,12 @@ describe('settingsLastSection', () => {
             expect(readLastSettingsSection(WEB, storage)).toBeNull();
             expect(readLastSettingsSection(DESKTOP, storage)).toBe('desktop');
 
+            /*
+             * 模组页各平台都有（安卓靠内置 nodejs-mobile 运行时），
+             * 所以它不再是「平台隐藏」的样本。平台上真正被隐藏的只剩 desktop。
+             */
             storage.data[SETTINGS_LAST_SECTION_STORAGE_KEY] = 'mods';
-            expect(readLastSettingsSection(WEB, storage)).toBeNull();
+            expect(readLastSettingsSection(WEB, storage)).toBe('mods');
         });
 
         it('returns null instead of throwing when storage is unavailable', () => {

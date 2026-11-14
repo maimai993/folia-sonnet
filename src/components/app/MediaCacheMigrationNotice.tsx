@@ -24,8 +24,11 @@ const MediaCacheMigrationNotice: React.FC = () => {
                 if (alive) setProgress(next);
             });
             if (!alive) return;
-            if (result.migrated > 0) {
-                console.log(`[Cache] 旧版本媒体缓存已迁移 ${result.migrated}/${result.total} 条，旧数据已清除`);
+            if (result.migrated > 0 || result.dropped > 0) {
+                console.log(
+                    `[Cache] 旧版本媒体缓存已清除：迁入私有目录 ${result.migrated} 条`
+                    + `，没搬成直接删掉 ${result.dropped} 条（共 ${result.total} 条）`,
+                );
             }
             setProgress(null);
         })();

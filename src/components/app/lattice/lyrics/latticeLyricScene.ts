@@ -2,8 +2,8 @@ import type { Container, Mesh, MeshGeometry, Shader, Sprite, Texture } from 'pix
 import type { MonetVisibleLineEntry } from '../../../visualizer/monet/monetLyricsModel';
 import { resolveMonetSweepEdgeSoftness, resolveMonetSweepEnd } from '../../../visualizer/monet/monetLyricsModel';
 import { resolveMonetFillWidth, resolveMonetGlow, clampMonetProgress } from '../../../visualizer/monet/monetLyricMotion';
-import { buildWordColorRangesFromMatchers, prepareWordColorMatchers, resolveTokenColorMap, resolveWordColor } from '../../../visualizer/wordColoring';
-import { colorWithAlpha, mixColors } from '../../../../utils/visualizer/colorMix';
+import { buildWordColorRangesFromMatchers, prepareWordColorMatchers, resolveTokenColorMap } from '../../../visualizer/wordColoring';
+import { colorWithAlpha, mixColors, resolveGlowColorStrength } from '../../../visualizer/colorMix';
 import { getLineRenderEndTime } from '../../../../utils/lyrics/renderHints';
 import type { LatticeLyricInput } from './types';
 import type { LatticeLineLayout, LatticeTypography, LyricPiece } from './latticeLyricLayout';
@@ -30,40 +30,18 @@ export function createLatticeLineView(pixi: Pixi, raster: LatticeRaster, parent:
     const quad = createLatticeQuadGeometry(pixi);
     const matchers = prepareWordColorMatchers(input.theme.wordColors, input.keywordColoringEnabled);
     const colors = resolveTokenColorMap(layout.pieces.map(p => p.token), buildWordColorRangesFromMatchers(entry.line.fullText, matchers));
-    /*
-     * 唱过去那一段的颜色：命中主题关键字（AI 主题的 wordColors）用关键字自己的颜色，
-     * 没命中就兜到主题的**强调色** —— 与别处歌词渲染同一条规矩（classic / cadenza / fume
-     * 的 resolveWordColor 兜底都是 theme.accentColor，claddagh 同理）。
-     *
-     * 以前这里兜的是 primaryColor：磁贴墙上「唱到的」和「没唱到的」于是同一个颜色，
-     * AI 主题的高亮色在这里一点都看不出来 —— 播放页有、磁贴墙没有，差的就这一行。
-     * 副歌那一条本来就是往强调色上混（与莫奈一致），不动。
-     */
-    const accent = chorus ? mixColors(input.theme.primaryColor, input.theme.accentColor, 0.48) : colorWithAlpha(input.theme.accentColor, 0.98);
-    /*
-     * 逐字着色：先按「关键字在整行里连续出现」取区间色（与 Monet 一致），取不到再按
-     * **逐词**取一次 —— 用的是全应用同一条规则 resolveWordColor（中日韩默认
-     * 'target-contains-token'：关键字包含这个词就算命中，不要求整句里连续出现）。
-     *
-     * 只有第一档时，磁贴墙的命中条件比播放页严得多：播放页那些样式（classic / cadenza /
-     * fume）都是逐词 resolveWordColor，关键字与歌词里的词只要字面有交叠就上色；磁贴墙却要
-     * 关键字整段落在行里。同一份 AI wordColors，于是播放页有高亮、磁贴墙一个都没有。
-     */
-    const resolvePieceColor = (piece: LyricPiece) => {
-        if (piece.translation) return (input.subtitleTheme ?? input.theme).primaryColor;
-        return colors.get(piece.token.key)
-            ?? resolveWordColor(piece.text, input.theme.wordColors, accent, { keywordColoringEnabled: input.keywordColoringEnabled });
-    };
+    const accent = chorus ? mixColors(input.theme.primaryColor, input.theme.accentColor, 0.48) : colorWithAlpha(input.theme.primaryColor, 0.98);
     const destroyPiece = (view: PieceView) => {
         view.sprite.destroy(); view.sweep.shader.destroy(); view.glow.forEach(sprite => sprite.destroy()); view.texture.destroy(true);
     };
     const createPiece = (piece: LyricPiece): PieceView => {
         const px = piece.translation ? type.translationPx : type.fontPx;
-        const image = raster.rasterize(piece.text, piece.translation ? type.translationFont : type.font, px, resolution);
-        const color = resolvePieceColor(piece);
+        const image = raster.rasterize(piece.text, piece.translation ? type.translationFont : type.font, px, resolution, piece.rtl);
+        const color = piece.translation ? (input.subtitleTheme ?? input.theme).primaryColor : colors.get(piece.token.key) ?? accent;
         const base = new pixi.Color(input.theme.primaryColor).toArray();
         const sweep = createLatticeSweepShader(pixi, base, new pixi.Color(color).toArray(), image.texture);
         sweep.uniforms.uGlyphRange = [(image.pad - piece.tokenOffset) / image.width, (piece.offsets.at(-1) ?? piece.width) / image.width];
+        sweep.uniforms.uRtl = piece.rtl ? 1 : 0;
         const sprite = new pixi.Mesh({ geometry: quad, shader: sweep.shader, texture: image.texture });
         sprite.scale.set(image.width, image.height);
         sprite.position.set(piece.x - image.pad, piece.y - image.pad); text.addChild(sprite);
@@ -104,13 +82,14 @@ export function createLatticeLineView(pixi: Pixi, raster: LatticeRaster, parent:
             uniforms.uVerticalFade[1] = clipped ? (view.pad + type.lineHeight) / view.height : 3;
             const glow = !quiet && !piece.translation && token.timed && status !== 'waiting'
                 ? resolveMonetGlow(time, start, end, getLineRenderEndTime(entry.line)) : 0;
-            glowing ||= glow > 0;
             const word = uniforms.uWord;
             const r = Math.round((view.base[0] + (word[0] - view.base[0]) * glow) * 255);
             const g = Math.round((view.base[1] + (word[1] - view.base[1]) * glow) * 255);
             const b = Math.round((view.base[2] + (word[2] - view.base[2]) * glow) * 255);
+            const glowAlpha = glow * (chorus ? 1 : 0.88) * resolveGlowColorStrength(r, g, b);
+            glowing ||= glowAlpha > 0;
             for (const sprite of view.glow) {
-                sprite.alpha = glow * (chorus ? 1 : 0.88);
+                sprite.alpha = glowAlpha;
                 sprite.tint = (r << 16) | (g << 8) | b;
             }
         }

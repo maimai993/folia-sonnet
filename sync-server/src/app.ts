@@ -11,7 +11,8 @@ import adminAuthRoutes, {
   readAdminPublicOrigin,
 } from './admin.js';
 import { renderLoginPage, renderPanelPage } from './panel.js';
-import { aiCacheRoutes, adminCacheBackupRoutes, adminCacheRoutes, readCacheStats } from './aiCache.js';
+import { aiCacheRoutes, adminCacheRoutes, readCacheStats } from './aiCache.js';
+import { adminCacheBackupRoutes } from './aiCacheBackups.js';
 import { adminCachePages } from './adminCachePages.js';
 import { adminFontRoutes, fontRoutes, readFontStats } from './fonts.js';
 import { adminStatsImageRoutes } from './statsImage.js';
@@ -154,6 +155,26 @@ const initializeSchema = async (db: D1Database) => {
       )
     `),
     /*
+     * 歌名的倒排索引：`ai_cache` 里每条的 `song_title` 拆成几种 token 各存一行，
+     * 于是 `POST /api/ai-cache/resolve` 的按歌名找候选不再需要 `LIKE '%…%'` 全表扫，
+     * 而是按 token 精确命中走索引（实测 4 万条时 14ms → 0.03ms，且与库大小无关）。
+     *
+     * 冗余存 `song_title`、`updated_at` 是为了命中之后**不必回主表**就能排序截断 ——
+     * 主表每行带最大 64KB 的 payload，那才是「一碰整表就慢」的根源。
+     * 这张表由写入路径维护（见 aiCache.ts 的 `writeTitleTokens`），不回填历史数据：
+     * 老条目靠**首次命中时补写**（见 `backfillTitleTokens`），不阻塞启动。
+     */
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS ai_cache_title_token (
+        kind TEXT NOT NULL,
+        token TEXT NOT NULL,
+        cache_key TEXT NOT NULL,
+        song_title TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (kind, token, cache_key)
+      )
+    `),
+    /*
      * 每次被覆盖之前的那一版。
      *
      * 上传是公开的（没填 Key 的人也要能推），所以「有人用空数据把别人做好的那条盖掉」
@@ -199,7 +220,20 @@ const initializeSchema = async (db: D1Database) => {
     `),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_font_market_enabled ON font_market(enabled)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_updated_at ON ai_cache(updated_at)'),
+    /*
+     * 命中流水只按时间读、也只按时间清（「最近 N 分钟」、24 小时分桶、七天前的那一批），
+     * 而这里**原来从没建过 `at` 上的索引** —— 于是每一条这样的查询都是整表扫。
+     * 命中一多，流水表就是这个库里长得最快的一张：20w 行时一条 `DELETE ... WHERE at <`
+     * 要扫 56ms，每小时一次，每次都把整个进程的事件循环按在地上。
+     */
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_hits_at ON ai_cache_hits(at)'),
+    /*
+     * 管理列表的排序入口：`kind` 在最前面，带 kind 筛选时 SQL 能顺着索引取够一页就停。
+     * 覆盖索引 `idx_ai_cache_kind_updated` 管的是「某个 kind 下按时间 + 只取几列」，
+     * 而管理列表要的是整行的元数据列，用不上它；没有这条索引时带 kind 的列表会把
+     * 整个 kind 分支取回来再排（实测 4w 行 339ms）。
+     */
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_kind_updated_at ON ai_cache(kind, updated_at)'),
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_backups_key ON ai_cache_backups(kind, cache_key, archived_at)'),
     /*
      * 覆盖索引一：按 (kind, updated_at) 排序/扫描的入口 —— 访客检索页、管理列表、
@@ -210,9 +244,9 @@ const initializeSchema = async (db: D1Database) => {
      */
     db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_kind_updated ON ai_cache(kind, updated_at, song_title, cache_key)'),
     /*
-     * 覆盖索引二：/songs 的 `GROUP BY song_title` + `COUNT(DISTINCT song_title)`。
+     * 覆盖索引二：/songs 的 `GROUP BY song_title`。
      * SELECT 里要的每一列（updated_at/hits/cache_key/platform）都在索引里，
-     * 分组与聚合全程只扫索引，不碰大字段。
+     * 分组与聚合全程只扫索引，不碰大字段；按 `song_title` 排序时也能顺着它取够一页就停。
      */
   ]);
 
@@ -742,6 +776,13 @@ app.get('/admin', async (c) => {
 });
 app.route('/admin/api/fonts', adminFontRoutes);
 app.route('/admin/api/ai-cache', adminCacheRoutes);
+/*
+ * 旧版列表与「捞回某一版」。恢复之后要让 `/songs` 的总数缓存作废 —— 捞回来的那条
+ * 可能带着一个当前库里已经没有的歌名（原因见 aiCacheSongTotal.ts）。
+ *
+ * 这里用一个包装好的模块级实例、并以**导入名**挂载：契约提取脚本（ci/contracts/extract.ts）
+ * 按 `app.route('前缀', 标识符)` 回溯到 import 表，内联调用或另起局部常量它都找不到。
+ */
 app.route('/admin/api/ai-cache-backups', adminCacheBackupRoutes);
 /*
  * 管理面板的缓存详情页面：`/admin/cache/:kind/:key`。

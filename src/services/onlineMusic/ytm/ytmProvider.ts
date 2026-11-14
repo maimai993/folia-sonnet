@@ -1,11 +1,11 @@
 import type { UnifiedSong } from '../../../types';
-import type { OnlineMusicProvider, ProviderUser } from '../../../types/onlineMusic';
+import type { OnlineMusicProvider, ProviderCollection, ProviderPage, ProviderUser } from '../../../types/onlineMusic';
 import { createProviderSongMetadata } from '../../../utils/songMetadata';
 import { isMacPlatform } from '../../../utils/platform';
 import { parseLyricsByFormat } from '../../../utils/lyrics/parserCore';
 import { noteYtmAccount, ytmHasPremium } from './ytmAccount';
 import { getYtmTransportAvailability, requestYtm } from './ytmTransport';
-import type { YtmWirePage, YtmWireSong, YtmWireWebLoginState } from './ytmTransport';
+import type { YtmWireCollection, YtmWirePage, YtmWireSong, YtmWireWebLoginState } from './ytmTransport';
 import { createYtmPager, normalizeYtmCollection, normalizeYtmSong, normalizeYtmUser, requireYtmSong } from './ytmNormalize';
 import { clearYtmCatalogCache, ytmCatalog } from './ytmCatalog';
 import { clearYtmLibraryCache, ytmLibrary } from './ytmLibrary';
@@ -14,6 +14,8 @@ import { ytmMutations } from './ytmMutations';
 import { resetYtmRecommendations, ytmRecommendations } from './ytmRecommendations';
 import { describeYtmLoginFailure, ytmLoginFailure } from './ytmLoginFailure';
 import { describeYtmFailure } from './ytmFailure';
+import { getYtmLoginDiagnostics, noteYtmLoginStatusCheck } from './ytmLoginDiagnostics';
+import { diagnosticLine } from '../login/loginDiagnosticReport';
 import i18n from '../../../i18n/config';
 import { isCapacitorAndroid } from '../../../platform/runtime';
 
@@ -33,6 +35,19 @@ const searchPager = createYtmPager<UnifiedSong>();
 // that such a search never starts the listener's search over, and the walks it keeps (the pager
 // holds as many as `searchPager`) only ever make room among themselves.
 const sessionSearchPager = createYtmPager<UnifiedSong>();
+// Album and playlist searches, walked by kind and text as songs are.
+const collectionSearchPager = createYtmPager<ProviderCollection>();
+const searchYtmCollections = (kind: 'album' | 'playlist', query: string, limit: number, offset: number): Promise<ProviderPage<ProviderCollection>> => {
+    const text = query.trim();
+    if (!text) return Promise.resolve({ items: [], total: 0, nextOffset: offset, hasMore: false });
+    return collectionSearchPager.page(`${kind}:${text}`, offset, limit, async continuation => {
+        const page = await requestYtm<YtmWirePage<YtmWireCollection>>(
+            kind === 'album' ? 'search_albums' : 'search_playlists',
+            continuation ? { continuation } : { query: text },
+        );
+        return { items: page.items.map(item => normalizeYtmCollection(item, kind)), continuation: page.continuation };
+    });
+};
 // A letter of any script but Latin.
 const NON_LATIN_LETTER = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
 // The key of the sign-in in progress.
@@ -45,6 +60,7 @@ let loginStarts = 0;
 const forgetPages = (): void => {
     searchPager.clear();
     sessionSearchPager.clear();
+    collectionSearchPager.clear();
     clearYtmCatalogCache();
     clearYtmLibraryCache();
     forgetYtmMusicPage();
@@ -54,7 +70,7 @@ const forgetPages = (): void => {
 i18n.on('languageChanged', forgetPages);
 
 export const ytmProvider: OnlineMusicProvider = {
-    id: 'ytm', displayName: 'YouTube Music', shortName: 'YT Music',
+    id: 'ytm', displayName: 'YouTube Music', shortName: 'YT Music', shortNameKey: 'onlineProviderName.ytm',
     mark: { letter: 'Y', color: '#e11d48' },
     getAvailability: getYtmTransportAvailability,
     describeFailure: describeYtmFailure,
@@ -89,6 +105,8 @@ export const ytmProvider: OnlineMusicProvider = {
                 return { items: page.items.map(normalizeYtmSong), continuation: page.continuation };
             });
         },
+        searchAlbums: (query, limit, offset) => searchYtmCollections('album', query, limit, offset),
+        searchPlaylists: (query, limit, offset) => searchYtmCollections('playlist', query, limit, offset),
     },
     playback: {
         async getSongDetail(id) {
@@ -111,11 +129,19 @@ export const ytmProvider: OnlineMusicProvider = {
         async getAudioSource(song, quality) {
             const id = requireYtmSong(song);
             const startedAt = Date.now();
-            const audio = await requestYtm<{ url: string; route: string; itag?: number; bitrate?: number; level?: 'high' }>('audio', { id, quality });
+            const audio = await requestYtm<{ url: string; route: string; itag?: number; bitrate?: number; level?: 'high'; loudnessDb?: number }>('audio', { id, quality });
             const served = audio.level ?? quality;
             const format = audio.itag ? ` (itag ${audio.itag}, ${Math.round((audio.bitrate ?? 0) / 1000)} kbit/s)` : '';
             console.log(`[Ytm] Audio for "${song.name}" (${id}) at ${quality}${served === quality ? '' : ` (served at ${served})`} is ready by the ${audio.route} route${format} after ${Date.now() - startedAt}ms`);
-            return { url: audio.url, fetchedAt: Date.now(), quality: served };
+            // YouTube turns a track down by how much louder than its playback level it is: that is its track gain.
+            // A quieter one it leaves as it is, and so does this: with no peak known, a lift could clip.
+            const replayGain = typeof audio.loudnessDb === 'number' && Number.isFinite(audio.loudnessDb) ? { trackGain: Math.min(0, -audio.loudnessDb) } : undefined;
+            return { url: audio.url, fetchedAt: Date.now(), quality: served, ...(replayGain ? { replayGain } : {}) };
+        },
+        // A music video a list showed as itself, its song not known in time, is played as that song.
+        async getPlayedSong(song) {
+            const { song: played } = await requestYtm<{ song: YtmWireSong | null }>('played_as', { id: requireYtmSong(song) });
+            return played && normalizeYtmSong(played);
         },
     },
     lyrics: {
@@ -161,7 +187,15 @@ export const ytmProvider: OnlineMusicProvider = {
             caseNotes: { 'browser-unfinished': 'home.loginCaseYtmUnfinished', 'no-browser': 'home.loginNoBrowserYtm' },
         }),
         async getLoginStatus() {
-            const user = await requestYtm<ProviderUser | null>('login_status');
+            let user: ProviderUser | null;
+            try {
+                user = await requestYtm<ProviderUser | null>('login_status');
+            } catch (error) {
+                noteYtmLoginStatusCheck(diagnosticLine`login_status failed: ${error instanceof Error ? error.message : String(error)}`);
+                throw error;
+            }
+            // 与另一家同一条规矩：只有「平台说这个登录不算数」才等于没人登录，其它错误必须抛出去。
+            noteYtmLoginStatusCheck(diagnosticLine`${user ? `signed in (id ${user.id ? 'present' : 'missing'}, nickname ${user.nickname ? 'present' : 'missing'})` : 'nobody is signed in'}`);
             noteYtmAccount(user);
             return user ? normalizeYtmUser(user) : null;
         },
@@ -190,6 +224,8 @@ export const ytmProvider: OnlineMusicProvider = {
             return key;
         },
         describeLoginFailure: describeYtmLoginFailure,
+        // 登录确认之后账号没读出来（account-refresh-failed）时，报告里这一段靠它说出卡在哪。
+        getLoginDiagnostics: async () => getYtmLoginDiagnostics(),
         async openLoginPage() { await requestYtm('web_login_open'); },
         // The window of the sign-in is opened by its start, and closing it ends the sign-in.
         opensLoginPageItself: () => true,

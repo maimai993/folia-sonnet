@@ -9,59 +9,47 @@
 // (its `storage`), its field and its actions are built from that declaration by `tuningFields`,
 // and its part of the type comes from VisualizerTuningSettings, which each tuning.ts adds to. A
 // background's settings that are no tuning object come whole from its settings.ts.
+//
+// @note 帧率上限（visualizer_frame_rate）和辉光模糊量化（visualizer_glow_blur_quantize）是用户明确决定「不进外观配置导入导出」的
+// 设置（2026-11-08）：配置码也用于 web 版 OBS 链接，只加 OBS 页面看得到的；OBS 的浏览器源按 OBS 自己设的帧率渲染，辉光量化
+// 开关看起来几乎一样。同一批里的歌词画布分辨率与抗锯齿（lyricRenderQuality）进了配置码。不要按 settings-feature-integration
+// 「视觉设置必须进 buildCurrentConfig / compressConfig / decompressConfig / validKeys / handleImportConfig」的规则把这两个补进去。
 
 import { create } from 'zustand';
+import { getVisualizerModeLabel } from '../components/visualizer/registry';
 import type { StoredTuning, VisualizerTuningSettings } from '../components/visualizer/tuningDefinition';
 import { getBackgroundSettingsSlices, getStoredVisualizerTunings } from '../components/visualizer/tuningRegistry';
-import { type RenderPixelRatio, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { type LyricRenderQuality, type RenderPixelRatio, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 import { VISUALIZER_FRAME_RATE_STORAGE_KEY, setGlobalVisualizerFrameRate } from '../utils/frameRateLimiter';
+import { LYRIC_RENDER_QUALITY_STORAGE_KEY, normalizeLyricRenderQuality } from '../utils/lyricRenderQuality';
 import { RENDER_PIXEL_RATIO_STORAGE_KEY, readStoredRenderPixelRatio, setGlobalRenderPixelRatio } from '../utils/renderPixelRatio';
 import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlurQuantized } from '../utils/glowBlurQuantize';
-// 显示名住在各模式的 entry.tsx（components），由 utils/visualizerModeLabel 持有、registry 注册解析器：
-// store 是低层，不能 import components/visualizer/registry。
-import { getVisualizerModeLabel } from '../utils/visualizerModeLabel';
 import i18n from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
-import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, readStoredBackgroundOpacity, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, readStoredWallpaperFloatingAvoidOffsetX, readStoredWallpaperFloatingAvoidWidth, readStoredWallpaperFloatingFillSafeArea, readStoredWallpaperFloatingFontSize, readStoredWallpaperFloatingFontSizeMode, readStoredWallpaperFloatingOffsetX, readStoredWallpaperFloatingOpacity, readStoredWallpaperFloatingOverSafeArea, readStoredWallpaperFloatingWidth, readStoredWallpaperLyricsFontMode, readStoredWallpaperOverlayAllApps, readStoredWallpaperOverlayEnabled, readStoredWallpaperOverlayHideAfterLyricsEnd, readStoredWallpaperOverlayHideCoverArt, readStoredWallpaperOverlayHideNativeLyrics, readStoredWallpaperOverlayHideNativeProgress, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlayLockScreen, readStoredWallpaperOverlayLockScreenOnly, readStoredWallpaperOverlayOpacity, readStoredWallpaperOverlaySkipInstrumental, writeStoredTuning } from './visualizerSettingsPersistence';
+import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress, WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, readStoredWallpaperVideoRotation } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
-// 上游 v0.7.22 的随机池：参与随机的样式集合。和 fork 保留的「每首换一种」是同一件事的两半。
 import { RANDOM_VISUALIZER_MODES_STORAGE_KEY, readStoredRandomVisualizerModes } from './visualizerSettingsPersistence';
 import { normalizeRandomVisualizerModes, type RandomVisualizerMode } from '../utils/randomVisualizerModes';
 
-/** 是否把播放中的歌词喂给系统动态壁纸。关掉后壁纸保留最后一帧，不再更新。 */
+export type SetVisualizerModeOptions = { notify?: boolean; preserveRandom?: boolean };
+
+// 歌词壁纸（Android 壁纸画面与叠层）的偏好，dev 独有能力。
 export const LYRICS_WALLPAPER_FEED_STORAGE_KEY = 'folia.lyricsWallpaperFeed';
-
-/*
- * 注意函数体要和返回类型一起改：加了 'video' 这一支类型、**没**加这个判断的话，
- * 存进去的 'video' 在**下一次读存储**时就会被静默回退成 'cover' ——
- * 用户看到的就是「设了视频背景，动一下别的设置又变回封面」。
- * （读存储不只在启动时发生：叠层那份页面每次重载都会重新读一遍 localStorage。）
- */
-const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' =>
-    value === 'color' || value === 'image' || value === 'video' ? value : 'cover';
-/** 歌词壁纸的背景：模糊封面 / 主题色渐变 / 自选图片。 */
 export const LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY = 'folia.lyricsWallpaperBackground';
-/** 歌词壁纸的自选背景图（base64，已压到 512px）。体积不小，但落 localStorage 仍在配额内。 */
 export const LYRICS_WALLPAPER_IMAGE_STORAGE_KEY = 'folia.lyricsWallpaperImage';
-/** 歌词壁纸的背景模糊强度 0..1。0 = 完全清晰，1 = 糊到只剩色块。 */
 export const LYRICS_WALLPAPER_BLUR_STORAGE_KEY = 'folia.lyricsWallpaperBlur';
-/** 歌词壁纸顶部下方那条整首歌的进度条。 */
 export const LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY = 'folia.lyricsWallpaperProgress';
-/** 歌词壁纸的双行翻译：主行下面再挂一行翻译。 */
 export const LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY = 'folia.lyricsWallpaperTranslation';
-/** 歌词壁纸的样式：'minimal' 固定精简风格，'follow' 跟随播放页选的可视化模式。 */
 export const LYRICS_WALLPAPER_STYLE_STORAGE_KEY = 'folia.lyricsWallpaperStyle';
-
-// 默认偏轻：多数人选图就是想看清那张图，糊过头反而违背意图。想要柔化往上拉即可。
 const DEFAULT_WALLPAPER_BLUR = 0.35;
+
+const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' | 'mv' =>
+    value === 'color' || value === 'image' || value === 'video' || value === 'mv' ? value : 'cover';
 
 const clampWallpaperBlur = (value: number): number => {
     if (!Number.isFinite(value)) return DEFAULT_WALLPAPER_BLUR;
     return Math.min(1, Math.max(0, value));
 };
-
-export type SetVisualizerModeOptions = { notify?: boolean; preserveRandom?: boolean };
-
 type OwnSettingsState = {
     disableVisualizerVignette: boolean;
     disableVisualizerGeometricBackground: boolean;
@@ -69,6 +57,8 @@ type OwnSettingsState = {
     visualizerOpacity: number;
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     visualizerFrameRate: VisualizerFrameRate;
+    /** 歌词画布的全局分辨率与抗锯齿挡位；样式自己的覆盖在各自的 tuning 里（utils/lyricRenderQuality.ts）。 */
+    lyricRenderQuality: LyricRenderQuality;
     /**
      * 画布渲染分辨率的上限，null = 跟随屏幕。
      *
@@ -81,12 +71,45 @@ type OwnSettingsState = {
     randomVisualizerModes: RandomVisualizerMode[];
     /** Snap animated glow blur radii to a bounded set. See components/visualizer/wordGlow.ts. */
     glowBlurQuantize: boolean;
-    /** 把播放中的歌词推给原生歌词动态壁纸。Android 专有，其它平台恒为 false 也不影响。 */
+    /**
+     * 歌词关键词着色：高亮的词按它的语气/关键词上色。
+     *
+     * 一颗总闸管所有画面（莫奈 / 镜台 / 绘光 / 海报墙）—— 以前各样式面板里各有一颗，
+     * 而且海报墙看的是莫奈那颗，彼此不该有这种牵连，于是收编成全局一份。
+     */
+    keywordColoringEnabled: boolean;
+    /** 智能动感模式, shared by every visualizer and background that draws beat FX: no one style's tuning. */
+    smartBeat: SmartBeatSettings;
+    handleToggleDisableVisualizerVignette: (disable: boolean) => void;
+    handleToggleDisableVisualizerGeometricBackground: (disable: boolean) => void;
+    handleSetBackgroundOpacity: (opacity: number) => void;
+    handleSetVisualizerOpacity: (opacity: number) => void;
+    handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
+    handleResetVisualizerBackgroundMode: () => void;
+    handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
+    handleSetLyricRenderQuality: (patch: Partial<LyricRenderQuality>) => void;
+    handleSetRenderPixelRatio: (limit: RenderPixelRatio | null) => void;
+    handleSetVisualizerMode: (mode: VisualizerMode, options?: SetVisualizerModeOptions) => void;
+    handleToggleRandomVisualizerModePerSong: (enable: boolean, options?: { notify?: boolean }) => void;
+    handleSetRandomVisualizerModes: (modes: readonly VisualizerMode[]) => void;
+    handleToggleGlowBlurQuantize: (enable: boolean) => void;
+    handleSetKeywordColoringEnabled: (enable: boolean) => void;
+    handleSetSmartBeat: (patch: SmartBeatPatch) => void;
     lyricsWallpaperFeed: boolean;
-    /** 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片，'video' 自选视频。 */
-    lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video';
+    /**
+     * 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片，
+     * 'video' 自选视频，'mv' B 站 MV（按歌自动匹配一条投稿当背景）。
+     */
+    lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video' | 'mv';
     /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
     lyricsWallpaperImage: string | null;
+    /**
+     * 桌面壁纸视频背景的旋转角度（0/90/180/270）。
+     *
+     * 存在这里而不是只下发一次：原生那份 tuning 每次 setAppearance 都会整体重建，
+     * 不持久化的话重启后角度就没了。
+     */
+    wallpaperVideoRotation: number;
     /** 背景模糊强度 0..1：同时作用于模糊封面与自选背景图。 */
     lyricsWallpaperBlur: number;
     /** 是否在歌词区顶部下方显示整首歌的进度条。 */
@@ -190,23 +213,11 @@ type OwnSettingsState = {
      * 而叠层存在的意义恰恰是透出壁纸，所以默认隐藏，想要完整构图的再打开。
      */
     wallpaperOverlayHideCoverArt: boolean;
-    /** 智能动感模式, shared by every visualizer and background that draws beat FX: no one style's tuning. */
-    smartBeat: SmartBeatSettings;
-    handleToggleDisableVisualizerVignette: (disable: boolean) => void;
-    handleToggleDisableVisualizerGeometricBackground: (disable: boolean) => void;
-    handleSetBackgroundOpacity: (opacity: number) => void;
-    handleSetVisualizerOpacity: (opacity: number) => void;
-    handleSetVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
-    handleResetVisualizerBackgroundMode: () => void;
-    handleSetVisualizerFrameRate: (frameRate: VisualizerFrameRate) => void;
-    handleSetRenderPixelRatio: (limit: RenderPixelRatio | null) => void;
-    handleSetVisualizerMode: (mode: VisualizerMode, options?: SetVisualizerModeOptions) => void;
-    handleToggleRandomVisualizerModePerSong: (enable: boolean, options?: { notify?: boolean }) => void;
-    handleSetRandomVisualizerModes: (modes: readonly VisualizerMode[]) => void;
-    handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
-    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video') => void;
+    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video' | 'mv') => void;
     handleSetLyricsWallpaperImage: (image: string | null) => void;
+    /** 设定桌面壁纸视频的旋转角度（0/90/180/270），会持久化。 */
+    handleSetWallpaperVideoRotation: (degrees: number) => void;
     handleSetLyricsWallpaperBlur: (blur: number) => void;
     handleToggleLyricsWallpaperProgress: (enable: boolean) => void;
     handleToggleLyricsWallpaperTranslation: (enable: boolean) => void;
@@ -247,7 +258,6 @@ type OwnSettingsState = {
     handleToggleWallpaperOverlayHideWhenPaused: (enable: boolean) => void;
     handleToggleWallpaperOverlayHideAfterLyricsEnd: (enable: boolean) => void;
     handleToggleWallpaperOverlayHideCoverArt: (enable: boolean) => void;
-    handleSetSmartBeat: (patch: SmartBeatPatch) => void;
 };
 
 export type VisualizerSettingsState = OwnSettingsState & VisualizerTuningSettings;
@@ -279,7 +289,7 @@ const tuningFields = (
             hold(storage.merge(held(), patch));
         },
         [settingsResetterKey]: () => {
-            hold(defaults);
+            hold(storage.reset ? storage.reset(held(), defaults) : defaults);
             if (storage.resetNotice) {
                 setStatusMessage({ type: 'info', text: i18n.t(storage.resetNotice) });
             }
@@ -300,22 +310,11 @@ const declaredFields = (set: (fields: object) => void, get: () => Fields) => {
 };
 
 export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, get) => ({
-    ...declaredFields(set as (fields: object) => void, get as unknown as () => Fields),
-    disableVisualizerVignette: getStoredBoolean('disable_visualizer_vignette', false),
-    disableVisualizerGeometricBackground: getStoredBoolean('disable_visualizer_geometric_background', false),
-    backgroundOpacity: readStoredBackgroundOpacity(),
-    visualizerOpacity: readStoredVisualizerOpacity(),
-    visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
-    visualizerFrameRate: readStoredVisualizerFrameRate(),
-    renderPixelRatio: readStoredRenderPixelRatio(),
-    visualizerMode: readStoredVisualizerMode(),
-    randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
-    randomVisualizerModes: readStoredRandomVisualizerModes(),
-    glowBlurQuantize: readStoredGlowBlurQuantize(),
     lyricsWallpaperFeed: getStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, true),
     lyricsWallpaperBackground: resolveWallpaperBackground(
         getStoredString(LYRICS_WALLPAPER_BACKGROUND_STORAGE_KEY, 'cover')),
     lyricsWallpaperImage: getStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, '') || null,
+    wallpaperVideoRotation: readStoredWallpaperVideoRotation(),
     lyricsWallpaperBlur: clampWallpaperBlur(Number(getStoredString(LYRICS_WALLPAPER_BLUR_STORAGE_KEY, ''))),
     lyricsWallpaperProgress: getStoredBoolean(LYRICS_WALLPAPER_PROGRESS_STORAGE_KEY, true),
     lyricsWallpaperTranslation: getStoredBoolean(LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY, true),
@@ -345,10 +344,24 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     wallpaperOverlayHideWhenPaused: readStoredWallpaperOverlayHideWhenPaused(),
     wallpaperOverlayHideAfterLyricsEnd: readStoredWallpaperOverlayHideAfterLyricsEnd(),
     wallpaperOverlayHideCoverArt: readStoredWallpaperOverlayHideCoverArt(),
+    ...declaredFields(set as (fields: object) => void, get as unknown as () => Fields),
+    disableVisualizerVignette: getStoredBoolean('disable_visualizer_vignette', false),
+    disableVisualizerGeometricBackground: getStoredBoolean('disable_visualizer_geometric_background', false),
+    backgroundOpacity: readStoredBackgroundOpacity(),
+    visualizerOpacity: readStoredVisualizerOpacity(),
+    visualizerBackgroundMode: readStoredVisualizerBackgroundMode(),
+    visualizerFrameRate: readStoredVisualizerFrameRate(),
+    lyricRenderQuality: readStoredLyricRenderQuality(),
+    renderPixelRatio: readStoredRenderPixelRatio(),
+    visualizerMode: readStoredVisualizerMode(),
+    randomVisualizerModePerSong: getStoredBoolean('random_visualizer_mode_per_song', false),
+    randomVisualizerModes: readStoredRandomVisualizerModes(),
+    glowBlurQuantize: readStoredGlowBlurQuantize(),
+    keywordColoringEnabled: getStoredBoolean('keyword_coloring_enabled', true),
     smartBeat: readStoredSmartBeatSettings(),
     handleSetSmartBeat: (patch) => {
         const next = resolveSmartBeatSettings(patch, get().smartBeat);
-        if (typeof window !== 'undefined') localStorage.setItem(SMART_BEAT_STORAGE_KEY, JSON.stringify(next));
+        if (typeof window !== 'undefined') localStorage.setItem(SMART_BEAT_STORAGE_KEY, JSON.stringify(toStoredSmartBeat(next)));
         set({ smartBeat: next });
     },
     handleToggleDisableVisualizerVignette: (disable) => {
@@ -398,6 +411,13 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         }
         setGlobalVisualizerFrameRate(frameRate);
         set({ visualizerFrameRate: frameRate });
+    },
+    handleSetLyricRenderQuality: (patch) => {
+        const next = normalizeLyricRenderQuality({ ...get().lyricRenderQuality, ...patch });
+        const current = get().lyricRenderQuality;
+        if (next.scale === current.scale && next.antialias === current.antialias) return;
+        setStoredString(LYRIC_RENDER_QUALITY_STORAGE_KEY, JSON.stringify(next));
+        set({ lyricRenderQuality: next });
     },
     handleSetRenderPixelRatio: (limit) => {
         if (typeof window !== 'undefined') {
@@ -452,6 +472,10 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         setGlowBlurQuantized(enable);
         set({ glowBlurQuantize: enable });
     },
+    handleSetKeywordColoringEnabled: (enable) => {
+        setStoredBoolean('keyword_coloring_enabled', enable);
+        set({ keywordColoringEnabled: enable });
+    },
     handleToggleLyricsWallpaperFeed: (enable) => {
         setStoredBoolean(LYRICS_WALLPAPER_FEED_STORAGE_KEY, enable);
         set({ lyricsWallpaperFeed: enable });
@@ -463,6 +487,11 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     handleSetLyricsWallpaperImage: (image) => {
         setStoredString(LYRICS_WALLPAPER_IMAGE_STORAGE_KEY, image || '');
         set({ lyricsWallpaperImage: image });
+    },
+    handleSetWallpaperVideoRotation: (degrees) => {
+        const normalized = ((Math.round(degrees / 90) * 90) % 360 + 360) % 360;
+        setStoredString(WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, String(normalized));
+        set({ wallpaperVideoRotation: normalized });
     },
     handleSetLyricsWallpaperBlur: (blur) => {
         const next = clampWallpaperBlur(blur);
