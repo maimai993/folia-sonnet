@@ -216,14 +216,15 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private var cachedPlaying = false
     @Volatile
     private var cachedBuffering = false
+    /** 一拍位置采样：位置与时刻（elapsedRealtime）必须成对读写，所以装在一个不可变对象里。 */
+    private class TickSample(val positionMs: Long, val atMs: Long)
     /**
-     * 最近一拍位置采样的值与时刻（elapsedRealtime）。只有 positionTick 写。
-     * 缓存位置被 seek / 换源 / 暂停改写后与它不再相等，显示位置就不外推（#320）。
+     * 最近一拍位置采样。只有 positionTick 写，整体发布（一次 volatile 写），读端不会拿到
+     * 「新位置 + 旧时刻」的混搭。缓存位置被 seek / 换源 / 暂停改写后与它不再相等，
+     * 显示位置就不外推（#320）。
      */
     @Volatile
-    private var tickSamplePositionMs = -1L
-    @Volatile
-    private var tickSampleAtMs = 0L
+    private var tickSample: TickSample? = null
 
     private val positionTick = object : Runnable {
         override fun run() {
@@ -248,9 +249,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     && position + 1_000L < lastTickPositionMs
             lastTickPositionMs = position
             cachedPositionMs = position
-            // 先写位置再写时刻：读的一侧以「时刻对应的那个位置仍是缓存值」为外推前提（#320）。
-            tickSamplePositionMs = position
-            tickSampleAtMs = android.os.SystemClock.elapsedRealtime()
+            // 先写缓存位置、再整体发布采样：读端先读采样、后读缓存，读到这份采样时缓存一定已是 position 或更新的值（#320）。
+            tickSample = TickSample(position, android.os.SystemClock.elapsedRealtime())
             /*
              * 缓冲标记只靠事件清（playing / paused / ...），漏一次就一直挂着：
              * 显示锚点按「在缓冲」把 playing 写成 false，桌面歌词冻在原地，
@@ -740,10 +740,12 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      * 与 [getPositionMs] 一样只读缓存，任何线程可调；规则见 extrapolatedDisplayPositionMs。
      */
     fun getDisplayPositionMs(audible: Boolean): Long {
-        val sampleAt = tickSampleAtMs
+        // 顺序不能换：先取采样再读缓存。反过来可能拿到旧采样配新缓存——那只会判成不新鲜、不外推，
+        // 而这个顺序下「新鲜」一定意味着时刻就是这个位置被采到的时刻。
+        val sample = tickSample
         val cached = cachedPositionMs
-        val fresh = cached == tickSamplePositionMs
-        return Math.max(0L, extrapolatedDisplayPositionMs(cached, if (fresh) sampleAt else 0L,
+        val sampleAt = if (sample != null && sample.positionMs == cached) sample.atMs else 0L
+        return Math.max(0L, extrapolatedDisplayPositionMs(cached, sampleAt,
             android.os.SystemClock.elapsedRealtime(), audible, requestedSpeed))
     }
 
