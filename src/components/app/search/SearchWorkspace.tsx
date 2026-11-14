@@ -118,7 +118,20 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
         return resolveTrackDisplay ? raw.map(resolveTrackDisplay) : raw;
     }, [resolveTrackDisplay, searchResults]);
     const collections = collectionResults || [];
-    const isCollectionKind = searchKind !== 'song';
+    /*
+     * 哪些种类摆的是「集合」（专辑 / 歌单 / 番剧 / 电影 / 用户），哪些摆的是「单曲」。
+     *
+     * 不能写成 `kind !== 'song'`：视频站的「视频」那一档和单曲是同一条路
+     * （executeSearch 把 'video' 也交给 searchOnlineProviderSongs，见那边的注释），
+     * 结果落在 searchResults 里。以前这里把 'video' 当集合，界面就去读
+     * collectionResults —— 永远是空的，表现成「视频这一档什么都搜不出来」，
+     * 而同一个词在番剧 / 电影 / 用户那几档都正常。
+     */
+    const isCollectionKind = searchKind === 'album'
+        || searchKind === 'playlist'
+        || searchKind === 'bangumi'
+        || searchKind === 'movie'
+        || searchKind === 'user';
     const resultCount = isCollectionKind ? collections.length : results.length;
     const { sources, activeProviderId } = useSearchSources(hasLocalSongs);
     // B 站那一栏要「把视频钉到正在放的这首歌」：从播放器取当前歌，拼成 songKey。
