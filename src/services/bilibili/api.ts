@@ -675,8 +675,16 @@ export const fetchBilibiliPlayUrl = async (
         const code = error instanceof BilibiliApiError ? error.code : -1;
         if (code !== -400 && code !== -403) throw error;
         console.warn('[Bilibili] wbi playurl rejected, falling back to the plain endpoint', code);
+        /*
+         * 退路不要带 platform=html5。
+         *
+         * html5 模式回的是渐进式 MP4（durl），实测它的真实时长比标称少一两秒，
+         * 播到尾巴上就提前 ended —— 用户看到的是「视频还没放完就切下一首，还差
+         * 一点点」。不带这个参数、给 fnval=16（只要 DASH），同一接口回的是分离的
+         * 音轨 + 画面轨，时长精确到毫秒、画质还更高（登录后能到 1080P）。
+         */
         const fallbackUrl = `${API_BASE}/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}`
-            + `&qn=${qn}&platform=html5&high_quality=1`;
+            + `&qn=${qn}&fnval=16&fnver=0&fourk=${wants4k ? 1 : 0}`;
         payload = unwrap(await fetchJson<PlayUrlDash>(fallbackUrl));
     }
     const track = pickVideoTrack(payload, effectiveQuality);
