@@ -37,6 +37,29 @@ const foliaNode = (() => {
     }
 })();
 
+// Node 的未捕获异常默认会调用 process.exit；在 Android 中 Node 与 WebView
+// 共用一个进程，退出会触发 libhoudini/WebView 的析构竞态。把启动和异步异常
+// 送回 Java 侧作为可见的降级状态，保持宿主事件循环存活。
+const serializeError = (error) => (
+    error && typeof error === 'object' && typeof error.message === 'string'
+        ? error.message
+        : String(error)
+);
+
+let startupFailure = false;
+const reportUncaughtFailure = (error) => {
+    const message = error && typeof error.message === 'string' ? error.message : String(error);
+    if (startupFailure) return;
+    startupFailure = true;
+    try {
+        foliaNode.failure(message);
+    } catch (reportError) {
+        process.stderr.write(`[folia-node] 上报未捕获异常失败：${serializeError(reportError)}\n`);
+    }
+};
+process.on('uncaughtException', reportUncaughtFailure);
+process.on('unhandledRejection', reportUncaughtFailure);
+
 const MODS = path.join(__dirname, 'modSystem');
 
 const {
@@ -93,12 +116,6 @@ const safeJson = (value) => {
         return String(value);
     }
 };
-
-const serializeError = (error) => (
-    error && typeof error === 'object' && typeof error.message === 'string'
-        ? error.message
-        : String(error)
-);
 
 const send = (channel, payload) => {
     try {
