@@ -43,8 +43,8 @@ export const LYRICS_WALLPAPER_TRANSLATION_STORAGE_KEY = 'folia.lyricsWallpaperTr
 export const LYRICS_WALLPAPER_STYLE_STORAGE_KEY = 'folia.lyricsWallpaperStyle';
 const DEFAULT_WALLPAPER_BLUR = 0.35;
 
-const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' =>
-    value === 'color' || value === 'image' || value === 'video' ? value : 'cover';
+const resolveWallpaperBackground = (value: string): 'cover' | 'color' | 'image' | 'video' | 'mv' =>
+    value === 'color' || value === 'image' || value === 'video' || value === 'mv' ? value : 'cover';
 
 const clampWallpaperBlur = (value: number): number => {
     if (!Number.isFinite(value)) return DEFAULT_WALLPAPER_BLUR;
@@ -96,8 +96,11 @@ type OwnSettingsState = {
     handleSetKeywordColoringEnabled: (enable: boolean) => void;
     handleSetSmartBeat: (patch: SmartBeatPatch) => void;
     lyricsWallpaperFeed: boolean;
-    /** 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片，'video' 自选视频。 */
-    lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video';
+    /**
+     * 歌词壁纸的背景：'cover' 模糊封面，'color' 主题色渐变，'image' 自选图片，
+     * 'video' 自选视频，'mv' B 站 MV（按歌自动匹配一条投稿当背景）。
+     */
+    lyricsWallpaperBackground: 'cover' | 'color' | 'image' | 'video' | 'mv';
     /** 自选背景图的 base64，lyricsWallpaperBackground='image' 时生效。 */
     lyricsWallpaperImage: string | null;
     /**
@@ -211,7 +214,7 @@ type OwnSettingsState = {
      */
     wallpaperOverlayHideCoverArt: boolean;
     handleToggleLyricsWallpaperFeed: (enable: boolean) => void;
-    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video') => void;
+    handleSetLyricsWallpaperBackground: (mode: 'cover' | 'color' | 'image' | 'video' | 'mv') => void;
     handleSetLyricsWallpaperImage: (image: string | null) => void;
     /** 设定桌面壁纸视频的旋转角度（0/90/180/270），会持久化。 */
     handleSetWallpaperVideoRotation: (degrees: number) => void;

@@ -5,6 +5,7 @@ import {
     usePlaybackStore,
 } from '../../stores/usePlaybackStore';
 import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
+import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from '../../stores/useVideoLayerSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
@@ -44,7 +45,16 @@ const describe = (song: unknown): { title: string; artist: string } => {
 };
 
 const BilibiliMvLayer: React.FC = () => {
-    const enabled = useBilibiliMvStore(state => state.enabled);
+    /*
+     * 开关只有一个：外观设置里壁纸背景选了「MV」。
+     *
+     * 以前这里还有一个「连接与集成」的独立开关 —— 同一件事摆两处，用户开了这处
+     * 不知道那处，入口收编成一个：背景模式 === 'mv'。歌词样式的「MV」款仍能强制
+     * 打开（forcedByStyle，见 services/mvRequirement），那是"这款背景就要画面"的
+     * 表达，不属于用户开关。
+     */
+    const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    const enabled = backgroundMode === 'mv' || useBilibiliMvStore(state => state.forcedByStyle);
     /*
      * 背景样式要求画面时从这里进来（见 services/mvRequirement）。
      *

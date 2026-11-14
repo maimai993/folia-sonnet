@@ -40,19 +40,11 @@ export const LX_SOURCE: SettingsGroupDef = {
 };
 
 /**
- * B 站（fork 独有）：MV 背景开关与登录。
+ * B 站这一组已整个退场。
  *
- * MV **不再是一个歌词样式**：它铺在播放页当背景，跟「流光 / 心象」那些样式互不相关，
- * 所以入口搬到这里，而不是从歌词样式列表里选。
- *
- * 只在安卓 App 内可用：api.bilibili.com 不给 CORS 头，WebView 直连一定被拦，
- * 靠 FoliaBilibili 插件用 OkHttp 代发。别的平台整组不画。
+ * MV 背景收编进「外观 → 歌词壁纸」的背景模式（'mv' 一档）；登录在通用登录面板里。
+ * 这里不再留组定义 —— SettingsRegistry 是按组挂面板的，组没了面板自然不画。
  */
-export const BILIBILI: SettingsGroupDef = {
-    id: 'bilibili',
-    titleKey: 'options.settingsHeadingBilibili',
-    available: () => isCapacitorAndroid(),
-};
 
 
 export const O = {
@@ -65,10 +57,7 @@ export const O = {
     syncToken: option(SERVICES, 'r2SyncToken', 'options.r2SyncToken'),
     discord: option(SERVICES, 'discordRichPresence', 'options.discordRichPresence', { electronOnly: true }),
     scrobble: option(SERVICES, 'scrobbleSettings', 'options.neteaseScrobble'),
-    // B 站那块的两行：MV 背景开关、登录（登录卡片自画，这里只为设置搜索登记）。
-    bilibiliMv: option(BILIBILI, 'bilibiliMv', 'options.bilibiliMv'),
-    bilibiliMvUseAi: option(BILIBILI, 'bilibiliMvUseAi', 'options.bilibiliMvUseAi'),
-    bilibiliLogin: option(BILIBILI, 'bilibiliLogin', 'options.bilibiliLogin'),
+    // B 站的 MV 开关与登录行都已退场（见上面 BILIBILI 组的说明）。
     transparentBackground: option(STREAMING, 'transparentPlayerBackground', 'options.transparentPlayerBackground'),
     obs: option(STREAMING, 'obsBrowserSource', 'options.obsBrowserSource', { electronOnly: true }),
     obsKeepAnimation: option(STREAMING, 'obsKeepMainWindowAnimation', 'options.obsKeepMainWindowAnimation', { electronOnly: true }),
