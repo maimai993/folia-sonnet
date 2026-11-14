@@ -57,6 +57,10 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 | [Andrea-lyz/ColorOS-Live-Lyrics-Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) | ColorOS 原生锁屏歌词（「媒体与播放」歌词页）的桥接协议参考。原生锁屏歌词那部分按它的协议写 `MediaMetadata["lyricInfo"]`。 |
 | [RemnantCloudGodofWar/folia-android](https://github.com/RemnantCloudGodofWar/folia-android)       | 同为 Folia 的 Android 化尝试，手机适配（紧凑布局、竖屏 / 横屏）与 AI 主题等做法参考了它。                        |
 | [EasonLai96/folia-major](https://github.com/EasonLai96/folia-major)                               | Android 上 YouTube Music 的真账号登录整套来自它的 [`android-v23`](https://github.com/EasonLai96/folia-major/releases/tag/android-v23) 版本：原生登录 Activity、Android Keystore 加密的会话持久化、secure-only Cookie 的签名与 canonical Origin 修复，以及 BotGuard poToken 加整首下载的音频路线。 |
+| [LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)                                         | 莱茵生命终端界面的复刻（Three.js 三维档案阵列，本地参考 `RhineLabUI-full`）。播放页的玻璃质感叠层、档案式排版与滚动数字 / 滚动标题等动效细节参考了它的设计与实现。 |
+| [maimai993/koishi-plugin-kkk](https://github.com/maimai993/koishi-plugin-kkk)                     | 同作者的多平台短视频 / 图文解析与动态推送插件。B 站内容解析（BV 号识别、视频信息、封面与作者字段）的取数思路参考了它。 |
+| [852wa/JIZURA](https://github.com/852wa/JIZURA)（本地参考 `jizura-repo`）                              | 歌词 PV 自動構成ツール：逐字歌词动画的表达方式（拍点对齐、逐字入场 / 退场、滚动文字、按seed变化的自动排版）在歌词动效调优时参考。 |
+| [maimai993/Mineradio-Android](https://github.com/maimai993/Mineradio-Android)（本地参考 `Mineradio-Android`） | 同类 Android 音乐客户端（横屏 H5 + Kotlin 壳 + Node.js 桥接 + Native C++）。把 Node.js 运行时打进 APK 的 assets 布局、H5 界面加密装载与原生桥的分层方式参考了它的结构。 |
 
 ## Android 上的 YouTube Music
 
