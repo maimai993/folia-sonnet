@@ -2472,7 +2472,8 @@ class FoliaPlaybackService : android.app.Service() {
             val comma = base64.indexOf(',')
             val payload = if (comma >= 0) base64.substring(comma + 1) else base64
             val bytes = Base64.decode(payload, Base64.DEFAULT)
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            // 同样按目标尺寸采样解码（#352）：Web 交下来的 data URL 也可能是超大原图。
+            return ArtworkDecoder.decodeSampled(bytes)
         } catch (error: Throwable) {
             // 封面解析失败不该影响播放与通知，退回默认图标即可。
             Log.w(TAG, "Failed to decode artwork", error)
@@ -3087,6 +3088,21 @@ class FoliaPlaybackService : android.app.Service() {
             return if (info.durationMs > 0L) Math.min(advanced, info.durationMs) else advanced
         }
 
+        /** 最多读 [limit] 字节；超过返回 null（不把半截数据当图）。 */
+        private fun readAtMost(stream: java.io.InputStream, limit: Int): ByteArray? {
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > limit) return null
+                out.write(buffer, 0, read)
+            }
+            return out.toByteArray()
+        }
+
         private fun downloadBitmap(url: String): Bitmap? {
             /*
              * blob: / data: 只有 WebView 自己认，原生这里没有这条协议。
@@ -3112,23 +3128,23 @@ class FoliaPlaybackService : android.app.Service() {
                     connection.disconnect()
                     return null
                 }
-                stream = connection.getInputStream()
-                val decoded = android.graphics.BitmapFactory.decodeStream(stream)
-                connection.disconnect()
-                if (decoded == null) {
+                // 声明的长度已经超限就不读了（#352）：省掉一次必败的下载。
+                val declared = connection.getContentLengthLong()
+                if (declared > ArtworkSampling.MAX_ARTWORK_BYTES) {
+                    Log.w(TAG, "Cover skipped: declared size $declared exceeds ${ArtworkSampling.MAX_ARTWORK_BYTES}: $url")
+                    connection.disconnect()
                     return null
                 }
-                // 通知栏只需要一张小图，顺手压到 512，避免大图白占内存。
-                val edge = Math.max(decoded.getWidth(), decoded.getHeight())
-                if (edge > 512) {
-                    val ratio = 512f / edge
-                    val scaled = android.graphics.Bitmap.createScaledBitmap(decoded,
-                            Math.round(decoded.getWidth() * ratio),
-                            Math.round(decoded.getHeight() * ratio), true)
-                    decoded.recycle()
-                    return scaled
+                stream = connection.getInputStream()
+                // 先把字节读进内存（带上限），再按目标尺寸采样解码：通知栏只要一张小图，
+                // 整张解码再缩放的峰值是整图像素的好几倍，超大封面会 OOM 并被当成「没有封面」。
+                val bytes = readAtMost(stream, ArtworkSampling.MAX_ARTWORK_BYTES)
+                connection.disconnect()
+                if (bytes == null) {
+                    Log.w(TAG, "Cover skipped: body exceeds ${ArtworkSampling.MAX_ARTWORK_BYTES} bytes: $url")
+                    return null
                 }
-                return decoded
+                return ArtworkDecoder.decodeSampled(bytes)
             } catch (error: Throwable) {
                 Log.w(TAG, "Failed to download the cover", error)
                 return null
