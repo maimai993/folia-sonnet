@@ -1,9 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { PlayerState } from '../../types';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
-import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { setDuration, setPlayerState, usePlaybackStore } from '../../stores/usePlaybackStore';
 import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nativePlaybackSync';
 import type { MutableRefObject } from 'react';
-import { setDuration } from '../../stores/usePlaybackStore';
 import { currentTime } from '../../stores/motionSignals';
 import { nativePlaybackEngine } from './nativePlaybackEngine';
 
@@ -109,7 +109,14 @@ export const useNativePlaybackRuntime = ({
         if (!shouldAutoPlayRef.current) return;
         shouldAutoPlayRef.current = false;
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
-        void nativePlaybackEngine.play().catch(error => {
+        const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
+        void nativePlaybackEngine.play().then(() => {
+            // 只让当前起播意图同步状态，避免迟到的结果覆盖暂停、换歌或 ABA 换源。
+            if (nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1) {
+                setPlayerState(PlayerState.PLAYING);
+            }
+        }).catch(error => {
+            if (nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });
