@@ -229,6 +229,21 @@ class WallpaperOverlay(private val context: Context) {
         return lockScreenPauseHold && _lockScreenHost != null
     }
 
+    /**
+     * 「暂停时隐藏」这一刻管不管得着这份快照。
+     *
+     * 快照的 playing=false 不全是暂停：播放器缓冲 / 欠载时也会被写成 false（时间轴该停住），
+     * 但那时播放意图还在，把叠层收走再淡回来就是用户报的「动画停住，然后整层消失」（#314）。
+     * 所以播放器明说「在等数据」的那段时间（有上限，见 STALL_HOLD_MAX_MS）不按暂停处理。
+     *
+     * shouldShow / describeHideReason / isContentExhausted 三处必须问同一句，否则收起的
+     * 决定和它写进日志的理由会对不上。
+     */
+    private fun hiddenForPause(snapshot: WallpaperLyricsState.Snapshot): Boolean {
+        return !snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()
+                && !WallpaperLyricsState.playerStallHeld()
+    }
+
     /** 见 lockScreenUnlockedAtMs。给 LockScreenMusicActivity 起来时自检用。 */
     fun lockScreenRecentlyUnlocked(): Boolean {
         return lockScreenUnlockedAtMs > 0L
@@ -597,8 +612,12 @@ class WallpaperOverlay(private val context: Context) {
                 && snapshot.positionMs() > INSTRUMENTAL_CONFIRM_MS) {
             return "纯音乐，且开了「跳过纯音乐」"
         }
-        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()) {
-            return "播放已暂停，且开了「暂停时隐藏」"
+        if (hiddenForPause(snapshot)) {
+            // 两种来路在日志里必须分得开（#314）：等数据等过了上限，和真的暂停。
+            return if (WallpaperLyricsState.playerStallExpired())
+                "播放器等数据超过上限（缓冲一直没恢复），且开了「暂停时隐藏」"
+            else
+                "播放已暂停，且开了「暂停时隐藏」"
         }
         if (lyricsFinished(snapshot)) {
             return "歌词已唱完，且开了「唱完自动隐藏」"
@@ -629,7 +648,7 @@ class WallpaperOverlay(private val context: Context) {
          * 锁屏面板上按的暂停不算「没内容」：那一页上就摆着播放键，钉住"别再起来"
          * 等于把它连同播放键一起判死，这一轮锁屏再也不会回来（见 lockScreenPauseHold）。
          */
-        return !snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()
+        return hiddenForPause(snapshot)
     }
 
     /** 锁屏页**不是**我们主动 finish 掉的时候（被系统回收了）由 Activity 调来记一笔。 */
@@ -1662,7 +1681,9 @@ class WallpaperOverlay(private val context: Context) {
         //
         // 例外是锁屏面板上按下暂停的那一次（见 lockScreenPauseHold）：那一页上
         // 有播放键，收走就等于把"续播"这个动作一起收走了。
-        if (!snapshot.playing && tuningFlag("wp.hideWhenPaused", true) && !pausedHideWaived()) {
+        //
+        // 另一个例外是播放器在等数据（缓冲 / 欠载）：那不是暂停，见 hiddenForPause（#314）。
+        if (hiddenForPause(snapshot)) {
             return false
         }
         // 歌词唱完了、后面还有很长的尾奏（有些曲子后半段就是纯音乐）：

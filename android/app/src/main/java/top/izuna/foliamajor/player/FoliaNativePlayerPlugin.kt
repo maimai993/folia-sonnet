@@ -39,9 +39,41 @@ import top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin
 @CapacitorPlugin(name = "FoliaNativePlayer")
 class FoliaNativePlayerPlugin : Plugin() {
 
+    @Volatile
     private var player: FoliaNativePlayer? = null
+    /** 本插件实例建播放器时拿到的代数；旧实例的事件与释放回调靠它识别自己已被取代（#314）。 */
+    @Volatile
+    private var playerGeneration = 0L
+
+    /** 在播放器线程换源前撤销旧媒体的缓冲豁免；代数过期（插件已被新实例取代）时不碰全局状态。 */
+    private fun prepareClearingStall(target: FoliaNativePlayer, url: String, startPositionMs: Long, mediaId: String?) {
+        val generation = playerGeneration
+        target.prepare(
+            url,
+            startPositionMs,
+            mediaId,
+            onPlayerThreadBeforePrepare = { PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() } },
+        )
+    }
+
+    /** 释放播放器：先让排队中的旧事件失效（player=null），释放完成后再清全局缓冲豁免，且只在代数仍是当前时清。 */
+    private fun releasePlayerAndClearStall() {
+        val generation = playerGeneration
+        val current = player
+        player = null
+        if (current != null) {
+            current.release {
+                PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+            }
+        } else {
+            PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+        }
+    }
 
     companion object {
+        /** 跨插件实例共享：新实例 load() 一旦推进代数，旧实例的任何迟到写入都被挡掉。 */
+        private val PLAYER_GENERATIONS = PlayerGeneration()
+
         private const val EVENT = "foliaNativePlayer"
 
         /** 过桥回到主线程用（播放器那条线程不能直接碰监听器表）。 */
@@ -165,7 +197,7 @@ class FoliaNativePlayerPlugin : Plugin() {
              */
             val url = top.izuna.foliamajor.FoliaPlaybackService.mirrorCurrentUrl()
             if (url.isNullOrEmpty()) return
-            player.prepare(url, currentPositionMs())
+            current.prepareClearingStall(player, url, currentPositionMs(), null)
             player.play()
         }
 
@@ -180,7 +212,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val current = instance
             val player = current?.player
             if (current == null || player == null || url == null || url.isEmpty()) return false
-            player.prepare(url, -1L, mediaId)
+            current.prepareClearingStall(player, url, -1L, mediaId)
             return true
         }
 
@@ -298,6 +330,10 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     override fun load() {
         instance = this
+        val generation = PLAYER_GENERATIONS.advance()
+        playerGeneration = generation
+        // 旧实例若还没销毁，它的释放回调会因代数过期而跳过清理；新播放器从干净的缓冲豁免开始。
+        WallpaperLyricsState.clearPlayerStall()
         /*
          * 均衡器先恢复再建播放器。
          *
@@ -309,10 +345,22 @@ class FoliaNativePlayerPlugin : Plugin() {
         // 文件头的「线程」那一节）—— 这里只是把壳子建出来。
         player = FoliaNativePlayer(getContext(), object : FoliaNativePlayer.Listener {
             override fun onEvent(type: String, positionMs: Long, durationMs: Long, message: String?) {
+                // 旧实例（已释放或已被新 load() 取代）排队中的事件不得写全局桌面歌词状态。
+                val self = player
+                if (self == null || !PLAYER_GENERATIONS.isCurrent(generation)) return
                 /*
                  * ⚠️ 这一下是**播放器线程**上跑的（播放循环在那条专用线程上，见
                  * FoliaNativePlayer 文件头的「线程」那一节），不在主线程。
                  */
+                /*
+                 * 先把「是不是在等数据」交给桌面歌词（#314），再写下面的锚点。
+                 *
+                 * 缓冲时下面那段会把快照写成 playing=false（时间轴该停住，这没错），而叠层的
+                 * 「暂停时隐藏」只认这一个布尔值：网络一卡，动画停 3.5 秒后整层淡出，缓冲完再
+                 * 淡回来。这一份让它分得清「用户暂停」和「在等数据」。每条事件都报（含 buffering /
+                 * error / idle 这些不写锚点的），值由播放器在发事件前按真值算好。
+                 */
+                WallpaperLyricsState.setPlayerStalled(self.isStalled())
                 /*
                  * 桌面歌词（壁纸 / 悬浮小窗 / 锁屏）的时间轴锚点：由播放器自己给，
                  * **就在这里写**，不再绕一次主线程 —— 锚点记的是「收到这个位置的那一刻」，
@@ -325,10 +373,9 @@ class FoliaNativePlayerPlugin : Plugin() {
                      * seeked 既可能是播放中的单曲循环，也可能是暂停时拖进度条：
                      * 不能用「不是 paused 就算在播」推，问播放器自己。
                      */
-                    val playing = if ("seeked" == type)
-                        player != null && player!!.isPlaying()
-                    else
-                        "paused" != type && player?.isBuffering() != true
+                    // READY 只表示已有可播放源，不表示已经出声；统一读取播放器线程缓存的真值，
+                    // 避免暂停发生在 READY 之前时被 ready 事件误写回 playing=true。
+                    val playing = anchorPlayingForEvent(type, self.isPlayingOnPlayerThread())
                     /*
                      * ⭐ **"position" 这一档不是每次都写锚点。**
                      *
@@ -363,7 +410,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                      * 抽一下」。倍速时不跳过，照旧每拍写（跟改之前一样），不引入回归。
                      * 真要把倍速也抹平，得让 WallpaperLyricsState 的外推带上速率。
                      */
-                    val unityRate = player != null && Math.abs(player!!.getSpeed() - 1f) < 0.01f
+                    val unityRate = Math.abs(self.getSpeed() - 1f) < 0.01f
                     val snapshot = WallpaperLyricsState.get()
                     if ("position" == type && playing && unityRate
                         && !displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, positionMs)) {
@@ -418,10 +465,10 @@ class FoliaNativePlayerPlugin : Plugin() {
                  */
                 payload.put("wallMs", System.currentTimeMillis().toDouble())
                 // ended / error 用事件发出时真实装着的那首（见 FoliaNativePlayer.emit），不用已被下一单提前改写的 lastMediaId。
-                val eventKey = if ("ended" == type || "error" == type) player?.lastEventMediaId() ?: "" else player?.currentMediaId() ?: ""
+                val eventKey = if ("ended" == type || "error" == type) self.lastEventMediaId() else self.currentMediaId()
                 payload.put("songKey", eventKey)
-                payload.put("playing", player?.isPlaying() == true)
-                payload.put("buffering", player?.isBuffering() == true)
+                payload.put("playing", self.isPlaying())
+                payload.put("buffering", self.isBuffering())
                 /*
                  * ⭐ **播完了自动下一首。**
                  *
@@ -524,12 +571,10 @@ class FoliaNativePlayerPlugin : Plugin() {
     }
 
     override fun handleOnDestroy() {
-        val current = player
-        if (current != null) {
-            current.release()
-            player = null
-        }
-        instance = null
+        // 先使排队中的旧播放器事件失效，再异步释放播放器线程；清理只在代数仍是当前时生效。
+        releasePlayerAndClearStall()
+        // 旧实例迟到销毁时不能把新实例的入口一并清掉。
+        if (instance === this) instance = null
         super.handleOnDestroy()
     }
 
@@ -566,11 +611,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         // 撤销条件：Web 亲自装源 = 手动换歌，进行中的过渡必须让位并恢复播放器状态。
         FoliaTransitionPlugin.interrupt("Web 亲自装源")
-        current.prepare(
-            url,
-            if (startPositionMs != null) startPositionMs.toLong() else -1L,
-            webSongKey,
-        )
+        // 旧媒体的缓冲豁免不能跨媒体继承：清理排到播放器线程、与旧事件同序，换源前旧事件无法再写回。
+        prepareClearingStall(current, url, if (startPositionMs != null) startPositionMs.toLong() else -1L, webSongKey)
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
         val result = JSObject()
@@ -819,10 +861,7 @@ class FoliaNativePlayerPlugin : Plugin() {
 
     @PluginMethod
     fun release(call: PluginCall) {
-        val current = player
-        if (current != null) {
-            current.release()
-        }
+        releasePlayerAndClearStall()
         call.resolve()
     }
 }
