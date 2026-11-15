@@ -151,7 +151,18 @@ export const useWallPosterArtwork = (
     );
 
     useEffect(() => {
-        if (!source || (current.cover === source && current.step >= targetStep)) return;
+        if (!source) return;
+        /*
+         * 这个 effect 的责任是「把这张图真的取回来」，不只是「升级到更大的档位」。
+         *
+         * 以前这里先判 `current.step >= targetStep` 就 return：而 pickDisplay 在什么档位都
+         * 没 decode 过时**正好**返回 `step = targetStep`（见它的最后一行），于是一张谁都没
+         * 取过的封面永远满足这个条件 —— effect 一次都不跑，decodeVariant 永远不会被调用，
+         * 卡片就一直停在渐变色块上。B 站图床更明显：它的地址不能直接摆进 <img src>，
+         * 必须等这一趟把字节换成本地 blob（见下面 display 那段），没跑就只能是空的。
+         *
+         * 所以判据改成「这张图解码过没有」，而不是「档位够不够」。
+         */
         const url = variantUrl(source, targetStep, keepOriginal);
         const upgrade = () => setReady({ cover: source, step: targetStep, url });
         if (decodedVariants.has(url)) {
@@ -163,17 +174,43 @@ export const useWallPosterArtwork = (
             if (decoded && !cancelled) upgrade();
         });
         return () => { cancelled = true; };
-    }, [current, source, targetStep, keepOriginal]);
+    }, [source, targetStep, keepOriginal]);
 
-    // B 站图床的地址不能直接摆到 <img src> 上（403 见上文）：decode 已把字节经原生
-    // 代理换成本地 blob，这里渲染出口同样换 —— URL 还没换好时给空串，卡片按「图未到」
-    // 画占位，blob 一到下一次渲染就是它。
-    const display = useMemo(() => {
+    /*
+     * B 站图床的地址不能直接摆到 <img src> 上（403 见上文）：decode 已把字节经原生
+     * 代理换成本地 blob，这里渲染出口同样换 —— URL 还没换好时给空串，卡片按「图未到」
+     * 画占位，blob 一到下一次渲染就是它。
+     *
+     * 但 `blobUrls` 是 hook 外面的一张表，往里写它不会让组件重新渲染：光靠 `current.url`
+     * 当依赖，blob 到齐了这里也不会再算一次，卡片就永远停在空串上（这正是冷启动首屏
+     * 一片渐变色块的原因）。所以这里自己记一份「这张图换好了没」，等到之后重算：
+     * 上面的 decodeVariant 本来就在等这一趟，两边是同一个 inflight。
+     */
+    const [localUrl, setLocalUrl] = useState<string | null>(() => {
         const url = current.url;
-        if (!url || !isHdslbImageUrl(url)) return url;
-        const local = hdslbImageBlobUrlSync(url);
-        return local ?? '';
+        return url && isHdslbImageUrl(url) ? hdslbImageBlobUrlSync(url) : null;
+    });
+
+    useEffect(() => {
+        const url = current.url;
+        if (!url || !isHdslbImageUrl(url)) {
+            setLocalUrl(null);
+            return;
+        }
+        const ready = hdslbImageBlobUrlSync(url);
+        if (ready) {
+            setLocalUrl(ready);
+            return;
+        }
+        let cancelled = false;
+        setLocalUrl(null);
+        void hdslbImageBlobUrl(url).then((local) => {
+            if (!cancelled && local) setLocalUrl(local);
+        });
+        return () => { cancelled = true; };
     }, [current.url]);
+
+    const display = current.url && isHdslbImageUrl(current.url) ? (localUrl ?? '') : current.url;
 
     return display;
 };

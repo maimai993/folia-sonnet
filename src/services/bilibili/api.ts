@@ -462,6 +462,8 @@ export const fetchBilibiliSubtitle = async (
 const qualityMaxHeight: Record<string, number> = {
     standard: 720,
     high: 1080,
+    // 1080P+ / 1080P60 / 4K 都是**大会员档**：高度上 1080P+ 与 1080P 一样是 1080，
+    // 差别在码率和帧率，所以这里只给上限、真正要哪一条由 qn 决定（见 qualityToQn）。
     ultra: 1080,
     lossless: 1080,
     hires: 2160,
@@ -633,52 +635,72 @@ export const fetchBilibiliPlayUrl = async (
     const signedIn = await isBilibiliSignedIn();
     const effectiveQuality = signedIn ? quality : 'standard';
     const wants4k = (qualityMaxHeight[effectiveQuality] ?? 720) > 1080;
-    const fnval = wants4k ? 4048 : 2 + 1 + 4; // dash + mp4 + hdr（2=dash, 1=mp4, 4=hdr）
-    const qn = qualityToQn[quality] ?? 64;
     /*
-     * 取流有两条路：wbi 签名版和老的普通版。
+     * 要哪些格式回来。
      *
-     * wbi 那条是「正路」，但它的签名校验对客户端挑得很：签名稍有出入（buvid 对不上、
-     * key 换了没跟住）就回 -400「请求错误」，而且**不管怎么重算签名都过不去** ——
-     * 这不是我们算错，是站方对这一跳的校验收得比文档说的严。
+     * 2=dash。比 720P 高一档起就把 4(hdr)、8(4K)、128(dolby) 一并要上 —— 这几档
+     * 都是**大会员档**（1080P+ / 1080P60 / 4K HDR），而 qn 已经是 112/116/120 了，
+     * 这里要是只要 dash，站方就按非会员处理、只回给你 1080P，用户会以为「会员白开了」。
+     * 要多了不会亏：pickVideoTrack 按 qn 对应的上限挑，多余的高码率轨不会被选中。
      *
-     * 老接口没有这层校验，实测在设备上直接给流（durl 模式，最高 720P）。所以先走
-     * wbi，一旦它拿 -400 就退到老接口：有流可比什么都没有强得多。字幕只有 wbi
-     * 那份会带，退路里就空着 —— 歌词优先的默认设置下用户看到的还是歌词。
+     * 基础档仍只要 dash，别把 4K/杜比塞进低端机上那一档的候选里。
      */
+    const fnval = signedIn && (qualityMaxHeight[effectiveQuality] ?? 720) > 720
+        ? 2 + 4 + 8 + 128
+        : 2;
+    const qn = qualityToQn[quality] ?? 64;
     let payload: PlayUrlDash;
-    // 番剧分集没有 bvid：playurl 对 PGC 内容认 ep_id（ep_id 与 cid 二选一或都给）。
-    const idParams: Record<string, string | number> = epId
-        ? { ep_id: epId, cid }
-        : { bvid, cid };
-    try {
-        const url = await signedUrl('/x/player/wbi/playurl', {
-            ...idParams,
-            qn,
-            fnval,
-            fourk: wants4k ? 1 : 0,
-        });
-        payload = unwrap(await fetchJson<PlayUrlDash>(url));
-    } catch (error) {
-        const code = error instanceof BilibiliApiError ? error.code : -1;
-        if (code !== -400 && code !== -403) throw error;
-        console.warn('[Bilibili] wbi playurl rejected, falling back to the plain endpoint', code,
-            'bvid:', bvid || '(none)', 'epId:', epId ?? '(none)', 'cid:', cid);
-        /*
-         * 退路不要带 platform=html5。
-         *
-         * html5 模式回的是渐进式 MP4（durl），实测它的真实时长比标称少一两秒，
-         * 播到尾巴上就提前 ended —— 用户看到的是「视频还没放完就切下一首，还差
-         * 一点点」。不带这个参数、给 fnval=16（只要 DASH），同一接口回的是分离的
-         * 音轨 + 画面轨，时长精确到毫秒、画质还更高（登录后能到 1080P）。
-         */
-        const idQuery = epId
-            ? `ep_id=${epId}&cid=${cid}`
-            : `bvid=${encodeURIComponent(bvid)}&cid=${cid}`;
-        const fallbackUrl = `${API_BASE}/x/player/playurl?${idQuery}`
-            + `&qn=${qn}&fnval=16&fnver=0&fourk=${wants4k ? 1 : 0}`;
-        payload = unwrap(await fetchJson<PlayUrlDash>(fallbackUrl));
+    /*
+     * 番剧 / 电影（PGC）走它自己那一套取流接口，不能用投稿的那条。
+     *
+     * `x/player/playurl`（和它的 wbi 版）只认投稿：传 `ep_id` 进去一律回
+     * **-400「请求错误」**，连改回 bvid 也没用 —— 分集压根没有 bvid。番剧的正确入口是
+     * `pgc/player/web/playurl`，而且它**必须**带上 qn 与 fnval：不带这两个参数它只回
+     * 一条 durl（渐进式 MP4，没有独立音轨），带上才给 DASH —— 这里的 pickAudioTrack
+     * 要的是 dash.audio，拿 durl 那份就挑不出音轨，播放器一声不响。
+     */
+    if (epId) {
+        const pgcUrl = `${API_BASE}/pgc/player/web/playurl?ep_id=${epId}&cid=${cid}`
+            + `&qn=${qn}&fnval=${fnval <= 7 ? 16 : fnval}&fnver=0&fourk=${wants4k ? 1 : 0}`;
+        type PgcEnvelope = ApiEnvelope<PlayUrlDash> & { result?: PlayUrlDash };
+        const body = await fetchJson<PlayUrlDash>(pgcUrl) as PgcEnvelope;
+        if (body.code !== 0) {
+            throw new BilibiliApiError(body.code, body.message || `bilibili error ${body.code}`);
+        }
+        // PGC 这一个把内容放在 result 里，不是 data。
+        const result = body.result ?? body.data;
+        if (!result) throw new BilibiliApiError(-404, 'no playurl result');
+        payload = result;
+        const pgcTrack = pickVideoTrack(payload, effectiveQuality);
+        if (!pgcTrack) throw new BilibiliApiError(-404, 'no video stream');
+        return {
+            ...pgcTrack,
+            audioUrl: pickAudioTrack(payload),
+            audioUrls: pickAudioCandidates(payload),
+            subtitles: payload.subtitle?.subtitles ?? [],
+        };
     }
+    /*
+     * 投稿的取流：直接问老接口，**不要 wbi 签名**。
+     *
+     * 以前先走 `/x/player/wbi/playurl`，拿 -400 再退到这条 —— 结果设备上每一条投稿
+     * 都稳稳回 -400（日志里那一串 "wbi playurl rejected ... -400"），等于每次都白问
+     * 一趟再回退。实测这个接口**根本不校验 w_rid**：带一个瞎编的签名照样回 code 0。
+     * 换句话说 -400 不是「签名不够」，是我们多塞的 wts / w_rid 让它不认这些参数 ——
+     * 签名在这条路上只会帮倒忙。
+     *
+     * 所以现在只走一次老接口，并且照旧带 fnval（要 DASH）：DASH 才有独立的音轨，
+     * 而播放器要的正是那条音轨；只要 durl 的话 pickAudioTrack 挑不出东西。
+     */
+    {
+        const url = `${API_BASE}/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}`
+            + `&qn=${qn}&fnval=${fnval}&fnver=0&fourk=${wants4k ? 1 : 0}`;
+        payload = unwrap(await fetchJson<PlayUrlDash>(url));
+    }
+    /*
+     * 老接口不给字幕（subtitle 字段恒空）。字幕不在这次的响应里，另外去要一遍的事
+     * 不在这里做 —— 歌词优先的默认设置下用户看到的就是歌词，够用。
+     */
     const track = pickVideoTrack(payload, effectiveQuality);
     if (!track) throw new BilibiliApiError(-404, 'no video stream');
     // 字幕跟着取流一起回来：它和 playurl 是同一次请求，单独再要一遍是白跑。

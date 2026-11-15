@@ -2,6 +2,7 @@ import React from 'react';
 import { AudioLines, Disc, SlidersHorizontal, ListMusic, FileAudio, FileText, Radio, Cloud } from 'lucide-react';
 import { locatePlayingSong } from './app/playing-song-locator/playingSongLocator';
 import { useTranslation } from 'react-i18next';
+import { useLibraryAccountProviders } from '../library/core/account/useLibraryAccount';
 import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, ThemeMode, VisualizerMode } from '../types';
 import type { LibraryAccountController } from '../library/core/account/account.contract';
 import ControlsTab from './panelTab/ControlsTab';
@@ -122,6 +123,8 @@ type UnifiedPanelQueueProps = {
 
 type UnifiedPanelAccountProps = {
     accountController: LibraryAccountController;
+    /** 打开某个 UP 主的投稿页（账号页里关注 / 粉丝列表点头像）。不给就不可点。 */
+    onOpenBilibiliUser?: (mid: number, name: string) => void;
     audioQuality: AudioQualityPreference;
     onAudioQualityChange: (quality: AudioQualityPreference) => void;
     onSyncData: () => void;
@@ -156,6 +159,10 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
 }) => {
     countRender('UnifiedPanel');
     const { t } = useTranslation();
+    // 这一家的质量选项选的其实是画面（见下面那页标题）：认它一个就够，别到处散落字符串。
+    const { activeProviderId } = useLibraryAccountProviders(account.accountController);
+    const { onOpenBilibiliUser } = account;
+    const qualityIsPicture = activeProviderId === 'bilibili';
     // Read here and not handed down from App.tsx: a change of tab renders the panel, not the app.
     const currentTab = useAppViewStore(state => state.panelTab);
     const {
@@ -265,7 +272,18 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         isFmMode 
             ? { id: 'queue' as PanelTab, label: t('home.radio'), icon: Radio }
             : { id: 'queue' as PanelTab, label: t('panel.playlist'), icon: ListMusic },
-        { id: 'account' as PanelTab, label: t('panel.account'), icon: AudioLines },
+        /*
+         * 这一页的标题跟着平台走。
+         *
+         * 视频站那一家的「音质」实际是清晰度 —— 取流时画面和声音是绑在一起选的，
+         * 叫「音质」会让人以为能单独调声音。认的是 isVideoPlatform，和页里那行
+         * 质量选项用的是同一个判断（AccountTab 的 qualityIsPicture），别让两处对不上。
+         */
+        {
+            id: 'account' as PanelTab,
+            label: qualityIsPicture ? t('panel.videoQuality') : t('panel.account'),
+            icon: AudioLines,
+        },
     ];
 
     if (isLocal) {
@@ -470,6 +488,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         onToggle();
                         onNavigateHome();
                     }}
+                    onOpenBilibiliUser={onOpenBilibiliUser && ((mid, name) => {
+                        // 面板先收起来：歌手页是全屏的，留着这一层在上面没有意义。
+                        onToggle();
+                        onOpenBilibiliUser(mid, name);
+                    })}
                 />
             )}
             {currentTab === 'local' && isLocal && (

@@ -451,7 +451,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     vocalCancelCacheLimit: 0,
     vocalTrackMode: 'off',
     // 默认关：预拆两轨是几十秒的推理，不替用户决定要不要占这份负载。
-    prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, false),
+    // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
+    prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
     audioEqualizerModCurve: readStoredAudioEqualizerModCurve(initialAudioEqualizerSettings),

@@ -53,7 +53,6 @@ const StoragePage: React.FC = () => {
     // 进存储页问一次，和其余缓存一起量。
     const vocalCachedCount = useAudioSettingsStore(state => state.vocalCancelCachedCount);
     const vocalCacheBytes = useAudioSettingsStore(state => state.vocalCancelCacheBytes);
-    const vocalCacheLimit = useAudioSettingsStore(state => state.vocalCancelCacheLimit);
     useEffect(() => {
         if (isCapacitorAndroid()) refreshInstrumentalStatus();
     }, []);
@@ -122,23 +121,32 @@ const StoragePage: React.FC = () => {
                 <Row label={t('options.cachedSongsCount')}>
                     <Value>{mediaCount} · {cacheSizes.media}</Value>
                 </Row>
-                {isCapacitorAndroid() && (
-                    <Row label={t('options.prebuildTracks')} hint={t('options.prebuildTracksDesc')}>
-                        <Toggle checked={prebuildTracksEnabled} onChange={setPrebuildTracksEnabled} />
-                    </Row>
-                )}
+                {/*
+                 * 分轨的两行贴着放，紧挨在「清除」之上 —— 它们说的是同一件事（分离出来的
+                 * 那些音轨），中间隔开缓存目录 / 上限那几行就会看不出来是一组。
+                 */}
                 {isCapacitorAndroid() && (
                     <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
+                        {/*
+                         * 只说用掉多少、存了几首。
+                         *
+                         * 上限那一截不再写了：这个上限不是能调的东西（它按曲库大小自己定），
+                         * 摆出来只会让人去找那个调不了的数字。
+                         */}
                         {vocalCachedCount > 0 && (
-                            <Value>{t('account.vocalCancelCache', {
+                            <Value>{t('account.vocalCancelCacheUsed', {
                                 count: vocalCachedCount,
                                 used: formatCacheSize(vocalCacheBytes),
-                                limit: formatCacheSize(vocalCacheLimit),
                             })}</Value>
                         )}
                         <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
                             {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
                         </Button>
+                    </Row>
+                )}
+                {isCapacitorAndroid() && (
+                    <Row label={t('options.prebuildTracks')} hint={t('options.prebuildTracksDesc')}>
+                        <Toggle checked={prebuildTracksEnabled} onChange={setPrebuildTracksEnabled} />
                     </Row>
                 )}
             </Group>

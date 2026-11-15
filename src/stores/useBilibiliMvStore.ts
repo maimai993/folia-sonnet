@@ -45,6 +45,17 @@ const ENABLED_STORAGE_KEY = 'bilibili_mv_enabled';
 /** 「让 AI 判断哪条是 MV」落盘的键。默认开：配了 AI 就该用它。 */
 const USE_AI_MATCH_STORAGE_KEY = 'bilibili_mv_use_ai';
 
+/** MV 画面清晰度落盘的键。只对「不是 B 站平台的歌」生效，见 MvVideoQuality。 */
+const MV_QUALITY_STORAGE_KEY = 'bilibili_mv_quality';
+
+/**
+ * MV 画面的清晰度档位。
+ *
+ * 三档是有意压过的：B 站的 qn 表里有 1080P+/60/4K，但那几档要么是大会员、要么在
+ * 手机上解码吃力，而这个画面**只是背景**。三档刚好对应「省电 / 一般 / 最清楚」。
+ */
+export type MvVideoQuality = 'standard' | 'high' | 'ultra';
+
 const readStoredUseAi = (): boolean => {
     try {
         const raw = localStorage.getItem(USE_AI_MATCH_STORAGE_KEY);
@@ -52,6 +63,22 @@ const readStoredUseAi = (): boolean => {
         return raw === null ? true : raw === '1';
     } catch {
         return true;
+    }
+};
+
+/**
+ * MV 画面要哪一档清晰度。
+ *
+ * 只在**非 B 站平台**下有意义：B 站自己的投稿取流不受它管（走播放器那套音质偏好），
+ * 这里管的是「这首歌不是 B 站的，MV 是另找的一条视频」。默认 standard（720P）：
+ * 背景是衬在歌词后面的，1080P 起在手机上解码吃力，也没有肉眼可见的收益。
+ */
+const readStoredQuality = (): MvVideoQuality => {
+    try {
+        const raw = localStorage.getItem(MV_QUALITY_STORAGE_KEY);
+        return raw === 'high' || raw === 'ultra' ? raw : 'standard';
+    } catch {
+        return 'standard';
     }
 };
 
@@ -89,6 +116,8 @@ interface BilibiliMvState {
     /** MV 铺上时把歌词动画整个关掉，只留视频。 */
     /** 配了 AI 时，让它判断哪条投稿才是这首歌的 MV（关掉就用打分规则）。 */
     useAiMatch: boolean;
+    /** MV 画面清晰度。只对非 B 站平台的歌有意义（见 MvVideoQuality）。 */
+    quality: MvVideoQuality;
     /**
      * 被背景样式强制打开（见 visualizer 的 mv 样式）。
      *
@@ -111,6 +140,7 @@ interface BilibiliMvState {
 const initialState: BilibiliMvState = {
     enabled: readStoredEnabled(),
     useAiMatch: readStoredUseAi(),
+    quality: readStoredQuality(),
     forcedByStyle: false,
     bySongKey: {},
     inflight: {},
@@ -121,6 +151,7 @@ interface BilibiliMvActions {
     /** 背景样式要求强制打开（它自己不写用户的开关）。 */
     setForcedByStyle: (forced: boolean) => void;
     setUseAiMatch: (use: boolean) => void;
+    setQuality: (quality: MvVideoQuality) => void;
     /**
      * 把某条 BV 直接钉给这首歌当背景（搜索结果里点一条时用）。
      *
@@ -237,6 +268,15 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
         set({ useAiMatch: use });
     },
 
+    setQuality: (quality) => {
+        try {
+            localStorage.setItem(MV_QUALITY_STORAGE_KEY, quality);
+        } catch {
+            // 存不下也不影响这次运行。
+        }
+        set({ quality });
+    },
+
     /**
      * 解析一首歌的 MV。
      *
@@ -327,7 +367,8 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
             }
 
             const info = await fetchBilibiliVideoInfo(best.bvid);
-            const track = await fetchBilibiliPlayUrl(best.bvid, info.cid);
+            // 画质跟着设置里那一档走：这个画面是背景，默认 720P 就够，用户嫌糊可以自己调。
+            const track = await fetchBilibiliPlayUrl(best.bvid, info.cid, get().quality);
             /*
              * 画面和声音都走原生中转。
              *
@@ -439,7 +480,7 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
             // 里 pinBv 的语义一致 —— 不该还要再回设置里开一次）。
             if (!get().enabled) get().setEnabled(true);
             const info = await fetchBilibiliVideoInfo(clean);
-            const track = await fetchBilibiliPlayUrl(clean, info.cid);
+            const track = await fetchBilibiliPlayUrl(clean, info.cid, get().quality);
             const streamHeaders = {
                 Referer: 'https://www.bilibili.com/',
                 Origin: 'https://www.bilibili.com',

@@ -60,7 +60,14 @@ object VideoStreamProxy {
         synchronized(this) {
             if (started.get() && port > 0) return port
             try {
-                val socket = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
+                /*
+                 * backlog 给足一些。
+                 *
+                 * 原来只有 8：拖动进度条的那一刻，播放器会把手上几条连接全部掐掉重开，
+                 * 外加预读那条，瞬间就能把队列占满 —— 满了之后新连接直接被内核回绝，
+                 * 播放器侧看到的就是「播放出现错误」，而且这条流后面再也接不上。
+                 */
+                val socket = ServerSocket(0, 64, InetAddress.getByName("127.0.0.1"))
                 server = socket
                 port = socket.localPort
                 started.set(true)
@@ -138,18 +145,28 @@ object VideoStreamProxy {
                     writeSimple(output, "404 Not Found", "stream gone")
                     return
                 }
-                // 按候选顺序试：一台回 403 就换下一台。
+                /*
+                 * 按候选顺序试：一台回 403 就换下一台。
+                 *
+                 * `responded` 说的是「这条连接上已经出现过一个 HTTP 响应了」。它一旦为真，
+                 * 就**不能再补任何一个响应** —— 补上去就是两个响应叠在一条连接上，播放器
+                 * 读到的是脏数据（拖进度条时报「播放出现错误」、之后这条流不再出声）。
+                 * 传输中途断掉时唯一正确的做法是把连接关掉，让播放器自己重开一条。
+                 */
+                var responded = false
                 var served = false
                 for (url in entry.urls) {
                     if (served) break
-                    served = try {
-                        relay(url, entry.headers, range, output)
+                    try {
+                        served = relay(url, entry.headers, range, output, onHead = { responded = true })
                     } catch (error: Exception) {
                         Log.w(TAG, "relay failed, trying the next address", error)
-                        false
+                        // 已经把响应头吐出去的那条路不能再换地址重来（同一个连接上没法重开一个响应）。
+                        if (responded) return
+                        served = false
                     }
                 }
-                if (!served) writeSimple(output, "502 Bad Gateway", "no address answered")
+                if (!served && !responded) writeSimple(output, "502 Bad Gateway", "no address answered")
             }
         } catch (error: Exception) {
             Log.w(TAG, "video proxy connection failed", error)
@@ -167,6 +184,7 @@ object VideoStreamProxy {
         headers: Map<String, String>,
         range: String?,
         output: OutputStream,
+        onHead: () -> Unit = {},
     ): Boolean {
         val builder = Request.Builder().url(url)
         headers.forEach { (name, value) -> builder.header(name, value) }
@@ -174,7 +192,14 @@ object VideoStreamProxy {
 
         val response: Response = client.newCall(builder.build()).execute()
         response.use { opened ->
-            // 这一个地址拒绝了，让调用方换下一个。
+            /*
+             * 这一个地址拒绝了就让调用方换下一个 —— 但**必须在写响应头之前**判定。
+             *
+             * 一旦下面那行 output.write(head) 跑过，这条连接上就已经有一个 HTTP 响应了；
+             * 此时再失败、再让调用方补一个 502，等于把两个响应的字节首尾相接塞给播放器。
+             * 播放器按第一个响应的 Content-Length 读完就关连接，多出来那段成了脏数据 ——
+             * 表现正是「拖进度条时报播放出错」，而且这次之后这条流彻底不出声。
+             */
             if (opened.code == 403 || opened.code >= 500) return false
             if (!opened.isSuccessful && opened.code != 206) return false
 
@@ -193,6 +218,8 @@ object VideoStreamProxy {
             head.append("Connection: close\r\n\r\n")
             output.write(head.toString().toByteArray())
             output.flush()
+            // 从这一刻起这条连接上已经有一个响应了，调用方不许再补。
+            onHead()
 
             body.byteStream().use { source ->
                 copyStream(source, output)

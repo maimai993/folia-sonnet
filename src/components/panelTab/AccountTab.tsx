@@ -39,6 +39,8 @@ interface AccountTabProps {
     onSyncData: () => void;
     isSyncing: boolean;
     onNavigateHome: () => void;
+    /** 打开某个 UP 主的投稿页（关注 / 粉丝列表里点头像）。不给就不可点。 */
+    onOpenBilibiliUser?: (mid: number, name: string) => void;
     /** 投送浮层按日间/夜间取配色（和播放页那颗旧按钮一致）。 */
     isDaylight: boolean;
 }
@@ -77,6 +79,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
     onSyncData,
     isSyncing,
     onNavigateHome,
+    onOpenBilibiliUser,
     isDaylight,
 }) => {
     const { t } = useTranslation();
@@ -270,7 +273,12 @@ const AccountTab: React.FC<AccountTabProps> = ({
             {/* B 站特有的那几行：关注 / 粉丝 / 签名。只在登录着、且当前平台就是它时挂出来 ——
                 别的平台没有「关注」这种关系，摆一行点了没反应的按钮比不摆更糟。 */}
             {activeUser && activeProviderId === 'bilibili' && (
-                <BilibiliAccountRows providerId={activeProviderId} />
+                <BilibiliAccountRows
+                    providerId={activeProviderId}
+                    onOpenUser={onOpenBilibiliUser
+                        ? user => onOpenBilibiliUser(user.mid, user.name)
+                        : undefined}
+                />
             )}
 
             {activeUser && (

@@ -1012,10 +1012,15 @@ class LocalAudioServer(context: Context) {
             connection.connectTimeout = 8000
             connection.readTimeout = 15000
             connection.instanceFollowRedirects = true
+            // 先给个兜底 UA，平台自己那份随后覆盖 —— 有的 CDN 对太短的 UA 直接回 403，
+            // 而播放器和这里用不同 UA 就会出现「播得动却存不下来」（分离会因此退回 WebView）。
             connection.setRequestProperty("User-Agent", "Mozilla/5.0")
             // 飞牛这类「要会话 Cookie 才给字节」的源：网关认识自己的 URL，
             // 要带什么头由它说（见 MusicGateway.headersForPlaybackUrl）。
-            for ((key, headerValue) in top.izuna.foliamajor.online.MusicGateway.headersForPlaybackUrl(audioUrl)) {
+            // 视频站的 CDN 防盗链也走这里：它会给回 Referer / Origin / UA。
+            val platformHeaders =
+                top.izuna.foliamajor.online.MusicGateway.headersForPlaybackUrl(audioUrl)
+            for ((key, headerValue) in platformHeaders) {
                 connection.setRequestProperty(key, headerValue)
             }
             val code = connection.responseCode

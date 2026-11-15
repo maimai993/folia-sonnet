@@ -140,7 +140,7 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         for (const folder of folders.list ?? []) {
             const folderId = folder.id;
             if (typeof folderId !== 'number') continue;
-            shelves.push({
+            const shelf: BilibiliShelf = {
                 id: `fav:${folderId}`,
                 title: folder.title ?? '',
                 coverUrl: https(folder.cover),
@@ -162,9 +162,17 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                         all.push(...items);
                         if (items.length === 0 || page.has_more === false) break;
                     }
+                    /*
+                     * 收藏夹自己没有封面图（`fav/folder/created/list-all` 回的字段里就没有
+                     * cover 这一项），只能用夹内第一条的图当封面 —— 站内列表也是这么做的。
+                     * 不回填的话卡片永远摆一个渐变色块，点进去再返回才「突然有了图」
+                     * （那一次是缓存里已经有条目了）。
+                     */
+                    if (!shelf.coverUrl && all[0]?.coverUrl) shelf.coverUrl = all[0].coverUrl;
                     return all;
                 },
-            });
+            };
+            shelves.push(shelf);
         }
     } catch {
         // 这个分类取不到就不摆它，别把整个歌单页判成失败。

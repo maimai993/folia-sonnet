@@ -104,6 +104,7 @@ export const STORAGE_KEYS = [
     'web:background_throttling',
     'web:bilibili_mv_enabled',
     'web:bilibili_mv_use_ai',
+'web:bilibili_mv_quality',
     'web:bodianSessionV1',
     'web:close_to_tray',
     'web:command_palette_frequency_v1',

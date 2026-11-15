@@ -17,6 +17,8 @@ const MvBackgroundSettingsCard: React.FC<{ t: (key: string) => string }> = ({ t 
     const setUseAiMatch = useBilibiliMvStore(state => state.setUseAiMatch);
     const mvLyricSource = useLyricSettingsStore(state => state.mvLyricSource);
     const setMvLyricSource = useLyricSettingsStore(state => state.handleSetMvLyricSource);
+    const quality = useBilibiliMvStore(state => state.quality);
+    const setQuality = useBilibiliMvStore(state => state.setQuality);
     const aiReady = isAiTargetConfigured();
 
     return (
@@ -32,6 +34,18 @@ const MvBackgroundSettingsCard: React.FC<{ t: (key: string) => string }> = ({ t 
             {!aiReady && (
                 <p className="text-[12px] opacity-60">{t('options.mvBackgroundAiNeedsTarget')}</p>
             )}
+            <label className="flex items-center justify-between gap-3">
+                <span>{t('options.mvBackgroundQuality')}</span>
+                <Select
+                    value={quality}
+                    onChange={value => setQuality(value === 'high' || value === 'ultra' ? value : 'standard')}
+                    options={[
+                        { value: 'standard', label: t('options.mvBackgroundQualityStandard') },
+                        { value: 'high', label: t('options.mvBackgroundQualityHigh') },
+                        { value: 'ultra', label: t('options.mvBackgroundQualityUltra') },
+                    ]}
+                />
+            </label>
             <label className="flex items-center justify-between gap-3">
                 <span>{t('options.mvBackgroundLyricSource')}</span>
                 <Select
