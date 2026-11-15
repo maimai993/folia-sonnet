@@ -16,7 +16,7 @@ const harness = vi.hoisted(() => {
         play: vi.fn(async () => undefined),
         pause: vi.fn(async () => undefined),
         stop: vi.fn(async () => undefined),
-        seek: vi.fn(async () => undefined),
+        seek: vi.fn(async (_positionMs?: number) => undefined),
         setVolume: vi.fn(async () => undefined),
         setSpeed: vi.fn(async () => undefined),
         getSnapshot: vi.fn(async () => ({ positionMs: 0, durationMs: 0, playing: false })),
@@ -34,7 +34,7 @@ vi.mock('@/services/playbackEngine/nativePlayerPlugin', () => ({
     isNativePlayerAvailable: () => true,
 }));
 
-const { nativePlaybackEngine } = await import('@/services/playbackEngine/nativePlaybackEngine');
+const { nativePlaybackEngine, isStaleSourceEvent } = await import('@/services/playbackEngine/nativePlaybackEngine');
 
 const emit = (event: NativePlaybackEvent): void => {
     harness.listeners.forEach(listener => listener(event));
@@ -221,6 +221,133 @@ describe('nativePlaybackEngine clock', () => {
         nowMs = 10000;
         expect(nativePlaybackEngine.getPositionSec()).toBe(0);
         expect(nativePlaybackEngine.isPlaying()).toBe(false);
+    });
+
+    // ---- #337 #339 #341：原生命令结算与 source 令牌 ----
+
+    it('sends a fresh source token with every prepare and tags the adopted source with it', async () => {
+        vi.clearAllMocks();
+        await nativePlaybackEngine.setSource('https://example.invalid/T1', { songKey: 'T' });
+        await nativePlaybackEngine.setSource('https://example.invalid/T2', { songKey: 'T' });
+        const tokens = harness.nativePlayer.prepare.mock.calls.map((call: unknown[]) => (call[0] as { sourceToken?: string }).sourceToken);
+        expect(tokens).toHaveLength(2);
+        expect(tokens[0]).toMatch(/^w:[a-z0-9]+\.\d+$/);
+        expect(tokens[1]).toMatch(/^w:[a-z0-9]+\.\d+$/);
+        expect(tokens[0]).not.toBe(tokens[1]);
+    });
+
+    it('drops a late event of an older source even when songKey is identical (A→B→A)', async () => {
+        vi.clearAllMocks();
+        await nativePlaybackEngine.setSource('https://example.invalid/A1', { songKey: 'A' });
+        await nativePlaybackEngine.setSource('https://example.invalid/B', { songKey: 'B' });
+        await nativePlaybackEngine.setSource('https://example.invalid/A2', { songKey: 'A' });
+        const tokens = harness.nativePlayer.prepare.mock.calls.map((call: unknown[]) => (call[0] as { sourceToken: string }).sourceToken);
+        const first = tokens[0];
+        const third = tokens[2];
+        nowMs = 1000;
+        emit({ type: 'playing', songKey: 'A', sourceToken: first, positionMs: 70_000, durationMs: 200_000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+        emit({ type: 'playing', songKey: 'A', sourceToken: third, positionMs: 2000, durationMs: 200_000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    it('after adopting a snapshot only events of the adopted token are applied', () => {
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'B', sourceToken: 'n:t9', url: 'https://example.invalid/B', positionMs: 5000, durationMs: 90000, playing: false });
+        emit({ type: 'playing', songKey: 'B', sourceToken: 'n:t8', positionMs: 50_000, durationMs: 90000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+        emit({ type: 'playing', songKey: 'B', sourceToken: 'n:t9', positionMs: 5000, durationMs: 90000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    it('does not record playing when native reports the play was superseded', async () => {
+        await nativePlaybackEngine.pause();
+        harness.nativePlayer.play.mockImplementationOnce(async () => ({ ok: false, stale: true, reason: 'intent-superseded' }) as never);
+        const applied = await nativePlaybackEngine.play();
+        expect(applied).toBe(false);
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+    });
+
+    it('reports play() as applied only when native really executed it', async () => {
+        await nativePlaybackEngine.pause();
+        expect(await nativePlaybackEngine.play()).toBe(true);
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    // M1：原生自己重装同一个 songKey（单曲循环 / 单曲队列的下一首）时令牌是 n:，Web 还是 w:，不能全丢。
+    it('keeps accepting events from a native-initiated reload of the same song', async () => {
+        await nativePlaybackEngine.pause();
+        await nativePlaybackEngine.setSource('https://example.invalid/L', { songKey: 'L' });
+        nowMs = 1000;
+        emit({ type: 'playing', songKey: 'L', sourceToken: 'n:t7', positionMs: 0, durationMs: 100_000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    it('still drops a late event that carries a web token the engine already retired', async () => {
+        await nativePlaybackEngine.setSource('https://example.invalid/M1', { songKey: 'M' });
+        await nativePlaybackEngine.setSource('https://example.invalid/M2', { songKey: 'M' });
+        const prepareTokens = harness.nativePlayer.prepare.mock.calls.map((call: unknown[]) => (call[0] as { sourceToken: string }).sourceToken);
+        const first = prepareTokens[prepareTokens.length - 2];
+        await nativePlaybackEngine.pause();
+        emit({ type: 'playing', songKey: 'M', sourceToken: first, positionMs: 5000, durationMs: 100_000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+    });
+
+    it('decides staleness from both tokens (unknown on either side lets the event through)', () => {
+        expect(isStaleSourceEvent(undefined, 'w:a.1')).toBe(false);
+        expect(isStaleSourceEvent('', 'w:a.1')).toBe(false);
+        expect(isStaleSourceEvent('w:a.1', null)).toBe(false);
+        expect(isStaleSourceEvent('w:a.1', 'w:a.1')).toBe(false);
+        expect(isStaleSourceEvent('w:a.1', 'w:a.2')).toBe(true);
+        expect(isStaleSourceEvent('n:t3', 'w:a.2')).toBe(false);
+        expect(isStaleSourceEvent('n:t3', 'n:t4')).toBe(true);
+        expect(isStaleSourceEvent('w:a.1', 'n:t4')).toBe(true);
+    });
+
+    it('lets a pause that is superseded by a later play yield to the play', async () => {
+        const pausing = nativePlaybackEngine.pause();
+        const playing = nativePlaybackEngine.play();
+        await Promise.all([pausing, playing]);
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    it('does not push a stale volume to a superseded prepare', async () => {
+        vi.clearAllMocks();
+        harness.nativePlayer.prepare.mockImplementationOnce(async () => ({ ok: false, stale: true, reason: 'source-superseded' }));
+        await nativePlaybackEngine.setSource('https://example.invalid/S', { songKey: 'S' });
+        expect(harness.nativePlayer.setVolume).not.toHaveBeenCalled();
+    });
+
+    it('queues seeks behind a pending prepare and keeps the last seek last', async () => {
+        vi.clearAllMocks();
+        const order: string[] = [];
+        let releasePrepare: (() => void) | undefined;
+        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<{ ok: boolean }>(resolve => {
+            releasePrepare = () => { order.push('prepare'); resolve({ ok: true }); };
+        }));
+        harness.nativePlayer.seek.mockImplementation(async (position?: number) => { order.push(`seek:${position}`); return undefined; });
+        const source = nativePlaybackEngine.setSource('https://example.invalid/Q', { songKey: 'Q' });
+        await vi.waitFor(() => expect(releasePrepare).toBeDefined());
+        const first = nativePlaybackEngine.seek(10);
+        const second = nativePlaybackEngine.seek(20);
+        releasePrepare?.();
+        await Promise.all([source, first, second]);
+        expect(order).toEqual(['prepare', 'seek:10000', 'seek:20000']);
+        harness.nativePlayer.seek.mockImplementation(async () => undefined);
+    });
+
+    it('drops a queued seek once the source changed', async () => {
+        vi.clearAllMocks();
+        let releasePrepare: (() => void) | undefined;
+        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<{ ok: boolean }>(resolve => {
+            releasePrepare = () => resolve({ ok: true });
+        }));
+        const source = nativePlaybackEngine.setSource('https://example.invalid/R1', { songKey: 'R1' });
+        await vi.waitFor(() => expect(releasePrepare).toBeDefined());
+        const seek = nativePlaybackEngine.seek(30);
+        const next = nativePlaybackEngine.setSource('https://example.invalid/R2', { songKey: 'R2' });
+        releasePrepare?.();
+        await Promise.all([source, seek, next]);
+        expect(harness.nativePlayer.seek).not.toHaveBeenCalled();
     });
 
     it('resets to zero when the player loops the track', () => {

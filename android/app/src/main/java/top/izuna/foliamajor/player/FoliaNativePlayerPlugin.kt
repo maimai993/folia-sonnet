@@ -78,9 +78,11 @@ class FoliaNativePlayerPlugin : Plugin() {
             val playing: Boolean,
             val speed: Float,
             val buffering: Boolean,
+            val sourceToken: String = "",
         ) {
             fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
                 put("songKey", songKey)
+                put("sourceToken", sourceToken)
                 put("url", url)
                 put("positionMs", positionMs)
                 put("durationMs", durationMs)
@@ -111,6 +113,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                 player.isPlaying(),
                 player.getSpeed(),
                 player.isBuffering(),
+                player.currentSourceToken(),
             )
         }
 
@@ -308,7 +311,7 @@ class FoliaNativePlayerPlugin : Plugin() {
         // load() 在主线程上跑，但播放器自己会起一条专用线程（见 FoliaNativePlayer
         // 文件头的「线程」那一节）—— 这里只是把壳子建出来。
         player = FoliaNativePlayer(getContext(), object : FoliaNativePlayer.Listener {
-            override fun onEvent(type: String, positionMs: Long, durationMs: Long, message: String?) {
+            override fun onEvent(type: String, positionMs: Long, durationMs: Long, message: String?, sourceToken: String) {
                 /*
                  * ⚠️ 这一下是**播放器线程**上跑的（播放循环在那条专用线程上，见
                  * FoliaNativePlayer 文件头的「线程」那一节），不在主线程。
@@ -420,6 +423,8 @@ class FoliaNativePlayerPlugin : Plugin() {
                 // ended / error 用事件发出时真实装着的那首（见 FoliaNativePlayer.emit），不用已被下一单提前改写的 lastMediaId。
                 val eventKey = if ("ended" == type || "error" == type) player?.lastEventMediaId() ?: "" else player?.currentMediaId() ?: ""
                 payload.put("songKey", eventKey)
+                // 事件发出那一刻装载着的 source 令牌：Web 侧据此丢旧 source 的迟到事件（#341）。
+                payload.put("sourceToken", sourceToken)
                 payload.put("playing", player?.isPlaying() == true)
                 payload.put("buffering", player?.isBuffering() == true)
                 /*
@@ -533,6 +538,39 @@ class FoliaNativePlayerPlugin : Plugin() {
         super.handleOnDestroy()
     }
 
+    /**
+     * 传输命令的异步结算（#339）：Promise 在播放器线程**真正执行完**动作之后才结束。
+     *
+     * - Ok → `{ ok: true }`；
+     * - Stale（提交之后被更新的换源 / 播放意图取代，没执行）→ `{ ok: false, stale: true, reason }`，
+     *   resolve 而不是 reject —— 快速换歌 / 连点是常态，不该制造一堆未处理的 rejection；
+     * - Failed（动作抛异常、post 失败、播放器已 release）→ reject，带稳定的 code。
+     *
+     * **不要 setKeepAlive**：它只用于「同一个 call 多次响应」（addListener 一类）。异步单次 resolve
+     * 本来就是 Capacitor 的常规用法，PluginCall 被闭包持有；加上 keepAlive 反而会在 completion
+     * 先于 plugin.invoke 返回时，让 Bridge 把已经结算的 call 存进 savedCalls 再也没人释放（泄漏）。
+     * 结算由 [PendingCommand] 保证恰好一次，这里不会重复 resolve。
+     */
+    private fun asyncCompletion(call: PluginCall, extra: JSObject? = null): NativeCommandCompletion {
+        return { result ->
+            when (result) {
+                is NativeCommandResult.Ok -> {
+                    val payload = extra ?: JSObject()
+                    payload.put("ok", true)
+                    call.resolve(payload)
+                }
+                is NativeCommandResult.Stale -> {
+                    val payload = JSObject()
+                    payload.put("ok", false)
+                    payload.put("stale", true)
+                    payload.put("reason", result.reason)
+                    call.resolve(payload)
+                }
+                is NativeCommandResult.Failed -> call.reject(result.message, result.code)
+            }
+        }
+    }
+
     @PluginMethod
     fun prepare(call: PluginCall) {
         val current = player
@@ -544,6 +582,7 @@ class FoliaNativePlayerPlugin : Plugin() {
         val startPositionMs = call.getDouble("startPositionMs")
         val repeatMode = call.getInt("repeatMode")
         val webSongKey = call.getString("songKey")
+        val webSourceToken = call.getString("sourceToken")
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
@@ -554,28 +593,31 @@ class FoliaNativePlayerPlugin : Plugin() {
          * 判据不成立时返回 false，继续走下面的普通装源 —— 与加这段之前的行为完全一致。
          * 同一首重装（恢复进度、切画质）必须走普通路径，否则会被当成一次换歌交叉两次。
          */
-        if (url != current.currentUrl() &&
-            FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)
-        ) {
-            MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
-            val handled = JSObject()
-            handled.put("ok", true)
-            handled.put("transition", true)
-            call.resolve(handled)
-            return
+        if (url != current.currentUrl()) {
+            // 接管是 source 边界：先在调用线程上递增纪元并预置令牌，之后紧随的 play / seek 才是新纪元。
+            val ticket = current.armTakeover(url, webSourceToken)
+            if (FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)) {
+                MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
+                val handled = JSObject()
+                handled.put("ok", true)
+                handled.put("transition", true)
+                call.resolve(handled)
+                return
+            }
+            current.clearTakeover(ticket)
         }
         // 撤销条件：Web 亲自装源 = 手动换歌，进行中的过渡必须让位并恢复播放器状态。
         FoliaTransitionPlugin.interrupt("Web 亲自装源")
+        // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
+        MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
+        // Promise 等播放器线程真正装完源（setMediaItem / prepare / 初始 seek）再结束，不再是「已经 post」。
         current.prepare(
             url,
             if (startPositionMs != null) startPositionMs.toLong() else -1L,
             webSongKey,
+            asyncCompletion(call),
+            webSourceToken,
         )
-        // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
-        MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
-        val result = JSObject()
-        result.put("ok", true)
-        call.resolve(result)
     }
 
     @PluginMethod
@@ -585,8 +627,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("The player is not ready.")
             return
         }
-        current.play()
-        call.resolve()
+        current.play(asyncCompletion(call))
     }
 
     @PluginMethod
@@ -597,8 +638,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("The player is not ready.")
             return
         }
-        current.pause()
-        call.resolve()
+        current.pause(asyncCompletion(call))
     }
 
     @PluginMethod
@@ -609,8 +649,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("The player is not ready.")
             return
         }
-        current.stop()
-        call.resolve()
+        current.stop(asyncCompletion(call))
     }
 
     @PluginMethod
@@ -622,8 +661,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("positionMs is required.")
             return
         }
-        current.seek(positionMs.toLong())
-        call.resolve()
+        current.seek(positionMs.toLong(), asyncCompletion(call))
     }
 
     @PluginMethod
@@ -768,6 +806,7 @@ class FoliaNativePlayerPlugin : Plugin() {
         // 引擎此刻装的是哪一首：Web 层判「点歌有没有真的换过去」只信这一个
         // （服务里的 cachedSongKey 会随它自己推的 metadata 变，当判据等于自证）。
         result.put("songKey", current.currentMediaId())
+        result.put("sourceToken", current.currentSourceToken())
         call.resolve(result)
     }
 

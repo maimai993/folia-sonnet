@@ -23,6 +23,7 @@ import top.izuna.foliamajor.player.dsp.NativeEqualizerState
 import top.izuna.foliamajor.player.transition.bridge.TransitionDeckHost
 import top.izuna.foliamajor.player.transition.dsp.DeckRole
 import top.izuna.foliamajor.player.transition.dsp.TransitionDspState
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 // 当前文件：Folia 在安卓上的原生播放内核。
@@ -64,8 +65,13 @@ import java.util.concurrent.atomic.AtomicReference
 class FoliaNativePlayer(context: Context, listener: Listener) {
 
     interface Listener {
-        /** type: ready | playing | paused | ended | position | seeked | buffering | error */
-        fun onEvent(type: String, positionMs: Long, durationMs: Long, message: String?)
+        /**
+         * type: ready | playing | paused | ended | position | seeked | buffering | error
+         *
+         * sourceToken：事件**在播放器线程上发出那一刻**真正装载着的 source 令牌（见 [activeSourceToken]），
+         * Web 侧用它丢掉旧 source 的迟到事件（#341）。
+         */
+        fun onEvent(type: String, positionMs: Long, durationMs: Long, message: String?, sourceToken: String)
     }
 
     companion object {
@@ -155,6 +161,45 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     @Volatile
     private var lastMediaId: String? = null
     private var tickScheduled = false
+
+    /*
+     * ⭐ 命令纪元（#337 #338 #339 #341）。
+     *
+     * sourceEpoch：每次换源 / stop / 过渡接管就 +1，在**调用线程**上同步分配。命令提交时捕获，
+     * 到播放器线程上轮到它时再比一遍（见 [NativeCommandPolicy.staleReason]）：提交之后又换了源，
+     * 旧 source 的 prepare / play / seek 就不执行 —— 这是 JS 的 command chain 做不到的
+     * （它取消不了已经 post 进播放器线程的 runnable）。pause 不受它约束（见 policy 的说明）。
+     * transportEpoch：每个 play / pause / prepare / stop +1，只让最新的播放意图落地。
+     *
+     * 调度、结算、release 兜底都在纯 Kotlin 的 [NativeCommandScheduler] 里（JVM 单测覆盖），
+     * 这里只负责把线程注入进去。
+     */
+    private val scheduler = NativeCommandScheduler(
+        post = { task -> handler.post(task) },
+        onPlayerThread = { Looper.myLooper() == handler.looper },
+        onActionError = { error -> emit("error", cachedPositionMs, cachedDurationMs, error.toString()) },
+    )
+
+    /**
+     * 过渡接管预置的 source 令牌，**按提交顺序排队**（不是单槽）：
+     * 引擎的 start 也是按同样的顺序投递到播放器线程的，所以第 N 次 begin / 兜底 prepare
+     * 消费的正是第 N 次接管的令牌。单槽会在「连点 A→B」时把令牌贴到错的歌上。
+     */
+    private class TakeoverTicket(val id: Long, val token: String, val url: String)
+    private val takeoverQueue = java.util.ArrayDeque<TakeoverTicket>()
+    private val takeoverSeq = AtomicLong(0L)
+
+    /**
+     * source 令牌：Web 侧每次装源生成一个（原生自己换源时用 `n:<纪元>`），随事件一起回去，
+     * Web 侧据此丢掉旧 source 的迟到事件 —— songKey 解决不了 A→B→A 同 key 的 ABA，令牌可以。
+     *
+     * [lastSourceToken] 在调用线程上随提交写入（与 lastMediaId 同纪律，快照 / 认领读它）；
+     * [activeSourceToken] 在播放器线程**真正装上**那一刻才换，事件按它打标，
+     * 所以旧 source 排在队列里的事件仍带旧令牌。
+     */
+    @Volatile private var lastSourceToken = ""
+    @Volatile private var activeSourceToken = ""
+
     /** 桥线程上要先比一遍（同值 = 状态同步，不打断斜坡），所以是 volatile。 */
     @Volatile private var requestedVolume = 1f
     /**
@@ -285,10 +330,47 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         handler = Handler(playerLooper)
     }
 
-    /** 装上地址并缓冲。startPositionMs 小于 0 表示从头播。 */
-    fun prepare(url: String, startPositionMs: Long, mediaId: String? = null) {
+    /**
+     * 装上地址并缓冲。startPositionMs 小于 0 表示从头播。
+     *
+     * [completion]（可空）在播放器线程**真正执行完** setMediaItem / prepare / 初始 seekTo 之后才结算，
+     * 不是「已经 post」。结算恰好一次：Ok、Stale（被更新的换源 / stop 取代，没执行）或 Failed。
+     * 它**不等** STATE_READY —— 网络卡住时 READY 可能永远不来；ready / playing 仍走事件。
+     */
+    fun prepare(
+        url: String,
+        startPositionMs: Long,
+        mediaId: String? = null,
+        completion: NativeCommandCompletion? = null,
+        sourceToken: String? = null,
+        keepEpoch: Boolean = false,
+    ) {
+        var token = sourceToken ?: ""
+        // keepEpoch：过渡引擎的兜底 prepare 沿用接管时已分配的纪元（armTakeover 已递增过），
+        // 不能再递增 —— 否则 Web 紧随其后提交的 play 会被判成旧 source 而丢掉。
+        val reuseTakeover = keepEpoch && peekTakeover(url)
+        dispatch(
+            NativeCommandKind.PREPARE, completion,
+            bumpSource = !reuseTakeover, bumpTransport = !reuseTakeover,
+            callerSide = { epoch ->
+                if (token.isEmpty()) {
+                    // 过渡接管预置过令牌（Web 发起的换歌）：兜底 prepare 沿用它，事件才对得上 Web。
+                    token = (if (reuseTakeover) pollTakeover(url) else null) ?: "n:$epoch"
+                } else if (reuseTakeover) {
+                    pollTakeover(url)
+                }
+                prepareCallerSide(url, startPositionMs, mediaId, token)
+            },
+        ) {
+            prepareOnPlayer(url, startPositionMs, mediaId, token)
+        }
+    }
+
+    /** 调用线程上立刻做的那一半：身份与缓存位置（volatile，见下面的说明）。 */
+    private fun prepareCallerSide(url: String, startPositionMs: Long, mediaId: String?, token: String) {
         lastUrl = url
         lastMediaId = mediaId
+        lastSourceToken = token
         /*
          * ⭐ 位置与时长在**调用线程上**立刻归零，不等播放器线程。
          *
@@ -301,38 +383,55 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          */
         cachedPositionMs = if (startPositionMs > 0) startPositionMs else 0L
         cachedDurationMs = 0L
-        runOnPlayer {
-            val current = ensurePlayer()
-            /*
-             * 换源即收掉在途的交叉淡化（#104）。
-             *
-             * crossfadeTo 有 cancelFade 防重入，但普通换源不走它：连续自动跳过时
-             * 上一首还挂在 crossfadeOutgoing 里慢慢淡出，这里不收它就再也没人管 ——
-             * 新歌起播后旧歌继续出声，再来一次跳过就是 3+ 路音频叠着放。
-             */
-            cancelFade()
-            // 有些源要附带请求头（飞牛的音频流认 Cookie: music-token）：
-            // 每次换源都按地址重问一遍，没有就清空，别把上一首的头带给下一首。
-            applySourceHeaders(url)
-            current.setMediaItem(mediaItemFor(url, mediaId))
-            current.setRepeatMode(requestedRepeatMode)
-            current.setVolume(requestedVolume)
-            current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
-            current.prepare()
-            if (startPositionMs > 0) {
-                current.seekTo(startPositionMs)
-            }
-            cachedPositionMs = if (startPositionMs > 0) startPositionMs else 0L
-            cachedDurationMs = 0L
-            // 新的一首：快到尾巴这件事重新上膛，回绕判定的上一拍与拖动门槛也清掉。
-            nearEndFired = false
-            lastTickPositionMs = 0L
-            nearEndFloorMs = 0L
-        }
     }
 
-    fun play() {
-        runOnPlayer {
+    /** 播放器线程上的那一半：setMediaItem / prepare / 初始 seekTo 都做完才算这条命令完成。 */
+    private fun prepareOnPlayer(url: String, startPositionMs: Long, mediaId: String?, token: String) {
+        val current = ensurePlayer()
+        /*
+         * 换源即收掉在途的交叉淡化（#104）。
+         *
+         * crossfadeTo 有 cancelFade 防重入，但普通换源不走它：连续自动跳过时
+         * 上一首还挂在 crossfadeOutgoing 里慢慢淡出，这里不收它就再也没人管 ——
+         * 新歌起播后旧歌继续出声，再来一次跳过就是 3+ 路音频叠着放。
+         */
+        cancelFade()
+        // 有些源要附带请求头（飞牛的音频流认 Cookie: music-token）：
+        // 每次换源都按地址重问一遍，没有就清空，别把上一首的头带给下一首。
+        applySourceHeaders(url)
+        current.setMediaItem(mediaItemFor(url, mediaId))
+        current.setRepeatMode(requestedRepeatMode)
+        current.setVolume(requestedVolume)
+        current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+        current.prepare()
+        if (startPositionMs > 0) {
+            current.seekTo(startPositionMs)
+        }
+        // 从这一刻起，播放器线程上发出的事件才属于新 source（旧 source 排队中的事件已先发完）。
+        activeSourceToken = token
+        cachedPositionMs = if (startPositionMs > 0) startPositionMs else 0L
+        cachedDurationMs = 0L
+        // 新的一首：快到尾巴这件事重新上膛，回绕判定的上一拍与拖动门槛也清掉。
+        nearEndFired = false
+        lastTickPositionMs = 0L
+        nearEndFloorMs = 0L
+    }
+
+    /**
+     * 提交一条播放命令（#337 #339）：调度、过期判定与恰好一次的结算见 [NativeCommandScheduler.dispatch]。
+     * 动作抛异常会同时发 error 事件（原生服务靠它兜底）并让这条命令的 Promise 以 Failed 收尾。
+     */
+    private fun dispatch(
+        kind: NativeCommandKind,
+        completion: NativeCommandCompletion?,
+        bumpSource: Boolean,
+        bumpTransport: Boolean,
+        callerSide: ((Long) -> Unit)? = null,
+        action: () -> Unit,
+    ) = scheduler.dispatch(kind, completion, bumpSource, bumpTransport, callerSide, action)
+
+    fun play(completion: NativeCommandCompletion? = null) {
+        dispatch(NativeCommandKind.PLAY, completion, bumpSource = false, bumpTransport = true) {
             val current = ensurePlayer()
             val resuming = !cachedPlaying
             current.setPlayWhenReady(true)
@@ -346,9 +445,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         }
     }
 
-    fun pause() {
-        runOnPlayer {
-            val current = player ?: return@runOnPlayer
+    fun pause(completion: NativeCommandCompletion? = null) {
+        dispatch(NativeCommandKind.PAUSE, completion, bumpSource = false, bumpTransport = true) {
+            val current = player ?: return@dispatch
             cachedPlaying = false
             cachedPositionMs = current.currentPosition
             // 位置与状态当场报出去：界面上的进度条不该跟着斜坡走 160ms。
@@ -356,7 +455,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             if (!pauseFadeEnabled) {
                 current.setPlayWhenReady(false)
                 stopTicking()
-                return@runOnPlayer
+                return@dispatch
             }
             /*
              * 淡出多长：平时是 160 ms；混响开着并且允许留尾巴时，跟着 RT60 走（约三分之一，
@@ -522,15 +621,18 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     /** 停下来并丢掉当前媒体（换歌之前的收尾，以及「没有歌了」）。 */
-    fun stop() {
-        runOnPlayer {
-            val current = player ?: return@runOnPlayer
+    fun stop(completion: NativeCommandCompletion? = null) {
+        // stop 也是 source 边界：此前提交、还没执行的 prepare / play / seek 全部作废（Stale）。
+        dispatch(NativeCommandKind.STOP, completion, bumpSource = true, bumpTransport = true) {
+            val current = player ?: return@dispatch
             current.stop()
             current.setPlayWhenReady(false)
             current.clearMediaItems()
             // 真的停了：系统控件就不该再把它拉起来。
             lastUrl = null
             lastMediaId = null
+            lastSourceToken = ""
+            activeSourceToken = ""
             cachedPlaying = false
             cachedPositionMs = 0L
             cachedDurationMs = 0L
@@ -540,7 +642,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         }
     }
 
-    fun seek(positionMs: Long) {
+    fun seek(positionMs: Long, completion: NativeCommandCompletion? = null) {
         val target = Math.max(0L, positionMs)
         /*
          * ⭐ 位置在**调用线程**立刻写进缓存，不等播放器线程（照 prepare 的纪律）。
@@ -552,9 +654,11 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          * cachedPositionMs 是 volatile，提前写安全；精确值（夹过 duration 的）
          * 由播放器线程 seekTo 之后再覆盖一遍。
          */
-        cachedPositionMs = target
-        runOnPlayer {
-            val current = player ?: return@runOnPlayer
+        dispatch(
+            NativeCommandKind.SEEK, completion, bumpSource = false, bumpTransport = false,
+            callerSide = { cachedPositionMs = target },
+        ) {
+            val current = player ?: return@dispatch
             var clamped = target
             val duration = current.duration
             // C.TIME_UNSET（负数）表示还不知道多长，这时候别去夹。
@@ -656,7 +760,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         // 收过一次就别再收：线程 quit 之后再往它的 Handler 上 post 会直接抛
         // 「sending message to a Handler on a dead thread」，而系统控件（通知栏 / 耳机）
         // 在插件销毁之后仍可能来碰一次。
-        if (released) return
+        // 还在排队 / 没来得及执行的命令统一以 Failed 收尾：Promise 绝不悬挂（#339）。
+        // 已经在播放器线程上执行到一半的那条由它自己的 settle 兜底（只结算一次）。
+        if (!scheduler.release()) return
         released = true
         handler.post {
             stopTicking()
@@ -679,6 +785,70 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             // 这条线程只是为播放器起的，播放器没了就一并收掉，不留空转。
             playbackThread.quitSafely()
         }
+    }
+
+    /**
+     * 最近一次**提交**的 source 令牌（调用线程上写入）；没装东西时是空串。
+     * 快照 / 认领读它：认领之后 Web 侧只信这个令牌之后的事件。
+     */
+    fun currentSourceToken(): String = lastSourceToken
+
+    private val nativeTokenSeq = AtomicLong(0L)
+
+    /** 原生自己换源（交叉淡化 / 过渡 / 服务兜底）时生成的令牌：Web 不认识它，认领后才对得上。 */
+    private fun nextNativeToken(): String = "n:t${nativeTokenSeq.incrementAndGet()}"
+
+    /**
+     * 过渡接管也是 source 边界：调用线程上**同步**递增纪元并登记令牌，
+     * 这样紧随其后的 play / seek 捕获的是新纪元，而此前排队的旧命令变成 Stale。
+     *
+     * 令牌登记成「按提交顺序的票据」并带上目标地址：引擎的 start 按同样顺序投递到播放器线程，
+     * begin / 兜底 prepare 按地址认领自己的那一张，认领时把它之前没人认领的旧票一并作废
+     * （接管被抢占、引擎没接）—— 单槽字段会在连点 A→B 时把令牌贴到错的歌上。
+     * 返回票据 id（没接成时交给 [clearTakeover]）；已 release 返回 -1。
+     */
+    fun armTakeover(url: String, token: String?): Long {
+        if (scheduler.bumpBoundary() < 0L) return -1L
+        val applied = if (token.isNullOrEmpty()) nextNativeToken() else token
+        val ticket = TakeoverTicket(takeoverSeq.incrementAndGet(), applied, url)
+        synchronized(takeoverQueue) { takeoverQueue.addLast(ticket) }
+        lastSourceToken = applied
+        return ticket.id
+    }
+
+    /** 接管没成（引擎没接）：这张票作废，调用方继续走普通 prepare。 */
+    fun clearTakeover(ticketId: Long) {
+        synchronized(takeoverQueue) { takeoverQueue.removeAll { it.id == ticketId } }
+    }
+
+    /** 队列里有没有给这个地址的票（不消费）。 */
+    private fun peekTakeover(url: String): Boolean =
+        synchronized(takeoverQueue) { takeoverQueue.any { it.url == url } }
+
+    /** 认领给这个地址的第一张票，并作废它之前的旧票；没有返回 null。 */
+    private fun pollTakeover(url: String): String? = synchronized(takeoverQueue) {
+        var found: TakeoverTicket? = null
+        while (takeoverQueue.isNotEmpty()) {
+            val head = takeoverQueue.removeFirst()
+            if (head.url == url) {
+                found = head
+                break
+            }
+        }
+        found?.token
+    }
+
+    /**
+     * 播放器线程上、新 source 真正装上的那一刻：认领预置令牌（没有就自己生成），写成 active。
+     * 与旧事件的分界线就在这里 —— 此前排队的旧 source 事件仍带旧令牌。
+     */
+    private fun adoptTakeoverTokenOnPlayer(url: String) {
+        var token = pollTakeover(url)
+        if (token == null) {
+            token = nextNativeToken()
+            lastSourceToken = token
+        }
+        activeSourceToken = token
     }
 
     /** 手上有没有还在播的那一首（系统控件该不该直接碰它，就问这个）。 */
@@ -803,11 +973,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          * volatile，与 lastUrl 同纪律；真正的「旧那台手上有没有东西」在播放器线程里再判一次。
          */
         if (!cachedPlaying || !hasMedia()) return false
+        // 换源边界：此前排队的旧命令作废，令牌在调用线程上先写（快照读得到）。
+        armTakeover(url, null)
         runOnPlayer {
             val old = player
             val incoming = buildExtraPlayer()
             lastUrl = url
             lastMediaId = mediaId
+            adoptTakeoverTokenOnPlayer(url)
             cachedPositionMs = 0L
             cachedDurationMs = 0L
             cachedPlaying = true
@@ -925,11 +1098,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         runOnPlayer {
             val old = player
             if (old == null || old.mediaItemCount == 0) {
-                // 旧那台手上已经没东西：没得交接，让调用方按普通换源处理。
+                // 旧那台手上已经没东西：没得交接，按普通换源装上（沿用接管时登记的纪元与令牌）。
+                // 以前这里直接返回、却对调用方报「已接管」，这首歌就静默地谁也没装。
                 TransitionDspState.clear()
+                prepare(url, startMs, mediaId, keepEpoch = true)
                 return@runOnPlayer
             }
             cancelFade()
+            adoptTakeoverTokenOnPlayer(url)
             // 交叉一开始就摘掉旧那台的监听：它之后播到尾巴上的 STATE_ENDED 不该被当成
             // 「本曲结束」，否则一次换歌会跳两首（crossfadeTo 里已写过同一条理由）。
             old.removeListener(playerListener)
@@ -1023,7 +1199,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         override fun nowMs(): Long = android.os.SystemClock.elapsedRealtime()
         override fun canHandover(): Boolean = this@FoliaNativePlayer.canTransition()
         override fun fallbackPrepare(url: String, mediaId: String?) =
-            this@FoliaNativePlayer.prepare(url, -1L, mediaId)
+            this@FoliaNativePlayer.prepare(url, -1L, mediaId, keepEpoch = true)
         override fun begin(url: String, mediaId: String?, startMs: Long): Boolean =
             transitionBegin(url, mediaId, startMs)
         override fun apply(incomingGain: Float, outgoingGain: Float, tempoOut: Float) =
@@ -1264,7 +1440,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             cachedBuffering = false
         }
         if (listener != null) {
-            listener.onEvent(type, positionMs, durationMs, message)
+            listener.onEvent(type, positionMs, durationMs, message, activeSourceToken)
         }
     }
 }
