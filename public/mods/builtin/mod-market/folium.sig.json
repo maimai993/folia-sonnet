@@ -1,0 +1,10 @@
+{
+  "format": "folium-signature",
+  "version": 1,
+  "modId": "mod-market",
+  "modVersion": "1.0.1",
+  "digest": "sha256:59c6d0d3ac50d1664af45e0f99f5b81d56a8018fd5ecc494ff5ae1c0392e1a63",
+  "keyId": "folium-ci-2026-1",
+  "signedAt": "2026-11-07T06:19:42.744Z",
+  "signature": "C2Bfa44K8yI5L0/W41XES44X7FbtMTINummQgwxWm5wd83HzEnXm5n77xUBcHndNdMq+EFFJaH3BaA1SD4IbDA=="
+}

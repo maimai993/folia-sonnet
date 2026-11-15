@@ -13,6 +13,7 @@ import ObsBrowserSourceApp from './components/obs/ObsBrowserSourceApp';
 import ObsNowPlayingSourceApp from './components/obs/ObsNowPlayingSourceApp';
 import ObsPlayerCapSourceApp from './components/obs/ObsPlayerCapSourceApp';
 import { initializeLocalCoverRuntime } from './services/localCoverRuntime';
+import { installHdslbImageFixer } from './services/bilibili/hdslbImage';
 import { installFoliumHomePageDismissal } from './components/app/home/foliumHomePageDismissal';
 import { installLibrarySuiteChromeCommands } from './library/app/installLibrarySuiteChromeCommands';
 import { noteFoliumFirstScreenMounted, startFoliumForMainWindow } from './mods/runtime/mainWindowStart';
@@ -20,6 +21,7 @@ import { installNativeDragGuard } from './utils/nativeDragGuard';
 // 安卓的安全区必须在画第一帧之前就落进 CSS 变量：env(safe-area-inset-*) 在安卓 WebView 上
 // 不可信（只报挖孔不报系统栏，无刘海全 0），顶部控件会被状态栏压住。
 import { installPhoneInsets } from './services/phoneInsets';
+import { prewarmSavedVisualizer, prewarmVisualizersWhenIdle } from './components/visualizer/prewarmVisualizers';
 import { bootNavidromeServerPreset } from './services/navidromeServerPreset';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { setNavidromeEnabledState } from './stores/useLibraryStore';
@@ -27,9 +29,9 @@ import { isMainAppSurface, isObsBrowserSourceSurface, isRemoteControlSurface, ob
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
 import './stores/useMotionSettingsStore';
-// 同上：`<html data-glass='off'>` 也要在画第一帧之前就挂上。原来只被设置弹窗那一支引用
-// （GeneralSettingsSubview → GlassSurfaceSetting），谁先被懒加载谁才生效；挂在 bootstrap 上
-// 之后每个根（App / 遥控 / OBS）一开始就带着这个属性，index.css 那条覆盖才压得住玻璃。
+// 同上：液态玻璃的开关（`<html data-liquid-glass='on'>` + 注入器）也要在画第一帧之前就挂好。
+// 原来只被设置弹窗那一支引用（当时在 AppearancePage，现在在 GraphicsPage 的 LiquidGlassGroup），
+// 谁先被懒加载谁才生效；挂在 bootstrap 上之后每个根（App / 遥控 / OBS）一开始就带着正确的玻璃状态。
 import './stores/useGlassSurfaceSettingsStore';
 
 // src/bootstrap.tsx
@@ -76,6 +78,7 @@ const isMainApp = isMainAppSurface;
 const FirstScreenMounted: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     React.useEffect(() => {
         noteFoliumFirstScreenMounted();
+        prewarmVisualizersWhenIdle();
     }, []);
     return <>{children}</>;
 };
@@ -100,6 +103,10 @@ const renderApp = () => root.render(
 // registry, so the commands are put into its list here, before anything renders (main window only,
 // like the mod commands below). A clashing execute shortcut throws here, at startup.
 if (isMainApp) installLibrarySuiteChromeCommands();
+
+// 保存的歌词样式可以趁首屏加载遮罩还在时先准备（雾笺在后台编着色器，见 visualizer/prewarmVisualizers.ts）。
+// 不等它，和下面的 mod 加载一起跑；别的启动慢的样式等首屏出来、页面空闲时再准备（FirstScreenMounted）。
+if (isMainApp) prewarmSavedVisualizer();
 
 const bootFolium = async () => {
     if (!isMainApp) return;
@@ -140,6 +147,9 @@ void Promise.allSettled([bootFolium(), bootNavidrome()])
         // 不等它：封面 worker 接管页面后 controllerchange 会自己把这一期间失败的封面重新要一遍，
         // 为了它卡住首屏不值当（首次安装时它可能要等一整个 precache 下载完才接管）。
         initializeLocalCoverRuntime();
+        // B 站图床封来源，<img> 直连隔三差五 403 —— 挂上「加载失败就换原生代理的
+        // 本地 blob 重试」的兜底。不阻塞启动。
+        installHdslbImageFixer();
         clearTimeout(bootFallbackTimer);
         renderOnce();
     });

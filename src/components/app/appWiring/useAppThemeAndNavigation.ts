@@ -7,6 +7,7 @@ import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { useThemeController } from '../../../hooks/useThemeController';
 import { useThemeQuickEditorContext } from '../../../hooks/useThemeQuickEditorContext';
 import { useFoliumHostBridge } from '../../../mods/runtime/hostBridge';
+import { useFoliumAnimationIntensity } from '../../../mods/runtime/visualizer/hostAnimationIntensity';
 import { registerAiThemeApplier, registerAiThemeProvider } from '../../../services/aiThemeApplyBridge';
 import { DAYLIGHT_THEME, DEFAULT_THEME } from '../../../services/baseThemes';
 import { useVisualizerAroundWall } from '../lattice/wallLayer';
@@ -35,6 +36,7 @@ export const useAppThemeAndNavigation = (model: Input) => {
     });
     const {
         theme,
+        songThemePair,
         setTheme,
         aiTheme,
         customTheme,
@@ -68,6 +70,8 @@ export const useAppThemeAndNavigation = (model: Input) => {
     // Folium: publish what is on screen to the main process (runtime snapshot
     // for main-side mods and the export service).
     useFoliumHostBridge(theme, isDaylight);
+    // Folium: let a mod drive the animation intensity of the playing theme.
+    useFoliumAnimationIntensity(theme, setTheme);
 
     useThemeQuickEditorContext({
         aiTheme,
@@ -146,7 +150,8 @@ export const useAppThemeAndNavigation = (model: Input) => {
         navigateToPlayer, navigateToSearch, popCollectionTo, pushCollection, reduceLatticeMotion,
         restoreCachedThemeForSong, saveCustomDualTheme, saveEditedAiDualTheme, setFocusedPlaylistIndex,
         setLocalMusicState, setNavidromeFocusedAlbumIndex, setTheme, songThemeAutoGenerateEnabled,
-        songThemeAutoSwitchEnabled, theme, themeController, themeGenerationSource, themeSettling, themeSourceModel,
+        songThemeAutoSwitchEnabled, songThemePair, theme, themeController, themeGenerationSource, themeSettling,
+        themeSourceModel,
         visualizerAroundWall
     };
 };

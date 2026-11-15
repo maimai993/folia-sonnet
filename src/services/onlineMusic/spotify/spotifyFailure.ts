@@ -7,21 +7,31 @@ import type { OnlineFailureDetail, OnlineFailureOperation } from '../../../types
 // said here only (they are made in electron/spotify/). A network that fails and 5xx come as
 // `network` and need nothing here.
 
-// electron/spotify/errors.cjs gives Spotify's 429 this sentence, under the code of a network that fails.
-const ASKED_TO_WAIT = 'Spotify asked to wait before trying again';
+// The desktop side's sentences that name a case: Spotify's 429 (electron/spotify/errors.cjs), and
+// Spotify refusing a track's key before and after it gave this account one in this run
+// (electron/spotify/audio.cjs).
+const NAMED: Record<string, OnlineFailureDetail> = {
+    'Spotify asked to wait before trying again': { case: 'retry-later', httpStatus: 429 },
+    'Spotify gives this account no audio key': { case: 'account-refused' },
+    'Spotify refused the audio key for now': { case: 'retry-later' },
+};
 
-/**
- * 安卓上（spotifyInPageRuntime）429 是另一句话：`Spotify answered 429`。所以**按读出来的
- * HTTP 状态认，不按那句英文认** —— 认句子的话，安卓这一路撞上限流会落到「连不上」，
- * 界面也就不会说「稍后再试」。平台要求等多久（`Retry-After`）一并交出去。
- */
+// Soloist's failures (electron/spotify/soloist.cjs), by the reason word the desktop side gives them:
+// one that setting it up mends (the program, its key, its pairing, a start that fails) is a source
+// that is not set up, and the failure offers the setup checklist; the program gone or refusing a
+// track may pass when tried again.
+const SOLOIST_REASONS: Record<string, OnlineFailureDetail> = {
+    'soloist-program': { case: 'not-configured' },
+    'soloist-key': { case: 'not-configured' },
+    'soloist-expired': { case: 'not-configured' },
+    'soloist-unpaired': { case: 'not-configured' },
+    'soloist-start': { case: 'not-configured' },
+    'soloist-gone': { case: 'unreachable' },
+    'soloist-refused': { case: 'refused' },
+};
+
 export const describeSpotifyFailure = (_operation: OnlineFailureOperation, error: unknown): OnlineFailureDetail | null => {
-    if (!(error instanceof OnlineProviderError) || error.providerId !== 'spotify' || error.code !== 'network') return null;
-    const saidToWait = error.message === ASKED_TO_WAIT || error.httpStatus === 429;
-    if (!saidToWait) return null;
-    return {
-        case: 'retry-later',
-        httpStatus: 429,
-        ...(typeof error.retryAfterMs === 'number' && Number.isFinite(error.retryAfterMs) ? { retryAfterMs: error.retryAfterMs } : {}),
-    };
+    if (!(error instanceof OnlineProviderError) || error.providerId !== 'spotify') return null;
+    if (typeof error.cause === 'string' && Object.hasOwn(SOLOIST_REASONS, error.cause)) return SOLOIST_REASONS[error.cause];
+    return Object.hasOwn(NAMED, error.message) ? NAMED[error.message] : null;
 };

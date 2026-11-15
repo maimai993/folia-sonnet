@@ -1,5 +1,10 @@
 import type { AppFoundation } from './useAppFoundation';
 import { useAudioOutputDevice } from '../../../hooks/useAudioOutputDevice';
+// HiFi 路线上开了软件音量时，拖动音量条要直接下发给 mpv —— 那才是出声的那一路，
+// Web Audio 的增益只影响网页解码（HiFi 上根本没有回声）。
+import { hifiEngine } from '../../../services/hifi/hifiEngine';
+import { isHifiRoute } from '../../../services/hifi/hifiPlayback';
+import { selectHifiEngineConfig, useHifiSettingsStore } from '../../../stores/useHifiSettingsStore';
 import { NATIVE_PLAYBACK_ENABLED, nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
@@ -24,19 +29,19 @@ export const useAppAudioOutput = (model: Input) => {
     const {
         audioContextRef, audioQuality, audioRef, audioSrc, blobUrlRef, cachedCoverUrl,
         currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongFullRef, gainNodeRef, globalLyricTimelineOffsetMs,
-        isMuted, lastAudioRecoverySourceRef, loopMode, lyricFilterEnabled, lyricFilterPattern, lyricStaffAbsorbMode,
+        isMuted, lastAudioRecoverySourceRef, loopMode, lyricLineRules, lyricStaffAbsorbMode,
         lyricStaffMinDwellSeconds, lyricStaffPattern, lyricStaffPolicy, lyricTimelineOffsetMs,
         onlinePlaybackRecoveryRef, pendingResumeTimeRef, pendingVolumePreviewRef, setAudioSrc, setCurrentSong,
         setLyricTimelineOffsetMs, setLyricsState, setPlayQueue, shouldAutoPlay, volume, volumePreviewFrameRef
     } = model;
     const setLyrics = useMemo(
-        () => createLyricsSetter(setLyricsState, lyricFilterEnabled ? lyricFilterPattern : '', currentSongFullRef, {
+        () => createLyricsSetter(setLyricsState, lyricLineRules, currentSongFullRef, {
             policy: lyricStaffPolicy,
             minDwellSeconds: lyricStaffMinDwellSeconds,
             absorbMode: lyricStaffAbsorbMode,
             pattern: lyricStaffPattern,
         }),
-        [lyricFilterEnabled, lyricFilterPattern, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
+        [lyricLineRules, lyricStaffPolicy, lyricStaffMinDwellSeconds, lyricStaffAbsorbMode, lyricStaffPattern],
     );
     // 保存过滤设置后要用新设置重新铺一遍当前歌词，而此时闭包里的 setLyrics 还是旧的。
     const setLyricsRef = useRef(setLyrics);
@@ -62,26 +67,28 @@ export const useAppAudioOutput = (model: Input) => {
     /*
      * 原生播放（P1）。
      *
-     * ⛔ **已停用**：`NATIVE_PLAYBACK_ENABLED` 是总闸（见 nativePlaybackEngine.ts）。
-     * 下面三个层次都保留着，闸一关它们自然全为 false，所以不用逐个去改分支。
+     * **安卓上恒开**：出声这件事交给 ExoPlayer，不再由 WebView 的 `<audio>` 解码。
+     * 以前这里还有一道用户开关（设置里的「原生播放（实验）」），它已经删掉了 ——
+     * 留着开关就是留着一条「一半歌走原生、一半走网页」的岔路，同一个问题在两种
+     * 音频栈上表现不同，最难复现。
      *
-     *  · `nativePlaybackEnabled` —— 用户开关（设置里那一项，已随停用一起撤掉）；
-     *  · `nativeActive`          —— 总闸 ∧ 开关 ∧ 原生插件真的在（不能靠 `typeof
-     *                               plugin.method === 'function'` 判，registerPlugin 给的是代理）；
-     *  · `nativeTakes`           —— 这一首真的交给原生：地址还得是原生吃得下的
-     *                               （blob 是 WebView 自己的对象 URL，本地导入的歌就是这种，
-     *                                 那首整首回落 `<audio>`；媒体缓存走本机回环地址，原生能读）。
+     *  · `nativeActive` —— 原生插件真的在（不能靠 `typeof plugin.method === 'function'`
+     *                     判，registerPlugin 给的是代理）；
+     *  · `nativeTakes`  —— 这一首真的交给原生：地址还得是原生吃得下的（blob 是
+     *                     WebView 自己的对象 URL，本地导入的歌就是这种，那一首整首
+     *                     回落 `<audio>`；媒体缓存走本机回环地址，原生能读）。
      *
      * `nativeTakesRef` 给那些「用户按下时才跑」的回调（音量、seek、transport）用：
      * 它们不该因为换了一首歌就换身份。
      */
-    const nativePlaybackEnabled = useAudioSettingsStore(state => state.nativePlaybackEnabled);
-    const nativeActive = NATIVE_PLAYBACK_ENABLED && nativePlaybackEnabled && isNativePlayerAvailable();
+    const nativeActive = NATIVE_PLAYBACK_ENABLED && isNativePlayerAvailable();
     const nativeTakes = nativeActive && nativePlaybackEngine.supports(audioSrc);
     const nativeTakesRef = useRef(false);
     useEffect(() => {
         nativeTakesRef.current = nativeTakes;
     }, [nativeTakes]);
+    /** 原生解析失败过的歌（会话级黑名单）：这些歌不再分流，直接走 Web 全流程。 */
+    const nativeFailedKeysRef = useRef<Set<string>>(new Set());
 
     const syncOutputGain = useCallback((targetVolume: number, smoothing = 0.015) => {
         const clampedVolume = clampMediaVolume(targetVolume);
@@ -118,7 +125,8 @@ export const useAppAudioOutput = (model: Input) => {
 
         if (audioRef.current) {
             audioRef.current.volume = clampedVolume;
-            audioRef.current.muted = isMuted;
+            // A preview frame can belong to an older render; the store holds the current mute state.
+            audioRef.current.muted = useAudioSettingsStore.getState().isMuted;
         }
     }, [isMuted]);
 
@@ -130,6 +138,8 @@ export const useAppAudioOutput = (model: Input) => {
 
     const handlePreviewVolume = useCallback((val: number) => {
         pendingVolumePreviewRef.current = val;
+        // 在用户操作这一刻解除静音，不把延迟到下一帧的预览当作新的静音意图。
+        if (val > 0) useAudioSettingsStore.getState().handleSetMuted(false);
 
         if (volumePreviewFrameRef.current !== null) {
             return;
@@ -139,7 +149,18 @@ export const useAppAudioOutput = (model: Input) => {
             volumePreviewFrameRef.current = null;
             const nextVolume = pendingVolumePreviewRef.current;
             if (nextVolume !== null) {
-                syncOutputGain(nextVolume, 0.015);
+                // A positive preview is an explicit unmute. Read the store inside the frame rather
+                // than using an isMuted captured by an older render, so the gain write cannot mute
+                // the preview again. Zero leaves mute alone.
+                // 若这一帧之前用户又点了静音，新的静音意图优先。
+                const mutedNow = useAudioSettingsStore.getState().isMuted;
+                syncOutputGain(mutedNow ? 0 : nextVolume, 0.015);
+                // HiFi 上开了软件音量时，拖动的这一下是从 mpv 里听到的；引擎同配置不重复下发。
+                // 静音同样现读：与上面那一次写一致，避免下发的配置和网页增益说的不是一件事。
+                const hifiSettings = useHifiSettingsStore.getState();
+                if (isHifiRoute() && hifiSettings.softwareVolume) {
+                    void hifiEngine.configure(selectHifiEngineConfig(hifiSettings, nextVolume, mutedNow));
+                }
             }
         });
     }, [syncOutputGain]);
@@ -174,7 +195,7 @@ export const useAppAudioOutput = (model: Input) => {
         ...model,
         coverUrl, effectiveLoopMode, effectiveLyricTimelineOffsetMs, getCoverUrl, getTargetPlaybackVolume,
         handleAudioOutputDeviceChange, handleLyricTimelineOffsetChange, handlePreviewVolume, nativeActive,
-        nativeTakes, nativeTakesRef, persistLastPlaybackCache, recoverOnlinePlaybackSource, setLyrics,
+        nativeTakes, nativeTakesRef, nativeFailedKeysRef, persistLastPlaybackCache, recoverOnlinePlaybackSource, setLyrics,
         setLyricsStable, shouldRefreshCurrentOnlineAudioSource, syncOutputGain
     };
 };

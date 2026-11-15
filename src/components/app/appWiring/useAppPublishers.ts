@@ -6,6 +6,11 @@ import type { AppLibraryControllers } from './useAppLibraryControllers';
 import type { AppPlaybackQueue } from './useAppPlaybackQueue';
 import type { AppPlaybackBridges } from './useAppPlaybackBridges';
 import type { AppChromeAndGestures } from './useAppChromeAndGestures';
+import { useBilibiliMvStore } from '../../../stores/useBilibiliMvStore';
+import { songKeyOf } from '../../bilibili/BilibiliMvLayer';
+import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
+import { usePlaybackStore } from '../../../stores/usePlaybackStore';
+import { nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { useLyricApiPublisher } from '../../../hooks/useLyricApiPublisher';
 import { useObsBrowserSourcePublisher } from '../../../hooks/useObsBrowserSourcePublisher';
 import { useSleepTimer } from '../../../hooks/useSleepTimer';
@@ -66,6 +71,30 @@ export const useAppPublishers = (model: Input) => {
     const generateCurrentSongTheme = useCallback(() => {
         void generateAITheme(lyrics, currentSong);
     }, [currentSong, generateAITheme, lyrics]);
+    /*
+     * 「匹配 MV」：对正在放这首歌重新搜一条 B 站投稿（强制清缓存），拿到新画面后
+     * 从头放。isRematchingMv 跟着这首歌的 inflight 走 —— 匹配中按钮转圈禁点。
+     */
+    const mvSongKey = songKeyOf(currentSong?.name, getSongArtistLabel(currentSong as never));
+    const isRematchingMv = useBilibiliMvStore(state => Boolean(mvSongKey && state.inflight[mvSongKey]));
+    const rematchCurrentSongMv = useCallback(() => {
+        if (!currentSong) return;
+        const title = currentSong.name ?? '';
+        if (!title.trim()) return;
+        const artist = getSongArtistLabel(currentSong as never) || '';
+        const key = songKeyOf(title, artist);
+        const duration = usePlaybackStore.getState().duration ?? 0;
+        void useBilibiliMvStore.getState().resolveForSong(
+            key,
+            title,
+            artist,
+            Number.isFinite(duration) ? duration : 0,
+            true,
+        ).then(() => {
+            // 匹配完从头放：画面 / 声音都换成新选中的那条（store 那边会写回），进度归零。
+            void nativePlaybackEngine.seek(0);
+        });
+    }, [currentSong]);
     const toggleDaylightMode = useCallback(() => {
         handleToggleDaylight(!isDaylight);
     }, [handleToggleDaylight, isDaylight]);
@@ -141,9 +170,10 @@ export const useAppPublishers = (model: Input) => {
 
     return {
         ...model,
-        canGenerateAITheme, currentSearchSourceTabInPalette, generateCurrentSongTheme, isObsBrowserSourceRendering,
+        canGenerateAITheme, currentSearchSourceTabInPalette, generateCurrentSongTheme, isRematchingMv,
+        isObsBrowserSourceRendering,
         isSettingsModalOpen, lyricApiStatus, lyricSegmentationActions, obsBrowserSourceStatus,
-        refreshObsBrowserSourceStatus, setLyricApiEnabled, toggleBrowserFullscreen, toggleDaylightMode,
+        refreshObsBrowserSourceStatus, rematchCurrentSongMv, setLyricApiEnabled, toggleBrowserFullscreen, toggleDaylightMode,
         toggleMainWindowAlwaysOnTop, toggleRemoteControlWindow
     };
 };

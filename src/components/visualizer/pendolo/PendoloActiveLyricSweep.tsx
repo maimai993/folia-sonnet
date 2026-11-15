@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { motion, useTransform, type MotionValue } from 'framer-motion';
 import { type Line, type Theme } from '../../../types';
-import { colorWithAlpha, mixColors } from '../../../utils/visualizer/colorMix';
+import { colorWithAlpha, mixColors } from '../colorMix';
 import { buildLineGraphemeTimeline, splitLyricGraphemes } from '../../../utils/lyrics/graphemeTiming';
 import { measureMonetGraphemeOffsets } from '../monet/monetLyricsModel';
 import { buildPendoloTextLayout, type PendoloWrappedTextLine } from './pendoloTextLayout';
@@ -23,6 +23,10 @@ interface PendoloActiveLyricSweepProps {
     isChorus?: boolean;
     accentMix?: number;
     chorusGlowMultiplier?: number;
+    /** 歌词左右镜像：每一行贴右边排。 */
+    alignRight?: boolean;
+    /** 轮心视角下句子立起来：每一行居中排，中点对着刻度针。优先于 alignRight。 */
+    alignCenter?: boolean;
 }
 
 interface PendoloSweepLineProps {
@@ -100,8 +104,6 @@ const PendoloSweepLine: React.FC<PendoloSweepLineProps> = ({
                 >
                     <motion.span
                         className="absolute inset-0 block whitespace-pre"
-                        // 逐字扫光的叠加层：扁平档要留着这里的颜色（见 index.css 的 [data-folia-lyric-sweep] 段）。
-                        data-folia-lyric-sweep="1"
                         style={{
                             boxSizing: 'border-box',
                             padding: `${glowPaddingPx}px`,
@@ -136,6 +138,8 @@ const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
     isChorus = false,
     accentMix = 0.32,
     chorusGlowMultiplier = 0,
+    alignRight = false,
+    alignCenter = false,
 }) => {
     const text = line.fullText;
     const fontSpec = `${fontWeight} ${fontPx}px ${fontFamily}`;
@@ -189,6 +193,9 @@ const PendoloActiveLyricSweep: React.FC<PendoloActiveLyricSweepProps> = ({
         fontSize: `${fontPx}px`,
         lineHeight: `${lineHeight}px`,
         width: `${maxWidth}px`,
+        ...(alignCenter || alignRight
+            ? { display: 'flex', flexDirection: 'column' as const, alignItems: alignCenter ? 'center' : 'flex-end' }
+            : null),
     };
 
     return (

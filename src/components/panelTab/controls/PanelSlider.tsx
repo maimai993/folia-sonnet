@@ -1,14 +1,20 @@
-import React, { useRef, useState } from 'react';
+import React from 'react';
+import { Slider as UIKitSlider } from '../../ui';
 
 // src/components/panelTab/controls/PanelSlider.tsx
-// A slider drawn by the app, for a value that is tried out while the thumb moves and kept when it
-// is let go: every move calls onPreview, and letting go (the pointer, a key, or focus leaving)
-// calls onCommit, which may come more than once for one hold. The thumb follows the pointer with no delay and grows a little while it is held.
-// A press on the thumb that does not move it sends no value.
-
-const THUMB_PX = 16;
-/** How far an arrow key moves the thumb. */
-const KEY_STEP = 0.05;
+//
+// 调音台 / 雾滑块用的横滑杆。**只是组件库 Slider 的一层外壳**，不再自己画。
+//
+// 为什么收成一层壳：这里以前是一套完全独立的实现（自己的轨道、自己的纯白圆点、
+// 自己的「按下即跳」判定），于是同一个应用里出现了两种滑杆 —— 调音台是一种手感，
+// 设置页是另一种，雾那几根又是第三种。用户反馈的「误触 / 滑不动 / 和主题割裂」
+// 都是这么来的。
+//
+// 现在长得怎么样、手势怎么判，全部由 components/ui/Slider 说了算；这里只把
+// 「0..1 的位置 + 实时预览 + 松手落盘」翻译成它的接口。上面的名字与读数由
+// ConsoleSlider 那一层排版，这里只管滑杆本体。
+//
+// 保留这个文件是为了不动调用点：调音台十几根参数滑杆都直接引用它。
 
 type PanelSliderProps = {
     /** From 0 to 1. */
@@ -19,97 +25,30 @@ type PanelSliderProps = {
     label: string;
     /** How the value reads, e.g. "72%". */
     valueText: string;
+    /** 默认值（0..1）：滑杆上画一根细线标出来。 */
+    defaultValue?: number;
+    /** Out of reach: dimmed, and neither the pointer nor a key moves it. */
+    disabled?: boolean;
 };
 
-const clampUnit = (value: number) => Math.min(1, Math.max(0, value));
-
-export const PanelSlider: React.FC<PanelSliderProps> = ({ value, onPreview, onCommit, label, valueText }) => {
-    const trackRef = useRef<HTMLDivElement>(null);
-    const [isHeld, setIsHeld] = useState(false);
-    const shown = clampUnit(value);
-    /** Where on the thumb it was taken: the pointer's distance from the thumb's centre, 0 for a press on the track. */
-    const grabRef = useRef(0);
-    /** The pointer's last place along the track: a move that is not along it sends nothing. */
-    const lastXRef = useRef(0);
-
-    /** The value for a thumb whose centre is at `centreX`, in whole hundredths. */
-    const valueAt = (centreX: number) => {
-        const rect = trackRef.current!.getBoundingClientRect();
-        return Math.round(clampUnit((centreX - rect.left - THUMB_PX / 2) / (rect.width - THUMB_PX)) * 100) / 100;
-    };
-
-    const release = () => {
-        setIsHeld(false);
-        onCommit();
-    };
-
-    const handleKeyDown = (event: React.KeyboardEvent) => {
-        // To the next line of the key's grid, so a value between two lines gets back onto a round place.
-        const next = event.key === 'ArrowRight' || event.key === 'ArrowUp' ? (Math.floor(shown / KEY_STEP + 1e-6) + 1) * KEY_STEP
-            : event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? (Math.ceil(shown / KEY_STEP - 1e-6) - 1) * KEY_STEP
-                : event.key === 'Home' ? 0
-                    : event.key === 'End' ? 1
-                        : null;
-        if (next === null) {
-            return;
-        }
-        event.preventDefault();
-        onPreview(Math.round(clampUnit(next) * 100) / 100);
-    };
-
-    return (
-        <div
-            ref={trackRef}
-            role="slider"
-            tabIndex={0}
-            aria-label={label}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(shown * 100)}
-            aria-valuetext={valueText}
-            onPointerDown={(event) => {
-                if (event.button !== 0) {
-                    return;
-                }
-                event.currentTarget.setPointerCapture(event.pointerId);
-                setIsHeld(true);
-                lastXRef.current = event.clientX;
-                const rect = event.currentTarget.getBoundingClientRect();
-                const fromCentre = event.clientX - (rect.left + THUMB_PX / 2 + shown * (rect.width - THUMB_PX));
-                // A press on the thumb takes it where it is and changes nothing until it is moved; a
-                // press on the track brings the thumb's centre there.
-                if (Math.abs(fromCentre) <= THUMB_PX / 2) {
-                    grabRef.current = fromCentre;
-                    return;
-                }
-                grabRef.current = 0;
-                onPreview(valueAt(event.clientX));
-            }}
-            onPointerMove={(event) => {
-                // A move with no button down means the release was missed (focus went to another window).
-                if (!isHeld || event.buttons === 0 || event.clientX === lastXRef.current) {
-                    return;
-                }
-                lastXRef.current = event.clientX;
-                onPreview(valueAt(event.clientX - grabRef.current));
-            }}
-            onPointerUp={release}
-            onPointerCancel={release}
-            onLostPointerCapture={release}
-            onKeyDown={handleKeyDown}
-            onKeyUp={onCommit}
-            onBlur={release}
-            className="relative h-6 min-w-0 flex-1 cursor-pointer touch-none rounded-full"
-        >
-            <span className="absolute inset-x-0 top-2.5 h-1 overflow-hidden rounded-full bg-[var(--st-track)]">
-                <span className="absolute inset-0 origin-left bg-[var(--st-accent)]" style={{ transform: `scaleX(${shown})` }} />
-            </span>
-            <span
-                className="st-t-fast absolute top-1 h-4 w-4 rounded-full bg-white shadow-[0_0_0_1px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.35)] transition-transform"
-                style={{ left: `calc(${shown} * (100% - ${THUMB_PX}px))`, transform: isHeld ? 'scale(1.15)' : undefined }}
-            />
-        </div>
-    );
-};
+export const PanelSlider: React.FC<PanelSliderProps> = ({
+    value,
+    onPreview,
+    onCommit,
+    label,
+    valueText,
+    defaultValue,
+    disabled = false,
+}) => (
+    <UIKitSlider
+        value={value}
+        onPreview={onPreview}
+        onCommit={onCommit}
+        label={label}
+        valueText={valueText}
+        defaultValue={defaultValue}
+        disabled={disabled}
+    />
+);
 
 export default PanelSlider;

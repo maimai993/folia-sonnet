@@ -2,6 +2,8 @@ import type React from 'react';
 import type { MotionValue } from 'framer-motion';
 import type FloatingPlayerControls from '../../FloatingPlayerControls';
 import type SearchWorkspace from '../search/SearchWorkspace';
+import type ListeningArchive from '../listeningArchive/ListeningArchive';
+import { useListeningArchiveStore } from '../listeningArchive/listeningArchiveStore';
 import type DevDebugOverlay from '../../DevDebugOverlay';
 import type MemoryMonitorWindow from '../../debug/MemoryMonitorWindow';
 import type NowPlayingToast from './NowPlayingToast';
@@ -9,7 +11,7 @@ import { PlayerState } from '../../../types';
 import type { SongResult, UnifiedSong, LyricData } from '../../../types';
 import { resolvePlaybackNeighbors } from '../../../utils/playbackNeighbors';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
-import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
+import { getSongAlbumLabel, getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { setPlayerState } from '../../../stores/usePlaybackStore';
 import { locatePlayingSongOnWall } from '../lattice/wallLocate';
 import { setIsDevDebugOverlayVisible, setIsMemoryMonitorVisible } from '../../../stores/useAppChromeStore';
@@ -19,6 +21,7 @@ import type { PlayerControlSlotActionId } from '../../../types/playerControlSlot
 // src/components/app/overlays/buildAppOverlaysModel.ts
 
 type SearchOverlayProps = React.ComponentProps<typeof SearchWorkspace>;
+type ListeningArchiveProps = React.ComponentProps<typeof ListeningArchive>;
 type FloatingControlsProps = React.ComponentProps<typeof FloatingPlayerControls>;
 type DebugOverlayProps = React.ComponentProps<typeof DevDebugOverlay>;
 type MemoryMonitorProps = React.ComponentProps<typeof MemoryMonitorWindow>;
@@ -26,6 +29,14 @@ type NowPlayingToastProps = React.ComponentProps<typeof NowPlayingToast>;
 
 export type AppOverlaysModel = {
     searchOverlay?: SearchOverlayProps | null;
+    listeningArchiveOverlay?: ListeningArchiveProps | null;
+    /** 洛雪工作台（歌单 / 榜单 / 搜索 / 音源）：开合在 useLxWorkspaceStore，这里只放播放器回调。 */
+    lxWorkspace?: {
+        theme: any;
+        isDaylight: boolean;
+        onPlayTrack: (track: UnifiedSong) => void;
+        onAddToQueue: (track: UnifiedSong) => void;
+    } | null;
     debugOverlay?: DebugOverlayProps | null;
     memoryMonitor?: MemoryMonitorProps | null;
     floatingControls?: FloatingControlsProps | null;
@@ -39,6 +50,9 @@ type AppOverlaysAmbient = {
 
     currentView: FloatingControlsProps['currentView'];
     isSearchOpen: boolean;
+    /** 搜索页列表往下滚时播放条收起（见 SearchWorkspace 的滚动方向判定）。 */
+    isSearchResultsBarHidden: boolean;
+    isListeningArchiveOpen: boolean;
     isDaylight: boolean;
     isDevDebugOverlayVisible: boolean;
     isMemoryMonitorVisible: boolean;
@@ -87,8 +101,11 @@ export type AppOverlaysDeps = {
     handleSearchResultAddToQueue: (track: UnifiedSong) => void;
     handleSearchResultArtistOpen: SearchOverlayProps['onOpenArtist'];
     handleSearchResultAlbumOpen: SearchOverlayProps['onOpenAlbum'];
+    handleSearchResultCollectionOpen: SearchOverlayProps['onOpenCollection'];
     /** 搜索结果按当前本地曲库目录重算展示（见 SearchWorkspace 的同名 prop）。 */
     resolveSearchResultDisplay: NonNullable<SearchOverlayProps['resolveTrackDisplay']>;
+    /** 本地曲库里有没有歌（搜索页据此列不列「本地」来源）。 */
+    hasLocalSongs: boolean;
     devDebugSnapshot: any;
     effectiveLoopMode: 'off' | 'all' | 'one' | 'shuffle';
     canToggleCurrentPlayback: boolean;
@@ -112,7 +129,7 @@ export type AppOverlaysDeps = {
     invokeCommandById: (commandId: string) => void;
     canInvokeCommandById: (commandId: string) => boolean;
     /** 自动切歌预览（下一首）；isNextUp 时整卡展示它 */
-    stageNextUp: { title: string; artist: string | null; coverUrl: string | null } | null;
+    stageNextUp: { title: string; artist: string | null; coverUrl: string | null; album?: string | null } | null;
     /** 预览态：接下来播放标签 + 挂起 auto 隐藏计时 */
     stageIsNextUp: boolean;
     /** 当前页面 + 显示模式允许卡片在场（歌词页总是，首页看设置）；App 里算好的单一来源 */
@@ -127,6 +144,8 @@ type BuildAppOverlaysModelParams = AppOverlaysAmbient & AppOverlaysDeps;
 export const buildAppOverlaysModel = ({
     currentView,
     isSearchOpen,
+    isSearchResultsBarHidden,
+    isListeningArchiveOpen,
     theme,
     isDaylight,
     closeSearchView,
@@ -136,7 +155,9 @@ export const buildAppOverlaysModel = ({
     handleSearchResultAddToQueue,
     handleSearchResultArtistOpen,
     handleSearchResultAlbumOpen,
+    handleSearchResultCollectionOpen,
     resolveSearchResultDisplay,
+    hasLocalSongs,
     isDevDebugOverlayVisible,
     isMemoryMonitorVisible,
     memoryMonitorShortcutLabel,
@@ -185,16 +206,17 @@ export const buildAppOverlaysModel = ({
     playerControlSlotSecondary,
     playerControlSlotContext,
     onCommitPlayerBottomBarOffset,
-}: BuildAppOverlaysModelParams): AppOverlaysModel => ({
+}: BuildAppOverlaysModelParams): AppOverlaysModel => {
     // Gated on stageTrackPillOnScreen (computed in App: display mode plus which page allows the
     // card) rather than on the view directly, so the countdown that feeds the "up next" preview
     // and the card that shows it can never disagree about where the card lives.
-    nowPlayingToast: stageTrackPillOnScreen && currentSong
+    const nowPlayingToast: NowPlayingToastProps | null = stageTrackPillOnScreen && currentSong
         ? {
             song: {
                 title: currentSong.name || '',
                 artist: getSongArtistLabel(currentSong) || null,
                 coverUrl: coverUrl || null,
+                album: getSongAlbumLabel(currentSong) || null,
             },
             trackKey: getPlaybackSongKey(currentSong),
             isDaylight,
@@ -214,108 +236,150 @@ export const buildAppOverlaysModel = ({
                     ? stageTrackPillFocusLatticeLabel
                     : stageTrackPillOpenSongCardLabel,
         }
-        : null,
-    searchOverlay: currentView === 'home'
-        ? {
+        : null;
+    return {
+        nowPlayingToast,
+        // 洛雪工作台不限页面：登录页选中洛雪音源那一行就能开，开在播放页上面也说得通。
+        lxWorkspace: {
             theme,
             isDaylight,
-            onClose: closeSearchView,
-            onSubmitSearch: handleSearchOverlaySubmit,
-            onLoadMore: handleSearchLoadMore,
             onPlayTrack: handleSearchResultPlay,
-            onAddTrackToQueue: handleSearchResultAddToQueue,
-            onOpenArtist: handleSearchResultArtistOpen,
-            onOpenAlbum: handleSearchResultAlbumOpen,
-            resolveTrackDisplay: resolveSearchResultDisplay,
-        }
-        : null,
-    // Not gated on the view, and that was a real hole: the app cold-starts on the home page,
-    // so after a restart the chord opened nothing until something had been played - which
-    // reads exactly like the switch in Settings having lost its setting. This overlay is the
-    // only console the packaged build has, and the pages it could not be opened from are the
-    // ones where a problem stops you ever reaching the player.
-    debugOverlay: isDevDebugOverlayVisible && devDebugSnapshot
-        ? {
-            snapshot: devDebugSnapshot,
-            currentTime,
-            lyricCurrentTime,
-            isDaylight,
-            onClose: () => setIsDevDebugOverlayVisible(false),
-        }
-        : null,
-    // Independent of the log window on purpose: they answer different questions and are read side
-    // by side. Closing either one stops neither the console buffer nor the sampling behind it.
-    memoryMonitor: isMemoryMonitorVisible
-        ? {
-            isDaylight,
-            shortcutLabel: memoryMonitorShortcutLabel,
-            onClose: () => setIsMemoryMonitorVisible(false),
-        }
-        : null,
-    floatingControls: currentSong
-        ? {
-            currentSong,
-            playerState,
-            currentTime,
-            lyricCurrentTime,
-            duration,
-            loopMode: effectiveLoopMode,
-            currentView,
-            audioSrc,
-            canTogglePlay: canToggleCurrentPlayback,
-            controlsDisabled: isNowPlayingControlDisabled,
-            lyrics,
-            onSeek: (time) => {
-                if (isNowPlayingControlDisabled) {
-                    return;
-                }
-
-                if (activePlaybackContext === 'stage' && stageActiveEntryKind === 'lyrics' && !audioSrc) {
-                    syncStageLyricsClock(time, duration, playerState, stageLyricsClockRef.current.startTimeSec);
-                    currentTime.set(time);
-                    if (playerState !== PlayerState.PLAYING) {
-                        setPlayerState(PlayerState.PLAYING);
+            onAddToQueue: handleSearchResultAddToQueue,
+        },
+        searchOverlay: currentView === 'home'
+            ? {
+                theme,
+                isDaylight,
+                onClose: closeSearchView,
+                onSubmitSearch: handleSearchOverlaySubmit,
+                onLoadMore: handleSearchLoadMore,
+                onPlayTrack: handleSearchResultPlay,
+                onAddTrackToQueue: handleSearchResultAddToQueue,
+                onOpenArtist: handleSearchResultArtistOpen,
+                onOpenAlbum: handleSearchResultAlbumOpen,
+                onOpenCollection: handleSearchResultCollectionOpen,
+                resolveTrackDisplay: resolveSearchResultDisplay,
+                hasLocalSongs,
+            }
+            : null,
+        // 听歌档案不按页面门控：它读的是已经落库的播放记录，从命令面板在任何页面上都能打开。
+        // 关闭走 store（这一层没有别处能关它的动作），和搜索 overlay 的 closeSearchView 一样是
+        // 「关掉那一个功能自己的展开状态」。
+        listeningArchiveOverlay: isListeningArchiveOpen
+            ? {
+                theme,
+                isDaylight,
+                onClose: () => useListeningArchiveStore.getState().close(),
+            }
+            : null,
+        // Not gated on the view, and that was a real hole: the app cold-starts on the home page,
+        // so after a restart the chord opened nothing until something had been played - which
+        // reads exactly like the switch in Settings having lost its setting. This overlay is the
+        // only console the packaged build has, and the pages it could not be opened from are the
+        // ones where a problem stops you ever reaching the player.
+        debugOverlay: isDevDebugOverlayVisible && devDebugSnapshot
+            ? {
+                snapshot: devDebugSnapshot,
+                currentTime,
+                lyricCurrentTime,
+                isDaylight,
+                onClose: () => setIsDevDebugOverlayVisible(false),
+            }
+            : null,
+        // Independent of the log window on purpose: they answer different questions and are read side
+        // by side. Closing either one stops neither the console buffer nor the sampling behind it.
+        memoryMonitor: isMemoryMonitorVisible
+            ? {
+                isDaylight,
+                shortcutLabel: memoryMonitorShortcutLabel,
+                onClose: () => setIsMemoryMonitorVisible(false),
+            }
+            : null,
+        floatingControls: currentSong
+            ? {
+                currentSong,
+                playerState,
+                currentTime,
+                lyricCurrentTime,
+                duration,
+                loopMode: effectiveLoopMode,
+                currentView,
+                audioSrc,
+                canTogglePlay: canToggleCurrentPlayback,
+                controlsDisabled: isNowPlayingControlDisabled,
+                lyrics,
+                // 展开的紧凑胶囊拿它画封面和封面旁边的字（歌手 / 专辑，预告时是下一首）。
+                // 和上面那个 toast 是同一份数据、同一个「能不能在这一页出现」的判断；
+                // toast 那边几个字段是可选的，胶囊要的是填好的值，所以在这里逐个补齐。
+                card: nowPlayingToast
+                    ? {
+                        song: nowPlayingToast.song,
+                        trackKey: nowPlayingToast.trackKey,
+                        nextUp: nowPlayingToast.nextUp ?? null,
+                        isNextUp: nowPlayingToast.isNextUp ?? false,
+                        mode: nowPlayingToast.mode ?? 'auto',
+                        timeoutSec: nowPlayingToast.timeoutSec ?? 10,
+                        onActivate: nowPlayingToast.onActivate,
+                        activateLabel: nowPlayingToast.activateLabel,
                     }
-                    void onStagePlayerSeek();
-                } else {
-                    onSeekMainAudio(time);
-                }
-            },
-            onTogglePlay: togglePlay,
-            onToggleLoop: toggleLoop,
-            onNavigateToPlayer: navigateFromPlayerCapsule,
-            noTrackText,
-            primaryColor: 'var(--text-primary)',
-            secondaryColor: 'var(--text-secondary)',
-            theme,
-            isDaylight,
-            isHidden: currentView === 'player' && isPlayerChromeHidden,
-            hideControlBar: shouldHidePlayerProgressBar,
-            slotPrimary: playerControlSlotPrimary,
-            slotSecondary: playerControlSlotSecondary,
-            slotContext: playerControlSlotContext,
-            onCommitBottomBarOffset: onCommitPlayerBottomBarOffset,
-            trackNavigation: ((): FloatingControlsProps['trackNavigation'] => {
-                const neighbors = resolvePlaybackNeighbors({
-                    playQueue,
-                    currentSong,
-                    loopMode: effectiveLoopMode,
-                    isFmMode,
-                    isStageActive: isNowPlayingStageActive,
-                });
+                    : null,
+                // 播放页胶囊上的定位按钮：回到歌曲墙上正在放的那一首。
+                onFocusLatticeCurrentSong: locatePlayingSongOnWall,
+                onSeek: (time) => {
+                    if (isNowPlayingControlDisabled) {
+                        return;
+                    }
 
-                return {
-                    currentTrackKey: getPlaybackSongKey(currentSong),
-                    onPrev: handlePrevTrack,
-                    onNext: handleNextTrack,
-                    canPrev: neighbors.prev.canGo && !isNowPlayingControlDisabled,
-                    canNext: neighbors.next.canGo && !isNowPlayingControlDisabled,
-                    prevTitle: neighbors.prev.title,
-                    nextTitle: neighbors.next.title,
-                    prevLabel: prevTrackLabel,
-                    nextLabel: nextTrackLabel,
-                };
-            })(),
-        }
-        : null,
-});
+                    if (activePlaybackContext === 'stage' && stageActiveEntryKind === 'lyrics' && !audioSrc) {
+                        syncStageLyricsClock(time, duration, playerState, stageLyricsClockRef.current.startTimeSec);
+                        currentTime.set(time);
+                        if (playerState !== PlayerState.PLAYING) {
+                            setPlayerState(PlayerState.PLAYING);
+                        }
+                        void onStagePlayerSeek();
+                    } else {
+                        onSeekMainAudio(time);
+                    }
+                },
+                onTogglePlay: togglePlay,
+                onToggleLoop: toggleLoop,
+                onNavigateToPlayer: navigateFromPlayerCapsule,
+                noTrackText,
+                primaryColor: 'var(--text-primary)',
+                secondaryColor: 'var(--text-secondary)',
+                theme,
+                isDaylight,
+                isHidden: currentView === 'player' && isPlayerChromeHidden,
+                // 搜索页盖住整屏、又不给列表末尾留出胶囊的净空，「查看更多」就在胶囊底下。
+                // 往下滚时把它收到屏幕下面，往上滚（或关掉搜索页）再放回来。
+                isScrollHidden: currentView === 'home' && isSearchOpen && isSearchResultsBarHidden,
+                hideControlBar: shouldHidePlayerProgressBar,
+                slotPrimary: playerControlSlotPrimary,
+                slotSecondary: playerControlSlotSecondary,
+                slotContext: playerControlSlotContext,
+                onCommitBottomBarOffset: onCommitPlayerBottomBarOffset,
+                trackNavigation: ((): FloatingControlsProps['trackNavigation'] => {
+                    const neighbors = resolvePlaybackNeighbors({
+                        playQueue,
+                        currentSong,
+                        loopMode: effectiveLoopMode,
+                        isFmMode,
+                        isStageActive: isNowPlayingStageActive,
+                    });
+
+                    return {
+                        currentTrackKey: getPlaybackSongKey(currentSong),
+                        onPrev: handlePrevTrack,
+                        onNext: handleNextTrack,
+                        canPrev: neighbors.prev.canGo && !isNowPlayingControlDisabled,
+                        canNext: neighbors.next.canGo && !isNowPlayingControlDisabled,
+                        prevTitle: neighbors.prev.title,
+                        nextTitle: neighbors.next.title,
+                        prevLabel: prevTrackLabel,
+                        nextLabel: nextTrackLabel,
+                    };
+                })(),
+            }
+            : null,
+    };
+};

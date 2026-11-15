@@ -42,6 +42,7 @@ describe('library suite store', () => {
     it('uses the built-in initial choice (bravais) when the build does not override it', async () => {
         vi.stubEnv('VITE_LIBRARY_INITIAL_SUITE', undefined);
         const { useLibrarySuiteStore, setItem } = await loadStore();
+        // 内置初始选择与 src 的 LIBRARY_SUITE_INITIAL_CHOICE_FALLBACK 一致：bravais。
         expect(useLibrarySuiteStore.getState().suite).toBe('bravais');
         expect(setItem).not.toHaveBeenCalled();
     });

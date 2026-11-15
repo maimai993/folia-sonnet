@@ -15,23 +15,34 @@ export interface MonetBackgroundImageActions {
     handleClearMonetBackgroundImage: () => Promise<void>;
 }
 
-export const monetBackgroundImageActions = ({ held, hold }: HeldTuning<MonetBackgroundTuning>): MonetBackgroundImageActions => ({
-    handleUploadMonetBackgroundImage: async (files) => {
-        const file = files[0];
-        if (!file) {
-            return { ok: false, error: i18n.t('notifications.selectImageFile') };
-        }
-
-        if (!isSupportedMonetBackgroundFile(file)) {
-            return { ok: false, error: i18n.t('notifications.unsupportedImageFormat') };
-        }
-
+/**
+ * 上传一张自选背景图。
+ *
+ * 这是**唯一**的入口：本地文件 → 存 IndexedDB → 更新 store → 提示。
+ * 背景市场也走这里（先把网络图下载成 File），不另开一条写库的路 ——
+ * 两条路各写各的，迟早会出现「设置里看得见、可视化里看不见」这种对不上的情况。
+ */
+export const uploadMonetBackgroundImage = async (files: File[]): Promise<{ ok: boolean; error?: string }> => {
+    const file = files[0];
+    if (!file) {
+        return { ok: false, error: i18n.t('notifications.selectImageFile') };
+    }
+    if (!isSupportedMonetBackgroundFile(file)) {
+        return { ok: false, error: i18n.t('notifications.unsupportedImageFormat') };
+    }
+    try {
         const image = buildStoredMonetBackgroundImage(file);
         await saveMonetBackgroundImage(image);
         useVisualizerAssetStore.setState({ storedMonetBackgroundImage: image });
         setStatusMessage({ type: 'success', text: i18n.t('notifications.monetBgUpdated') });
         return { ok: true };
-    },
+    } catch (error) {
+        return { ok: false, error: (error as Error)?.message ?? 'upload failed' };
+    }
+};
+
+export const monetBackgroundImageActions = ({ held, hold }: HeldTuning<MonetBackgroundTuning>): MonetBackgroundImageActions => ({
+    handleUploadMonetBackgroundImage: uploadMonetBackgroundImage,
     handleClearMonetBackgroundImage: async () => {
         await clearMonetBackgroundImage();
         const prev = held();

@@ -69,6 +69,7 @@ export type StoredMonetBackgroundTuningInput = Partial<MonetBackgroundTuning> & 
 /** A stored tuning, or a part of one, as a whole valid tuning. */
 export const resolveStoredMonetBackgroundTuning = (parsed: StoredMonetBackgroundTuningInput): MonetBackgroundTuning => ({
     backgroundSource: backgroundSource(parsed.backgroundSource),
+    backgroundShowCover: parsed.backgroundShowCover ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundShowCover,
     backgroundLayout: backgroundLayout(parsed.backgroundLayout),
     backgroundBlurPx: blurPx(
         parsed.backgroundBlurPx ?? DEFAULT_MONET_BACKGROUND_TUNING.backgroundBlurPx,

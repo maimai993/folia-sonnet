@@ -37,6 +37,17 @@ export type AudioEffectControl = {
     addsNoise?: boolean;
 };
 
+// 调音台里**有滑杆**的那几项。
+//
+// 只有两颗滤波器：它们是原生链上真正接住的两项（EqAudioProcessor 的 ② 高通 / 低通）。
+// 其余七项在安卓上没有任何一站接手，或者已经被别的页取代：
+//   · 饱和失真、比特降质、抖晃、黑胶噪声 —— 原生侧从来没有实现，拖到头也听不出变化；
+//   · 立体声宽度 —— 归「混响 · 声场」，那边还多一根低频单声道；
+//   · 空间混响 —— 归「混响」整页（RT60、阻尼、预延迟、干湿比）；
+//   · 动态压缩 —— 归「压缩」整页（四段、阈值、比率、拐点、平行）。
+// 留着它们的滑杆只会让人以为拖了有用，或者以为自己没找到生效的位置。
+export const AUDIO_CONSOLE_EFFECT_IDS: readonly AudioEffectId[] = ['highpass', 'lowpass'];
+
 // Slider order follows the signal flow: tone shaping, then colour, then space.
 export const AUDIO_EFFECT_CONTROLS: readonly AudioEffectControl[] = [
     { id: 'highpass', min: 20, max: 2000, step: 1, neutral: 20, scale: 'log', unit: 'hz' },

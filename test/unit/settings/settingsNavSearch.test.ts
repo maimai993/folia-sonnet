@@ -70,7 +70,7 @@ describe('searchSettings', () => {
     });
 
     it('finds a category through a command synonym no label spells out', () => {
-        expect(hitsFor('fps')).toContainEqual({ sectionId: 'graphics', targetId: null, label: '性能与动效', path: '应用' });
+        expect(hitsFor('fps')).toContainEqual({ sectionId: 'graphics', targetId: null, label: '动画与性能', path: '界面' });
     });
 
     it('finds a category by the name of its side-list group', () => {
@@ -87,8 +87,12 @@ describe('searchSettings', () => {
     });
 
     it('never surfaces what the platform does not show', () => {
+        /*
+         * 模组页现在各平台都有（安卓靠内置 nodejs-mobile 运行时），
+         * 所以 web 上也要能搜到 —— 不再是「平台不显示」的那一类。
+         */
         expect(hitsFor('模组').map(hit => hit.sectionId)).toContain('mods');
-        expect(hitsFor('模组', webEntries).map(hit => hit.sectionId)).not.toContain('mods');
+        expect(hitsFor('模组', webEntries).map(hit => hit.sectionId)).toContain('mods');
 
         expect(hitsFor('AI 供应商').map(hit => hit.targetId)).toContain('aiProvider');
         expect(hitsFor('AI 供应商', webEntries)).toEqual([]);

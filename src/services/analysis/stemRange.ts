@@ -1,4 +1,5 @@
 import { HTDEMUCS_GPU_SEGMENT, runHtdemucsGpu, type GpuRunOptions, type StemChannels } from './beatThisGpu';
+import { isNativeModelsAvailable, separateStemsNative } from '../automix/nativeModels';
 
 // src/services/analysis/stemRange.ts
 // Any stretch of a track's four stems from htdemucs on the GPU, on the one segment grid every caller
@@ -225,8 +226,13 @@ export const forgetStemRange = (key: string, from: number, to: number, total: nu
     }
 };
 
-/** Who is separating: what it keeps for the others differs (see the header). */
-export type StemSeparator = 'drums' | 'stems';
+/**
+ * Who is separating: what it keeps for the others differs (see the header). 'drums' and 'pass' are a
+ * track's stem pass (stemPass.ts) - reading the drums alone, which a segment kept as its drums will
+ * do for, or more than the drums - and keep nothing for the drum hits (they are the drum hits, or
+ * carry them); 'stems' is automix.
+ */
+export type StemSeparator = 'drums' | 'pass' | 'stems';
 
 /**
  * One segment of `key` (a track of `total` samples): from the cache, or separated now on the GPU
@@ -253,6 +259,25 @@ export const separateStemSegment = async (
         if (joined && (by === 'drums' || joined.length === STEM_SOURCES.length)) return joined;
     }
     const run = (async () => {
+        /*
+         * 安卓：走原生 onnxruntime。
+         *
+         * 原来这里只有 runHtdemucsGpu 一条路，而它是 WebGPU/WGSL 实现
+         * （drumStem.ts 的头注释写着 "GPU only: there is no CPU path behind this"）。
+         * 安卓 WebView 没有 WebGPU，所以这条路在这里**必然**返回 null ——
+         * 于是仿真鼓面、雾笺人声、automix 分轨在手机上一律不出效果，
+         * 即使 htdemucs 权重就在 APK 里。
+         *
+         * 现在先问原生；拿不到再落回 GPU（桌面仍然只走 GPU）。
+         */
+        if (isNativeModelsAvailable()) {
+            const separated = await separateStemsNative(inLeft, inRight);
+            if (separated) {
+                // 与 GPU 路径同样的顺序：drums, bass, other, vocals（STEM_SOURCES）。
+                return STEM_SOURCES.map(name => separated[name]);
+            }
+            return null;
+        }
         const result = await runHtdemucsGpu(inLeft, inRight, { ...options, key: options.key ?? key });
         if (!result) return null;
         return result.stems ?? [{ left: result.left, right: result.right }];

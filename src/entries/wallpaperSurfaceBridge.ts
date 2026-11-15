@@ -33,6 +33,8 @@ let lastGoodLines: WallpaperTimedLine[] | null = null;
 let lastGoodTitle = '';
 let lastGoodAt = 0;
 const STALE_FALLBACK_MS = 3000;
+/** 上一次「整包缺主题字段、沿用上一份」的字段组合，只用来给日志去重。 */
+let lastHeldThemeFields = '';
 
 window.__foliaWallpaperPush = (incoming) => {
     let payload = incoming;
@@ -56,6 +58,60 @@ window.__foliaWallpaperPush = (incoming) => {
      */
     if (!payload.coverUrl && !payload.cover && (latest.coverUrl || latest.cover)) {
         payload = { ...payload, coverUrl: latest.coverUrl, cover: latest.cover };
+    }
+    /*
+     * 群唱自定义图同理：它们走单独那条通道，整包里根本没有这两个字段 ——
+     * 不补的话，每一次换歌推送都会把已经到位的头像冲成空，
+     * Cappella 当场退回封面。
+     */
+    if (!payload.cappellaAvatarImages && latest.cappellaAvatarImages) {
+        payload = { ...payload, cappellaAvatarImages: latest.cappellaAvatarImages };
+    }
+    if (!payload.cappellaEmojiImages && latest.cappellaEmojiImages) {
+        payload = { ...payload, cappellaEmojiImages: latest.cappellaEmojiImages };
+    }
+    /*
+     * 主题那三样（整份主题 JSON、主文本色、次色）和封面一样是**容易掉**的字段。
+     *
+     * 为什么必须在这里补：原生推的整包不是每一份都带它们 —— 高亮色与底色在快照里
+     * （每一份都带），而 `primaryColor` / `secondaryColor` / `theme` 存在原生那张
+     * `WallpaperThemePalette` 表里，只有表里有值时才写进整包。于是只要哪一份整包
+     * 在这些字段上恰好是空的（首份数据、表还没写进去、被清过），叠层的三个颜色就
+     * 当场退回内置主题——而内置主题是按封面随机生成的，跟 App 无关：
+     * 表现正是「高亮色在、主题色没了」。沿用上一份，比退回随机色好得多。
+     *
+     * 高亮色 / 底色一起补：它们在快照里虽然每份都带，但原生冷启动时快照可能是空的
+     * （`colorToHex(0)` 那种「还没设过」的状态），补一下省得整页先黑一下再跳回来。
+     */
+    const heldThemeFields: string[] = [];
+    const keepThemeField = <K extends 'accent' | 'backgroundColor' | 'primaryColor' | 'secondaryColor' | 'theme'>(
+        field: K,
+    ) => {
+        const incomingValue = payload[field];
+        const heldValue = latest[field];
+        const incomingMissing = incomingValue === undefined || incomingValue === null
+            || (typeof incomingValue === 'string' && incomingValue.trim().length === 0);
+        const heldUsable = heldValue !== undefined && heldValue !== null
+            && !(typeof heldValue === 'string' && heldValue.trim().length === 0);
+        if (!incomingMissing || !heldUsable) return;
+        payload = { ...payload, [field]: heldValue } as WallpaperPayload;
+        heldThemeFields.push(field);
+    };
+    keepThemeField('accent');
+    keepThemeField('backgroundColor');
+    keepThemeField('primaryColor');
+    keepThemeField('secondaryColor');
+    keepThemeField('theme');
+    /*
+     * 记一条决定：哪几个字段是「这份整包没带、沿用上一份」的。
+     * 只在组合变化时打，避免心跳把日志刷满。
+     */
+    const heldSignature = heldThemeFields.join(',');
+    if (heldSignature !== lastHeldThemeFields) {
+        lastHeldThemeFields = heldSignature;
+        if (heldThemeFields.length > 0) {
+            console.log('[Wallpaper] 整包缺主题字段，沿用上一份', heldThemeFields);
+        }
     }
     /*
      * 安全区必须在**通知订阅者之前**落下去。
@@ -89,6 +145,24 @@ window.__foliaWallpaperPushCover = (incoming) => {
     if (!url && !data) return;
     if (latest.coverUrl === url && latest.cover === data) return;
     latest = { ...latest, coverUrl: url, cover: data };
+    subscribers.forEach(notify => notify());
+};
+
+/**
+ * 群唱自定义头像 / 表情图单独那条通道。
+ *
+ * 和封面一样落在 `latest` 上：组件那边只读一份快照，不会出现两套互相打架的数据。
+ */
+window.__foliaWallpaperPushCappellaImages = (incoming) => {
+    if (!incoming || typeof incoming !== 'object') return;
+    const avatars = Array.isArray(incoming.avatars) ? incoming.avatars : undefined;
+    const emojis = Array.isArray(incoming.emojis) ? incoming.emojis : undefined;
+    if (!avatars && !emojis) return;
+    latest = {
+        ...latest,
+        cappellaAvatarImages: avatars ?? latest.cappellaAvatarImages,
+        cappellaEmojiImages: emojis ?? latest.cappellaEmojiImages,
+    };
     subscribers.forEach(notify => notify());
 };
 

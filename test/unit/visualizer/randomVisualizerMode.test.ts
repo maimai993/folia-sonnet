@@ -21,6 +21,9 @@ import { useRandomVisualizerMode } from '@/hooks/useRandomVisualizerMode';
 import { useVisualizerSettingsStore } from '@/stores/useVisualizerSettingsStore';
 import { collectVisualizerTunings } from '@/components/visualizer/tuningRegistry';
 import { BUILTIN_VISUALIZER_MODES } from '@/types/visualizerModes';
+
+// 随机池里没有 `blank`：它一个歌词都不画，随机到它读起来是「样式坏了」。
+const RANDOM_ELIGIBLE_MODES = BUILTIN_VISUALIZER_MODES.filter(mode => mode !== 'blank');
 import { readStoredRandomVisualizerModes, RANDOM_VISUALIZER_MODES_STORAGE_KEY } from '@/stores/visualizerSettingsPersistence';
 import type { SongResult } from '@/types';
 import { buildCurrentConfig, applyImportedConfig, planConfigImport, type ConfigThemeControls } from '@/components/modal/settings/pages/storage/visualConfigTransfer';
@@ -184,7 +187,7 @@ describe('per-song random lyric styles', () => {
     it.each([
         { pool: ['sonnet'], expected: ['sonnet'] },
         { pool: ['unknown', 'sonnet', 'sonnet'], expected: ['sonnet'] },
-        { pool: [], expected: BUILTIN_VISUALIZER_MODES },
+        { pool: [], expected: RANDOM_ELIGIBLE_MODES },
     ])('decodes a standalone minified random-style pool: $pool', ({ pool, expected }) => {
         expect(decompressConfig(JSON.stringify({ rvm: pool }))).toEqual({ randomVisualizerModes: expected });
     });
@@ -220,12 +223,12 @@ describe('per-song random lyric styles', () => {
     });
 
     it('persists the pool and restores safe defaults for old or corrupt storage', () => {
-        expect(readStoredRandomVisualizerModes()).toEqual(BUILTIN_VISUALIZER_MODES);
+        expect(readStoredRandomVisualizerModes()).toEqual(RANDOM_ELIGIBLE_MODES);
         localStorage.setItem(RANDOM_VISUALIZER_MODES_STORAGE_KEY, '{broken');
-        expect(readStoredRandomVisualizerModes()).toEqual(BUILTIN_VISUALIZER_MODES);
+        expect(readStoredRandomVisualizerModes()).toEqual(RANDOM_ELIGIBLE_MODES);
         state().handleSetRandomVisualizerModes(['tilt', 'sonnet', 'tilt']);
         expect(readStoredRandomVisualizerModes()).toEqual(['sonnet', 'tilt']);
         state().handleSetRandomVisualizerModes([]);
-        expect(readStoredRandomVisualizerModes()).toEqual(BUILTIN_VISUALIZER_MODES);
+        expect(readStoredRandomVisualizerModes()).toEqual(RANDOM_ELIGIBLE_MODES);
     });
 });

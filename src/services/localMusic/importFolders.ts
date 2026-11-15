@@ -118,6 +118,17 @@ async function hydrateImportedSongsInBackground(rootFolderName: string, songs: L
 }
 
 // Import folder using File System Access API (if supported)
+/**
+ * ⚠️ 这份 `importFolder` **目前没有任何调用方**。
+ *
+ * 真正被首页用的是 `src/services/localMusicService.ts` 里的同名函数
+ * （`createLibraryHomePort.ts` 从那里导入）。两份实现曾经分叉过：这里加了
+ * 安卓分支、那边没加，于是安卓上点「导入文件夹」只会调 Web 的
+ * `showDirectoryPicker`，加载动画闪一下就没了，系统文件管理器根本不弹。
+ *
+ * 那边现在已经补上同样的安卓分支。改这里的逻辑时**务必同步改那边**，
+ * 否则又会变成「改了没生效」。长期看应该只留一份。
+ */
 export async function importFolder(expectedRootName?: string): Promise<LocalSong[]> {
     /*
      * 安卓没有 File System Access API，这里不能去调 showDirectoryPicker —— 它会直接抛

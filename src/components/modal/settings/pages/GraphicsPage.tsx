@@ -7,15 +7,20 @@ import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsSt
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
+import type { LyricAntialias } from '../../../../types';
 import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../../utils/frameRateLimiter';
+import { LYRIC_RENDER_SCALES } from '../../../../utils/lyricRenderQuality';
 import { DEFAULT_RENDER_PIXEL_RATIO, RENDER_PIXEL_RATIO_OPTIONS } from '../../../../utils/renderPixelRatio';
+import { lyricAntialiasChoices, lyricRenderScaleChoices } from '../../../visualizer/renderQuality/LyricRenderQualityRows';
 import { Group, Link, Reveal, Row, Segmented, Toggle, option, useSettingsKitTheme, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import { GpuPreferenceRow } from './graphics/GpuPreferenceRow';
+import LiquidGlassGroup, { LIQUID_GLASS_OPTIONS } from './graphics/LiquidGlassGroup';
 import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/GraphicsPage.tsx
-// The 性能与动效 page: what trades picture for smoothness or works around a renderer problem
-// (static mode, the home background, native blur, the frame-rate cap, background throttling, the
+// The 动画与性能 page: what trades picture for smoothness or works around a renderer problem
+// (static mode, the home background, native blur, the frame-rate cap, the lyric canvas resolution and
+// anti-aliasing every canvas / WebGL lyric style follows by default, background throttling, the
 // Linux glow fix, the Windows render GPU), and which parts of the interface play reduced motion.
 
 /** Docs page behind the "Fix lyric animation freeze on Linux" switch. */
@@ -39,11 +44,10 @@ const O = {
     nativeBlur: option(PERFORMANCE, 'enablePlayerPageNativeBlur', 'options.enablePlayerPageNativeBlur'),
     frameRate: option(PERFORMANCE, 'visualizerFrameRate', 'options.visualizerFrameRate'),
     frameRateValue: option(PERFORMANCE, 'visualizerFrameRateValue', 'options.visualizerFrameRateValue'),
+    lyricRenderScale: option(PERFORMANCE, 'lyricRenderScale', 'options.lyricRenderScale'),
+    lyricAntialias: option(PERFORMANCE, 'lyricAntialias', 'options.lyricAntialias'),
     backgroundThrottling: option(PERFORMANCE, 'backgroundThrottling', 'options.backgroundThrottling', { electronOnly: true }),
     glowFix: option(PERFORMANCE, 'glowBlurQuantize', 'options.glowBlurQuantize'),
-    // 这两行是 fork 自己加的，说明收进「i」（`noteKey`）而不是印在标签下面 —— 见 kit/Row.tsx 的说明。
-    renderPixelRatio: option(PERFORMANCE, 'renderPixelRatio', 'options.renderPixelRatio', { noteKey: 'options.renderPixelRatioDesc' }),
-    renderPixelRatioValue: option(PERFORMANCE, 'renderPixelRatioValue', 'options.renderPixelRatioValue'),
     gpuPreference: option(PERFORMANCE, 'gpuPreference', 'options.gpuPreference', { electronOnly: true, available: () => IS_WINDOWS_DESKTOP }),
     followSystem: option(MOTION, 'reduceMotionFollowSystem', 'options.reduceMotionFollowSystem'),
 };
@@ -61,11 +65,13 @@ const SURFACE_ROWS: Record<MotionSurfaceId, { option: SettingsOptionDef; hintKey
 export const OPTIONS: SettingsOptionDef[] = [
     ...Object.values(O).filter(row => row !== O.nativeBlur || !IS_LINUX),
     ...MOTION_SURFACE_IDS.map(surface => SURFACE_ROWS[surface].option),
+    ...LIQUID_GLASS_OPTIONS,
 ];
 
-const FRAME_RATE_CHOICES = VISUALIZER_FRAME_RATE_OPTIONS.map(rate => ({ value: String(rate), label: `${rate} FPS` }));
 /** 档位直接印出来（0.5 / 0.75 / 1 / 1.25 / 1.5 / 2），不补尾随零。 */
 const RENDER_PIXEL_RATIO_CHOICES = RENDER_PIXEL_RATIO_OPTIONS.map(ratio => ({ value: String(ratio), label: `×${ratio}` }));
+
+const FRAME_RATE_CHOICES = VISUALIZER_FRAME_RATE_OPTIONS.map(rate => ({ value: String(rate), label: `${rate} FPS` }));
 
 const GraphicsPage: React.FC = () => {
     const { t } = useTranslation();
@@ -84,9 +90,11 @@ const GraphicsPage: React.FC = () => {
     const visualizer = useVisualizerSettingsStore(useShallow(state => ({
         frameRate: state.visualizerFrameRate,
         glowFix: state.glowBlurQuantize,
-        renderPixelRatio: state.renderPixelRatio,
         setFrameRate: state.handleSetVisualizerFrameRate,
         setGlowFix: state.handleToggleGlowBlurQuantize,
+        renderQuality: state.lyricRenderQuality,
+        setRenderQuality: state.handleSetLyricRenderQuality,
+        renderPixelRatio: state.renderPixelRatio,
         setRenderPixelRatio: state.handleSetRenderPixelRatio,
     })));
     const motion = useMotionSettingsStore(useShallow(state => ({
@@ -99,10 +107,6 @@ const GraphicsPage: React.FC = () => {
     // Native blur can drop frames on some GPUs, so switching it on asks first.
     const [nativeBlurAsking, setNativeBlurAsking] = useState(false);
     const frameRateLimited = visualizer.frameRate !== 'off';
-    const isRenderPixelRatioLimited = visualizer.renderPixelRatio !== null;
-    // 关着的时候档位停在默认档，打开的瞬间就落在这一档；右边显示的却是**当前生效**的像素比
-    // （跟随屏幕时就是屏幕自己的值），所以关/开两边都不会出现「显示的数和画面对不上」。
-    const selectedRenderPixelRatio = isRenderPixelRatioLimited ? visualizer.renderPixelRatio : DEFAULT_RENDER_PIXEL_RATIO;
 
     return (
         <>
@@ -136,24 +140,25 @@ const GraphicsPage: React.FC = () => {
                         />
                     </Row>
                 </Reveal>
-                <Row option={O.renderPixelRatio}>
-                    <Toggle
-                        checked={isRenderPixelRatioLimited}
-                        onChange={enabled => visualizer.setRenderPixelRatio(enabled ? DEFAULT_RENDER_PIXEL_RATIO : null)}
+                {/* 渲染分辨率上限已删：与歌词画布自己的渲染倍率（lyricRenderScale）冲突 ——
+                    两层各夹一次，最终清晰度对不上设置里的数。 */}
+                <Row option={O.lyricRenderScale} note={t('options.lyricRenderScaleDesc')}>
+                    <Segmented
+                        value={String(visualizer.renderQuality.scale)}
+                        options={lyricRenderScaleChoices()}
+                        onChange={(value) => {
+                            const scale = LYRIC_RENDER_SCALES.find(candidate => String(candidate) === value);
+                            if (scale) visualizer.setRenderQuality({ scale });
+                        }}
                     />
                 </Row>
-                <Reveal when={isRenderPixelRatioLimited}>
-                    <Row sub option={O.renderPixelRatioValue}>
-                        <Segmented
-                            value={String(selectedRenderPixelRatio)}
-                            options={RENDER_PIXEL_RATIO_CHOICES}
-                            onChange={(value) => {
-                                const ratio = RENDER_PIXEL_RATIO_OPTIONS.find(candidate => String(candidate) === value);
-                                if (ratio) visualizer.setRenderPixelRatio(ratio);
-                            }}
-                        />
-                    </Row>
-                </Reveal>
+                <Row option={O.lyricAntialias} note={t('options.lyricAntialiasDesc')}>
+                    <Segmented<LyricAntialias>
+                        value={visualizer.renderQuality.antialias}
+                        options={lyricAntialiasChoices(t)}
+                        onChange={antialias => visualizer.setRenderQuality({ antialias })}
+                    />
+                </Row>
                 {isElectron && (
                     <Row option={O.backgroundThrottling} hint={t('options.backgroundThrottlingHint')} note={t('options.backgroundThrottlingDesc')}>
                         <Toggle checked={backgroundThrottling} onChange={setBackgroundThrottling} />
@@ -172,6 +177,9 @@ const GraphicsPage: React.FC = () => {
                 </Row>
                 {IS_WINDOWS_DESKTOP && <GpuPreferenceRow option={O.gpuPreference} />}
             </Group>
+
+            {/* 液态玻璃：总开关、预设、四个数值参数与光效 / 果冻两个效果开关。 */}
+            <LiquidGlassGroup />
 
             <Group def={MOTION} foot={t('options.reduceMotionSectionDesc')}>
                 <Row option={O.followSystem} hint={t('options.reduceMotionFollowSystemDesc')}>

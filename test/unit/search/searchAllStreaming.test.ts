@@ -15,6 +15,8 @@ vi.mock('@/services/onlineMusic/omni', () => ({
     omni: {
         getProviderSummaries: () => [{ providerId: 'netease' }, { providerId: 'qq' }],
         getProviderCapabilities: () => ({ search: true }),
+        // 搜索种类（v0.7.26 起 submitSearch 会先问一次）：这两家只搜单曲。
+        getProviderSearchKinds: () => ['song'],
         searchProviderSongs: searchMock,
     },
 }));

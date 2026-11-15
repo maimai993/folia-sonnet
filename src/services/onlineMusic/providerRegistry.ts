@@ -8,7 +8,6 @@ import { qqProvider } from './qq/qqProvider';
 import { bodianProvider } from './bodian/bodianProvider';
 import { ytmProvider } from './ytm/ytmProvider';
 import { spotifyProvider } from './spotify/spotifyProvider';
-import { feiniuProvider } from './feiniuProvider';
 /*
  * 汽水有两套实现：fork 这份（`./qishuiProvider`，走本机 nativeBridge 的手机协议扫码，
  * 车机/手机两套协议都在这里）与上游 v0.7.22 新增的 `./qishui/qishuiProvider`（桌面端
@@ -17,6 +16,11 @@ import { feiniuProvider } from './feiniuProvider';
  * 上游那份连同 `test/unit/qishui/` 先留着（vite-env 的桥类型还引它），不注册。
  */
 import { qishuiProvider } from './qishuiProvider';
+import { appleMusicProvider } from './appleMusic/appleMusicProvider';
+import { bilibiliProvider } from '../bilibili/bilibiliProvider';
+// 上游 fnmusic 那份没有 import：注册的是本 fork 的 feiniu，见文件末尾的说明。
+import { feiniuProvider } from './feiniuProvider';
+import { installLxAudioRouting, lxmusicProvider } from './lxmusic/lxmusicProvider';
 
 // src/services/onlineMusic/providerRegistry.ts
 
@@ -102,7 +106,14 @@ export const keepProviderSongAudio = (song: SongResult, url: string): Promise<bo
 
 export const canPlayOnlineMusicSong = (song: SongResult): boolean => {
     const provider = getOnlineMusicProviderForSong(song);
-    return providerSupports(provider, 'playback') && Boolean(provider?.playback);
+    return (providerSupports(provider, 'playback') && Boolean(provider?.playback))
+        || (providerSupports(provider, 'externalPlayback') && Boolean(provider?.externalPlayback) && provider?.externalPlayback?.canPlay?.(song) !== false);
+};
+
+/** The provider sounds this song in a player of its own outside this app. */
+export const canPlaySongExternally = (song: SongResult): boolean => {
+    const provider = getOnlineMusicProviderForSong(song);
+    return providerSupports(provider, 'externalPlayback') && Boolean(provider?.externalPlayback);
 };
 
 export const requireOnlineMusicProviderForSong = (song: SongResult): OnlineMusicProvider => {
@@ -119,5 +130,30 @@ registerOnlineMusicProvider(qqProvider);
 registerOnlineMusicProvider(bodianProvider);
 registerOnlineMusicProvider(ytmProvider);
 registerOnlineMusicProvider(spotifyProvider);
-registerOnlineMusicProvider(feiniuProvider);
+
 registerOnlineMusicProvider(qishuiProvider);
+
+// B 站是一个**视频**平台：推荐一屏投稿，点开就放那条视频。它和音乐平台的差别都在
+// capabilities 里说清了（没有歌词、没有收藏），所以这里和别的平台一样注册 ——
+// 界面上的红心、歌词这些入口会照 capabilities 自己消失。
+// 只在有原生代发的环境（安卓）真正可用，见它的 getAvailability。
+registerOnlineMusicProvider(bilibiliProvider);
+
+registerOnlineMusicProvider(appleMusicProvider);
+// 飞牛只注册本 fork 那一份。
+//
+// 上游 v0.7.26 带来了另一份 `fnmusic`（fnmusic/ 目录）：凭据交给主进程 safeStorage，播放走
+// `folia-fnmusic://` 自定义协议 —— 只有 Electron 有主进程，所以它只在桌面上成立，安卓上发不出
+// 请求。本 fork 的 `feiniu`（feiniu* 根目录）凭据留在 Web 会话存储，请求走 foliaNative 的原生
+// HTTP（安卓 OkHttp），没插件时回落到 fetch，桌面与安卓都能用。
+//
+// 两份都注册会让平台列里出现两个「飞牛」，用户分不清该点哪个，所以只留本 fork 这一份。上游那份
+// 的文件保留着（未注册），将来若要做桌面专属的凭据加固可以在这里换回来。
+// 注意：`fnmusic` 的 i18n 键仍被本用于飞牛表单（fnmusic.serverUrl / fnmusic.username 等），
+// 那是共用文案，不是「注册了 fnmusic 平台」。
+registerOnlineMusicProvider(feiniuProvider);
+// 洛雪音源：用户导入的自定义音源聚合 provider（搜索复用原生 provider，播放 / 歌词用导入的音源续地址）。
+registerOnlineMusicProvider(lxmusicProvider);
+// 装上 omni 的「取地址之前」扩展点：导入音源后，其它 provider 的歌也先问音源，
+// 音源交不出地址才回落到各家自己的播放接口。没导入音源时这层直接让路。
+installLxAudioRouting();

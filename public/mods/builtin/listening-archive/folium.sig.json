@@ -1,0 +1,10 @@
+{
+  "format": "folium-signature",
+  "version": 1,
+  "modId": "listening-archive",
+  "modVersion": "1.3.3",
+  "digest": "sha256:a9db09d14eb79e20851cd126f2baccac2c142d3bbe665d7f81831282d920e4f9",
+  "keyId": "folium-ci-2026-1",
+  "signedAt": "2026-10-28T17:16:51.572Z",
+  "signature": "Jce+GHAXvRbFzE9Hq4PiPaQ+ieCtf6G8WThMP0FSsIf3SnleHNScLJGdfafxpamzs1AegQEOlU86Ws/vUgleBQ=="
+}

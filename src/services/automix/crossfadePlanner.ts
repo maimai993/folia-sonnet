@@ -35,10 +35,37 @@ export const CROSSFADE_MAX_SEC = AUTOMIX_MAX_OVERLAP_SEC;
 /** Where the slider starts. The length the planner already falls back to when nothing points. */
 export const CROSSFADE_DEFAULT_SEC = 5;
 
-/** Whole seconds inside the slider's range. The one place a stored or typed value is trusted. */
+/**
+ * 音量交叉的曲线。
+ *
+ * 两首歌重叠时，音量不是简单的「一个升一个降」：如果两条都走直线，中点处两条各是 0.5，
+ * 合成功率只有 0.5（-3 dB），听感就是过渡中间「塌一下」。等功率曲线让两条的中点为
+ * 0.707，功率正好接上，这是交叉淡化的默认做法。
+ *
+ * - `equalPower`：sin / cos，中点不塌，最通用（默认）。
+ * - `linear`：两条直线，旧行为，A/B 时用来确认「塌陷」确实来自这里。
+ * - `fast`：先快后慢的三次曲线，短过渡里两首同时可闻的时间更少，适合差别很大的两首。
+ */
+export const CROSSFADE_CURVES = ['equalPower', 'linear', 'fast'] as const;
+export type CrossfadeCurve = typeof CROSSFADE_CURVES[number];
+export const CROSSFADE_DEFAULT_CURVE: CrossfadeCurve = 'equalPower';
+
+/** 存档里读到的未知曲线名一律回到默认，不让一个手改的值把过渡变成静音。 */
+export const readCrossfadeCurve = (value: unknown): CrossfadeCurve => (
+    CROSSFADE_CURVES.includes(value as CrossfadeCurve)
+        ? value as CrossfadeCurve
+        : CROSSFADE_DEFAULT_CURVE
+);
+
+/**
+ * 半秒一格。
+ *
+ * 整秒对三秒以内的过渡太粗：4 秒和 5 秒之间的差别，在尾奏接前奏时是听得出来的。
+ * 再细就没意义了 —— 0.1 秒的差别落在鼓点上反而是随机的。
+ */
 export const clampCrossfadeSeconds = (seconds: number): number => (
     Number.isFinite(seconds)
-        ? Math.min(CROSSFADE_MAX_SEC, Math.max(CROSSFADE_MIN_SEC, Math.round(seconds)))
+        ? Math.min(CROSSFADE_MAX_SEC, Math.max(CROSSFADE_MIN_SEC, Math.round(seconds * 2) / 2))
         : CROSSFADE_DEFAULT_SEC
 );
 

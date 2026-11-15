@@ -1,0 +1,8 @@
+{
+    "name": "folia-node-host",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Android 端 Node 宿主（nodejs-mobile）。显式声明 CommonJS，不受上层包的 type 影响。",
+    "type": "commonjs",
+    "main": "host.js"
+}

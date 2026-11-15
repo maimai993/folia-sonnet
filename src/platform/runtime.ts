@@ -4,9 +4,19 @@ import { Capacitor } from '@capacitor/core';
 
 export type RuntimeEnvironment = 'web' | 'electron' | 'capacitor-android';
 
+/**
+ * 是不是桌面端（Electron）。
+ *
+ * 判据是 `window.electron.platform` —— 只有 Electron 的 preload 会写这个字段
+ * （electron/preload.cjs）。安卓端为了让模组能用，会装一份 `window.electron.mods`
+ * 的 shim，但它不带 `platform`，所以这里仍然为 false。
+ *
+ * 从前这里只问 `window.electron` 在不在，装了 shim 之后安卓就会被误判成 'electron'
+ * （`window.electron.api` 里的 desktop-only 分支、设置页的桌面专属分区都会跟着错）。
+ */
 export const hasElectronBridge = (): boolean => (
   typeof window !== 'undefined'
-  && Boolean((window as typeof window & { electron?: unknown }).electron)
+  && typeof (window as typeof window & { electron?: { platform?: unknown } }).electron?.platform === 'string'
 );
 
 export const isCapacitorAndroid = (): boolean => (

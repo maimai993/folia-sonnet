@@ -123,7 +123,7 @@ describe('local music cover import', () => {
         vi.mocked(prepareLocalCoverBlob).mockResolvedValue(null);
 
         vi.stubGlobal('window', {
-            electron: {},
+            electron: { platform: 'win32' },
             showDirectoryPicker: vi.fn(),
             dispatchEvent: vi.fn(),
         });

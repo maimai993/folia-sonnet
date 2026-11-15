@@ -22,7 +22,7 @@ import { Group, PictureChoice, Reveal, Row, Segmented, Toggle, option, type Sett
 // The Bravais 墙面 group of the 主页与歌单 page: every setting only the bravais library UI has. How
 // much of the wall lets the visualizer through (and, when partly, how many windows a block has),
 // the collections' stack edges, which way the seam opens (vertical, horizontal, or by the screen's
-// shape), the seam's material (always clear, or one of eight solid
+// shape, either way round), the seam's material (always clear, or one of eight solid
 // presets; the two exclude each other), and whether the picture behind the wall has lyrics and
 // blur. The group is drawn only while bravais is the library UI in effect, the same test the
 // command palette asks (isBravaisLibraryActive): under any other UI these settings do nothing.
@@ -36,7 +36,6 @@ const O = {
     windows: option(BRAVAIS_WALL, 'libraryWallWindows', 'options.libraryWallWindows'),
     stackEdges: option(BRAVAIS_WALL, 'bravaisStackEdges', 'options.bravaisStackEdges'),
     seamDirection: option(BRAVAIS_WALL, 'bravaisSeamDirection', 'options.bravaisSeamDirection'),
-    seamDirectionReverse: option(BRAVAIS_WALL, 'bravaisSeamDirectionReverse', 'options.bravaisSeamDirectionReverse'),
     seamClear: option(BRAVAIS_WALL, 'bravaisSeamClear', 'options.bravaisSeamClear'),
     seamStyle: option(BRAVAIS_WALL, 'bravaisSeamStyle', 'options.bravaisSeamStyle'),
     backdropLyrics: option(BRAVAIS_WALL, 'bravaisBackdropLyrics', 'options.bravaisBackdropLyrics'),
@@ -76,7 +75,6 @@ export const BravaisWallGroup: React.FC = () => {
         backdropLyrics: state.backdropLyrics,
         backdropBlur: state.backdropBlur,
         seamDirection: state.seamDirection,
-        seamDirectionReverse: state.seamDirectionReverse,
         setLook: state.setLook,
         setWindowsPerBlock: state.setWindowsPerBlock,
         setStackEdges: state.setCollectionStackEdges,
@@ -85,7 +83,6 @@ export const BravaisWallGroup: React.FC = () => {
         setBackdropLyrics: state.setBackdropLyrics,
         setBackdropBlur: state.setBackdropBlur,
         setSeamDirection: state.setSeamDirection,
-        setSeamDirectionReverse: state.setSeamDirectionReverse,
     })));
 
     if (!isBravaisActive) return null;
@@ -126,12 +123,7 @@ export const BravaisWallGroup: React.FC = () => {
                     onChange={wall.setSeamDirection}
                 />
             </Row>
-            {/* 反向只翻「自动」那一支：明确选了竖向 / 横向时它不改变结果。 */}
-            <Reveal when={wall.seamDirection === 'auto'}>
-                <Row sub option={O.seamDirectionReverse} note={t('options.bravaisSeamDirectionReverseDesc')}>
-                    <Toggle checked={wall.seamDirectionReverse} onChange={wall.setSeamDirectionReverse} />
-                </Row>
-            </Reveal>
+            {/* 反向不再是单独的开关：它是方向列表里的一档（自动（反向）），列表自己会列出来。 */}
             <Row option={O.seamClear} note={t('options.bravaisSeamClearDesc')}>
                 <Toggle checked={wall.seamClear} onChange={wall.setSeamClear} />
             </Row>

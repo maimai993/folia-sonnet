@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>JIZURA 渲染器</title>
+<style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+    body { display: block; }
+    #render-host { position: absolute; inset: 0; }
+    /* 尺寸由 applyCanvasStyle 按 cover 算好写进内联样式，这里不能再写 width/height，
+       否则会盖掉内联值、把画布拉成容器尺寸，比例不匹配就露出黑底。 */
+    #render-host canvas { display: block; }
+</style>
+</head>
+<body>
+<div id="render-host"></div>
+<script src="./jizura.engine.js"></script>
+<script>
+// public/jizura/render.html
+// 原版 JIZURA 引擎的最小渲染宿主：只负责「把某一时刻的画面画到 canvas」。
+// folia 通过 postMessage 推歌词与播放时间，本页不含任何编辑界面与本地存储。
+(() => {
+    'use strict';
+    const host = document.getElementById('render-host');
+    let renderer = null;
+    let plan = null;
+    let canvas = null;
+    let ctx = null;
+    let lastKey = '';
+    let viewport = { width: 0, height: 0, dpr: 1 };
+    /** 最近一次宿主给的工程：视口变化（横屏）时用它重建 plan。 */
+    let currentProject = null;
+    let currentSongKey = null;
+    /** 画布该按什么比例建：容器比例，与 plan 的构图比例无关（构图归编辑台管）。 */
+    let viewAspect = null;
+
+    const post = (type, body) => window.parent.postMessage(Object.assign({ source: 'jizura-render', type }, body || {}), '*');
+
+    /** 按 plan 的输出尺寸建画布：像素与构图比例一致，不留黑边，显示交给 CSS 铺满。 */
+    const ensureCanvas = () => {
+        if (plan) {
+            // 画布像素按 plan 的构图比例建：比例与编辑台一致，draw 的 scale 恒等于 1，
+            // 排版一模一样；铺满容器交给 CSS，不在像素层面缩放。
+            const scaleK = 540 / Math.min(plan.W, plan.H);
+            const width = Math.round(plan.W * scaleK);
+            const height = Math.round(plan.H * scaleK);
+            if (canvas && canvas.width === width && canvas.height === height) return;
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                host.appendChild(canvas);
+                ctx = canvas.getContext('2d');
+            }
+            canvas.width = width;
+            canvas.height = height;
+            applyCanvasStyle();
+            return;
+        }
+        // 宿主推来的 viewport 可能带着异常高度（真机上出现过 960x1 的画布）；
+        // iframe 自己铺满舞台，直接用本窗口的尺寸最可靠，宿主数据只做兜底。
+        // 性能红线：像素量按 540 短边等比，不随 DPR 放大。
+        // 真机实测单帧耗时：1080 短边 28ms、720 短边 14ms、540 短边 9ms。
+        // 720 时 GPU 合成仍在中端机上压崩过渲染进程（SIGTRAP），降到 540 留出余量；
+        // 手机屏幕宽 480 CSS px，540 像素已经够清晰。
+        const designShort = 540;
+        // 用容器实际尺寸而不是 innerWidth：iframe 被布局到的区域未必等于窗口尺寸
+        // （真机上出现过 424x365 的舞台，按 innerWidth 建画布就会算错比例）。
+        const rect = host.getBoundingClientRect();
+        const cssW = Math.round(rect.width) || window.innerWidth || viewport.width || 480;
+        const cssH = Math.round(rect.height) || window.innerHeight || viewport.height || 800;
+        const k = designShort / Math.min(cssW, cssH);
+        const width = Math.max(1, Math.round(cssW * k));
+        const height = Math.max(1, Math.round(cssH * k));
+        if (canvas && canvas.width === width && canvas.height === height) return;
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            host.appendChild(canvas);
+            ctx = canvas.getContext('2d');
+        }
+        canvas.width = width;
+        canvas.height = height;
+        applyCanvasStyle();
+    };
+
+    /**
+     * 画布铺满容器：cover 而不是 contain。
+     *
+     * 构图的宽高比和容器不一定相同（比如 9:16 的构图放进略宽的舞台），
+     * contain 会在下面留一条黑边；cover 让画面填满，多出来的部分裁掉 ——
+     * 原版自己导出时也是按构图裁切，视觉上更接近它。
+     */
+    const applyCanvasStyle = () => {
+        if (!canvas) return;
+        // 直接拉伸铺满容器：cover 会裁掉内容、contain 会留黑边，两个都不行；
+        // stretch 一格像素都不浪费。这只是显示层缩放，canvas 内部坐标系不变。
+        canvas.style.position = 'absolute';
+        canvas.style.left = '0';
+        canvas.style.top = '0';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+    };
+
+    /*
+     * 字体接入。
+     *
+     * 之前这里是错的，两条都要改：
+     *   1) 引擎的 project.fonts.display 要的是 J.FONTS 里的**键**（'gothic_black' 之类），
+     *      不是字体族名。传族名过去引擎查表查不到，等于没设。
+     *   2) folia 的歌词字体可能是**用户上传的字体文件**（族名 FoliaUploadedLyricsFont_xxx），
+     *      Google Fonts 上根本没有，插 link 永远下载不到 —— 这就是"怎么都接不上字体"的真原因。
+     *      必须由宿主把字体字节送进来，这里 new FontFace 注册。
+     *
+     * 所有宿主字体共用一个引擎槽位 user_folia：原版的字体缓存键里带 Object.keys(J.FONTS).length，
+     * 每多一个键缓存就失效一次，会导致它反复重载字体、样式缩略图一直画不出来。
+     */
+    const HOST_FONT_KEY = 'user_folia';
+    /** 已经注册好的字体载荷（family → 是否成功），避免重复注册。 */
+    const registeredFonts = new Map();
+    /** 已经尝试并失败的字体族：不再重试，否则「重建 plan → 再等字体 → 再重建」会无限循环。 */
+    const failedFonts = new Set();
+    /** 字体还在注册时，plan 先用默认字画，注册完再重建一次（不阻塞首帧）。 */
+    let pendingFont = null;
+
+    /**
+     * 让引擎所有字位都解析到 folia 选的这个字体。
+     *
+     * 覆盖 J.faceOf 而不是只改 fonts.display：字位有 display / serif / body / mono 多个，
+     * 引擎各自查表；只改一个，其余字位还是原版字，看起来就是"字体没生效"。
+     */
+    const forceEngineFont = (family, weight) => {
+        const face = {
+            label: family,
+            family: `"${family}"`,
+            weight: weight || 700,
+            kind: 'custom',
+            // 回落是系统无衬线：即使字体某个字缺字，也不会退成别的花体。
+            fb: 'system-ui, -apple-system, "Noto Sans CJK SC", sans-serif',
+        };
+        J.faceOf = () => face;
+        console.log('[jizura-render] 引擎字体已被强制为 folia 选定的字体', { family, weight: face.weight });
+    };
+
+    /** 往 +NewFontFace+ 里塞字节并登记到引警的一个固定槽位。 */
+    const registerFontPayload = async (payload) => {
+        const clean = String(payload.family || '').replace(/["']/g, '').trim();
+        if (!clean) return '';
+        if (registeredFonts.has(clean)) return HOST_FONT_KEY;
+        if (failedFonts.has(clean)) return '';
+
+        try {
+            if (payload.data) {
+                // 上传字体：字节直接建 FontFace，不依赖任何网络。
+                const face = new FontFace(clean, payload.data);
+                await face.load();
+                document.fonts.add(face);
+                console.log('[jizura-render] 上传字体已注册', { family: clean, bytes: payload.data.byteLength });
+            } else {
+                // 系统字体 / Google Fonts：先补一张样式表，再等它真的可用。
+                const linkId = `host-font-${clean.replace(/[^\w]/g, '_')}`;
+                if (!document.getElementById(linkId)) {
+                    const link = document.createElement('link');
+                    link.id = linkId;
+                    link.rel = 'stylesheet';
+                    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(clean).replace(/%20/g, '+')}:wght@400;500;700;900&display=swap`;
+                    document.head.appendChild(link);
+                }
+                await document.fonts.load(`${payload.weight || 700} 40px "${clean}"`, '字面ABC');
+                if (!document.fonts.check(`${payload.weight || 700} 40px "${clean}"`)) {
+                    failedFonts.add(clean);
+                    console.warn('[jizura-render] 字体下载后仍不可用', { family: clean });
+                    return '';
+                }
+                console.log('[jizura-render] 字体已就绪', { family: clean });
+            }
+
+            // 原地登记到固定槽位：键数量必须保持不变（见上面的说明）。
+            if (!J.FONTS[HOST_FONT_KEY]) {
+                J.addUserFont(HOST_FONT_KEY, clean, clean, payload.weight || 700, 'custom');
+            } else {
+                J.FONTS[HOST_FONT_KEY].label = clean;
+                J.FONTS[HOST_FONT_KEY].family = `"${clean}"`;
+                J.FONTS[HOST_FONT_KEY].weight = payload.weight || 700;
+            }
+            J.FONTS[HOST_FONT_KEY].loaded = true;
+            // 字面换了，字形与度量缓存要清掉，否则会沿用上一个字体的量字结果。
+            J.glyphs.clear();
+            J.metrics.clear();
+            // 关键：把所有字位都钉到这个字体上，否则只有 display 变了，其余还是原版字。
+            forceEngineFont(clean, payload.weight || 700);
+            registeredFonts.set(clean, true);
+            return HOST_FONT_KEY;
+        } catch (fontError) {
+            console.warn('[jizura-render] 字体注册失败', fontError);
+            failedFonts.add(clean);
+            return '';
+        }
+    };
+
+    /** 探针：确认引擎与关键函数都在。 */
+    const ready = () => typeof J !== 'undefined' && typeof J.Renderer === 'function' && typeof J.plan === 'function';
+
+    /*
+     * shared plan: use the plan the editor already computed.
+     *
+     * Previously the render page took the project and called J.plan again. J.plan depends on
+     * runtime state (audio beats, bg history, random history, lock order), so the same project
+     * computed twice can differ -- plus this page overrode aspect with the screen ratio.
+     * The plan is plain data (no functions, no Map), so it survives structured clone;
+     * adopting it makes the player show exactly what the editor shows.
+     */
+    let sharedPlan = null;
+
+    /** Adopt a plan pushed by the host (the editor). Returns whether it was usable. */
+    const adoptSharedPlan = (incoming) => {
+        if (!incoming || typeof incoming !== 'object') return false;
+        if (typeof incoming.W !== 'number' || typeof incoming.H !== 'number') return false;
+        if (!Array.isArray(incoming.cuts)) return false;
+        // sharedPlan 只能服务当前歌词。旧异步消息不得把刚切换的工程又画回上一首。
+        if (currentProject) {
+            const expected = J.parseLyrics(String(currentProject.lyrics || '')).lines.map(line => line.text).join('').replace(/\s+/g, '');
+            const actual = (incoming.lines || []).map(line => String(line.text || '')).join('').replace(/\s+/g, '');
+            if (actual !== expected) return false;
+        }
+        /*
+         * 比例校验：plan 是和尺寸绑定的快照，不能跨比例直接复用。
+         *
+         * 存下来的 plan 是编辑台当时的构图比例；重启后窗口方向/尺寸可能已经变了，
+         * 直接照搬会让画布比例与容器不符，靠 CSS 拉伸铺满 —— 那就是「一重启就被拉伸」。
+         * 比例差超过 2% 就不用它，回落到按当前屏幕重算。
+         */
+        const rect = host.getBoundingClientRect();
+        const boxW = Math.round(rect.width) || window.innerWidth || 0;
+        const boxH = Math.round(rect.height) || window.innerHeight || 0;
+        if (boxW > 0 && boxH > 0) {
+            const planRatio = incoming.W / incoming.H;
+            const boxRatio = boxW / boxH;
+            const drift = Math.abs(planRatio - boxRatio) / boxRatio;
+            if (drift > 0.02) {
+                console.log('[jizura-render] plan 比例与当前屏幕不符，改为按屏幕重算', {
+                    plan: `${incoming.W}x${incoming.H}`,
+                    box: `${boxW}x${boxH}`,
+                    drift: +drift.toFixed(3),
+                });
+                return false;
+            }
+        }
+        sharedPlan = incoming;
+        plan = incoming;
+        clock.fps = incoming.fps || 24;
+        ensureCanvas();
+        console.log('[jizura-render] adopted shared plan from editor', {
+            W: incoming.W,
+            H: incoming.H,
+            cuts: incoming.cuts.length,
+            style: incoming.styleKey,
+        });
+        return true;
+    };
+
+    /** 由 folia 的歌词与设置重建 plan：画布尺寸按视口走，构图比例用 folia 的宽高比。 */
+    const buildPlan = (project) => {
+        currentProject = project;
+        const base = J.defaultProject();
+        // 说明：整个函数由调用处 try 包住，异常会 post('error') 上来，不会静默留一块黑板。
+        const merged = Object.assign(base, project, {
+            fx: Object.assign({}, base.fx, project.fx || {}),
+            timing: Object.assign({}, base.timing, project.timing || {}),
+        });
+        const rect = host.getBoundingClientRect();
+        let width = Math.round(rect.width) || window.innerWidth || viewport.width || 480;
+        let height = Math.round(rect.height) || window.innerHeight || viewport.height || 800;
+        /*
+         * 方向自检。
+         *
+         * 旋转 / 布局过渡中 getBoundingClientRect() 会返回中间态（比如竖屏时短暂拿到一个
+         * 宽>高的矩形），aspect 就算成横屏并一直留着 —— 表现就是"竖屏偶发被拉伸成横屏，
+         * 再切一次才好"。这里用 window 的方向兜底：两边方向不一致时，以 window 为准。
+         */
+        const windowPortrait = (window.innerHeight || 0) >= (window.innerWidth || 0);
+        if ((width > height) === windowPortrait) {
+            // 容器的方向与窗口相反：多半是过渡中的脏值，用窗口尺寸重算。
+            const ww = window.innerWidth || width;
+            const wh = window.innerHeight || height;
+            if (ww && wh) {
+                width = ww;
+                height = wh;
+            }
+        }
+        const ratio = width / height;
+        /*
+         * 构图比例始终按容器（屏幕）走。
+         *
+         * 编辑台里的 aspect 绑的是导出比例（12_ui.js:1722 的 outAspect），决定导出视频多大，
+         * 不是播放时的显示比例。播放页是手机屏幕，只有按容器比例排版才不会变形、不留黑边。
+         * 用户在编辑台调的导出比例仍然保存着，只影响它自己导出。
+         */
+        merged.aspect = ratio >= 1.9 ? '21:9'
+            : ratio >= 1.5 ? '16:9'
+            : ratio >= 1.2 ? '4:3'
+            : ratio <= 0.6 ? '9:16'
+            : ratio <= 0.8 ? '3:4'
+            : '1:1';
+        // res 决定字级，保持一个够清晰又不吃性能的值。
+        merged.res = 540;
+
+        /*
+         * 补帧：关掉引擎的"逐帧"时间量化。
+         *
+         * 引擎把时间 floor 到 1/koma 秒的格子里（09_render.js:65），koma 默认 12，
+         * 等于每秒只重算 12 次画面；60Hz 屏幕上 5 帧里 4 帧是同一张图 ——
+         * 这就是"帧率设成无限制还是很卡"的原因，跟性能无关。
+         *
+         * koma 置 0 后 stepDur = 1/fps，时间不再被量化成重复格，每帧都按真实时间重算，
+         * 动画变丝滑。代价是失去原版逐帧动画的顿挫感（用户明确选了丝滑优先）。
+         */
+        merged.fx = Object.assign({}, merged.fx, { koma: 0, onTwos: false });
+
+        // 字体：用已经注册好的引擎键；还没注册就先按默认字建 plan，等字体到位再重建一次。
+        // 整块包在 try 里：字体出问题只是字不对，绝不能让 plan 建不出来（那就是全黑）。
+        try {
+            const payload = project.fontPayload;
+            const wanted = payload && payload.family
+                ? payload
+                : (project.fonts && typeof project.fonts === 'object' && project.fonts.display
+                    ? { family: project.fonts.display }
+                    : null);
+            if (wanted && wanted.family) {
+                const clean = String(wanted.family).replace(/["']/g, '').trim();
+                if (registeredFonts.has(clean)) {
+                    merged.fonts = Object.assign({}, merged.fonts, { display: HOST_FONT_KEY });
+                } else if (!failedFonts.has(clean)) {
+                    // 字体没就绪：先记下它，用默认字把画面画出来，注册完再重建。
+                    pendingFont = wanted;
+                }
+            }
+        } catch (fontError) {
+            console.warn('[jizura-render] 应用宿主字体失败，沿用原版默认', fontError);
+        }
+
+        // 关键字高亮色：原版没有 wordColors，它表达「强调」的通道是 colors.accent。
+        // folia 主题里的 AI 标记色就落到这里；没给关键字色就保持主题的 accentColor。
+        try {
+            const keywordColors = Array.isArray(project.wordColors) ? project.wordColors : [];
+            const first = keywordColors.find(entry => entry && typeof entry.color === 'string' && entry.color);
+            if (first) {
+                merged.colors = Object.assign({}, merged.colors, { accent: first.color, accentOn: true });
+            }
+        } catch (colorError) {
+            console.warn('[jizura-render] 应用关键字高亮色失败，沿用原版配色', colorError);
+        }
+        plan = J.plan(merged, null);
+        /*
+         * plan.W / plan.H 保持编辑台的构图，不再按容器改写。
+         *
+         * 上一轮为了让画面填满屏幕改写过它们，带来的副作用正是「横屏字跑出屏幕」——
+         * 排版已经按原构图算好了，事后改画布尺寸只会把内容挤出去。
+         * 填满容器由 applyCanvasStyle 的 cover 负责，那只影响显示缩放，不动排版。
+         */
+        const short = Math.min(plan.W, plan.H);
+        if (ratio >= 1) {
+            viewAspect = { w: Math.round(short * ratio), h: short };
+        } else {
+            viewAspect = { w: short, h: Math.round(short / ratio) };
+        }
+        clock.fps = merged.fps || 24;
+        // plan 换了就按新构图重建画布，保证比例一致、不留黑边。
+        ensureCanvas();
+        post('ready', { cuts: plan.cuts.length, duration: plan.duration, W: plan.W, H: plan.H, iw: width, ih: height });
+
+        // 字体到位后重建一次 plan：字形换了，字宽与排版都要重算。
+        if (pendingFont) {
+            const payload = pendingFont;
+            pendingFont = null;
+            registerFontPayload(payload).then((key) => {
+                if (!key || !currentProject) return;
+                console.log('[jizura-render] 字体就绪，重建 plan', { family: payload.family });
+                buildPlan(currentProject);
+                draw(currentTimeOf());
+            }).catch(fontError => {
+                console.warn('[jizura-render] 字体就绪后重建 plan 失败', fontError);
+            });
+        }
+    };
+
+    const draw = (time) => {
+        ensureCanvas();
+        if (!plan || !ctx) {
+            post('draw-miss', { hasPlan: Boolean(plan), hasCtx: Boolean(ctx) });
+            return;
+        }
+        // 画布像素就是编辑台的构图比例，所以 scale 恒等于 1（留 min 只为极端情况兜底）。
+        // 铺满容器由 CSS 拉伸负责，那是显示层缩放，不改排版。
+        const scale = Math.min(canvas.width / plan.W, canvas.height / plan.H);
+        try {
+            renderer.frame(ctx, plan, time, { scale });
+            post('drawn', { time, scale, W: plan.W, H: plan.H, cw: canvas.width, ch: canvas.height });
+        } catch (error) {
+            post('draw-error', { reason: String(error && error.stack || error) });
+        }
+    };
+
+    window.addEventListener('message', (event) => {
+        const data = event.data;
+        if (!data || data.target !== 'jizura-render') return;
+        try {
+            if (data.type === 'project' || data.type === 'init') {
+                const nextSongKey = data.songKey ?? null;
+                const nextLyrics = String(data.project?.lyrics || '');
+                if (currentSongKey !== nextSongKey || String(currentProject?.lyrics || '') !== nextLyrics) {
+                    sharedPlan = null;
+                    lastKey = '';
+                }
+                currentSongKey = nextSongKey;
+                currentProject = data.project || {};
+            }
+            if (data.type === 'plan' && data.songKey !== undefined && data.songKey !== currentSongKey) return;
+            if (data.type === 'plan' && data.sourceLyrics !== undefined && data.sourceLyrics !== currentProject?.sourceLyrics) return;
+            if (data.type === 'frameRate') {
+                // folia「性能与动效」里的帧率上限：'off' 不限，数字是每秒上限。
+                clock.capOff = data.frameCap === 'off' || data.frameCap === undefined;
+                clock.capFps = typeof data.frameCap === 'number' ? data.frameCap : 0;
+                return;
+            }
+            if (data.type === 'project' && !renderer) {
+                // folia 只发 project：没有 renderer 就把它当 init 处理，握手失败时也能画出来。
+                if (typeof data.frameCap !== 'undefined') {
+                    clock.capOff = data.frameCap === 'off';
+                    clock.capFps = typeof data.frameCap === 'number' ? data.frameCap : 0;
+                }
+                if (!ready()) { post('error', { reason: 'engine-missing' }); return; }
+                renderer = new J.Renderer();
+                viewport = data.viewport || viewport;
+                buildPlan(data.project || {});
+                syncClock(typeof data.time === 'number' ? data.time : 0, Boolean(data.playing));
+                draw(currentTimeOf());
+                startLoop();
+                return;
+            }
+            if (data.type === 'plan') {
+                // The editor's plan: adopt it verbatim so the player matches the editor exactly.
+                if (!ready()) { post('error', { reason: 'engine-missing' }); return; }
+                renderer = renderer || new J.Renderer();
+                if (adoptSharedPlan(data.plan)) {
+                    syncClock(typeof data.time === 'number' ? data.time : 0, Boolean(data.playing));
+                    draw(currentTimeOf());
+                    post('plan-adopted', { W: plan.W, H: plan.H, cuts: plan.cuts.length });
+                } else if (currentProject) {
+                    // 比例不符或数据不完整：按当前屏幕与已知参数重算，别留一块黑屏。
+                    sharedPlan = null;
+                    buildPlan(currentProject);
+                    syncClock(typeof data.time === 'number' ? data.time : 0, Boolean(data.playing));
+                    draw(currentTimeOf());
+                    post('plan-rejected', { reason: 'replanned' });
+                } else {
+                    post('plan-rejected', { reason: 'invalid-plan' });
+                }
+                return;
+            }
+            if (data.type === 'init') {
+                if (!ready()) { post('error', { reason: 'engine-missing' }); return; }
+                renderer = renderer || new J.Renderer();
+                viewport = data.viewport || viewport;
+                lastKey = '';
+                buildPlan(data.project || {});
+                syncClock(typeof data.time === 'number' ? data.time : 0, Boolean(data.playing));
+                draw(currentTimeOf());
+                startLoop();
+            } else if (data.type === 'viewport') {
+                viewport = data.viewport || viewport;
+                lastKey = '';
+                if (plan) { plan.W = viewport.width; plan.H = viewport.height; }
+            } else if (data.type === 'project') {
+                viewport = data.viewport || viewport;
+                if (!renderer) { renderer = new J.Renderer(); }
+                const key = JSON.stringify(data.project || {});
+                if (key !== lastKey || !plan) {
+                    lastKey = key;
+                    // Once a shared plan is in use, keep it: that plan is what the editor shows,
+                    // and re-planning here is exactly what made the two views diverge.
+                    if (sharedPlan) {
+                        console.log('[jizura-render] keeping editor plan, ignoring project re-plan');
+                    } else {
+                        buildPlan(data.project || {});
+                    }
+                }
+                // 工程变了：重建 plan，同时把播放头对齐宿主给的时间。
+                if (typeof data.time === 'number') syncClock(data.time, data.playing);
+                draw(currentTimeOf());
+                startLoop();
+            } else if (data.type === 'seek') {
+                // 宿主的播放头（跨句、拖动、暂停恢复）：对了时钟就立刻画一帧。
+                syncClock(data.time || 0, data.playing);
+                draw(currentTimeOf());
+                startLoop();
+            } else if (data.type === 'dispose') {
+                clock.playing = false;
+                plan = null;
+            }
+        } catch (error) {
+            post('error', { reason: String(error && error.message || error) });
+        }
+    });
+
+    let hiddenPause = false;
+    let hostPause = false; // 宿主（folia）显式要求暂停（编辑台打开时置位）。
+    const shouldStop = () => hiddenPause || hostPause;
+
+    /* ---- 连续渲染循环 ----
+       原版引擎是一帧一帧画的：宿主只在跨句时给一个基准时间，句内必须由本页按 fps 自己推进。
+       之前没有这个循环，整句歌词停在第一帧，只在跨句时跳一下 —— 那就是「一直卡」的真身。 */
+    // playing 默认 false：没有宿主明确说「在播」之前，一帧都不该自己往前跑。
+    let clock = { playing: false, baseTime: 0, startedAt: 0, fps: 24, capOff: true, capFps: 0 };
+    let loopHandle = 0;
+    let lastDrawnAt = 0;
+    const nowMs = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+    /** 当前该画的时间：播放中按 fps 从基准时间推进，暂停时停在基准时间。 */
+    const currentTimeOf = () => {
+        if (!clock.playing) return clock.baseTime;
+        return clock.baseTime + (nowMs() - clock.startedAt) / 1000;
+    };
+
+    /** 把播放头对到某个时间（跨句、拖动进度、暂停恢复都走这里）。 */
+    const syncClock = (time, playing) => {
+        clock.baseTime = time;
+        clock.startedAt = nowMs();
+        if (typeof playing === 'boolean') clock.playing = playing;
+    };
+
+    /** 一拍：到点就按当前时间画一帧。用帧间隔节流，避免高刷屏空跑。 */
+    let slowFrames = 0;
+    const tick = () => {
+        loopHandle = 0;
+        if (!shouldStop() && plan && ctx) {
+            /*
+             * 出帧只由用户设的帧率上限决定。
+             *
+             * 之前这里还有一档 engineInterval = 1000 / clock.fps（plan 的 fps，默认 24），
+             * 等于把画面又压回 24fps —— 关掉 koma 也没用，照样不丝滑。
+             * 引擎的 fps 是它算时间用的基准，不该当成绘制上限。
+             * 上限选「无限制」就完全跟随 rAF（屏幕刷新率）。
+             */
+            const capInterval = clock.capOff ? 0 : 1000 / Math.max(1, clock.capFps || 60);
+            const interval = capInterval;
+            const at = nowMs();
+            // 没在播放就不重绘：画面是静态的，重绘只会白烧电。
+            // seek / 参数变化会直接调 draw 补一帧，所以暂停时画面依然是对的。
+            const wantsFrame = clock.playing;
+            // 前一次绘制太慢就跳过这一拍，让浏览器有机会喘口气（否则连续长帧会压崩渲染进程）。
+            if (wantsFrame && at - lastDrawnAt >= interval - 1 && slowFrames < 3) {
+                const t0 = nowMs();
+                lastDrawnAt = at;
+                draw(currentTimeOf());
+                // 按绝对耗时判慢，而不是 interval 的倍数：
+                // 不限帧率时 interval 为 0，倍数判据会把每一帧都当成慢帧，越放越卡。
+                const SLOW_FRAME_MS = 40;
+                slowFrames = nowMs() - t0 > SLOW_FRAME_MS ? slowFrames + 1 : 0;
+            } else if (slowFrames >= 3) {
+                slowFrames = 0;
+                lastDrawnAt = at;
+            }
+        }
+        if (shouldStop()) {
+            loopHandle = 0;
+            return;
+        }
+        loopHandle = window.requestAnimationFrame(tick);
+    };
+
+    /**
+     * 启动循环；被宿主暂停时立刻退出，不再排下一帧。
+     *
+     * 之前 shouldStop() 只是让 tick 跳过 draw，rAF 照样每帧空转 ——
+     * 编辑台盖在上面时，两套渲染叠着跑，真机上就是明显掉帧。
+     * 现在真正停下来，恢复时再 startLoop。
+     */
+    const startLoop = () => {
+        if (shouldStop()) {
+            loopHandle = 0;
+            return;
+        }
+        if (!loopHandle) loopHandle = window.requestAnimationFrame(tick);
+    };
+
+    /** 立刻停掉循环（编辑台打开时用，省下整份算力给编辑台）。 */
+    const stopLoop = () => {
+        if (loopHandle) {
+            window.cancelAnimationFrame(loopHandle);
+            loopHandle = 0;
+        }
+    };
+
+    /* ---- 视口变化：横屏、分屏、地址栏收起都会改窗口尺寸，画布与 plan 必须跟着重建 ---- */
+    let lastViewportKey = '';
+    const watchViewport = () => {
+        const key = `${window.innerWidth}x${window.innerHeight}`;
+        if (key === lastViewportKey) return;
+        lastViewportKey = key;
+        if (!plan) return;
+        /*
+         * 已有共享 plan 时只重算画布，不重算排版。
+         *
+         * 排版是编辑台算好的那份（sharedPlan），本页重算会因为输入不同而和编辑台不一致。
+         * 旋转/分屏只影响画布该多大，不该动排版。
+         */
+        if (sharedPlan) {
+            ensureCanvas();
+            draw(currentTimeOf());
+            return;
+        }
+        // 没有共享 plan（还没进过编辑台）：按新尺寸重建画布与 plan。
+        ensureCanvas();
+        lastKey = '';
+        buildPlan(currentProject || {});
+        draw(currentTimeOf());
+    };
+    window.addEventListener('resize', watchViewport);
+    window.addEventListener('orientationchange', () => window.setTimeout(watchViewport, 120));
+
+    /* ---- 性能：页面不可见（编辑台盖在上面 / 切后台）时彻底停画，可见时恢复 ---- */
+    document.addEventListener('visibilitychange', () => {
+        hiddenPause = document.hidden;
+        if (hiddenPause) {
+            // 进后台：把时钟冻在当前画到的位置。否则回来时会按真实流逝的时长往前跳，
+            // 表现就是「暂停着退后台再回来，画面自己跑到后面去了」。
+            clock.baseTime = currentTimeOf();
+            clock.startedAt = nowMs();
+        }
+        if (hiddenPause) {
+            // 进后台就真正停掉循环，省电也避免后台被系统降频后节奏错乱。
+            stopLoop();
+        } else if (!shouldStop()) {
+            // 回前台：从冻住的位置接着画，等宿主下一条 seek 校准真实进度。
+            clock.startedAt = nowMs();
+            draw(currentTimeOf());
+            startLoop();
+        }
+    });
+    window.addEventListener('message', (event) => {
+        if (event.data && event.data.target === 'jizura-render' && event.data.type === 'pause') {
+            const wasPaused = hostPause;
+            hostPause = Boolean(event.data.paused);
+            if (!wasPaused && hostPause) {
+                // 暂停前把时钟冻住，恢复时不会按流逝时间往前跳。
+                clock.baseTime = currentTimeOf();
+                clock.startedAt = nowMs();
+                // 编辑台打开：外层彻底停渲染。两套一起跑在真机上就是明显卡顿，
+                // 而且编辑台是全屏浮层，外面这层根本看不见，没有画的必要。
+                stopLoop();
+                console.log('[jizura-render] 编辑台打开，外层渲染已停');
+            } else if (wasPaused && !hostPause) {
+                clock.startedAt = nowMs();
+                /*
+                 * 关闭编辑台：先按当前 plan 重建画布，再补画一帧恢复循环。
+                 *
+                 * 必须重建画布。编辑台里可能换了 aspect / 重算了 plan，plan.W/H 变了；
+                 * 如果画布还是旧尺寸，就会靠 CSS 拉伸铺满容器 —— 画面糊、比例也不对，
+                 * 那就是"退出编辑台之后界面变得非常糊、被拉伸"的原因。
+                 */
+                ensureCanvas();
+                draw(currentTimeOf());
+                startLoop();
+                console.log('[jizura-render] 编辑台关闭，外层渲染恢复', {
+                    canvas: `${canvas ? canvas.width : 0}x${canvas ? canvas.height : 0}`,
+                    plan: plan ? `${plan.W}x${plan.H}` : null,
+                });
+            }
+        }
+    });
+
+    post('boot', { ready: ready() });
+})();
+</script>
+</body>
+</html>

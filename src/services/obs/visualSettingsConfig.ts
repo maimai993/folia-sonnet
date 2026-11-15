@@ -7,6 +7,11 @@ import { useTypographySettingsStore } from '../../stores/useTypographySettingsSt
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { useStageSettingsStore } from '../../stores/useStageSettingsStore';
 import { useLibraryWallLookStore } from '../../stores/useLibraryWallLookStore';
+import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { useGlassSurfaceSettingsStore } from '../../stores/useGlassSurfaceSettingsStore';
+import type { LiquidGlassEffects, LiquidGlassParams } from '../../shinoinject/liquidglass';
+import { useLatticeSettingsStore } from '../../stores/useLatticeSettingsStore';
+import { useScratchpadSettingsStore } from '../../stores/useScratchpadSettingsStore';
 
 // src/services/obs/visualSettingsConfig.ts
 // Everything compressConfig serializes except the theme. Reads the live settings store, so both
@@ -45,9 +50,12 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // several renderers, so a web overlay without it animates where the main window does not.
     staticMode: storeThemeSettings.staticMode,
     visualizerOpacity: storeVisualizer.visualizerOpacity,
+    // 歌词画布的分辨率与抗锯齿：OBS 页面读不到本机的设置，只能经配置码带过去（用户 2026-11-08 定，只带 OBS 页面看得到的）。
+    lyricRenderQuality: storeVisualizer.lyricRenderQuality,
     hidePlayerTranslationSubtitle: storeTypographySettings.hidePlayerTranslationSubtitle,
     showSubtitleTranslation: storeTypographySettings.showSubtitleTranslation,
     subtitleContentMode: storeTypographySettings.subtitleContentMode,
+    subtitleOverlayLayout: storeTypographySettings.subtitleOverlayLayout,
     subtitleOverlayBackground: storeTypographySettings.subtitleOverlayBackground,
     subtitleUpcomingLyricsBlur: storeTypographySettings.subtitleUpcomingLyricsBlur,
     subtitleOverlayOpacity: storeTypographySettings.subtitleOverlayOpacity,
@@ -99,6 +107,10 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     stageTrackPillMode: storeStageSettings.stageTrackPillMode,
     stageTrackPillTimeoutSec: storeStageSettings.stageTrackPillTimeoutSec,
     stageTrackPillOnHome: storeStageSettings.stageTrackPillOnHome,
+    stageTrackPillPosition: storeStageSettings.stageTrackPillPosition,
+    // Whether the web link's overlay draws the card at all: without it the three legs above travel
+    // but the overlay has no word on whether the streamer wanted the card in the source.
+    stageTrackPillInObs: storeStageSettings.stageTrackPillInObs,
     // The bravais wall's collection stack edges (a tile look, so it travels with a shared look by the
     // settings rule). The wall's transparency and windows per block deliberately stay out — the user
     // decided so; see useLibraryWallLookStore.
@@ -113,8 +125,50 @@ export function buildVisualSettingsConfig(): Record<string, unknown> {
     // Which way the info strip opens (a column split, a row split across the wall, or by the screen's
     // shape): part of the wall's look, no user exception.
     libraryWallSeamDirection: useLibraryWallLookStore.getState().seamDirection,
-    // Whether the automatic branch is flipped (a column on tall screens, a row on wide ones).
-    libraryWallSeamDirectionReverse: useLibraryWallLookStore.getState().seamDirectionReverse,
+    // 播放页标题栏后面那层磨砂底：属于播放页的样子，不给用户例外。OBS 覆盖层不画标题栏，用不上它，
+    // 但它跟着一起走，导出的「样子」才是完整的。
+    playerHeaderBlur: usePlayerChromeSettingsStore.getState().playerHeaderBlur,
+    // 液态玻璃：总开关、四个参数与两个效果开关。界面材质，属于「长什么样」，随外观配置一起走。
+    // 存成一整对象而不是六个平铺字段，短码只占一个键（llg）。
+    liquidGlass: snapshotLiquidGlass(),
+    ...snapshotTileLooks(),
+  };
+}
+
+/** 液态玻璃的当前设置，导出用；没开也照样带走参数，导入方才能原样恢复。 */
+function snapshotLiquidGlass(): LiquidGlassParams & LiquidGlassEffects & { enabled: boolean } {
+  const glass = useGlassSurfaceSettingsStore.getState();
+  return {
+    enabled: glass.liquidGlassEnabled,
+    strength: glass.strength,
+    blur: glass.blur,
+    sat: glass.sat,
+    bend: glass.bend,
+    light: glass.light,
+    jelly: glass.jelly,
+    // The frosted bar behind the player page's titlebar: a look of the player page, no user exception.
+    // The OBS overlay draws no titlebar and ignores it; it rides along so a copied look keeps it.
+  };
+}
+
+/**
+ * 液态玻璃之外、但同样属于「长什么样」的几项。
+ *
+ * 它们不是一个 tunin 对象、也不归液态玻璃，所以跟着外观配置走的是顶层的平铺字段
+ * （短码里各占一个键、导入计划里各自归组，见 utils/appearanceCodec 与 appearanceImportPlan）。
+ * 放在这里而不是塞进 snapshotLiquidGlass：塞进去就只覆盖到液态玻璃那一块，导入方拿不到。
+ */
+function snapshotTileLooks(): Record<string, unknown> {
+  return {
+    // Numbering only the playing song on both tile walls (the queue collage and the bravais wall): a tile
+    // look with no user exception, so it travels too (#930).
+    latticeBadgeCurrentOnly: useLatticeSettingsStore.getState().latticeBadgeCurrentOnly,
+    // The frosted bar behind the player page's titlebar: a look of the player page, no user exception.
+    // The OBS overlay draws no titlebar and ignores it; it rides along so a copied look keeps it.
+    playerHeaderBlur: usePlayerChromeSettingsStore.getState().playerHeaderBlur,
+    // How the scratchpad's side tab looks while the pointer is away: a look of the library chrome, no user
+    // exception, so it travels with a shared look. The OBS overlay draws no scratchpad and ignores it.
+    scratchpadHandleStyle: useScratchpadSettingsStore.getState().handleStyle,
   };
 }
 

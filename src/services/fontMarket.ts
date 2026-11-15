@@ -1,34 +1,60 @@
-import { createAiFetch } from './aiNativeFetch';
-import { resolveCloudApiUrl, resolveCloudBaseUrl } from './foliaCloud';
-import { saveToCache } from './db';
+import {
+    DEFAULT_STYLE,
+    forgetInjectedFamily,
+    loadPreviewFamily,
+    warmMarketFontFamily,
+} from './fontMarket/zeosevenFont';
+import type { ZeosevenFont } from './fontMarket/zeosevenCatalog';
+
+/*
+ * 目录有 200 多 KB、1300 多款字体，而绝大多数用户从不开字体商店。所以它是**动态载入**
+ * 的：第一次用到时才拉这个 chunk，首屏不受牵连。
+ */
+let catalogPromise: Promise<typeof import('./fontMarket/zeosevenCatalog')> | null = null;
+const catalogModule = (): Promise<typeof import('./fontMarket/zeosevenCatalog')> => {
+    if (!catalogPromise) catalogPromise = import('./fontMarket/zeosevenCatalog');
+    return catalogPromise;
+};
 
 // src/services/fontMarket.ts
-// 字体市场的客户端：拉目录、看预览、按需取字体文件。
 //
-// 流量是这里唯一的设计约束。目录里每条字体只带一张**后台上传时就烤好的预览图**
-// （几 KB 的 PNG），播放器**不下载字体文件**就能看到这字体长什么样；只有用户点
-// 「使用」才去取那几 MB 的字体本体，取回来顺手落进本地缓存，重启也不用再下一遍。
+// 字体商店的客户端，数据来自 ZeoSeven Fonts（ZSFT）的免费商用字体库。
 //
-// 目录是公开只读接口。上架 / 下架 / 改名一律走后台那个带登录的面板。
+// 与以前的实现有一个根本区别：字体不再是一个「整包下载」的文件，而是按 unicode-range
+// 切成几百个 woff2 的 WebFont。所以这里不再有 fileUrl / fileSize，也不下载整包；预览与
+// 正式使用都只登记**需要的分片**（见 fontMarket/zeosevenFont.ts），由浏览器按
+// unicode-range 决定实际下发哪几个。
+//
+// 好处是中文字体从「一次 10–20MB」变成「用多少下载多少」，代价是首次显示某段文字时要
+// 等那几个分片到 —— 所以预览会先把常见字预取一份。
 
-const REQUEST_TIMEOUT_MS = 15_000;
-
-/** 与「本地上传字体」共用同一个落盘槽位，冷启动的恢复流程因此原样可用。 */
-const UPLOADED_LYRICS_FONT_KEY = 'lyrics_uploaded_font';
+/** 预览文字：覆盖常用汉字与拉丁，够看出字体的实际样子。 */
+export const PREVIEW_SAMPLE = '永风起时花落无声AaBb';
 
 export interface FontMarketFont {
+    /** ZeoSeven 的字体 ID。 */
     id: string;
     name: string;
+    /** 用作 CSS family 的名字，运行时由 loadFullFamily 决定，这里只占位。 */
     family: string;
     category: string;
     categoryLabel: string;
     license: string;
+    /** 设计师。 */
+    designer: string;
+    /** 别名 / 英文名。 */
+    alias: string;
+    /** 语种子集标记。 */
+    languages: string[];
+    /** 字重数量。 */
+    weights: number;
+    /** 与旧接口对齐：切片字体没有单一文件地址，留空。 */
     fileName: string;
     mimeType: string;
     fileSize: number;
     fileUrl: string;
+    /** 与旧接口对齐：预览不再用预览图，而是直接用字体本身渲染。 */
     previewUrl: string;
-    /** 预览图宽高比。图片还没到时先按这个比例撑住位置，免得加载完顶一下。 */
     previewAspect: number;
     enabled: boolean;
     sort: number;
@@ -47,232 +73,192 @@ export type FontMarketInstallResult = FontMarketSelection & {
     /**
      * 字体字节（base64）。
      *
-     * 壁纸 / 叠层那两层是自绘的，读不到网页注册的 FontFace —— 谁要把字体
-     * 交给原生层，就用这一份。它已经在内存里了，不必再下一遍。
+     * 切片字体没有「整包字节」可取，这里为空串。壁纸 / 叠层那两层是自绘的，
+     * 它们要字体时按 family 走 WebFont（见 ensureMarketFontFamilyForCanvas）。
      */
     base64: string;
 };
 
-const asRecord = (value: unknown): Record<string, unknown> | null => (
-    Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-        ? value as Record<string, unknown>
-        : null
-);
-
-const asText = (value: unknown, fallback = ''): string => (
-    typeof value === 'string' ? value : (value === undefined || value === null ? fallback : String(value))
-);
-
-const absoluteUrl = (value: string): string => {
-    const raw = String(value || '').trim();
-    if (!raw) return '';
-    if (/^https?:\/\//i.test(raw)) return raw;
-    return `${resolveCloudBaseUrl()}${raw.startsWith('/') ? '' : '/'}${raw}`;
+const toMarketFont = (
+    font: ZeosevenFont,
+    index: number,
+    styleLabel: (style: string) => string,
+): FontMarketFont => {
+    /*
+     * `category` 取**第一个**风格，只用于卡片上那一行小字。筛选不能只看它：一款字体
+     * 常常同时带多个风格（比如既是无衬线、又带西里尔），用户点「楷书」时也该找得到它。
+     * 真正的筛选走 matchesCategory，比对整个 styles 数组。
+     */
+    const primaryStyle = font.styles[0] ?? '';
+    return {
+        id: font.id,
+        name: font.name,
+        family: `zsft-full-${font.id}-${DEFAULT_STYLE}`,
+        category: primaryStyle || 'all',
+        categoryLabel: primaryStyle ? styleLabel(primaryStyle) : '全部',
+        license: font.license,
+        designer: font.designer,
+        alias: font.alias,
+        languages: font.languages,
+        weights: font.weights,
+        fileName: '',
+        mimeType: 'font/woff2',
+        fileSize: 0,
+        fileUrl: '',
+        previewUrl: '',
+        previewAspect: 0,
+        enabled: true,
+        sort: index,
+        createdAt: '',
+        updatedAt: '',
+    };
 };
 
-/** 预览图地址：目录里带的是相对路径，这里补上云服务地址。 */
-export const resolveFontPreviewUrl = (font: Pick<FontMarketFont, 'previewUrl'>): string => (
-    absoluteUrl(font.previewUrl)
-);
-
-const registeredFonts = new Map<string, FontFace>();
-const registeredFamilies = new Set<string>();
-
-const getFontFaceConstructor = () => (globalThis as typeof globalThis & {
-    FontFace?: new (family: string, source: BufferSource | string) => FontFace;
-}).FontFace;
-
-/** 注册字体字节，返回可直接写进 CSS 的 family。重复安装同一款不会再下第二遍。 */
-const registerFontBytes = async (font: FontMarketFont, bytes: Uint8Array): Promise<string> => {
-    const FontFaceConstructor = getFontFaceConstructor();
-    if (!FontFaceConstructor || typeof document === 'undefined' || !document.fonts?.add) {
-        return font.family;
-    }
-
-    if (registeredFamilies.has(font.family)) return font.family;
-
-    // FontFace keeps a reference to the buffer, so hand it a private copy:
-    // the caller's array is also going into IndexedDB.
-    const copy = new Uint8Array(bytes.byteLength);
-    copy.set(bytes);
-
-    const face = new FontFaceConstructor(font.family, copy);
-    await face.load();
-    document.fonts.add(face);
-    registeredFonts.set(font.id, face);
-    registeredFamilies.add(font.family);
-    return font.family;
-};
-
-/** 已经在本会话注册过的市场字体。 */
-export const isMarketFontRegistered = (font: Pick<FontMarketFont, 'id'>): boolean => (
-    registeredFonts.has(font.id)
-);
-
-const withTimeout = (timeoutMs: number): AbortSignal => {
-    const controller = new AbortController();
-    if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
-        window.setTimeout(() => controller.abort(), timeoutMs);
-    }
-    return controller.signal;
-};
+/*
+ * 目录在构建时就烘进了包里（见 fontMarket/zeosevenCatalog.json），所以「拉一页」其实是
+ * 在本地数组上做筛选与切片 —— 不再有网络往返，翻页也就没有加载态。
+ */
+export interface FontMarketQuery {
+    page?: number;
+    pageSize?: number;
+    /** 'all' 或空 = 不过滤；否则是风格标记。 */
+    category?: string;
+    q?: string;
+}
 
 export interface FontMarketResult {
     fonts: FontMarketFont[];
     error: 'offline' | 'server' | null;
-    /** 服务端过滤后的总条数，不是这一页的条数。 */
     total: number;
     page: number;
     pageSize: number;
     hasMore: boolean;
 }
 
-const emptyResult = (error: FontMarketResult['error']): FontMarketResult => ({
-    fonts: [],
-    error,
-    total: 0,
-    page: 1,
-    pageSize: 0,
-    hasMore: false,
-});
-
-/** 老服务端还没有分页字段时，就拿这一页的条数当总数，界面不至于算出「0 款」。 */
-const readCount = (value: unknown, fallback: number): number => (
-    Number.isFinite(Number(value)) ? Math.max(0, Math.trunc(Number(value))) : fallback
+const matchesCategory = (font: ZeosevenFont, category: string): boolean => (
+    category === 'all' || font.styles.includes(category)
 );
 
-const mapFont = (value: unknown): FontMarketFont | null => {
-    const record = asRecord(value);
-    if (!record) return null;
-    const id = asText(record.id).trim();
-    const family = asText(record.family).trim();
-    if (!id || !family) return null;
+const matchesQuery = (font: ZeosevenFont, needle: string): boolean => {
+    if (!needle) return true;
+    const lower = needle.toLowerCase();
+    return font.name.toLowerCase().includes(lower)
+        || font.alias.toLowerCase().includes(lower)
+        || font.designer.toLowerCase().includes(lower);
+};
+
+export const fetchFontMarket = async (query: FontMarketQuery = {}): Promise<FontMarketResult> => {
+    const page = Math.max(1, Math.trunc(query.page ?? 1));
+    const pageSize = Math.max(1, Math.trunc(query.pageSize ?? 24));
+    const category = query.category ?? 'all';
+    const needle = (query.q ?? '').trim();
+
+    const { ZEOSEVEN_FONTS } = await catalogModule();
+    const filtered = ZEOSEVEN_FONTS.filter((font) => (
+        matchesCategory(font, category) && matchesQuery(font, needle)
+    ));
+
+    const start = (page - 1) * pageSize;
+    const { styleLabel } = await catalogModule();
+    const pageFonts = filtered.slice(start, start + pageSize)
+        .map((font, offset) => toMarketFont(font, start + offset, styleLabel));
+
     return {
-        id,
-        name: asText(record.name).trim() || family,
-        family,
-        category: asText(record.category).trim() || 'sans',
-        categoryLabel: asText(record.categoryLabel).trim() || asText(record.category).trim() || 'sans',
-        license: asText(record.license),
-        fileName: asText(record.fileName),
-        mimeType: asText(record.mimeType),
-        fileSize: Number(record.fileSize ?? 0) || 0,
-        fileUrl: asText(record.fileUrl),
-        previewUrl: asText(record.previewUrl),
-        previewAspect: Number(record.previewAspect ?? 0) || 0,
-        enabled: record.enabled !== false,
-        sort: Number(record.sort ?? 0) || 0,
-        createdAt: asText(record.createdAt),
-        updatedAt: asText(record.updatedAt),
+        fonts: pageFonts,
+        error: null,
+        total: filtered.length,
+        page,
+        pageSize,
+        hasMore: start + pageFonts.length < filtered.length,
     };
 };
 
-const fetchFonts = async (url: string): Promise<FontMarketResult> => {
-    try {
-        const response = await createAiFetch()(url, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-            signal: withTimeout(REQUEST_TIMEOUT_MS),
-        });
-        if (!response.ok) return emptyResult('server');
-        const data = await response.json().catch(() => null) as {
-            fonts?: unknown;
-            total?: unknown;
-            page?: unknown;
-            pageSize?: unknown;
-            hasMore?: unknown;
-        } | null;
-        const fonts = Array.isArray(data?.fonts)
-            ? data.fonts.map(mapFont).filter((font): font is FontMarketFont => font !== null)
-            : [];
-        const total = readCount(data?.total, fonts.length);
-        return {
-            fonts,
-            error: null,
-            total,
-            page: Math.max(1, readCount(data?.page, 1)),
-            pageSize: readCount(data?.pageSize, fonts.length),
-            hasMore: data?.hasMore === true || (fonts.length > 0 && fonts.length < total),
-        };
-    } catch {
-        return emptyResult('offline');
+/** 全部风格，按目录里出现的顺序 —— 给筛选页签用。 */
+export const listFontMarketCategories = async (): Promise<{ value: string; label: string; count: number }[]> => {
+    const { ZEOSEVEN_FONTS, styleLabel } = await catalogModule();
+    const counts = new Map<string, number>();
+    for (const font of ZEOSEVEN_FONTS) {
+        for (const style of font.styles) {
+            counts.set(style, (counts.get(style) ?? 0) + 1);
+        }
     }
+    return [...counts.entries()]
+        .sort((left, right) => right[1] - left[1])
+        .map(([value, count]) => ({ value, label: styleLabel(value), count }));
 };
 
-export interface FontMarketQuery {
-    page?: number;
-    pageSize?: number;
-    /** 'all' 或空 = 不过滤。 */
-    category?: string;
-    q?: string;
-}
-
 /**
- * 拉一页目录。断网 / 服务端坏了都只是「列表为空」，不弹错。
+ * 预览用的 family：只加载覆盖预览文字的分片，返回可直接写进 CSS 的名字。
  *
- * 分类和关键字交给服务端筛：分页之后前端手上只有一页，在前端筛等于只在这一页里筛。
+ * 拿不到（网络不通 / 站点改版）时返回 null，调用方显示占位而不是退回系统字体。
  */
-export const fetchFontMarket = async (query: FontMarketQuery = {}): Promise<FontMarketResult> => {
-    const params = new URLSearchParams();
-    if (query.page && query.page > 1) params.set('page', String(Math.trunc(query.page)));
-    if (query.pageSize && query.pageSize > 0) params.set('pageSize', String(Math.trunc(query.pageSize)));
-    if (query.category && query.category !== 'all') params.set('category', query.category);
-    const needle = query.q?.trim();
-    if (needle) params.set('q', needle);
-    const suffix = params.toString();
-    return fetchFonts(`${resolveCloudApiUrl('fonts')}${suffix ? `?${suffix}` : ''}`);
-};
-
-const bytesToBase64 = (bytes: Uint8Array): string => {
-    const CHUNK = 0x8000;
-    let binary = '';
-    for (let index = 0; index < bytes.length; index += CHUNK) {
-        binary += String.fromCharCode(...bytes.subarray(index, index + CHUNK));
-    }
-    return btoa(binary);
-};
+export const ensureMarketFontPreview = async (fontId: string): Promise<string | null> => (
+    loadPreviewFamily(fontId, DEFAULT_STYLE, PREVIEW_SAMPLE)
+);
 
 /**
- * 安装一款市场字体：下载 → 注册 FontFace → 落盘。
+ * 安装一款字体：把全部分片登记进页面，并把选择记下来。
  *
- * 落盘用的就是「上传字体」那一个槽位，于是冷启动时
- * `restoreUploadedLyricsFont(fontId)` 能把它重新注册回来 —— 市场字体和本地上传的
- * 字体在播放器眼里是同一件事，只是来路不同。
+ * 不再有「下载整包 → 存 IndexedDB」这一步：切片字体由浏览器按需取并缓存在 HTTP 层，
+ * 落盘也由它管。我们只记住用户选了哪一款。
  */
 export const installMarketFont = async (font: FontMarketFont): Promise<FontMarketInstallResult> => {
-    const response = await createAiFetch()(absoluteUrl(font.fileUrl), {
-        method: 'GET',
-        signal: withTimeout(REQUEST_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-        throw new Error(`字体下载失败（HTTP ${response.status}）`);
+    /*
+     * 用预热样本而不是一小段字：选中之后歌词随时会出现任何字，只唤醒几个分片的话，
+     * 其余字在首帧会画成回退字体，而 canvas 样式大多不会因此重绘。
+     */
+    const family = await warmMarketFontFamily(font.id);
+    if (!family) {
+        throw new Error('字体加载失败（网络不通或字体源不可用）');
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const family = await registerFontBytes(font, bytes);
-    const mimeType = font.mimeType || 'font/ttf';
-    const fileName = font.fileName || `${font.name}.ttf`;
 
-    await saveToCache(UPLOADED_LYRICS_FONT_KEY, {
-        id: font.id,
-        name: fileName,
-        mimeType,
-        blob: new Blob([bytes], { type: mimeType }),
-        family,
-        label: font.name,
-        createdAt: Date.now(),
-    });
-
-    return {
+    const selection: FontMarketSelection = {
         id: font.id,
         family,
         label: font.name,
-        previewUrl: resolveFontPreviewUrl(font),
-        base64: bytesToBase64(bytes),
+        previewUrl: '',
     };
+    writeFontMarketChoice(selection);
+
+    return { ...selection, base64: '' };
 };
 
-/** 面板地址，给「去后台看看」这类入口用。 */
-export const resolveFontMarketAdminUrl = (): string => `${resolveCloudBaseUrl()}/admin`;
+/** 卸载：把注入的样式表摘掉，避免继续占着文档。 */
+export const uninstallMarketFont = (family: string): void => {
+    forgetInjectedFamily(family);
+};
+
+/** 市场字体的 family 前缀，见 loadFullFamily。 */
+const MARKET_FAMILY_PREFIX = 'zsft-full-';
+
+/** 这个 family 是不是字体市场注入的（而不是本机系统字体）。 */
+export const isMarketFontFamily = (family: string): boolean => (
+    family.trim().startsWith(MARKET_FAMILY_PREFIX)
+);
+
+/**
+ * 从市场 family 反推出字体 ID。
+ *
+ * 形如 `zsft-full-292-main` → `292`。认不出时返回 null。
+ */
+export const marketFontIdFromFamily = (family: string): string | null => {
+    const trimmed = family.trim();
+    if (!trimmed.startsWith(MARKET_FAMILY_PREFIX)) return null;
+    const rest = trimmed.slice(MARKET_FAMILY_PREFIX.length);
+    // id 本身可能带 "-"，所以从右边按最后一段是 style 来切。
+    const cut = rest.lastIndexOf('-');
+    if (cut <= 0) return null;
+    const id = rest.slice(0, cut);
+    return id || null;
+};
+
+/** 面板地址，给「去官网看看」这类入口用。 */
+export const resolveFontMarketAdminUrl = (): string => 'https://fonts.zeoseven.com/';
+
+/** 某款字体的详情页。 */
+export const resolveFontMarketDetailUrl = (fontId: string): string => (
+    `https://fonts.zeoseven.com/items/${fontId}/`
+);
 
 // ------------------------------------------------------------------ 本机选择
 
@@ -281,8 +267,8 @@ const CHOICE_STORAGE_KEY = 'foliaFontMarketChoice';
 /**
  * 本机当前用着的是哪款市场字体。
  *
- * 只存元信息，不存字节 —— 字节在 `lyrics_uploaded_font` 那个缓存槽里，
- * 冷启动时由现有的「恢复上传字体」流程重新注册。
+ * 只存元信息；字体本身由 ZeoSeven 的 CDN 提供，冷启动时重新登记一次即可
+ * （见 restoreMarketFontChoice）。
  */
 export const readFontMarketChoice = (): FontMarketSelection | null => {
     if (typeof localStorage === 'undefined') return null;
@@ -310,4 +296,17 @@ export const writeFontMarketChoice = (choice: FontMarketSelection | null): void 
     } catch {
         // Quota or private mode: the in-memory font still applies this session.
     }
+};
+
+/**
+ * 冷启动时把上次选的市场字体重新登记回来。
+ *
+ * 返回可用的 family；存的那款已经在目录里找不到（站点下架）时返回 null。
+ */
+export const restoreMarketFontChoice = async (): Promise<string | null> => {
+    const choice = readFontMarketChoice();
+    if (!choice) return null;
+    const { getZeosevenFont } = await catalogModule();
+    if (!getZeosevenFont(choice.id)) return null;
+    return warmMarketFontFamily(choice.id);
 };

@@ -130,6 +130,6 @@ export default {
     summaryKey: 'ponder.summaries.folia_desktop',
     hoverSelector: null,
     // 浏览器里这三样一个都打不开，讲一遍纯属噪声。
-    isAvailable: () => typeof window !== 'undefined' && Boolean(window.electron),
+    isAvailable: () => typeof window !== 'undefined' && typeof window.electron?.platform === 'string',
     scenes: [wallpaper, tray, remote],
 } satisfies PonderTargetDefinition;

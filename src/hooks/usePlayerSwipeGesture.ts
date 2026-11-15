@@ -13,7 +13,7 @@
 //
 // 判定本身是纯函数，不碰 DOM 也不碰 React —— 单测直接测那个。
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { resolvePlayerSwipe, type PlayerSwipePoint } from '../utils/playerSwipeGesture';
 
@@ -34,26 +34,53 @@ export interface PlayerSwipeGestureBinding {
 
 export function usePlayerSwipeGesture({ enabled, onNext, onPrev }: UsePlayerSwipeGestureOptions): PlayerSwipeGestureBinding {
     const startRef = useRef<PlayerSwipePoint | null>(null);
+    // 这次手势属于哪根手指。安卓上多指同时触屏很常见（扶着手机的手、搭在屏幕边上的
+    // 手指），簿记不分指针的话：第二根手指一落就抢走起点、抹掉 triggeredRef，两根手指
+    // 的移动又都拿来跟同一个起点比 —— 静止手指的抖动会乱切歌，同一次触碰还会连切。
+    const pointerIdRef = useRef<number | null>(null);
     const triggeredRef = useRef(false);
     // 这个标记要活过 pointerup —— click 是在它之后才到的，所以收尾时不能清它。
     const suppressClickRef = useRef(false);
 
     const finish = useCallback(() => {
         startRef.current = null;
+        pointerIdRef.current = null;
         triggeredRef.current = false;
     }, []);
 
     const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
-        // 上一次手势的 click 已经派发完了（click 总在 pointerup 之后），这里可以安全重置。
+        // 已经有手指在跟就不再接新的：换起点会把原手势的几何整个打乱；也不能顺手重置
+        // suppressClickRef，那会把刚触发那下滑的 click 放出来。
+        /*
+         * 上一次手势可能**没收到收尾**：目标元素被换掉（换歌时可视化层重建）、
+         * pointerup 落在别的元素上、或者页面在这一手中间重新挂载。那时候 startRef 一直
+         * 不为空，之后每一次 pointerdown 都会在这里被忽略 —— 滑动从此彻底不响应，
+         * 而且一路带到下一首。同一根指针又来一次 down，就说明那一手早结束了：重置再开始。
+         *
+         * 兜底主要靠 window 捕获阶段的 pointerup / pointercancel（见下面的 effect），
+         * 这里只是「同一根指针又按下」的那一条。
+         */
+        if (startRef.current !== null) {
+            if (event.pointerId !== pointerIdRef.current) return;
+            startRef.current = null;
+            pointerIdRef.current = null;
+            triggeredRef.current = false;
+            suppressClickRef.current = false;
+        }
         suppressClickRef.current = false;
         if (!enabled) return;
+        // 场景（SceneHost）铺满整块播放页时，这一手是拿来转头看的，不是切歌：不接管，
+        // 否则往左划一下歌就换了，而用户以为只是把视线转过去。用场景自己的标记，
+        // 不能借 data-takes-drag —— 那个的意思是「别转视角」，正相反。
+        if (event.target instanceof Element && event.target.closest('[data-scene-look]')) return;
         startRef.current = { x: event.clientX, y: event.clientY };
+        pointerIdRef.current = event.pointerId;
         triggeredRef.current = false;
     }, [enabled]);
 
     const onPointerMove = useCallback((event: ReactPointerEvent<HTMLElement>) => {
         const start = startRef.current;
-        if (!enabled || !start || triggeredRef.current) return;
+        if (!enabled || !start || triggeredRef.current || event.pointerId !== pointerIdRef.current) return;
         const direction = resolvePlayerSwipe(start, { x: event.clientX, y: event.clientY });
         if (!direction) return;
         // 一次手势只切一首：手指继续往同一边划不该连切。
@@ -63,8 +90,34 @@ export function usePlayerSwipeGesture({ enabled, onNext, onPrev }: UsePlayerSwip
         else onPrev();
     }, [enabled, onNext, onPrev]);
 
-    const onPointerUp = useCallback(() => finish(), [finish]);
-    const onPointerCancel = useCallback(() => finish(), [finish]);
+    const onPointerUp = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+        // 别的手指抬起不算收尾 —— 不然它一松手，还在滑的那根手指就断了。
+        if (event.pointerId !== pointerIdRef.current) return;
+        finish();
+    }, [finish]);
+    const onPointerCancel = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+        if (event.pointerId !== pointerIdRef.current) return;
+        finish();
+    }, [finish]);
+
+    /*
+     * 收尾兜底：pointerup / pointercancel 也挂在 window 上（捕获阶段）。
+     *
+     * 视觉层上的那一发在元素被换掉之后不一定会到（换歌会重建可视化层），而收尾丢了就是
+     * 「手势从此瘫掉」。这里只认这一手的那根指针，别的手指抬起照旧不算收尾。
+     */
+    useEffect(() => {
+        const release = (event: PointerEvent) => {
+            if (pointerIdRef.current === null || event.pointerId !== pointerIdRef.current) return;
+            finish();
+        };
+        window.addEventListener('pointerup', release, true);
+        window.addEventListener('pointercancel', release, true);
+        return () => {
+            window.removeEventListener('pointerup', release, true);
+            window.removeEventListener('pointercancel', release, true);
+        };
+    }, [finish]);
 
     const consumeSuppressedClick = useCallback(() => {
         if (!suppressClickRef.current) return false;

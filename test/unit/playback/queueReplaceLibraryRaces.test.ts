@@ -195,6 +195,9 @@ function mount() {
         currentOnlineAudioUrlFetchedAtRef: refs.currentOnlineAudioUrlFetchedAtRef,
         pendingResumeTimeRef: refs.pendingResumeTimeRef,
         lastAudioRecoverySourceRef: refs.lastAudioRecoverySourceRef,
+        nativePlaybackRef: { current: false },
+        nativeLikeStateOf: () => undefined,
+        nativeFailedKeysRef: { current: new Set<string>() },
     } as never);
     const queue = usePlaybackQueueController({
         localSongs: [localOne, localTwo], localLibraryCatalog: {}, isNowPlayingStageActive: false,
@@ -214,6 +217,9 @@ function mount() {
         pendingResumeTimeRef: refs.pendingResumeTimeRef,
         currentOnlineAudioUrlFetchedAtRef: refs.currentOnlineAudioUrlFetchedAtRef,
         lastAudioRecoverySourceRef: refs.lastAudioRecoverySourceRef,
+        nativePlaybackRef: { current: false },
+        nativeLikeStateOf: () => undefined,
+        nativeFailedKeysRef: { current: new Set<string>() },
     } as never);
     return { library, queue, persistLastPlaybackCache };
 }

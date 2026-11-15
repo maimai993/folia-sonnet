@@ -18,19 +18,21 @@ import { createProviderSongMetadata } from '../../../utils/songMetadata';
 import { toSafePlaybackUrl } from '../../../utils/appPlaybackHelpers';
 import { fetchQQLyrics } from './qqLyricProvider';
 import { writeProviderSessionValue } from '../providerStorage';
-import { normalizeQqCollection, normalizeQqSong, normalizeQqUser } from './qqNormalize';
-import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, requestQq } from './qqTransport';
+import { getQqLyricSearchAlias, normalizeQqCollection, normalizeQqSong, normalizeQqUser } from './qqNormalize';
+import { clearQqSession, getQqRemoteApiBase, getQqTransportAvailability, hasQqSession, hasUsableQqSession, isQqSessionParked, readUpstreamRefusalCode, recheckQqSessionAfterEmptyPlayLink, requestQq } from './qqTransport';
 import { canRunLoginSelfCheck, runLoginSelfCheck } from '../loginSelfCheck';
 import { diagnosticLine, formatDiagnosticClock } from '../login/loginDiagnosticReport';
 import { collectQqLoginDiagnostics } from './qqLoginDiagnostics';
 import { getQqSongDetailById, getQqSongDetails, QQ_SONG_DETAILS_PER_REQUEST, requestQqSongDetail } from './qqSongDetail';
 import { qqRecommendations } from './qqRecommendations';
-import { resetQqSearchFallbackMemory, searchQqSongs } from './qqSearch';
+import { clearQqGuessYouLikeCatalog } from './qqGuessYouLike';
+import { resetQqSearchFallbackMemory, searchQqCollections, searchQqSongs } from './qqSearch';
 import { getQqSubscriptionStatus, qqMutations } from './qqMutations';
 import { describeQqLoginFailure, qqAccountHintNote, qqCheckFailure, qqHintFailure } from './qqLoginFailure';
 import { describeQqFailure } from './qqFailure';
 import { getQqCloudCollection, getQqCloudTracks, getQqListTracks, qqListKindOf } from './qqLists';
 import { qqExplore } from './qqExplore';
+import { getQqListeningRankCollections, getQqListeningRankTracks } from './qqListeningRank';
 import { areQqSongsLiked, resetQqVipMemory, withQqVipType } from './qqAccount';
 import { noteLibraryStep } from '../../../nativeBridge/api/libraryTrace.js';
 import { requestQqPreviewSource } from './qqPreview';
@@ -117,14 +119,17 @@ const loadRawPlaylistTracks = async (
 // 后端有没有 `/user/playlist-detail` 只取决于它的版本，一个会话里不会变，所以探到一次 404
 // 就记下来，不再为每一页重试。刷新页面自然会重新探测。
 let ownedPlaylistRouteMissing = false;
+let lastQqAccountId: string | null = null;
 
 export const resetQqProviderRuntimeCache = (): void => {
     ownedPlaylistRouteMissing = false;
+    lastQqAccountId = null;
     lastLoginStatusCheck = null;
     playlistRound = null;
     resetQqVipMemory();
     resetQqSessionRefresh();
     resetQqSearchFallbackMemory();
+    clearQqGuessYouLikeCatalog();
 };
 
 /**
@@ -485,6 +490,25 @@ const getAudioSource = async (song: SongResult, quality: AudioQualityPreference)
     // 有会话、所有音质都没给链接：这个账号可能只能听试听片段，不限后端说的可能原因。没会话时后端不给试听，停用的会话也不带
     // （hasUsableQqSession）。
     if (sawEmptyPlayLink && hasUsableQqSession()) {
+        /*
+         * 先确认这不是「登录已经过期」造成的。
+         *
+         * 会话失效时播放接口回的是 200 + 空链接，不是 401 —— 光靠 401 那条路永远清不掉
+         * 过期的 cookie，于是每首歌都拿到空链接，用户看到一大片「无法播放」却没有任何
+         * 登录提示。这里问一次 login_status：确认已经不再认出这个账号，就清掉会话、
+         * 按游客重试一次（免费的歌照常能播）。
+         */
+        let retriedAsGuest = false;
+        try {
+            retriedAsGuest = await recheckQqSessionAfterEmptyPlayLink();
+        } catch {
+            retriedAsGuest = false;
+        }
+        if (retriedAsGuest && !hasUsableQqSession()) {
+            // 会话已经清掉，重试这一次走游客（免费的歌照常能播）。
+            // 带 `!hasUsableQqSession()` 是防递归：万一清理没能生效，这里就不要再进同一个分支。
+            return getAudioSource(song, quality);
+        }
         const preview = await requestQqPreviewSource(songmid, mediaId);
         if (preview) return preview;
     }
@@ -543,7 +567,11 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
             console.info('[QQProvider] login-status:anonymous');
             return signedOutUnlessStoreUnreadable();
         }
-        const user = await withQqVipType(normalizeQqUser(profile));
+        const normalized = normalizeQqUser(profile);
+        const accountId = String(normalized.id || '');
+        if (lastQqAccountId && accountId && lastQqAccountId !== accountId) clearQqGuessYouLikeCatalog();
+        lastQqAccountId = accountId || null;
+        const user = await withQqVipType(normalized);
         // 登录还在：会话要在到期前续（qqSessionRefresh.ts）；续期的请求排在通道探测之后。
         void refreshDeclaredChannels().then(keepQqSessionFresh);
         // The acceptance test account returned a profile without a display name, so the profile itself is the signal.
@@ -568,6 +596,8 @@ const getLoginStatus = async (): Promise<ProviderUser | null> => {
 // The request takes the session as it is when it is made (`requestQq`); the session leaves the
 // page at once, before the first wait and whatever the backend answers.
 const logout = async (): Promise<void> => {
+    clearQqGuessYouLikeCatalog();
+    lastQqAccountId = null;
     stopQqSessionRefresh();
     const told = hasQqSession()
         ? requestQq('logout').catch(error => {
@@ -736,6 +766,23 @@ let lastAccountHintKey: string | null = null;
 // 20279 只在主进程钩子记下的 qq-auth.upstream-result 里，桌面版再去那里找本轮最后一次凭据交换。
 const isQqDeviceLimit = async (response: any): Promise<boolean> => {
     if (reportsDeviceLimit(response) || reportsDeviceLimit(response?.primaryFailure)) return true;
+    /*
+     * 安卓兜底：直接读这次响应里带的文本。
+     *
+     * 桌面端下面那段走 `window.electron.getLoginDiagnostics`（主进程环形记录），
+     * 安卓没有 Electron 那一层，取不到快照就直接 false —— 于是「登录设备已达上限」
+     * 永远认不出来，用户在手机上只会看到笼统的「登录失败」，不知道去删设备。
+     *
+     * QQ 通道的凭据交换失败会被后验覆盖，顶层可能只剩一个笼统的拒绝；但后端把
+     * 上游的原话（含 20279）拼在 message / upstreamMessage 里，从文本里认一遍即可。
+     */
+    const said = [response?.message, response?.upstreamMessage, response?.detail]
+        .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+    for (const text of said) {
+        const code = readUpstreamRefusalCode(text);
+        if (Number(code) === QQ_DEVICE_LIMIT_UPSTREAM_CODE) return true;
+        if (text.includes(String(QQ_DEVICE_LIMIT_UPSTREAM_CODE))) return true;
+    }
     if (response?.failureStage !== 'credential-validation') return false;
     const getSnapshot = typeof window === 'undefined' ? undefined : window.electron?.getLoginDiagnostics;
     if (!getSnapshot) return false;
@@ -778,6 +825,8 @@ const checkLogin = async (key: string): Promise<LoginState> => {
         return { state: 'scanned' };
     }
     if (code === 803) {
+        clearQqGuessYouLikeCatalog();
+        lastQqAccountId = null;
         // Idempotent with the transport, which already stored the opaque session string on this response.
         if (typeof response?.cookie === 'string' && response.cookie) {
             writeProviderSessionValue('qq', 'cookie', response.cookie);
@@ -1063,6 +1112,7 @@ export const qqProvider: OnlineMusicProvider = {
     id: 'qq',
     displayName: 'QQ Music',
     shortName: 'QQ音乐',
+    shortNameKey: 'onlineProviderName.qq',
     mark: { letter: 'Q', color: '#16a34a' },
     getAvailability,
     describeFailure: describeQqFailure,
@@ -1077,6 +1127,8 @@ export const qqProvider: OnlineMusicProvider = {
         artists: true,
         // 推荐、歌单增删与收藏歌单是 qq-music-api 3.3.0 的路由，红心与收藏专辑是 3.3.1 的。
         recommendations: true,
+        // 每日 30 首的历史日期是 qq-music-api 3.3.6 的路由；旧后端 404，看到的只是没有日期。
+        historyRecommendations: true,
         mutations: true,
         playlistTrackMutations: true,
         playlistSubscription: true,
@@ -1086,6 +1138,10 @@ export const qqProvider: OnlineMusicProvider = {
         // 音乐云盘与探索页是 qq-music-api 3.3.3 的路由。
         userCloud: true,
         explore: true,
+        // 听歌排行是 qq-music-api 3.3.6 的路由；旧后端 404，看到的只是没有排行条目。
+        listeningRank: true,
+        // 账号的音乐偏好是 qq-music-api 3.3.6 的路由；旧后端 404，偏好面板显示没读到。
+        recommendationPreferences: true,
     },
     normalizeSong: normalizeQqSong,
     normalizeUser: normalizeQqUser,
@@ -1101,9 +1157,13 @@ export const qqProvider: OnlineMusicProvider = {
         const songmid = String(song.qqMid || sourceRef?.providerData?.songMid || '').trim();
         return songmid ? `https://y.qq.com/n/ryqq/songDetail/${encodeURIComponent(songmid)}` : null;
     },
-    search: { searchSongs: searchQqSongs },
+    search: {
+        searchSongs: searchQqSongs,
+        searchAlbums: (query, limit, offset) => searchQqCollections('album', query, limit, offset),
+        searchPlaylists: (query, limit, offset) => searchQqCollections('playlist', query, limit, offset),
+    },
     playback: { getSongDetail: getQqSongDetailById, getSongDetails: getQqSongDetails, songDetailsPerRequest: QQ_SONG_DETAILS_PER_REQUEST, getAudioSource },
-    lyrics: { getLyrics },
+    lyrics: { getLyrics, getSearchAlias: getQqLyricSearchAlias },
     auth: {
         getLoginTexts: () => ({
             // 和 caseNotes 一样，到窗口真的要显示时才看这一次登录解析出的方式：只给 QQ 音乐 App 扫码时说三种 App 都能扫，
@@ -1189,6 +1249,7 @@ export const qqProvider: OnlineMusicProvider = {
         getLikedSongCount,
         areSongsLiked: areQqSongsLiked,
         getCloudCollection: getQqCloudCollection,
+        getListeningRankCollections: getQqListeningRankCollections,
     },
     catalog: {
         // 只要拿得到 songmid 就补得回 mid，所以能否导航等同于这首歌是不是 QQ 的歌。
@@ -1197,6 +1258,7 @@ export const qqProvider: OnlineMusicProvider = {
         getPlaylistTracks,
         getPlaylistDetail,
         getCloudTracks: (limit, offset) => getQqCloudTracks(limit, offset),
+        getListeningRankTracks: (range, limit, offset) => getQqListeningRankTracks(range, limit, offset),
         getAlbumDetail,
         getAlbumTracks,
         getArtistDetail,

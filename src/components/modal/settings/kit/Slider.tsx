@@ -24,12 +24,16 @@ const RANGE_CLASS = [
     'st-slider block h-5 min-w-0 max-w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed',
     '[&::-webkit-slider-runnable-track]:h-1 [&::-webkit-slider-runnable-track]:rounded-full',
     '[&::-webkit-slider-runnable-track]:bg-[linear-gradient(to_right,var(--st-accent)_var(--st-p),var(--st-track)_var(--st-p))]',
+    /*
+     * 圆点用强调色，不用纯白。纯白圆点在深色主题下是一块和界面对不上的异物 ——
+     * 和 components/ui/Slider 保持同一套配色，两处滑杆看起来才是同一种控件。
+     */
     '[&::-webkit-slider-thumb]:-mt-1.5 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none',
-    '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white',
-    '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_rgba(0,0,0,0.14),0_1px_3px_rgba(0,0,0,0.35)]',
+    '[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[var(--st-accent)]',
+    '[&::-webkit-slider-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--st-on-accent)_45%,transparent),0_1px_4px_rgba(0,0,0,0.28)]',
     '[&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[var(--st-track)]',
     '[&::-moz-range-progress]:h-1 [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-[var(--st-accent)]',
-    '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-white',
+    '[&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-[var(--st-accent)]',
 ].join(' ');
 
 type SliderProps = {

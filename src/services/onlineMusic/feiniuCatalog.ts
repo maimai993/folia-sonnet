@@ -2,7 +2,7 @@ import type { MediaId, OnlineCatalogProvider, ProviderPage } from '../../types/o
 import type { UnifiedSong } from '../../types';
 import { feiniuList, feiniuRequest } from './feiniuTransport';
 import { feiniuPage, normalizeFeiniuCollection, normalizeFeiniuSong } from './feiniuNormalize';
-import { backfillSongCovers } from './onlineCoverFallback';
+import { backfillSongCovers, prewarmCollectionCovers, resolveProxiedCollectionCover } from './onlineCoverFallback';
 
 // src/services/onlineMusic/feiniuCatalog.ts
 // 歌单 / 专辑 / 歌手的曲目与详情。
@@ -67,13 +67,18 @@ export const feiniuCatalog: OnlineCatalogProvider = {
 /** 专辑列表（首页「专辑」页用），按创建时间倒序取一页。 */
 export const feiniuAlbumPage = async (offset: number, limit: number) => {
     const { items, total } = await feiniuList<unknown>('/album/list', {}, offset, limit);
-    return feiniuPage(items.map(item => normalizeFeiniuCollection(item, 'album')), total, offset, limit);
+    // 与 feiniuLibrary 的集合列表同一趟：先把这一页封面预热成代理地址（issue #204 的漏网出口）。
+    const albums = items.map(item => normalizeFeiniuCollection(item, 'album'));
+    await prewarmCollectionCovers(albums.map(item => item.coverUrl));
+    return feiniuPage(albums.map(item => ({ ...item, coverUrl: resolveProxiedCollectionCover(item.coverUrl) })), total, offset, limit);
 };
 
 /** 歌手列表，同上。 */
 export const feiniuArtistPage = async (offset: number, limit: number) => {
     const { items, total } = await feiniuList<unknown>('/artist/list', {}, offset, limit);
-    return feiniuPage(items.map(item => normalizeFeiniuCollection(item, 'artist')), total, offset, limit);
+    const artists = items.map(item => normalizeFeiniuCollection(item, 'artist'));
+    await prewarmCollectionCovers(artists.map(item => item.coverUrl));
+    return feiniuPage(artists.map(item => ({ ...item, coverUrl: resolveProxiedCollectionCover(item.coverUrl) })), total, offset, limit);
 };
 
 /** 单曲详情（播放前补元数据用）。 */

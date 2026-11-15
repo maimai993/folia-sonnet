@@ -1,5 +1,6 @@
 import { getFromCache, saveToCache } from '../db';
 import { melSpectrogramOffThread } from '../automix/analysisOffThread';
+import { analyzeBeatsNative, analyzeBeatsNativeFromUrl, isNativeBeatAnalysisAvailable, type NativeBeat } from '../automix/nativeBeats';
 import { analyseBeatGrid, canRunBeatThis, type BeatGrid } from './beatThis';
 import { raiseGpuUrgency, runPercussiveEnergyGpu } from './beatThisGpu';
 import type { Urgency } from './scheduler';
@@ -31,6 +32,9 @@ import { computeBeatAccents, formatBeatMeter, isBeatAccents, resolveBeatConfiden
 //
 // The key prefix (beatGridKeys.ts) is registered in services/repositories/cacheRepository.ts as
 // analysis data, so "clear analysis cache" clears these with the profiles they feed.
+
+/** 原生推理退回「传样本」时的上限（见下方 native 分支）：桥与堆都撑不住整首歌。 */
+const MAX_BRIDGE_SAMPLES = 1_000_000;
 
 /** Bumped when the model, the spectrogram or the peak picking changes what a track's beats are. */
 const BEAT_GRID_VERSION = 1;
@@ -93,6 +97,22 @@ export interface TrackBeatGridOptions {
     storedOnly?: boolean;
     /** How the GPU scheduler orders a run started here (scheduler.ts); automix's default, 'background'. */
     urgency?: Urgency;
+    /**
+     * 安卓原生推理的音频来源：本地绝对路径或 http(s) 地址，由原生自己解码。
+     *
+     * 给了就整首歌不过桥；没给（桌面、或这一首既没有路径也没有可用地址）才退到
+     * `readMid` + `analyzeBeats` —— 那条路要把整首歌的 PCM 编成 base64，只适合短音频，
+     * 见 automix/nativeBeats.ts 的 analyzeBeatsFromUrl 说明。
+     */
+    nativeSourceUrl?: () => Promise<string | null>;
+
+    /**
+     * 安卓原生分段交付：每算完一块（累积，从头到 `seconds`）回调一次。
+     *
+     * 只在原生那条路上有意义。整曲要二十秒以上，而第一块（45 秒）一两秒就好 ——
+     * 调用方拿它先把画面点亮，整曲到了再替换。
+     */
+    onPartial?: (beats: NativeBeat[], seconds: number) => void;
 }
 
 /**
@@ -109,7 +129,7 @@ export interface TrackBeatGridOptions {
 export const getTrackBeatGrid = async (
     key: string,
     readMid: () => Promise<Float32Array | null>,
-    { cpuFallback = false, storedOnly = false, urgency = 'background' }: TrackBeatGridOptions = {},
+    { cpuFallback = false, storedOnly = false, urgency = 'background', nativeSourceUrl, onPartial }: TrackBeatGridOptions = {},
 ): Promise<AccentedBeatGrid | null> => {
     const stored = await readStoredBeatGrid(key);
     if (stored) return stored;
@@ -122,7 +142,74 @@ export const getTrackBeatGrid = async (
         const grid = await joined.grid;
         if (grid || joined.cpuFallback || !cpuFallback || storedOnly) return grid;
     }
-    if (storedOnly || !canRunBeatThis()) return null;
+    if (storedOnly) return null;
+
+    /*
+     * 安卓：走内置的 beat_this（onnxruntime-android）。
+     *
+     * 必须排在 `canRunBeatThis()` **之前**：那条判断问的是「桌面主进程的桥在不在，
+     * 或者这个渲染进程有没有 WebGPU」—— 安卓两样都没有，先问它就会在这里直接 return null，
+     * 原生这一条永远到不了。权重在 APK 里、推理在原生线程上，它不需要上面任何一样。
+     *
+     * 音频优先交给原生按地址自己解（`nativeSourceUrl`）：整首歌的 PCM 过桥是 20MB+ 的
+     * base64，桥和堆都撑不住。只有拿不到地址时才退回「JS 解码 + 传样本」。
+     *
+     * 与 GPU 路径刻意不同的是**不产出 accents**：
+     * accents 依赖频谱的打击乐能量，那是 GPU 那套顺带算出来的东西。
+     * 原生这次只交了拍点，没有那份频谱，硬凑一个会让动感模式的
+     * 强弱控制失真。没有 accents 时下游会退回按拍点平均分配，
+     * 那是「不知道强弱」该有的样子，不是编一个出来。
+     */
+    if (isNativeBeatAnalysisAvailable()) {
+        return (async () => {
+            let analysis: Awaited<ReturnType<typeof analyzeBeatsNative>> | null = null;
+            const sourceUrl = nativeSourceUrl ? await nativeSourceUrl() : null;
+            if (sourceUrl) {
+                /*
+                 * 不必先「安装」一遍：原生 analyzeBeatsFromUrl 里自己 ensureLocal，
+                 * 权重不在私有目录就当场从 assets 拷。原来这里横着一道 installModel 的闸，
+                 * 它失败一次就整首歌没有拍点 —— 而失败原因还到不了任何一行日志上。
+                 */
+                try {
+                    // 端口每次启动都变，别把它写进日志；路径本身足以判断走的是哪条来源。
+                    const where = sourceUrl.replace(/^(https?:\/\/127\.0\.0\.1):\d+/, '$1:…');
+                    console.info(`[BeatGrid] native analysis from ${where}`);
+                    analysis = await analyzeBeatsNativeFromUrl(sourceUrl, undefined, onPartial);
+                } catch (error) {
+                    console.warn('[BeatGrid] native analysis failed', error);
+                    return null;
+                }
+            } else {
+                /*
+                 * 退路：PCM 已经在 JS 手里、又没有可交出去的地址。
+                 *
+                 * 这条路要把样本编码成 base64 过桥，所以只对短音频开口子：
+                 * 100 万个样本（约 45 秒）编码后 5.3MB，还在桥的 8MiB 以内。
+                 * 更长的整首歌走这里不是慢，是把 WebView 的堆撞穿 —— 宁可不给拍点。
+                 */
+                const mid = await readMid();
+                if (mid && mid.length > MAX_BRIDGE_SAMPLES) {
+                    console.warn(`[BeatGrid] native beat analysis needs a source URL for ${key}: ${mid.length} samples would not fit the bridge`);
+                    analysis = null;
+                } else {
+                    analysis = mid ? await analyzeBeatsNative(mid) : null;
+                }
+            }
+            if (!analysis) {
+                console.warn('[BeatGrid] native analysis returned nothing');
+                return null;
+            }
+            console.info(`[BeatGrid] native analysis: ${analysis.beats.length} beats, ${analysis.beats.filter((beat: NativeBeat) => beat.downbeat).length} downbeats`);
+            const found: AccentedBeatGrid = {
+                beats: analysis.beats.map((beat: NativeBeat) => beat.time),
+                downbeats: analysis.beats.filter((beat: NativeBeat) => beat.downbeat).map((beat: NativeBeat) => beat.time),
+            };
+            if (found.beats.length) await storeBeatGrid(key, found);
+            return found.beats.length ? found : null;
+        })();
+    }
+
+    if (!canRunBeatThis()) return null;
 
     const grid = (async () => {
         const mid = await readMid();

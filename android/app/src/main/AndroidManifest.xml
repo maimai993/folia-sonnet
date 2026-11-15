@@ -22,6 +22,42 @@
         代价：部分 ROM 会把它收进「游戏空间」，前台时出现游戏助手悬浮球 / 免打扰；
         上 Google Play 时类别会落到「游戏」（本项目是自用发布，不走 Play）。
     -->
+    <!--
+        包可见性：让「跳到厂商的省电 / 自启动设置页」真的能跳过去。
+
+        Android 11 起，`Intent.resolveActivity` 对没声明过的包一律返回 null，
+        显式 `startActivity` 到不可见的组件也会抛 ActivityNotFoundException ——
+        两个失败都是**静默**的（只是没跳过去），表现就是「点了没反应」。
+        保活引导（keepalive/KeepAlive）与锁屏引导（lockscreen/RomPermissionGuide）
+        都靠这一张表才认得那些厂商页面。
+
+        只列会在候选表里出现的包，不用 QUERY_ALL_PACKAGES：后者是"能看见所有应用"，
+        会被应用市场判为过度授权，而我们只需要看这几家的设置页。
+        新增候选时**这张表要同步加** —— 漏了不会报错，只会静默退到应用详情页。
+    -->
+    <queries>
+        <!-- 小米 / Redmi / POCO：安全中心（自启动）、电量和性能（耗电管理） -->
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.miui.powerkeeper" />
+        <!-- 华为 / 荣耀：手机管家 -->
+        <package android:name="com.huawei.systemmanager" />
+        <!-- vivo / iQOO -->
+        <package android:name="com.vivo.permissionmanager" />
+        <package android:name="com.iqoo.secure" />
+        <!-- OPPO / 一加 / realme：手机管家、电池 -->
+        <package android:name="com.oplus.safecenter" />
+        <package android:name="com.oplus.battery" />
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.coloros.securitypermission" />
+        <package android:name="com.coloros.oppoguardelf" />
+        <package android:name="com.coloros.powermanager" />
+        <package android:name="com.oneplus.security" />
+        <!-- 三星：设备维护 -->
+        <package android:name="com.samsung.android.lool" />
+        <!-- 魅族：手机管家 -->
+        <package android:name="com.meizu.safe" />
+    </queries>
+
     <application
         android:name=".FoliaApplication"
         android:allowBackup="true"
@@ -266,11 +302,29 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!--
+        局域网音响投送（FoliaLanCastPlugin）：SSDP 设备发现走 UDP 组播，不拿
+        WifiManager.MulticastLock 的话不少 ROM 会直接把组播包丢掉，表现是「一台都搜不到」。
+        CHANGE_WIFI_MULTICAST_STATE 是拿锁的前提，ACCESS_WIFI_STATE / ACCESS_NETWORK_STATE
+        用来取 WiFi 状态与本机所在网段。三个都是 normal 级，安装即授予，无需运行时弹窗。
+    -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 前台服务 + 通知：后台播放时占住前台优先级并在通知栏显示播放控制 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!--
+        电池优化白名单：只用于弹系统那个「是否允许后台运行」对话框
+        （ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS，见 keepalive/KeepAlive）。
+
+        没有它的话，那个 action 会被系统当成一次普通跳转静默丢掉 —— 用户点了没反应，
+        也就无从判断到底是没授权还是按钮坏了。它**不是**运行时权限，不用申请，
+        只是告诉系统「本应用会发起这个请求」。
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!--
         本地曲库扫描：读系统媒体库里的音频必须声明这两个权限，缺了的话
         Capacitor 的 requestPermissionForAlias 会直接判"拒绝"，扫描按钮点了没反应。

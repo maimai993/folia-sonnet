@@ -28,6 +28,7 @@ export type LibraryTuiArtistSongRowProps = {
     accentColor: string;
     enqueueLabel: string;
     unavailableLabel: string;
+    videoLabel: string;
     artistLinks: TrackArtistLink[];
     /** 能打开专辑时给出打开它的回调。 */
     onOpenAlbum?: () => void;
@@ -46,6 +47,7 @@ export const LibraryTuiArtistSongRow: React.FC<LibraryTuiArtistSongRowProps> = (
     accentColor,
     enqueueLabel,
     unavailableLabel,
+    videoLabel,
     artistLinks,
     onOpenAlbum,
     onOpenArtist,
@@ -54,6 +56,7 @@ export const LibraryTuiArtistSongRow: React.FC<LibraryTuiArtistSongRowProps> = (
     onEnqueue,
 }) => {
     const unavailable = isSongUnavailable(song);
+    const tag = unavailable ? unavailableLabel : song.isVideo ? videoLabel : '';
     return (
         <div
             role="option"
@@ -73,7 +76,7 @@ export const LibraryTuiArtistSongRow: React.FC<LibraryTuiArtistSongRowProps> = (
             <span className="tabular-nums opacity-50">{String(index + 1).padStart(2, '0')}</span>
             <span className={cell}>
                 {song.name}
-                {unavailable ? <span className="opacity-70">{`  (${unavailableLabel})`}</span> : null}
+                {tag ? <span className="opacity-70">{`  (${tag})`}</span> : null}
             </span>
             <span className={`${cell} opacity-70`}>
                 {artistLinks.map((link, linkIndex) => (

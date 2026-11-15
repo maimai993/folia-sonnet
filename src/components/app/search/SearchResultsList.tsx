@@ -1,149 +1,229 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { List, useListRef } from 'react-window';
+import { useTranslation } from 'react-i18next';
 import type { UnifiedSong } from '../../../types';
-import type { MediaId } from '../../../types/onlineMusic';
+import type { MediaId, OmniCollection } from '../../../types/onlineMusic';
 import SearchResultRow from './SearchResultRow';
+import SearchCollectionRow from './SearchCollectionRow';
+import { Button } from '../../ui';
+import { createSearchBarScrollState, resolveSearchBarScrollState } from './searchBarScroll';
 
 // src/components/app/search/SearchResultsList.tsx
 
-type SearchResultsListProps = {
-    tracks: UnifiedSong[];
-    scrollTop: number;
-    isDaylight: boolean;
-    onScrollTopChange: (scrollTop: number) => void;
+/** 结果到了之后这么久，行的入场动画放完：再滚出来的行不再滑入（search.css 的 data-search-entered）。 */
+const ROW_REVEAL_MS = 1000;
+
+type SongHandlers = {
     onPlayTrack: (track: UnifiedSong) => void;
     onAddTrackToQueue: (track: UnifiedSong) => void;
+    onCollectTrack?: (track: UnifiedSong) => void;
+    canSaveTrackToPlaylist?: (track: UnifiedSong) => boolean;
+    onSaveTrackToPlaylist?: (track: UnifiedSong) => void;
     onOpenArtist: (track: UnifiedSong, artistName: string, artistId?: MediaId, entityId?: string) => void;
     onOpenAlbum: (track: UnifiedSong, albumName: string, albumId?: MediaId, entityId?: string) => void;
 };
 
-type RowProps = Omit<SearchResultsListProps, 'scrollTop' | 'onScrollTopChange'> & {
-    /** 每行的稳定身份（见 buildRowKeys）：react-window 认它不认下标，行挪位置时组件不会被顶掉。 */
-    rowKeys: string[];
-    /** 这一轮**新出现**的那些行的身份：只有它们播入场动画。 */
-    enterKeys: ReadonlySet<string>;
+type SearchResultsListProps = SongHandlers & {
+    /** 单曲结果；搜专辑、歌单时给 collections。 */
+    tracks?: UnifiedSong[];
+    collections?: OmniCollection[];
+    /** 换了这组结果（来源、种类或词变了）就再放一次入场动画。 */
+    revealKey: string;
+    scrollTop: number;
+    onScrollTopChange: (scrollTop: number) => void;
+    /** 往下滚收起底部播放条、往上滚放回来（见 searchBarScroll）。 */
+    onScrollBarHiddenChange: (hidden: boolean) => void;
+    onOpenCollection: (collection: OmniCollection) => void;
+    /** 还有更多结果：列表末尾那颗「加载更多」跟着最后一行滚出来，而不是钉在屏幕上。 */
+    hasMore?: boolean;
+    isLoadingMore?: boolean;
+    onLoadMore?: () => void;
 };
 
-/**
- * 行的稳定身份。
- *
- * react-window 默认拿下标当 key —— 于是「全部」流式插入时，下标 3 上一帧还是 A 平台那首、
- * 这一帧成了 B 平台那首，组件被复用、入场动画不会播，而被挤下去的老行反而跟着重播一遍。
- * 给了身份之后，新歌才是真的新组件，老歌只是往下让一格。
- *
- * 末尾那个计数是给「同一首跨页重复」兜底的：翻页不做跨页去重，真撞上了两个 key 会打架。
- */
-const buildRowKeys = (tracks: UnifiedSong[]): string[] => {
-    const counts = new Map<string, number>();
-    return tracks.map(track => {
-        const base = `${(track.isNavidrome ? track.navidromeData?.id : track.id) ?? ''}|${
-            (track.name ?? '').trim().toLowerCase()}`;
-        const seen = counts.get(base) ?? 0;
-        counts.set(base, seen + 1);
-        return seen === 0 ? base : `${base}#${seen}`;
-    });
-};
+type SongRowProps = SongHandlers & { tracks: UnifiedSong[] };
+type CollectionRowProps = { collections: OmniCollection[]; onOpenCollection: (collection: OmniCollection) => void };
 
-/** 行的位置是 react-window 写在 `transform: translateY()` 上的，给它加个过渡就是「老行往下让位」。 */
-const ROW_SHIFT_TRANSITION = 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1)';
+const LOAD_MORE_ROW_HEIGHT = 64;
 
-const Row = ({
-    index,
-    style,
-    tracks,
-    rowKeys,
-    enterKeys,
-    ...props
-}: { index: number; style: React.CSSProperties } & RowProps) => {
-    const key = rowKeys[index] ?? String(index);
-    /*
-     * 只在挂载这一刻判一次「我是不是刚被插进来的」。
-     *
-     * 之后这一行被挤到哪儿都还是同一首歌，不该再播一次入场 —— 所以用 `useRef` 把挂载那一刻的
-     * 结果钉住，而不是每次渲染都去查 `enterKeys`（那样下一批到达时整屏都会重播一遍）。
-     */
-    const entering = useRef(enterKeys.has(key)).current;
+/** 列表末尾那颗「加载更多」：作为最后一行跟着结果滚出来，不是钉在屏幕底部的固定条。 */
+const LoadMoreRow = ({ index, style, isLoadingMore, onLoadMore }: {
+    index: number;
+    style: React.CSSProperties;
+    isLoadingMore: boolean;
+    onLoadMore: () => void;
+}) => {
+    const { t } = useTranslation();
     return (
-        <div style={{ ...style, transition: ROW_SHIFT_TRANSITION }}>
-            <SearchResultRow track={tracks[index]} entering={entering} {...props} />
+        <div style={style}>
+            <div
+                className="flex h-full items-center justify-center"
+                style={{ '--search-row-order': index } as React.CSSProperties}
+            >
+                <Button
+                    variant="bare"
+                    disabled={isLoadingMore}
+                    onClick={onLoadMore}
+                    className="search-flat-button"
+                >
+                    {isLoadingMore ? t('localMusic.searching') : t('home.loadMore')}
+                </Button>
+            </div>
         </div>
     );
 };
 
+const SongRow = ({ index, style, tracks, ...handlers }: { index: number; style: React.CSSProperties } & SongRowProps) => (
+    <SearchResultRow track={tracks[index]} index={index} style={style} {...handlers} />
+);
+
+const CollectionRow = ({ index, style, collections, onOpenCollection }: { index: number; style: React.CSSProperties } & CollectionRowProps) => (
+    <SearchCollectionRow collection={collections[index]} index={index} style={style} onOpenCollection={onOpenCollection} />
+);
+
+/**
+ * 行分发器：最后一行是「加载更多」，其余按结果种类分发到歌曲行 / 集合行。
+ * react-window 的 rowProps 是一份对象，两种行共用一个 rowComponent 就得在这里自己拆。
+ */
+const DispatchRow = ({ index, style, resultCount, isCollectionList, loadMore, songRowProps, collectionRowProps }: {
+    index: number;
+    style: React.CSSProperties;
+    /** 结果行数（不含「加载更多」那行）。 */
+    resultCount: number;
+    isCollectionList: boolean;
+    loadMore: { isLoadingMore: boolean; onLoadMore: () => void } | null;
+    songRowProps: SongRowProps;
+    collectionRowProps: CollectionRowProps;
+}) => {
+    if (loadMore && index >= resultCount) {
+        return <LoadMoreRow index={index} style={style} isLoadingMore={loadMore.isLoadingMore} onLoadMore={loadMore.onLoadMore} />;
+    }
+    return isCollectionList
+        ? <CollectionRow index={index} style={style} {...collectionRowProps} />
+        : <SongRow index={index} style={style} {...songRowProps} />;
+};
+
 const SearchResultsList: React.FC<SearchResultsListProps> = ({
     tracks,
+    collections,
+    revealKey,
     scrollTop,
     onScrollTopChange,
-    ...rowProps
+    onScrollBarHiddenChange,
+    onPlayTrack,
+    onAddTrackToQueue,
+    onCollectTrack,
+    canSaveTrackToPlaylist,
+    onSaveTrackToPlaylist,
+    onOpenArtist,
+    onOpenAlbum,
+    onOpenCollection,
+    hasMore,
+    isLoadingMore,
+    onLoadMore,
 }) => {
     const listRef = useListRef(null);
     const latestScrollTopRef = useRef(scrollTop);
     const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const stableRowProps = useMemo(() => ({ tracks, ...rowProps }), [rowProps, tracks]);
-    const rowKeys = useMemo(() => buildRowKeys(tracks), [tracks]);
+    /** 方向判定的基准与当前收起状态，只在认下新方向时更新（见 searchBarScroll）。 */
+    const barScrollStateRef = useRef(createSearchBarScrollState(scrollTop));
+    // 入场放完的是哪一组结果：换组的那一次渲染里就不相等，行从第一帧起带着动画。
+    const [enteredKey, setEnteredKey] = useState<string | null>(null);
+    const isCollectionList = Boolean(collections);
+    const showLoadMoreRow = Boolean(hasMore && onLoadMore);
+    // 「加载更多」是接在结果后面的额外一行；没有它时行数就是结果数。
+    const rowCount = (collections ? collections.length : tracks?.length ?? 0) + (showLoadMoreRow ? 1 : 0);
+    // react-window 要求行高恒定：两种行不同高，用可变行高数组（其余行统一 84 / 76）。
+    const baseRowHeight = isCollectionList ? 84 : 76;
+    const rowHeight = (index: number) => (
+        showLoadMoreRow && index === rowCount - 1 ? LOAD_MORE_ROW_HEIGHT : baseRowHeight
+    );
+    const songRowProps = useMemo<SongRowProps>(() => ({
+        tracks: tracks ?? [],
+        onPlayTrack,
+        onAddTrackToQueue,
+        onCollectTrack,
+        canSaveTrackToPlaylist,
+        onSaveTrackToPlaylist,
+        onOpenArtist,
+        onOpenAlbum,
+    }), [canSaveTrackToPlaylist, onAddTrackToQueue, onCollectTrack, onOpenAlbum, onOpenArtist, onPlayTrack, onSaveTrackToPlaylist, tracks]);
+    const collectionRowProps = useMemo<CollectionRowProps>(() => ({
+        collections: collections ?? [],
+        onOpenCollection,
+    }), [collections, onOpenCollection]);
+    /** 有「加载更多」行时传给行分发器的参数；加载态变化时引用变化让那一行重画。 */
+    const dispatchRowProps = useMemo(() => ({
+        resultCount: isCollectionList ? collectionRowProps.collections.length : songRowProps.tracks.length,
+        isCollectionList,
+        loadMore: showLoadMoreRow
+            ? { isLoadingMore: Boolean(isLoadingMore), onLoadMore: onLoadMore as () => void }
+            : null,
+        songRowProps,
+        collectionRowProps,
+    }), [collectionRowProps, isCollectionList, isLoadingMore, onLoadMore, showLoadMoreRow, songRowProps]);
 
-    /*
-     * 这一轮新出现的行。认的是**整份 tracks** 里见没见过，不是「这一行渲染过没有」——
-     * 所以往下滚时新挂载的那几行不算新（它们早就在 tracks 里了），不会一滚就淡入一片。
-     *
-     * 「上一轮看过谁」放在 state 里而不是 ref 里：StrictMode 会把渲染函数跑两遍，
-     * 边跑边往 ref 里塞的话第二遍就一个都不新了，动画在开发环境直接消失。
-     */
-    const [seenRowKeys, setSeenRowKeys] = useState<readonly string[]>([]);
-    const enterKeys = useMemo(() => {
-        const seen = new Set(seenRowKeys);
-        const fresh = new Set<string>();
-        rowKeys.forEach(key => {
-            if (seen.has(key)) return;
-            fresh.add(key);
-        });
-        return fresh;
-        // 故意不认 seenRowKeys：那是「上一轮结束时的名单」，跟着它变会把刚算出的 fresh 冲掉。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [rowKeys]);
-
-    useEffect(() => {
-        if (rowKeys.length > 0) setSeenRowKeys(rowKeys);
-    }, [rowKeys]);
-
-    const rowKey = useCallback((index: number, data: RowProps) => data.rowKeys[index] ?? index, []);
-
-    useEffect(() => {
+    /** 上一次见过的结果组：只在换了组（换词 / 换来源 / 换种类）时才把播放条放回来。 */
+    const lastRevealKeyRef = useRef<string | null>(null);    useEffect(() => {
         const element = listRef.current?.element;
         if (element && Math.abs(element.scrollTop - scrollTop) > 1) {
             element.scrollTop = scrollTop;
         }
         latestScrollTopRef.current = scrollTop;
-    }, [listRef, scrollTop, tracks]);
+        // 只在换组结果时复位播放条与滚动基准。scrollTop 变化（滚动提交 120ms 后回来那一次）
+        // 会经过这里 —— 不能在这一步把播放条放回去，否则刚往下滚收起的播放条松手就弹回来了。
+        if (lastRevealKeyRef.current !== revealKey) {
+            lastRevealKeyRef.current = revealKey;
+            barScrollStateRef.current = createSearchBarScrollState(scrollTop);
+            onScrollBarHiddenChange(false);
+        }
+    }, [listRef, scrollTop, tracks, collections, revealKey, onScrollBarHiddenChange]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setEnteredKey(revealKey), ROW_REVEAL_MS);
+        return () => clearTimeout(timer);
+    }, [revealKey]);
 
     useEffect(() => () => {
         if (commitTimerRef.current) {
             clearTimeout(commitTimerRef.current);
         }
         onScrollTopChange(latestScrollTopRef.current);
-    }, [onScrollTopChange]);
+        // 只在收起时发复位：store 的 setter 相等时原样返回，但少一次多余的调用总是更稳。
+        if (barScrollStateRef.current.isBarHidden) {
+            onScrollBarHiddenChange(false);
+        }
+    }, [onScrollTopChange, onScrollBarHiddenChange]);
+
+    const handleScroll = (event: React.UIEvent<HTMLDivElement>) => {
+        latestScrollTopRef.current = event.currentTarget.scrollTop;
+        // 只写 ref、只在方向翻过来时回调一次：onScroll 是高频事件，不能每次都进 React。
+        const nextBarScrollState = resolveSearchBarScrollState(barScrollStateRef.current, latestScrollTopRef.current);
+        if (nextBarScrollState !== barScrollStateRef.current) {
+            barScrollStateRef.current = nextBarScrollState;
+            onScrollBarHiddenChange(nextBarScrollState.isBarHidden);
+        }
+        if (commitTimerRef.current) {
+            clearTimeout(commitTimerRef.current);
+        }
+        commitTimerRef.current = setTimeout(() => {
+            onScrollTopChange(latestScrollTopRef.current);
+        }, 120);
+    };
 
     return (
-        <List
-            listRef={listRef}
-            rowCount={tracks.length}
-            rowHeight={76}
-            rowComponent={Row as any}
-            rowProps={{ ...stableRowProps, rowKeys, enterKeys } as any}
-            rowKey={rowKey}
-            overscanCount={6}
-            className="custom-scrollbar"
-            style={{ height: '100%', width: '100%' }}
-            onScroll={(event) => {
-                latestScrollTopRef.current = event.currentTarget.scrollTop;
-                if (commitTimerRef.current) {
-                    clearTimeout(commitTimerRef.current);
-                }
-                commitTimerRef.current = setTimeout(() => {
-                    onScrollTopChange(latestScrollTopRef.current);
-                }, 120);
-            }}
-        />
+        <div className="search-list h-full w-full" data-search-entered={enteredKey === revealKey ? '' : undefined}>
+            <List
+                listRef={listRef}
+                rowCount={rowCount}
+                rowHeight={rowHeight}
+                rowComponent={DispatchRow as any}
+                rowProps={dispatchRowProps}
+                overscanCount={6}
+                className="custom-scrollbar"
+                style={{ height: '100%', width: '100%' }}
+                onScroll={handleScroll}
+            />
+        </div>
     );
 };
 

@@ -1,4 +1,7 @@
 import type { HanabiTuning } from '../../components/visualizer/hanabi/types';
+import type { NebbiaTuning } from '../../components/visualizer/nebbia/types';
+import type { MachiTuning } from '../../components/visualizer/machi/types';
+import type { KineticTuning } from '../../components/visualizer/kinetic/tuning';
 import type {
     CadenzaTuning,
     CappellaTuning,
@@ -43,6 +46,9 @@ export interface VisualizerTuningMap {
     tempera: TemperaTuning;
     lumiere: LumiereTuning;
     hanabi: HanabiTuning;
+    nebbia: NebbiaTuning;
+    machi: MachiTuning;
+    kinetic: KineticTuning;
 }
 
 export type VisualizerTuningMode = keyof VisualizerTuningMap;
@@ -69,6 +75,9 @@ export const VISUALIZER_TUNING_KEYS = {
     tempera: { settingsKey: 'temperaTuning', settingsSetterKey: 'handleSetTemperaTuning' },
     lumiere: { settingsKey: 'lumiereTuning', settingsSetterKey: 'handleSetLumiereTuning' },
     hanabi: { settingsKey: 'hanabiTuning', settingsSetterKey: 'handleSetHanabiTuning' },
+    nebbia: { settingsKey: 'nebbiaTuning', settingsSetterKey: 'handleSetNebbiaTuning' },
+    machi: { settingsKey: 'machiTuning', settingsSetterKey: 'handleSetMachiTuning' },
+    kinetic: { settingsKey: 'kineticTuning', settingsSetterKey: 'handleSetKineticTuning' },
 } as const satisfies Record<VisualizerTuningMode, { settingsKey: string; settingsSetterKey: string }>;
 
 export const VISUALIZER_TUNING_MODES = Object.keys(VISUALIZER_TUNING_KEYS) as VisualizerTuningMode[];

@@ -131,6 +131,7 @@ export const toFoliumTheme = (theme: Theme | null | undefined, isDaylight: boole
         name: source.name ?? DEFAULT_THEME.name,
         backgroundColor: source.backgroundColor ?? DEFAULT_THEME.backgroundColor,
         primaryColor: source.primaryColor ?? DEFAULT_THEME.primaryColor,
+        // 与内置渲染器同源；黑白主题也不能被无关宿主 UI 强调色替换。
         accentColor: source.accentColor ?? DEFAULT_THEME.accentColor,
         secondaryColor: source.secondaryColor ?? DEFAULT_THEME.secondaryColor,
         fontStyle: source.fontStyle ?? DEFAULT_THEME.fontStyle,
@@ -219,6 +220,7 @@ export const toFoliumSong = (song: SongResult | null | undefined): FoliumSong | 
 // the type check until it is classed here.
 const FOLIUM_PLAYBACK_FAILURE_REASONS: Readonly<Record<OnlineFailureCaseId, FoliumPlaybackFailureReason>> = Object.freeze({
     'sign-in-needed': 'auth',
+    'account-refused': 'restricted',
     'subscription-required': 'restricted',
     'purchase-required': 'restricted',
     'entitlement-required': 'restricted',

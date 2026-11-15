@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import {
     cancelExport,
     clearModCache,
+    deleteMod,
     getFfmpegStatus,
     getModStorageUsage,
     installModFromZip,
+    installModFromZipFile,
     isModsBridgeAvailable,
     listMods,
     openModsDirectory,
@@ -55,6 +57,8 @@ interface ModsStoreState {
     cancelActiveExport: () => Promise<void>;
     openModsDirectory: () => Promise<{ ok: boolean; directory?: string; error?: string }>;
     installModFromZip: (zipPath: string) => Promise<{ ok: boolean; id?: string; error?: string }>;
+    installModFromZipFile: (file: { name: string; base64: string }) => Promise<{ ok: boolean; id?: string; error?: string }>;
+    deleteMod: (modId: string) => Promise<{ ok: boolean; error?: string }>;
     getModStorageUsage: (modId: string) => Promise<ModStorageUsageResult>;
     clearModCache: (modId: string) => Promise<ModClearCacheResult>;
     bindEvents: () => void;
@@ -103,7 +107,16 @@ export const useModsStore = create<ModsStoreState>((set, get) => ({
     // actually returned one (a declined confirmation returns the current list).
     toggleMod: async (modId, enabled) => {
         const result = await setModEnabled(modId, enabled);
-        if (result.mods.length > 0 || result.ok) {
+        /*
+         * 只有真的拿到清单才替换。
+         *
+         * 以前的条件是 `result.mods.length > 0 || result.ok` —— 后半句是致命的：
+         * 安卓端宿主回 `{ ok: true, list }`，但桥接层一旦没解析出清单（或这次调用
+         * 被兜底成 ok 却没有 mods），这里就会拿空数组覆盖掉当前列表，
+         * 表现就是「开关一下就变成空列表，得手动点刷新才回来」。
+         * 现在没清单就保持原样，让界面继续显示已知的那一份。
+         */
+        if (Array.isArray(result.mods) && result.mods.length > 0) {
             set({ mods: result.mods });
         }
         return result;
@@ -120,6 +133,34 @@ export const useModsStore = create<ModsStoreState>((set, get) => ({
 
     installModFromZip: async (zipPath) => {
         const result = await installModFromZip(zipPath);
+        if (result.ok) {
+            await get().refresh();
+        }
+        return result;
+    },
+
+    /*
+     * 卸载一个模组。安卓端由原生删目录并回最新清单；桌面端走主进程的卸载。
+     * 成功后直接把列表换成新的一份，不必用户再点刷新。
+     */
+    deleteMod: async (modId) => {
+        const result = await deleteMod(modId);
+        if (result.ok) {
+            if (Array.isArray(result.mods) && result.mods.length > 0) {
+                set({ mods: result.mods });
+            } else {
+                await get().refresh();
+            }
+        }
+        return { ok: result.ok, error: result.error };
+    },
+
+    /*
+     * 安卓端从 `<input type=file>` 拿到的 zip：字节交给原生落盘再安装。
+     * 桌面上没有这条路径（那边用拖拽拿到真实路径），所以桥没有实现时如实报错。
+     */
+    installModFromZipFile: async (file) => {
+        const result = await installModFromZipFile(file);
         if (result.ok) {
             await get().refresh();
         }

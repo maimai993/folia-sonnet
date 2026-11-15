@@ -150,7 +150,7 @@ const PonderAudioEqualizerSurface: React.FC<SurfaceProps> = ({ accent, line, out
                     <span className="absolute bottom-[4%] right-[2.5%] h-0.5 w-[2%] rounded-full opacity-60" style={{ backgroundColor: line }} />
                 </div>
 
-                {/* 「效果链」：左边小标题，右端一句「在频段之后处理」；卡里三列三排九项，各是名字、数值、一条滑杆。 */}
+                {/* 「频率边界」：左边小标题，右端一句「在十段之后、压缩之前」；卡里两颗滤波器，各是名字、数值、一条滑杆。 */}
                 <span
                     className="rounded-full opacity-55"
                     style={{ ...relativeRectStyle({ left: 0.03, top: 0.69, width: 0.05, height: 0.008 }), backgroundColor: line }}
@@ -159,14 +159,14 @@ const PonderAudioEqualizerSurface: React.FC<SurfaceProps> = ({ accent, line, out
                     className="rounded-full opacity-40"
                     style={{ ...relativeRectStyle({ right: 0.03, top: 0.69, width: 0.1, height: 0.008 }), backgroundColor: line }}
                 />
-                {/* 描边走 inset box-shadow：border 会把里面那两枚徽章的百分比挪掉 1px。 */}
+                {/* 描边走 inset box-shadow：border 会把里面那两枚把手的百分比挪掉 1px。 */}
                 <div
                     data-ponder-eq-effects
                     className="rounded-xl"
                     style={{ ...relativeRectStyle(G.effects), boxShadow: `inset 0 0 0 1px ${outline}` }}
                 >
-                    <div className="absolute inset-x-[2%] bottom-[4%] top-[6%] grid grid-cols-3 grid-rows-3 gap-x-[3.4%]">
-                        {Array.from({ length: 9 }, (_, index) => (
+                    <div className="absolute inset-x-[2%] bottom-[4%] top-[6%] grid grid-cols-2 gap-x-[3.4%]">
+                        {Array.from({ length: 2 }, (_, index) => (
                             <span key={index} data-ponder-eq-effect className="flex flex-col justify-center gap-[22%]">
                                 <span className="flex items-center justify-between">
                                     <span className="h-1 w-[20%] rounded-full" style={{ backgroundColor: line, opacity: 0.95 }} />
@@ -175,24 +175,12 @@ const PonderAudioEqualizerSurface: React.FC<SurfaceProps> = ({ accent, line, out
                                 <span className="relative h-0.5 rounded-full" style={{ backgroundColor: line }}>
                                     <span
                                         className="absolute top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                                        style={{ left: index === 1 ? '96%' : index === 6 ? '50%' : '3%', backgroundColor: 'var(--st-t2)' }}
+                                        style={{ left: index === 1 ? '96%' : '3%', backgroundColor: 'var(--st-t2)' }}
                                     />
                                 </span>
                             </span>
                         ))}
                     </div>
-                    {/* 「会加噪」的徽章：推没推上去它都在，为的是在打开之前就回答噪声从哪来。 */}
-                    {[G.noiseBadge, G.noiseBadgeSecond].map((rect, index) => (
-                        <span
-                            key={index}
-                            {...(index === 0 ? { 'data-ponder-eq-noise-badge': true } : {})}
-                            data-ponder-eq-noise
-                            className="flex items-center justify-center rounded-md"
-                            style={{ ...relativeRectStyle(rect), boxShadow: 'inset 0 0 0 1px var(--st-warn)' }}
-                        >
-                            <span className="h-0.5 w-[56%] rounded-full" style={{ backgroundColor: 'var(--st-warn)' }} />
-                        </span>
-                    ))}
                 </div>
             </PonderSurfaceBase>
 

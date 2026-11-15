@@ -1,4 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
+import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
 
 // src/platform/foliaLyricon.ts
 // 状态栏歌词（Lyricon）的 Web 侧入口。原生实现见 android/.../lyricon/FoliaLyricon。
@@ -65,6 +66,7 @@ export const getLyriconStatus = async (): Promise<{ enabled: boolean; connected:
 };
 
 export const publishLyriconSong = async (payload: LyriconSongPayload): Promise<boolean> => {
+    if (isNativePlaybackReconciling()) return false;
     try {
         const result = await FoliaLyricon.publish(payload);
         return Boolean(result?.ok);
@@ -78,6 +80,7 @@ export const publishLyriconPosition = async (
     playing: boolean,
     options?: { continuous?: boolean },
 ): Promise<boolean> => {
+    if (isNativePlaybackReconciling()) return false;
     try {
         const result = await FoliaLyricon.setPosition({
             positionMs,

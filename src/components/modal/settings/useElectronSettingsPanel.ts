@@ -21,7 +21,7 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
             : 'realeco';
 
 /** Synchronous on purpose: the first render has to know whether the bridge is there before the isElectron state settles. */
-const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
+const hasElectronBridge = () => typeof window !== 'undefined' && typeof (window as any).electron?.platform === 'string';
 
 type ElectronSettingsPanelParams = {
     themeGenerationSource: ThemeGenerationSource;
@@ -72,7 +72,7 @@ export const useElectronSettingsPanel = ({
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
-    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
+    const isElectronRuntime = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
     const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
         ? savedElectronAiCredentials.OPENAI_API_KEY
         : savedElectronAiCredentials.GEMINI_API_KEY;
@@ -95,7 +95,9 @@ export const useElectronSettingsPanel = ({
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
         const electron = (window as any).electron;
-        if (!electron) {
+        // 只认 platform：安卓端的模组 shim 没有 platform，也没有 getSettings /
+        // getCacheDirectory 这些主进程方法 —— 放过去会直接抛。
+        if (!electron || typeof electron.platform !== 'string') {
             return;
         }
         setIsElectron(true);
@@ -168,7 +170,9 @@ export const useElectronSettingsPanel = ({
     }, [updateStatus?.availableVersion, updateStatus?.updateSeen]);
 
     const saveElectronSettings = async () => {
-        if ((window as any).electron) {
+        // 只认 platform：安卓端的模组 shim 没有 saveSettings。
+        const bridge = (window as any).electron;
+        if (bridge && typeof bridge.platform === 'string') {
             // What is saved is the number that was typed, so "0,7" is kept as 0.7 and the main process
             // reads it as that; anything that is not a number from 0 to 2 falls back to the default.
             const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
@@ -342,7 +346,8 @@ export const useElectronSettingsPanel = ({
     const handleOpenBaiduDownload = () => handleOpenDownloadUrl(BAIDU_DOWNLOAD_URL);
 
     const handleChooseCacheDirectory = async () => {
-        if (!(window as any).electron) {
+        // 只认 platform：安卓端的模组 shim 没有 chooseCacheDirectory。
+        if (typeof (window as any).electron?.platform !== 'string') {
             return;
         }
 

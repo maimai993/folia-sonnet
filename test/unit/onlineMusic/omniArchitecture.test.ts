@@ -7,7 +7,7 @@ import { PLATFORM_NAME_PLACES } from './platformNamePlaces.ts';
 // test/unit/onlineMusic/omniArchitecture.test.ts
 
 const roots = ['src/components', 'src/hooks', 'src/stores'];
-const forbiddenImport = /from\s+['"][^'"]*(providerRegistry|kugouTransport|qqTransport|bodianTransport|qishuiTransport|ytmTransport|spotifyTransport|onlineMusic\/netease\/netease)['"]/;
+const forbiddenImport = /from\s+['"][^'"]*(providerRegistry|kugouTransport|qqTransport|bodianTransport|qishuiTransport|fnmusicTransport|feiniuTransport|lxmusicTransport|ytmTransport|spotifyTransport|appleMusicTransport|bilibiliTransport|onlineMusic\/netease\/netease)['"]/;
 
 const collectSourceFiles = async (path: string): Promise<string[]> => {
     const entry = await stat(path);
@@ -56,5 +56,6 @@ describe('Omni architecture boundaries', () => {
             }
         }
         expect(differences).toEqual([]);
-    });
+        // 要把整个源码树按行数一遍（几百个文件），默认 5 秒在慢机器上不够。
+    }, 120_000);
 });

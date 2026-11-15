@@ -11,6 +11,7 @@ import { openOutsideLink } from '../../../../utils/system/outsideLink';
 import { isCapacitorAndroid } from '../../../../platform/runtime';
 import AndroidUpdatePanel from '../AndroidUpdatePanel';
 import { FoundUpdateRow } from './FoundUpdateRow';
+import { ChinaDrivesRow } from './ChinaDrivesRow';
 import { iconLabel } from './iconLabel';
 import { Button as UiButton } from '@/components/ui';
 
@@ -169,6 +170,7 @@ const HelpPage: React.FC<HelpPageProps> = ({ onOpenReleaseNotes, onOpenAiHelp, o
                     手机上没有静默安装这条路 —— 检查、下载进度、下载 / 安装全在这张卡片里。
                 */}
                 {isCapacitorAndroid() && <AndroidUpdatePanel />}
+                <ChinaDrivesRow sub quiet />
                 <Row
                     label={(
                         // The settings window counts the clicks and shows the cat at the seventh.

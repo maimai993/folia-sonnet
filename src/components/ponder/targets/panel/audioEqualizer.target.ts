@@ -20,7 +20,6 @@ const anchors = {
     bands: settingsRegion(G.bands, 'ponder.anchors.audioEqualizer.bands'),
     bandFader: { kind: 'relative', from: 'bands', rect: G.bandFader, role: 'region', labelKey: 'ponder.anchors.audioEqualizer.bandFader' },
     effects: settingsRegion(G.effects, 'ponder.anchors.audioEqualizer.effects'),
-    noiseBadge: { kind: 'relative', from: 'effects', rect: G.noiseBadge, role: 'region', labelKey: 'ponder.anchors.audioEqualizer.noiseBadge' },
 } satisfies Record<string, PonderAnchorSource>;
 
 /** 第一章：右上角的开关、六个内置预设，和同一排里那两个自己的槽。 */
@@ -98,7 +97,7 @@ const silentWrite: PonderSceneScript = {
     ],
 };
 
-/** 第三章：下半那一片效果推子，以及标题旁边那枚「会加噪」的徽章。 */
+/** 第三章：下半那两颗滤波器。 */
 const effects: PonderSceneScript = {
     id: 'audio-equalizer-effects',
     titleKey: 'ponder.scenes.audioEqualizerEffects',
@@ -111,15 +110,6 @@ const effects: PonderSceneScript = {
             pointTo: { anchor: 'effects' }, durationMs: 6400, withPrevious: true,
         },
         { kind: 'pause', id: 'readEffects' },
-
-        { kind: 'highlight', id: 'dimEffects', anchor: 'effects', intensity: [0.8, 0], durationMs: 380, keyframe: true },
-        { kind: 'highlight', id: 'markBadge', anchor: 'noiseBadge', intensity: [0, 0.95], durationMs: 440, withPrevious: true },
-        {
-            kind: 'caption', id: 'noise',
-            textKey: 'ponder.captions.audioEqualizer.noise',
-            pointTo: { anchor: 'noiseBadge' }, durationMs: 7000, withPrevious: true,
-        },
-        { kind: 'pause', id: 'readNoise' },
     ],
 };
 

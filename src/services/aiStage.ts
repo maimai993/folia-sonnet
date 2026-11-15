@@ -32,6 +32,7 @@ import { readDirectorSettings, readRecentModes } from './lyricDirector/state';
 import { isFoliaCloudCacheEnabled } from './foliaCloud';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { md5 } from '../utils/md5';
+import { readBackgroundTheme } from './backgroundThemeBridge';
 
 // src/services/aiStage.ts
 // 一次 AI 调用，两份答案：视觉主题 + 歌词动画决策。
@@ -281,6 +282,8 @@ export type StageContext = {
     isPureMusic: boolean;
     /** 平台名，本地歌曲为空串。 */
     platform: string;
+    /** 生成 policy（纯音乐 / 提示词 / 屏蔽的样式）：免费渠道要拿它算它那边的缓存键。 */
+    policy: string;
     skipPull: boolean;
     signal?: AbortSignal;
     generate?: (ctx: StageContext) => Promise<StageParts>;
@@ -336,6 +339,7 @@ const buildStageContext = (request: StageRequest): StageContext => {
         lyricSource,
         isPureMusic,
         platform: String(request.platform ?? '').trim(),
+        policy,
         skipPull: request.force === true,
         signal: request.signal,
         generate: request.generate,
@@ -385,7 +389,15 @@ export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
         signal: ctx.signal,
     });
     const parts = normalizeStagePayload(parseJsonAnswer(text), ctx.blockedModes);
-    if (!parts) throw new Error('AI 返回的内容里没有可用的主题或动画决策。');
+    if (!parts) {
+        /*
+         * 「解析成功、但没有一样能用的」和「压根不是 JSON」是两回事：前者常是模型回了
+         * 结构不对的对象（空的 theme、只有 description 之类），后者是整段说人话。
+         * 记下要的是哪一半 + 回复开头，日志里一眼能分清，不用再靠猜。
+         */
+        const head = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+        throw new Error(`AI 返回的内容里没有可用的主题或动画决策（需要 ${ctx.requirement}）；回复开头：${head || '(空)'}`);
+    }
     return parts;
 };
 
@@ -437,21 +449,45 @@ const rememberRecent = (
  * 结果来源提示：生成完一条，命中时另一条。
  *
  * 命中时结果来得很突然 —— 界面上只会看到主题一瞬间变了，既没有「生成中」也没有
- * 任何说明。两条文案互斥，由 `source` 二选一，不会出现连着弹两次的情况。
+ * 任何说明。三条文案互斥，由 `source` 选，不会出现连着弹两次的情况。
+ *
+ * 本地那一层（`'local'`）单独一句：它确实没发请求，说「已从云端拉取缓存」是假话。
  *
  * 放在这里（而不是服务内部），是因为同一次请求可能被主题、导演两条链路复用：
  * 弹提示是「告知用户」这种只有调用方知道该不该做的事。
  */
 export const notifyStageResolved = (source: AiCloudCacheSource): void => {
+    const text = source === 'local'
+        ? 'options.cloudCacheHitLocal'
+        : source === 'cloud'
+            ? 'options.cloudCacheHit'
+            : 'status.themeGenerated';
     setStatusMessage({
         type: 'info',
-        text: translate(source === 'cloud' ? 'options.cloudCacheHit' : 'status.themeGenerated'),
+        text: translate(text),
         nonce: Date.now(),
     });
 };
 
 /** 先问云端，没有（或不全）再生成，生成完回传。一次往返，一条缓存。 */
 const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
+    if (!ctx.skipPull) {
+        const native = await readBackgroundTheme(ctx.songTitle, ctx.lyricSource);
+        const parts = native ? normalizeStagePayload(native.payload, ctx.blockedModes) : null;
+        if (native && parts && hasRequired(parts, ctx.requirement)) {
+            /*
+             * 成功也记：这一行回答的就是 issue #209 第一个问题「后台算出来的主题有没有被
+             * 前台认领」。没有它，日志里只剩「生成完成」，看不出结果是拿到了还是又烧了一次。
+             * 歌词身份由原生侧自己校验（见 BackgroundThemeWorker.read），这里只记决定。
+             */
+            console.log('[BackgroundTheme] 前台采用原生后台结果', { songTitle: ctx.songTitle, source: native.source });
+            return { ...parts, source: native.source };
+        }
+        if (native) {
+            // 拿到了形状可用、但缺了这一趟要的那一半：当没命中，继续走云缓存。
+            console.log('[BackgroundTheme] 原生结果缺本次需要的那一半，回落云缓存', { songTitle: ctx.songTitle, requirement: ctx.requirement });
+        }
+    }
     const { value, source } = await withAiCloudCache({
         kind: STAGE_CACHE_KIND,
         fingerprint: ctx.fingerprint,

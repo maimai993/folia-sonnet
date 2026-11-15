@@ -9,10 +9,10 @@ import type { PonderRelativeRect } from '../../../../types/ponder';
 const BAND_WIDTH = 0.1;
 
 /**
- * 音频效果器窗口（十段均衡加效果链），坐标系是那个窗口。
+ * 音频效果器窗口（十段均衡加频率边界），坐标系是那个窗口。
  *
  * 从上到下：标题和右上角的总开关；一排预设（六个内置、两个自定义槽，右端复位）；
- * 「频段增益」一张卡，里面十根推子；「效果链」一张卡，里面三列三排九项。
+ * 「频段增益」一张卡，里面十根推子；「频率边界」一张卡，里面两颗滤波器。
  *
  * 推子那一排要能指着其中一根讲：拖任何一根都会把当前预设**静默**换成自定义槽
  * 并把值写进去，而这件事只有对着一根推子和预设排同时说才成立。
@@ -32,9 +32,6 @@ export const AUDIO_EQUALIZER_GEOMETRY = {
     bands: { left: 0.1045, top: 0.235, width: 0.818, height: 0.39 },
     /** 相对 bands：第四根推子，教程拖的就是它。 */
     bandFader: { left: BAND_WIDTH * 3, top: 0, width: BAND_WIDTH, height: 1 },
-    /** 「效果链」那张卡。 */
+    /** 「频率边界」那张卡。 */
     effects: { left: 0.026, right: 0.026, top: 0.72, bottom: 0.028 },
-    /** 相对 effects：会加噪的那两项（比特降质、黑胶噪声）名字旁边的小徽章。教程指的是第一枚。 */
-    noiseBadge: { left: 0.092, top: 0.43, width: 0.04, height: 0.085 },
-    noiseBadgeSecond: { left: 0.754, top: 0.43, width: 0.04, height: 0.085 },
 } satisfies Record<string, PonderRelativeRect>;

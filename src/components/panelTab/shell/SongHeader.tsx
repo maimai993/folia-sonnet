@@ -49,7 +49,7 @@ const COVER_TAB_MAX = '30rem';
  */
 const COVER_MAX = '100cqw';
 /** 矮而宽时封面挪到左边，边长压到这个尺寸：右边还要留出写歌名、摆按钮的地方。 */
-const COMPACT_COVER_MAX = 'min(36cqw, 10rem)';
+const COMPACT_COVER_MAX = 'min(26cqw, 8rem)';
 
 type SongHeaderProps = {
     /** The cover tab is open: the large form. */
@@ -96,7 +96,11 @@ const SongHeader: React.FC<SongHeaderProps> = ({ isBig, currentSong, coverUrl, l
 
     return (
         <header
-            className="st-t-unfold relative shrink-0 overflow-hidden transition-[height]"
+            // 矮而宽时不过渡高度：横屏的封面尺寸由 --pn-room（跟底栏位置走的 MotionValue）与下面
+            // 那块文字的高度（量出来才知道）共同决定，这两个数落在不同的帧上，再叠一层 height 过渡
+            // 就会看到封面先跳一下再归位。横屏不缺宽度，封面尺寸本来就是被 COMPACT_COVER_MAX 卡住的
+            // 固定值，直接给最终值，进出由面板自己的 unfold 动画负责。
+            className={`st-t-unfold relative shrink-0 overflow-hidden ${isWideShort ? 'transition-none' : 'transition-[height]'}`}
             style={{ height: isBig ? bigHeight : FOLDED_PX }}
         >
             {/* The cover is where the lessons about this panel's song buttons point (data-ponder-panel-artwork). */}
@@ -105,7 +109,7 @@ const SongHeader: React.FC<SongHeaderProps> = ({ isBig, currentSong, coverUrl, l
                 onClick={isBig ? undefined : onShowCover}
                 // 正方形：宽高同一个数，方形封面才放得下整张（见 COVER_MAX 的注释）。
                 // 叠着放时居中（左右会剩下两条边），并排时贴左。
-                className={`st-t-unfold absolute top-0 grid place-items-center overflow-hidden bg-[var(--st-fill)] transition-[width,height,border-radius] ${isBig
+                className={`st-t-unfold absolute top-0 grid place-items-center overflow-hidden bg-[var(--st-fill)] ${isWideShort ? 'transition-[border-radius]' : 'transition-[width,height,border-radius]'} ${isBig
                     ? `rounded-[10px] ${sideBySide ? 'left-0' : 'left-0 right-0 mx-auto'}`
                     : 'left-0 cursor-pointer rounded-lg'}`}
                 style={isBig ? { width: coverSide, height: coverSide } : { width: FOLDED_PX, height: FOLDED_PX }}
@@ -142,7 +146,7 @@ const SongHeader: React.FC<SongHeaderProps> = ({ isBig, currentSong, coverUrl, l
                  * 量的是里面这一层，不是外面那层：并排时外面那层被拉满整个 header 的高度，
                  * 量它等于量自己撑出来的结果（文字一多就永远量不出来，只会被裁掉）。
                  */}
-                <div ref={underRef}>
+                <div ref={underRef} className={sideBySide ? 'w-fit' : undefined}>
                     {children}
                 </div>
             </div>

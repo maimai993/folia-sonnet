@@ -12,6 +12,8 @@ import type { AppPlaybackActions } from './useAppPlaybackActions';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { useHomeModel } from '../home/useHomeModel';
 import { useAppWallToolsHost } from '../wall-tools/useAppWallToolsHost';
+// 速记簿（上游 v0.7.26 新增）：playback 页的「插进队列并播」与 queue 页的拖动重排。
+import { useScratchpadPlayback, useScratchpadQueuePort } from '../scratchpad/useScratchpadPlayback';
 
 // src/components/app/appWiring/useAppWallAndHome.ts
 // 两面墙的工具面板宿主动作与首页模型。
@@ -33,13 +35,13 @@ export const useAppWallAndHome = (model: Input) => {
     const {
         accountController, activeProvider, addNavidromeSongsToQueue, addOnlineSongToQueue, addOnlineSongsToQueue,
         backCollection, clearQueue, cloudPlaylist, commandPalette, focusedPlaylistIndex, handleLocalQueueAdd,
-        handlePreviewVolume, isGeneratingTheme, localLibraryCatalog, localMusicState, localPlaylists, localSongs,
-        moveQueueSong, moveQueueSongToEnd, moveQueueSongToNext, navidromeFocusedAlbumIndex,
-        navigateFromPlayerCapsule, navigateToLattice, navigateToPlayer, navigateToSearch, onRefreshLocalSongs,
-        openHomeCollection, openStagePlayer, playOnlineQueueFromStart, playQueue, playSong, playlists,
-        popCollectionTo, pushCollection, refreshActiveProviderPlaylists, removeQueueSong,
+        handlePreviewVolume, handleQueueAddAndPlay, isGeneratingTheme, localLibraryCatalog, localMusicState,
+        localPlaylists, localSongs, moveQueueSong, moveQueueSongToEnd, moveQueueSongToNext,
+        navidromeFocusedAlbumIndex, navigateFromPlayerCapsule, navigateToLattice, navigateToPlayer, navigateToSearch,
+        onRefreshLocalSongs, openHomeCollection, openStagePlayer, playOnlineQueueFromStart, playQueue, playSong,
+        playlists, popCollectionTo, pushCollection, refreshActiveProviderPlaylists, removeQueueSong,
         saveCurrentQueueAsLocalPlaylist, setFocusedPlaylistIndex, setLocalMusicState, setNavidromeFocusedAlbumIndex,
-        stageSource, theme, togglePlay, user
+        setQueueOrder, shuffleQueue, stageSource, theme, togglePlay, user
     } = model;
     // 两面墙（bravais 与 Lattice）右下角工具面板的宿主动作：命令面板的同一套命令与队列操作，host 身份稳定。
     const wallToolsHost = useAppWallToolsHost({
@@ -97,7 +99,10 @@ export const useAppWallAndHome = (model: Input) => {
 
     return {
         ...model,
-        homeModel, wallToolsHost
+        homeModel, wallToolsHost,
+        // 速记簿的两个动作端口，ScratchpadHost 在 AppSurface 里吃这两份。
+        scratchpadPlayback: useScratchpadPlayback(homeModel.surfaceProps, handleQueueAddAndPlay),
+        scratchpadQueue: useScratchpadQueuePort(playSong, setQueueOrder, shuffleQueue),
     };
 };
 

@@ -56,6 +56,15 @@ const lines = (a: string, b: string) => [{ fullText: a }, { fullText: b }];
 
 beforeEach(() => {
     state.payload = null;
+    /*
+     * 选一个「填了 Key、能生成」的服务商。
+     *
+     * 默认服务商现在是免费渠道（foliawork），它走自己那条原生端点（见
+     * services/aiCompletion.ts 的 requestThemeFromFoliaWork），而本文件把
+     * `requestAiCompletion` 换成了假实现 —— 走免费渠道就绕过了它，验的东西就变了。
+     * 这个文件钉的是来源标签，与哪一家无关，写死一个能走到那条假实现的服务商即可。
+     */
+    localStorage.setItem('foliaAiProviderSettings', JSON.stringify({ provider: 'gemini', geminiApiKey: 'test-key' }));
     localStorage.setItem('foliaCloudSettings.v2', JSON.stringify({
         enabled: true,
         baseUrl: 'https://cloud.test',

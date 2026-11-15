@@ -1,5 +1,5 @@
 import React from 'react';
-import { AudioLines, Disc, SlidersHorizontal, ListMusic, FileAudio, FileText, Radio, Cloud, Puzzle } from 'lucide-react';
+import { AudioLines, Disc, SlidersHorizontal, ListMusic, FileAudio, FileText, Radio, Cloud } from 'lucide-react';
 import { locatePlayingSong } from './app/playing-song-locator/playingSongLocator';
 import { useTranslation } from 'react-i18next';
 import { Album, Artist, SongResult, Theme, PlayerState, ReplayGainMode, ThemeMode, VisualizerMode } from '../types';
@@ -30,6 +30,7 @@ import { useIsWideShortViewport } from './panelTab/shell/panelViewport';
 import { FOLIUM_PANEL_TAB_PREFIX, FoliumPanelTabBody, useFoliumPanelTabs } from '../mods/folium/registries/playerPanelTabs';
 import { countRender } from '../dev/renderCount';
 import { useAppViewStore } from '../stores/useAppViewStore';
+import { openScratchpadQueueCanvas } from '../stores/useScratchpadStore';
 
 // src/components/UnifiedPanel.tsx
 // The playing page's panel: which tabs there are for the playing song, and what each one is given.
@@ -58,6 +59,9 @@ type UnifiedPanelPlaybackProps = {
     isGeneratingTheme: boolean;
     hasLyrics: boolean;
     canGenerateAITheme: boolean;
+    /** 「匹配 MV」：给当前这首歌重新找一条 B 站投稿画面（清缓存强制重搜），匹配后从头放。 */
+    onRematchMv: () => void;
+    isRematchingMv: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
     onBgModeChange: (mode: ThemeMode) => void;
@@ -172,6 +176,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         isGeneratingTheme,
         hasLyrics,
         canGenerateAITheme,
+        onRematchMv,
+        isRematchingMv,
         theme,
         onThemeChange,
         onBgModeChange,
@@ -270,7 +276,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         tabs.splice(1, 0, { id: 'onlineLyrics' as PanelTab, label: t('localMusic.lyrics'), icon: FileText });
     }
 
-    foliumTabs.forEach((tab) => tabs.push({ id: tab.id, label: tab.label, icon: Puzzle }));
+    foliumTabs.forEach((tab) => tabs.push({ id: tab.id, label: tab.label, icon: tab.icon }));
 
     // A mod tab can vanish while open (mod disabled or reloaded): fall back to the cover tab.
     const currentTabExists = tabs.some((tab) => tab.id === currentTab);
@@ -380,6 +386,8 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     onGenerateAITheme={onGenerateAITheme}
                     isGeneratingTheme={isGeneratingTheme}
                     canGenerateAITheme={canGenerateAITheme}
+                    onRematchMv={onRematchMv}
+                    isRematchingMv={isRematchingMv}
                     theme={theme}
                     onThemeChange={onThemeChange}
                     onBgModeChange={onBgModeChange}
@@ -438,6 +446,11 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         onMoveSongToEnd={onMoveSongToEnd}
                         onMoveSongToNext={onMoveSongToNext}
                         onOpenLattice={queue.onOpenLattice}
+                        // 在速记簿里展开队列：面板收起来，让开给展开的速记簿画布。
+                        onOpenScratchpadQueue={() => {
+                            openScratchpadQueueCanvas();
+                            onToggle();
+                        }}
                         // TODO: Define cross-source playlist export before enabling playlist creation for mixed queues.
                         canSaveLocalPlaylist={canSaveQueueAsLocalPlaylist(currentSong, playQueue)}
                         onSaveCurrentQueueAsPlaylist={onSaveCurrentQueueAsPlaylist}
@@ -452,6 +465,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                     onAudioQualityChange={onAudioQualityChange}
                     onSyncData={onSyncData}
                     isSyncing={isSyncing}
+                    isDaylight={isDaylight}
                     onNavigateHome={() => {
                         onToggle();
                         onNavigateHome();

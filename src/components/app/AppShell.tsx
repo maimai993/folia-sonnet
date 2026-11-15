@@ -7,9 +7,19 @@ import { SettingsKitThemeContext } from '../modal/settings/kit/kitTheme';
 import { SheetLayerContext } from '../shared/Sheet';
 import TitlebarDragZone from '../TitlebarDragZone';
 import WindowControls from '../WindowControls';
+import ClickThroughMediaControls from './ClickThroughMediaControls';
+import type { TransportButtonAction } from './playback/bridges/useTransportCommandRefs';
 import { usePlayerOverlayRoot, usePlayerOverlayReservation } from '../../hooks/usePlayerOverlayLayout';
+import { usePlayerChromeSettingsStore } from '../../stores/usePlayerChromeSettingsStore';
+import { useNativeTrafficLights } from '../../hooks/useNativeTrafficLights';
+import {
+    CLICK_THROUGH_MEDIA_CONTROLS_GAP,
+    CLICK_THROUGH_UNLOCK_BUTTON_GAP,
+    CLICK_THROUGH_UNLOCK_BUTTON_WIDTH,
+    NATIVE_TRAFFIC_LIGHTS_RESERVED_WIDTH,
+    resolveWindowControlsExtent,
+} from '../../utils/clickThroughUnlockHotspot';
 import type { FoliumLayoutRect } from '../../mods/folium/contract';
-import { Button } from '@/components/ui';
 
 // Shared shell for the app container, Electron titlebar, and mounted audio node.
 type AppShellProps = {
@@ -25,6 +35,7 @@ type AppShellProps = {
     isMainWindowClickThroughEnabled: boolean;
     showMainWindowClickThroughToggle: boolean;
     onToggleMainWindowClickThrough: () => void;
+    onClickThroughTransportAction: (action: TransportButtonAction) => void;
     isDaylight: boolean;
     theme: Theme;
     audioElement: React.ReactNode;
@@ -55,6 +66,7 @@ const AppShell: React.FC<AppShellProps> = ({
     isMainWindowClickThroughEnabled,
     showMainWindowClickThroughToggle,
     onToggleMainWindowClickThrough,
+    onClickThroughTransportAction,
     isDaylight,
     theme,
     audioElement,
@@ -70,6 +82,21 @@ const AppShell: React.FC<AppShellProps> = ({
     const [isWindowMaximized, setIsWindowMaximized] = useState(false);
     const [isWindowFullscreen, setIsWindowFullscreen] = useState(false);
     const hasFullscreenTitlebarButton = isElectronWindow && !hideFullscreenButton;
+    const playerHeaderBlur = usePlayerChromeSettingsStore(state => state.playerHeaderBlur);
+    // 窗口按钮靠左时，锁和切歌按钮照镜像排在它们右边，离窗口左缘的距离与靠右时离右缘的一样。
+    const titlebarSide = usePlayerChromeSettingsStore(state => state.titlebarSide);
+    const leftControls = titlebarSide === 'left';
+    // 窗口带 mac 系统红绿灯时自绘按钮只剩遥控/全屏，锁和切歌按钮跟着靠过去；靠左时整组让开红绿灯。
+    const nativeTrafficLights = useNativeTrafficLights();
+    const windowControlsExtent = resolveWindowControlsExtent({
+        hasFullscreenButton: hasFullscreenTitlebarButton,
+        nativeTrafficLights,
+        side: titlebarSide,
+    });
+    const titlebarEdge = leftControls ? 'left' : 'right';
+    const clickThroughLockOffset = windowControlsExtent + CLICK_THROUGH_UNLOCK_BUTTON_GAP;
+    const clickThroughMediaOffset = clickThroughLockOffset + CLICK_THROUGH_UNLOCK_BUTTON_WIDTH + CLICK_THROUGH_MEDIA_CONTROLS_GAP;
+    const windowControlsOffset = nativeTrafficLights && leftControls ? NATIVE_TRAFFIC_LIGHTS_RESERVED_WIDTH : 0;
 
     useEffect(() => {
         if (!useCustomWindowRadius || !window.electron?.isWindowMaximized) {
@@ -142,24 +169,44 @@ const AppShell: React.FC<AppShellProps> = ({
 
     const shouldApplyWindowRadius = useCustomWindowRadius && !isWindowMaximized && !isWindowFullscreen;
     const areTitlebarControlsVisible = isTitlebarRevealed || alwaysShowMainWindowTitlebar;
-    const shouldRenderTitlebarBackdrop = !isPlayerView || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
-    const titlebarBackdropClassName = `absolute inset-0 backdrop-blur-sm ${
-        isDaylight
-            ? isPlayerView
-                ? 'bg-white/[0.18] border-b border-white/25 shadow-[0_8px_28px_rgba(0,0,0,0.06)]'
-                : 'bg-white/[0.12] border-b border-white/15'
-            : isPlayerView
-                ? 'bg-black/[0.18] border-b border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]'
-                : ''
-    }`;
+    // 播放页顶栏模糊背景：浅色主题压在深色画面上时，标题栏按钮看不清，开了就给播放页也垫上主页那层磨砂底。
+    // 跟着按钮一起出现（悬停顶部或「始终显示标题栏控制按钮」），点击穿透时按钮都藏了，底也不画。
+    const showsPlayerHeaderBlur = isPlayerView && playerHeaderBlur && !isMainWindowClickThroughEnabled;
+    const shouldRenderTitlebarBackdrop = !isPlayerView || showsPlayerHeaderBlur || (useCustomWindowRadius && !isMainWindowClickThroughEnabled);
+    const isTitlebarBackdropVisible = isTitlebarRevealed || (showsPlayerHeaderBlur && alwaysShowMainWindowTitlebar);
+    // 开了顶栏模糊时用更实的一层：0.18 的白在深色画面上只会混成深灰，浅色主题的深色按钮照样看不清，
+    // 得把底色抬到接近浅色主题的底；深色主题同理压暗。透明窗口原有的 0.18 样式不变。
+    const titlebarBackdropClassName = showsPlayerHeaderBlur
+        ? `absolute inset-0 backdrop-blur-md border-b ${
+            isDaylight
+                ? 'bg-white/65 border-black/5 shadow-[0_8px_28px_rgba(0,0,0,0.06)]'
+                : 'bg-black/40 border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]'
+        }`
+        : `absolute inset-0 backdrop-blur-sm ${
+            isDaylight
+                ? isPlayerView
+                    ? 'bg-white/[0.18] border-b border-white/25 shadow-[0_8px_28px_rgba(0,0,0,0.06)]'
+                    : 'bg-white/[0.12] border-b border-white/15'
+                : isPlayerView
+                    ? 'bg-black/[0.18] border-b border-white/10 shadow-[0_8px_28px_rgba(0,0,0,0.20)]'
+                    : ''
+        }`;
+
+    // mac 系统红绿灯跟标题栏按钮同节奏：平时和点击穿透时藏掉，悬停顶部或常驻设置时放出。
+    // 全屏由系统自动隐藏/唤出，这里照常联动不会打架。不画自绘标题栏时（壁纸模式）一律藏着。
+    useEffect(() => {
+        if (!nativeTrafficLights) return;
+        void window.electron?.setTrafficLightsVisible(usesCustomWindowChrome && areTitlebarControlsVisible && !isMainWindowClickThroughEnabled);
+    }, [nativeTrafficLights, usesCustomWindowChrome, areTitlebarControlsVisible, isMainWindowClickThroughEnabled]);
 
     return (
         <div
-            data-folia-app-shell="true"
             ref={layoutRootRef}
             className="fixed inset-0 w-full h-full flex flex-col overflow-hidden font-sans transition-colors duration-500"
             style={{
                 ...appStyle,
+                // 左上角有窗口按钮时（自绘的靠左，或带系统红绿灯），墙面左上角那一排（返回、刷新、分区）下移 28px 让开，见 WallBackButton.css。
+                ...(usesCustomWindowChrome && (leftControls || nativeTrafficLights) ? { '--window-buttons-drop': '28px' } : null),
                 borderRadius: shouldApplyWindowRadius ? resolveWindowCornerRadius(window.electron?.platform ?? '') : undefined,
                 boxShadow: showTransparentWindowBorder ? 'inset 0 0 0 1px rgba(255,255,255,0.24)' : undefined,
             }}
@@ -170,7 +217,7 @@ const AppShell: React.FC<AppShellProps> = ({
                         <motion.div
                             initial={false}
                             animate={{
-                                opacity: isTitlebarRevealed ? 1 : 0,
+                                opacity: isTitlebarBackdropVisible ? 1 : 0,
                             }}
                             transition={{ duration: 0.18, ease: 'easeOut' }}
                             className={titlebarBackdropClassName}
@@ -179,14 +226,13 @@ const AppShell: React.FC<AppShellProps> = ({
                     <div className="relative h-full">
                         <TitlebarDragZone active={usesCustomWindowChrome} />
                         <div
-                            className={`pointer-events-auto absolute top-0 z-20 h-full flex items-center ${
-                                hasFullscreenTitlebarButton ? 'right-[224px]' : 'right-[180px]'
-                            }`}
-                            style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+                            className={`pointer-events-auto absolute ${window.electron?.platform === 'darwin' ? 'top-1' : 'top-0'} z-20 h-full flex items-center`}
+                            style={{ WebkitAppRegion: 'no-drag', [titlebarEdge]: clickThroughLockOffset } as React.CSSProperties}
                         >
-                            <Button
+                            <button
+                                type="button"
                                 aria-label={isMainWindowClickThroughEnabled ? 'Disable click-through' : 'Enable click-through'}
-                                tip={isMainWindowClickThroughEnabled ? t('remote.disableClickThrough') : t('remote.enableClickThrough')}
+                                title={isMainWindowClickThroughEnabled ? t('remote.disableClickThrough') : t('remote.enableClickThrough')}
                                 onClick={onToggleMainWindowClickThrough}
                                 className={`flex h-7 w-7 items-center justify-center rounded-full border shadow-[0_8px_24px_rgba(0,0,0,0.28)] backdrop-blur-md transition-all duration-200 ${
                                     showMainWindowClickThroughToggle
@@ -203,10 +249,28 @@ const AppShell: React.FC<AppShellProps> = ({
                                 }`}
                             >
                                 {isMainWindowClickThroughEnabled ? <Lock size={14} /> : <LockOpen size={14} />}
-                            </Button>
+                            </button>
                         </div>
-                        <div className="pointer-events-auto absolute top-0 right-0 z-10 h-full">
+                        {/* 点击穿透时窗口按钮都藏了，切歌按钮放在锁的左边，跟锁一起出现（#471）。
+                            右缘离锁 6px：锁离右边 180px/224px、宽 28px，这组宽 86px（位置由 resolveWindowControlsExtent 算）。
+                            不放锁右边：那样热区要伸到离右边 84px，压住下面窗口的最小化/最大化按钮。 */}
+                        <div
+                            className={`pointer-events-none absolute ${window.electron?.platform === 'darwin' ? 'top-1' : 'top-0'} z-20 h-full flex items-center`}
+                            // 只在点击穿透时扣出不可拖的区域：平时这组按钮不出现，标题栏这一段照常能拖窗口。
+                            style={{
+                                [titlebarEdge]: clickThroughMediaOffset,
+                                ...(isMainWindowClickThroughEnabled ? { WebkitAppRegion: 'no-drag' } : null),
+                            } as React.CSSProperties}
+                        >
+                            <ClickThroughMediaControls
+                                visible={isMainWindowClickThroughEnabled && showMainWindowClickThroughToggle}
+                                isDaylight={isDaylight}
+                                onAction={onClickThroughTransportAction}
+                            />
+                        </div>
+                        <div className="pointer-events-auto absolute top-0 z-10 h-full" style={{ [titlebarEdge]: windowControlsOffset }}>
                             <WindowControls
+                                side={titlebarSide}
                                 revealed={areTitlebarControlsVisible}
                                 isDaylight={isDaylight}
                                 isMainWindowClickThroughEnabled={isMainWindowClickThroughEnabled}

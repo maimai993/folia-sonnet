@@ -52,7 +52,8 @@ export const useAppOverlayModels = (model: Input) => {
         handleLyricMatchPureMusicMarkChanged, handleNaviLyricMatchComplete, handleNextTrack,
         handleOnlineLyricMatchComplete, handlePrevTrack, handleSaveLyricFilterPattern, handleSearchLoadMore,
         handleSearchOverlaySubmit, handleSearchResultAddToQueue, handleSearchResultAlbumOpen,
-        handleSearchResultArtistOpen, handleSearchResultPlay, handleToggleNavidromeEnabled,
+        handleSearchResultArtistOpen, handleSearchResultCollectionOpen, handleSearchResultPlay,
+        handleToggleNavidromeEnabled,
         handleUnavailableReplacementConfirm, isLyricMatchOpen, isNowPlayingControlDisabled,
         isNowPlayingControlDisabledRef, isNowPlayingStageActive, isPanelOpen, isSettingsModalOpen,
         leaveStagePlayback, loadCurrentSongLyricPreview, loadStageSessionIntoPlayback, localSongs, lyricApiStatus,
@@ -73,6 +74,7 @@ export const useAppOverlayModels = (model: Input) => {
         handleSearchResultAddToQueue,
         handleSearchResultArtistOpen,
         handleSearchResultAlbumOpen,
+        handleSearchResultCollectionOpen,
         resolveSearchResultDisplay,
         devDebugSnapshot,
         effectiveLoopMode,
@@ -100,6 +102,7 @@ export const useAppOverlayModels = (model: Input) => {
         stageIsNextUp,
         stageTrackPillOnScreen,
         openSongCardPanel,
+        hasLocalSongs: localSongs.length > 0,
     });
     const settingsDialog = useSettingsDialogModel({
         themeController,

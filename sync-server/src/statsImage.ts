@@ -115,8 +115,12 @@ const hourKeyOf = (at: Date): string => {
  *
  * 分桶用的键与图上标的钟点同一套（UTC+8）：原来键按 UTC 取、标签按 UTC 画，虽然一致，
  * 但看的人在自己的时区里对不上（见 displayParts 那条注释）。
+ *
+ * 分桶现在在 SQL 里做（见 `readCacheOverview`）：原来是把 24 小时里的命中流水**整批**
+ * 取回 Node 再逐条 `Date.parse` 分桶 —— 命中一多就是几十万行，而 better-sqlite3 是同步的，
+ * 这几百毫秒里整个进程都在等它。现在进到这里的是「一行一个钟点」的 24 行。
  */
-const buildHourlyBuckets = (rows: readonly HitLogRow[]): CacheOverview['hourly'] => {
+const buildHourlyBuckets = (rows: readonly { at: string }[]): CacheOverview['hourly'] => {
     const counts = new Map<string, number>();
     rows.forEach((row) => {
         const parsed = Date.parse(String(row.at ?? ''));
@@ -162,8 +166,19 @@ export const readCacheOverview = async (
             .prepare(`SELECT COUNT(*) AS count FROM ai_cache_hits WHERE at >= ${isoMinutesAgo(-recentMinutes)}`)
             .first<{ count: number }>(),
         db
-            .prepare(`SELECT kind, cache_key, song_title, at FROM ai_cache_hits WHERE at >= ${isoMinutesAgo(-24 * 60)} ORDER BY at DESC`)
-            .all<HitLogRow>(),
+            /*
+             * 24 小时分桶直接在 SQL 里数，一条给一行：`substr(at, 1, 13)` 就是
+             * `YYYY-MM-DDTHH`，跟 `hourKeyOf` 的键长得一样。24 小时里有几十万次命中时，
+             * 原来那条 `SELECT ... ORDER BY at DESC` 要把它们一条条搬回 Node 再数。
+             */
+            .prepare(
+                `SELECT substr(at, 1, 13) AS hour, COUNT(*) AS count
+                 FROM ai_cache_hits
+                 WHERE at >= ${isoMinutesAgo(-24 * 60)}
+                 GROUP BY hour
+                 ORDER BY hour ASC`,
+            )
+            .all<{ hour: string; count: number }>(),
         db
             .prepare('SELECT kind, cache_key, song_title, at FROM ai_cache_hits ORDER BY id DESC LIMIT 5')
             .all<HitLogRow>(),
@@ -176,7 +191,11 @@ export const readCacheOverview = async (
         totalHits: Number(entries?.hits ?? 0),
         recentHits: Number(recent?.count ?? 0),
         recentMinutes,
-        hourly: buildHourlyBuckets(daily?.results ?? []),
+        /*
+         * 一行一个钟点：把 `hour` 摆成 `at` 的样子（`YYYY-MM-DDTHH:00:00`）再交给
+         * `buildHourlyBuckets`，分桶逻辑与图上标签仍然只有那一份。
+         */
+        hourly: buildHourlyBuckets((daily?.results ?? []).map((row) => ({ at: `${row.hour}:00:00` }))),
         latest: latest?.results ?? [],
         fontCount: fonts.fontCount,
         fontBytes: fonts.fontBytes,

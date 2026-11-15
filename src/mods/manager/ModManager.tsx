@@ -11,7 +11,9 @@ import { openOutsideLink, opensThroughDesktopApp } from '../../utils/system/outs
 import { ModListItem, translateModError } from './ModListItem';
 import { useModCosts } from './modCost';
 import type { ModManagerClasses } from './modManagerClasses';
-import { Button } from '../../components/ui';
+import { Button, FilePicker, type FilePickerHandle } from '../../components/ui';
+import ThemedDialog from '../../components/shared/ThemedDialog';
+import { SheetButton } from '../../components/shared/Sheet';
 
 // src/mods/manager/ModManager.tsx
 // The mod list and everything that acts on it: toolbar, zip drop install, batch selection, ffmpeg
@@ -65,6 +67,18 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
     // so a plain boolean would flicker the overlay. Counting balances across the
     // whole panel; combined with pointer-events-none on the overlay it stays steady.
     const dragDepthRef = useRef(0);
+    /*
+     * 安卓上没有 `webUtils.getPathForFile`（那是 Electron 的），拖拽也基本不存在，
+     * 所以「导入本地 zip」走控件库里的 `FilePicker`：拿到 File 对象后
+     * 用 FileReader 读成 base64 交给原生落盘，再按正常流程安装。
+     */
+    const zipInputRef = useRef<FilePickerHandle | null>(null);
+    /*
+     * 删除确认走应用自己的弹窗，不用 `window.confirm`：系统对话框没法做玻璃 / 半透明效果，
+     * 而且它的外观不受主题控制，夹在整套 UI 里很突兀。
+     */
+    const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
+    const [deleting, setDeleting] = useState(false);
     const canInstall = bridgeAvailable && modSystemEnabled;
 
     // The main process loads or unloads every mod when the master switch flips, so the list is
@@ -125,6 +139,62 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                 : { kind: 'error', text: translateModError(t, result.error, 'install-failed') });
         } finally {
             setInstalling(false);
+        }
+    };
+
+    /*
+     * 安卓端的「导入本地 zip」：用户选完文件后，把字节交给原生插件落到模组目录，
+     * 再复用同一套安装流程。桌面端仍然走拖拽（`webUtils.getPathForFile`）。
+     */
+    const handlePickedZip = async (file: File) => {
+        if (!canInstall) return;
+        if (!file.name.toLowerCase().endsWith('.zip')) {
+            setNotice({ kind: 'error', text: t('mods.dropZipHint') });
+            return;
+        }
+        setInstalling(true);
+        try {
+            const base64 = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(reader.error ?? new Error('read-failed'));
+                reader.onload = () => {
+                    const text = typeof reader.result === 'string' ? reader.result : '';
+                    // data:application/zip;base64,XXXX → 取逗号后面那截
+                    resolve(text.slice(text.indexOf(',') + 1));
+                };
+                reader.readAsDataURL(file);
+            });
+            const result = await useModsStore.getState().installModFromZipFile({
+                name: file.name,
+                base64,
+            });
+            setNotice(result.ok
+                ? { kind: 'ok', text: t('mods.installSuccess', { id: result.id ?? '' }) }
+                : { kind: 'error', text: translateModError(t, result.error, 'install-failed') });
+        } catch (error) {
+            setNotice({
+                kind: 'error',
+                text: error instanceof Error ? error.message : t('mods.errors.install-failed'),
+            });
+        } finally {
+            setInstalling(false);
+        }
+    };
+
+    /*
+     * 删除一个模组：先弹确认（应用自己的弹窗，能跟着主题做玻璃效果），再交给 store。
+     * 误删没有撤销，所以这一步不能省。
+     */
+    const handleDeleteMod = async (mod: { id: string; name: string }) => {
+        setDeleting(true);
+        try {
+            const result = await useModsStore.getState().deleteMod(mod.id);
+            setNotice(result.ok
+                ? { kind: 'ok', text: t('mods.deleteSuccess', { id: mod.id }) }
+                : { kind: 'error', text: translateModError(t, result.error, 'delete-failed') });
+        } finally {
+            setDeleting(false);
+            setPendingDelete(null);
         }
     };
 
@@ -242,6 +312,24 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
                     {marketLink}
+                    {/*
+                        安卓上没有拖拽、也没有 webUtils，所以给一个显式的「导入 zip」入口。
+                        桌面端拖拽仍然可用，这颗按钮在两边都能工作（选完走同一条安装流程）。
+                    */}
+                    <FilePicker
+                        ref={zipInputRef}
+                        accept=".zip,application/zip"
+                        onFile={(file) => { void handlePickedZip(file); }}
+                    />
+                    <Button
+                        onClick={() => zipInputRef.current?.open()}
+                        disabled={!canInstall || installing}
+                        className={`${toolbarButtonClass} ${classes.ghostButton}`}
+                        style={{ color: 'var(--text-primary)' }}
+                    >
+                        <Upload size={12} />
+                        {installing ? t('mods.installing') : t('mods.importZip')}
+                    </Button>
                     <Button
                         onClick={() => { void handleOpenDirectory(); }}
                         className={`${toolbarButtonClass} ${classes.ghostButton}`}
@@ -359,6 +447,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                         onToggleExpand={() => selectMod(selectedModId === mod.id ? null : mod.id)}
                         onToggleEnabled={() => { void handleToggleEnabled(mod.id, !mod.enabled); }}
                         onToggleSelected={() => toggleSelected(mod.id)}
+                        onDelete={() => setPendingDelete({ id: mod.id, name: mod.name })}
                         onNotice={setNotice}
                     />
                 ))}
@@ -384,6 +473,33 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                     ))}
                 </div>
             ) : null}
+
+            {/*
+                删除确认：用应用自己的弹窗（ThemedDialog），所以它跟着主题做玻璃效果，
+                也不会像系统 confirm 那样在安卓上跳出一个格格不入的白框。
+            */}
+            <ThemedDialog
+                isOpen={pendingDelete !== null}
+                onClose={() => { if (!deleting) setPendingDelete(null); }}
+                isDaylight={isDaylight}
+                title={t('mods.deleteMod')}
+                description={pendingDelete ? t('mods.deleteConfirm', { name: pendingDelete.name }) : undefined}
+                closeDisabled={deleting}
+                footer={(
+                    <>
+                        <SheetButton onClick={() => setPendingDelete(null)} disabled={deleting}>
+                            {t('common.cancel')}
+                        </SheetButton>
+                        <SheetButton
+                            variant="primary"
+                            onClick={() => { if (pendingDelete) void handleDeleteMod(pendingDelete); }}
+                            disabled={deleting}
+                        >
+                            {t('mods.deleteMod')}
+                        </SheetButton>
+                    </>
+                )}
+            />
         </div>
     );
 };

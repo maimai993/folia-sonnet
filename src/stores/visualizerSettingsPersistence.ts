@@ -1,4 +1,4 @@
-import { DEFAULT_SMART_BEAT_SETTINGS, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
+import { DEFAULT_SMART_BEAT_SETTINGS, type LyricRenderQuality, type SmartBeatSettings, type VisualizerBackgroundMode, type VisualizerFrameRate, type VisualizerMode } from '../types';
 // 只做字符串校验，走 types/visualizerModes 而不是 registry：后者的 eager glob 会把 13 个
 // renderer（含 three.js）拉进来，而这里读的只是一个 localStorage 字符串。
 // mod 模式在启动时本来就看不到——bootstrap.tsx 的 restoreStoredModVisualizer 在 mods 注册完
@@ -11,7 +11,10 @@ import {
 } from '../types/visualizerModes';
 import type { StoredTuning } from '../components/visualizer/tuningDefinition';
 import { resolveSmartBeatSettings, type SmartBeatPatch } from '../services/beatFx/smartBeatSettings';
-import { parseVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
+// readStoredVisualizerFrameRate 走 resolveInitialVisualizerFrameRate（dev 侧）：从没设置过的
+// 用户要按「手机给 60、桌面不限」给初值，与启动装限帧器用的是同一个判据。
+import { resolveInitialVisualizerFrameRate, VISUALIZER_FRAME_RATE_STORAGE_KEY } from '../utils/frameRateLimiter';
+import { DEFAULT_LYRIC_RENDER_QUALITY, LYRIC_RENDER_QUALITY_STORAGE_KEY, normalizeLyricRenderQuality } from '../utils/lyricRenderQuality';
 
 import { getStoredString } from './storagePrimitives';
 import { normalizeRandomVisualizerModes } from '../utils/randomVisualizerModes';
@@ -43,6 +46,16 @@ export const readStoredBackgroundOpacity = () => {
     const saved = localStorage.getItem('background_opacity');
     const parsed = saved ? parseFloat(saved) : 0.75;
     return Number.isFinite(parsed) ? parsed : 0.75;
+};
+
+export const readStoredVisualizerOpacity = () => {
+    if (typeof window === 'undefined') {
+        return 1;
+    }
+
+    const saved = localStorage.getItem(VISUALIZER_OPACITY_STORAGE_KEY);
+    const parsed = saved ? parseFloat(saved) : 1;
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 1;
 };
 
 /** 可视化叠层（盖在壁纸之上那层 WebView）整体窗口的不透明度。 */
@@ -135,13 +148,6 @@ export const readStoredWallpaperFloatingWidth = () => {
 };
 
 /**
- * 叠加安全区时是否**直接占满整条**（左右不再留空）。默认关 ——
- * 占满会压住整条状态栏，那是比「叠在安全区上」更进一步的选择。
- *
- * 非竖屏时原生那边不认这一条：横屏下状态栏那一条的意义完全不同，
- * 占满只会糊住一整条，所以自动退回宽度滑条给的宽。
- */
-/**
  * 歌词字体的来路：'follow' = 跟随播放页那套，'custom' = 这两层单独指定一个字体文件。
  *
  * 默认 custom —— 老用户已经选过字体的，不该因为多了这个开关就悄悄失效。
@@ -162,6 +168,34 @@ export const readStoredWallpaperLyricsFontMode = (): 'follow' | 'custom' => {
         : 'custom';
 };
 
+/**
+ * 桌面壁纸视频背景的旋转角度。
+ *
+ * 为什么要单独存一份：
+ *   · 原生渲染层只认 `wp.videoRotation` 这个 tuning 键，而 tuning 是每次
+ *     setAppearance 整体下发的 —— 重启后 Web 侧重建那一份里没有它，
+ *     旋转就丢了（用户看到的是「转过的壁纸重启后自己转回去了」）。
+ *   · 所以角度必须落在 localStorage，重启后由 JS 再下发一次。
+ *
+ * 只允许 0/90/180/270；其它值当没转过。
+ */
+export const WALLPAPER_VIDEO_ROTATION_STORAGE_KEY = 'folia.wallpaperVideoRotation';
+
+export const readStoredWallpaperVideoRotation = (): number => {
+    if (typeof window === 'undefined') return 0;
+    const raw = Number(localStorage.getItem(WALLPAPER_VIDEO_ROTATION_STORAGE_KEY));
+    if (!Number.isFinite(raw)) return 0;
+    const normalized = ((Math.round(raw / 90) * 90) % 360 + 360) % 360;
+    return normalized;
+};
+
+/**
+ * 叠加安全区时是否**直接占满整条**（左右不再留空）。默认关 ——
+ * 占满会压住整条状态栏，那是比「叠在安全区上」更进一步的选择。
+ *
+ * 非竖屏时原生那边不认这一条：横屏下状态栏那一条的意义完全不同，
+ * 占满只会糊住一整条，所以自动退回宽度滑条给的宽。
+ */
 export const WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY = 'folia.wallpaperFloatingFillSafeArea';
 
 export const readStoredWallpaperFloatingFillSafeArea = () => {
@@ -302,12 +336,6 @@ export const readStoredWallpaperOverlayHideCoverArt = () =>
     || localStorage.getItem(WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY) !== 'false';
 
 /**
- * 纯音乐（没有歌词）时是否不显示叠层。
- *
- * 纯音乐下可视化只能画背景，画不出歌词；有人要的就是这时候干净点，
- * 也有人想留着动效当氛围，所以做成开关，默认开。
- */
-/**
  * 歌词唱完之后（尾奏很长 / 后半段是纯音乐）是否自动隐藏叠层。
  *
  * 有些曲目只在前半段有几句歌词，后面几分钟没有 —— 那时候叠层只是挂着一片空白。
@@ -319,7 +347,17 @@ export const readStoredWallpaperOverlayHideAfterLyricsEnd = () =>
     typeof window === 'undefined'
     || localStorage.getItem(WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY) !== 'false';
 
+/**
+ * 纯音乐（没有歌词）时是否不显示叠层。
+ *
+ * 纯音乐下可视化只能画背景，画不出歌词；有人要的就是这时候干净点，
+ * 也有人想留着动效当氛围，所以做成开关，默认开。
+ */
 export const WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY = 'folia.wallpaperOverlaySkipInstrumental';
+
+export const readStoredWallpaperOverlaySkipInstrumental = () =>
+    typeof window === 'undefined'
+    || localStorage.getItem(WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY) !== 'false';
 
 /**
  * 暂停时是否自动隐藏叠层。
@@ -333,26 +371,12 @@ export const readStoredWallpaperOverlayHideWhenPaused = () =>
     typeof window === 'undefined'
     || localStorage.getItem(WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY) !== 'false';
 
-export const readStoredWallpaperOverlaySkipInstrumental = () =>
-    typeof window === 'undefined'
-    || localStorage.getItem(WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY) !== 'false';
-
 /** 跟随模式下是否隐藏原生那层的进度条（叠层里可视化自带的那条不受影响）。 */
 export const WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY = 'folia.wallpaperOverlayHideNativeProgress';
 
 export const readStoredWallpaperOverlayHideNativeProgress = () =>
     typeof window !== 'undefined'
     && localStorage.getItem(WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY) === 'true';
-
-export const readStoredVisualizerOpacity = () => {
-    if (typeof window === 'undefined') {
-        return 1;
-    }
-
-    const saved = localStorage.getItem(VISUALIZER_OPACITY_STORAGE_KEY);
-    const parsed = saved ? parseFloat(saved) : 1;
-    return Number.isFinite(parsed) ? Math.min(1, Math.max(0.2, parsed)) : 1;
-};
 
 /**
  * Reads one stored tuning the way its tuning.ts declares it: under its key, else under a key of
@@ -402,7 +426,28 @@ export const readStoredVisualizerFrameRate = (): VisualizerFrameRate => {
         return 'off';
     }
 
-    return parseVisualizerFrameRate(localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
+    const stored = localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY);
+    /*
+     * 从没设置过：手机给 60，桌面不限（判据在 frameRateLimiter 里，与启动装限帧器
+     * 用的是同一个函数 —— 两边各写一份的话，会出现「启动不限、设置页显示 60」）。
+     */
+    return resolveInitialVisualizerFrameRate(stored);
+};
+
+/**
+ * 歌词画布的全局分辨率与抗锯齿挡位（utils/lyricRenderQuality.ts）。
+ *
+ * v0.7.26 起各样式 tuning 里的 `render` 覆盖都落在这一个键上：`scale` / `antialias`
+ * 两项，缺省取 DEFAULT_LYRIC_RENDER_QUALITY。
+ */
+export const readStoredLyricRenderQuality = (): LyricRenderQuality => {
+    const saved = getStoredString(LYRIC_RENDER_QUALITY_STORAGE_KEY, '');
+    if (!saved) return DEFAULT_LYRIC_RENDER_QUALITY;
+    try {
+        return normalizeLyricRenderQuality(JSON.parse(saved));
+    } catch {
+        return DEFAULT_LYRIC_RENDER_QUALITY;
+    }
 };
 
 export const readStoredVisualizerBackgroundMode = (): VisualizerBackgroundMode | null => {

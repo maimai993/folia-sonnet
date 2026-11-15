@@ -1,6 +1,6 @@
 import React from 'react';
 import { isCapacitorAndroid } from '../platform/runtime';
-import { clearLyricsWallpaper, publishLyricsWallpaper, pushLyricsFontToNative, setWallpaperAppearance, setWallpaperFloatingPreview, type FoliaWallpaperTimelineEntry } from '../platform/foliaWallpaper';
+import { clearLyricsWallpaper, publishLyricsWallpaper, pushLyricsFontToNative, setWallpaperAppearance, setWallpaperFloatingPreview, wallpaperHeartbeat, type FoliaWallpaperTimelineEntry } from '../platform/foliaWallpaper';
 import { getStoredUploadedLyricsFont } from '../services/customLyricsFont';
 import { flattenTuning, tuningFieldFor, withGlobalSettings } from '../platform/wallpaperVisualizerTuning';
 import { useVisualizerSettingsStore, type VisualizerSettingsState } from '../stores/useVisualizerSettingsStore';
@@ -12,6 +12,8 @@ import { useStageSettingsStore } from '../stores/useStageSettingsStore';
 import { findLatestActiveLineIndex } from '../utils/appPlaybackHelpers';
 import { fetchCoverBytes } from '../services/coverBytes';
 import { actuallyPlaying } from '../stores/motionSignals';
+import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
+import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from '../services/playbackEngine/nativePlaybackSync';
 import type { Line, Theme } from '../types';
 
 // src/hooks/useLyricsWallpaperFeed.ts
@@ -85,6 +87,12 @@ const WALLPAPER_DRIFT_TOLERANCE_MS = 900;
  */
 const PREVIEW_RENEW_MS = 15_000;
 
+/**
+ * 心跳间隔。前台每两秒敲一下「播放管线还活着」；退到后台 JS 定时器被挂起后由
+ * 播放服务接管（原生 2 秒一敲）。原生侧的超时是 8 秒，容得下几次没接着。
+ */
+const HEARTBEAT_MS = 2_000;
+
 /*
  * 换歌那一推要「等一等」再发。
  *
@@ -105,6 +113,15 @@ const THEME_SETTLE_MIN_MS = 700;
  * 与其让用户盯着旧歌词，不如照推（代价是这一首还会再闪一次，但只有一次）。
  */
 const THEME_SETTLE_MAX_MS = 2000;
+
+/**
+ * 回前台补推整包的最小间隔。
+ *
+ * `visibilitychange` / `resume` / `focus` 三个事件在部分 ROM 上会连着一起到，
+ * 同一件事补三遍没有意义（整包带着整条时间轴，一次几十 KB）。
+ * 1.5s 足够把这些合并成一次，又短到「切出去再切回来」的那一下一定补得上。
+ */
+const FOREGROUND_REPUSH_THROTTLE_MS = 1500;
 
 /** 超过这个长度的字符串值不进签名：那是 base64 图片（.key 本身还是进的）。 */
 const MAX_FINGERPRINT_STRING = 512;
@@ -305,7 +322,13 @@ export const useLyricsWallpaperFeed = ({
         }
     }, [theme]);
     const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
-    const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    const backgroundModeRaw = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    /*
+     * 「MV」不是壁纸原生会画的底：MV 的画面是播放页那一层（BilibiliMvLayer）的事，
+     * 壁纸端只认 cover/color/image/video。选了 MV 时壁纸用模糊封面打底，
+     * 播放页里 MV 层自己铺上去 —— 两边各画各的，谁也不挡谁。
+     */
+    const backgroundMode = backgroundModeRaw === 'mv' ? 'cover' : backgroundModeRaw;
     const backgroundImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
     const backgroundBlur = useVisualizerSettingsStore(state => state.lyricsWallpaperBlur);
     const showProgress = useVisualizerSettingsStore(state => state.lyricsWallpaperProgress);
@@ -421,10 +444,132 @@ export const useLyricsWallpaperFeed = ({
     const latest = React.useRef({ playing });
     latest.current.playing = playing;
 
+    /*
+     * 「整包重推一次」的出口，给回前台补推和原生认领结束那两处用。
+     *
+     * 为什么要补：`publishLyricsWallpaper` 在原生播放对账期间（`isNativePlaybackReconciling()`）
+     * 会把整条推送**直接丢掉**（见 src/platform/foliaWallpaper.ts 开头那一段）。而对账在
+     * 退到后台时是开着的，回到前台之后才关 —— 这段时间里这个 hook 按内容变化触发的那个
+     * effect 若刚好跑过一次，那一份带着主题的整包就没了，而且**不会再发**：它的依赖
+     * 没有变化，上面几个定时器只推位置和播放状态，谁都不会把主题重新带一趟。
+     *
+     * 谁受影响最大：「精简」样式。跟随样式在桌面上是那层 WebView，重挂页面时会重新
+     * 读一遍原生那张颜色表；精简样式压根没有那层页面，画面由原生自绘，只有整包推过去
+     * （推进 `snapshot.stamp` / 重写颜色表）才会重取颜色 —— 于是表现为
+     * 「切回应用内之后只有精简样式不更新」。
+     *
+     * 写成 ref 的理由同 `pushLyricsWallpaperPosition`：整包那一推的闭包带着一长串依赖，
+     * 塞进 effect 依赖里会让监听每改一个设置就重挂一次，反而更容易漏掉真正该补的那一次。
+     */
+    const pushFullPacket = React.useRef<() => void>(() => {});
+    const lastFullPushAt = React.useRef(0);
+
     // 封面用 state 而不是 ref：它是异步抓的，换歌时那一刻多半还没到。用 ref 的话
     // 第一次 publish 带着 null 封面就过去了，而 ref 变化不会触发重渲染，
     // 于是封面（以及从封面取的高亮色）永远推不到壁纸那边 —— 表现就是「歌词始终纯白」。
     const [wallpaperCover, setWallpaperCover] = React.useState<string | null>(null);
+
+    /*
+     * 回到前台 / 页面重新可见：**先把位置对齐到原生，再推**。
+     *
+     * 退到后台之后 WebView 的 JS 定时器被系统挂起，`getCurrentTime()` 停在挂起那一刻；
+     * 而原生那边这段时间一直在放。回到前台时如果照旧拿这个旧值去推整条时间轴
+     * （换歌 / 歌词变化的那个 effect 恰好会在挂起期间累积的所有变更上重跑一次），
+     * 就会把**过期位置**写进锚点 —— 壁纸和叠层立刻从正确的那一句跳回几十秒前，
+     * 也就是用户报的「打开前台后错误的歌词会覆盖后台的」。
+     *
+     * 判据用 visibilitychange + resume 两个事件：前者是切前后台，后者是 Capacitor
+     * 自己补的（有些 ROM 上只来一个）。只对齐位置，不在这里推送 —— 推送交给下面
+     * 那几个按内容变化触发的 effect，它们会在这一拍之后拿到已经对齐的值。
+     */
+    React.useEffect(() => {
+        if (!active) return undefined;
+        const resync = () => {
+            /*
+             * 原生在抽头（桥活着且手上真有歌）时，位置以它为准：
+             * 引擎内部是「锚点 + 墙钟」，getPositionSec() 回来的就是原生此刻的位置。
+             * 原生没在播（走 <audio> / 已释放）时什么都不同步，用的是 Web 自己的时钟。
+             */
+            if (!nativePlaybackEngine.isPlaying()) return;
+            const nativeSec = nativePlaybackEngine.getPositionSec();
+            if (!Number.isFinite(nativeSec) || nativeSec < 0) return;
+            pushLyricsWallpaperPosition.current(nativeSec);
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') resync();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('resume', resync);
+        window.addEventListener('focus', resync);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('resume', resync);
+            window.removeEventListener('focus', resync);
+        };
+    }, [active]);
+
+    /*
+     * 「把某个位置推给原生」这一支单独抽出来，供上面的回前台对齐使用。
+     *
+     * 写成 ref 是为了不让上面那个 effect 依赖一长串值（依赖一变就重挂监听，
+     * 反而更容易漏掉真正该对齐的那一次）。
+     */
+    const pushLyricsWallpaperPosition = React.useRef<(seconds: number) => void>(() => {});
+    pushLyricsWallpaperPosition.current = (seconds: number) => {
+        void publishLyricsWallpaper({
+            positionMs: Math.round(seconds * 1000),
+            playing: latest.current.playing,
+        });
+    };
+
+    /*
+     * 回到前台 / 原生对账结束：把**整包**补推一次（不只是位置）。
+     *
+     * 上面那个 effect 只对齐播放位置 —— 它管的是「别把过期位置写进锚点」。
+     * 主题那一份（高亮色 / 底色 / 主文本色 / 次色 / 主题 JSON）不在它的范围内，
+     * 而对账期间（后台 → 前台那一小段）所有推送都被 `publishLyricsWallpaper` 丢了，
+     * 之后没有任何一条路径会把它重新带上（理由见 `pushFullPacket` 上面那段）。
+     *
+     * 两个触发点：
+     *  1. 页面重新可见（`visibilitychange` → visible / Capacitor 的 `resume`）—— 走 WebView 的路径；
+     *  2. 原生对账从「进行中」变回「已完成」—— 这一拍才是丢掉写入的真正原因，
+     *     页面可见了但还在对账时补推是白补（照样被丢）。
+     *
+     * 不监听 `focus`：它在应用里点一下就触发一次，而整包带着整条时间轴（几十 KB），
+     * 换来的不过是「本来就在前台的两份数据再对一遍」。上面那个只推位置的 effect
+     * 才需要这么灵敏的触发点。
+     *
+     * 补推之后原生那边才重新拿到颜色表与主题 JSON：跟随样式的叠层页会重读颜色表，
+     * 精简样式那几个原生自绘的层则靠这一次整包推进会 `snapshot.stamp`。
+     */
+    React.useEffect(() => {
+        if (!active) return undefined;
+        const repush = (reason: string) => {
+            if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+            // 还在对账：这一推会被丢掉，等下面那个订阅的回调再补。
+            if (isNativePlaybackReconciling()) return;
+            if (performance.now() - lastFullPushAt.current < FOREGROUND_REPUSH_THROTTLE_MS) return;
+            lastFullPushAt.current = performance.now();
+            pushFullPacket.current();
+            console.log('[Wallpaper] 补推整包（含主题三元组）', { reason });
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') repush('visible');
+        };
+        const onResume = () => repush('resume');
+        document.addEventListener('visibilitychange', onVisibility);
+        window.addEventListener('resume', onResume);
+        const unsubscribe = subscribeNativePlaybackSync(() => {
+            // 只关心「对账结束」这一拍；对账开始时什么都没得推。
+            if (isNativePlaybackReconciling()) return;
+            repush('reconciled');
+        });
+        return () => {
+            document.removeEventListener('visibilitychange', onVisibility);
+            window.removeEventListener('resume', onResume);
+            unsubscribe();
+        };
+    }, [active]);
 
     // 关掉开关时清一次，别让壁纸停在过期的那一行上。
     React.useEffect(() => {
@@ -477,6 +622,17 @@ export const useLyricsWallpaperFeed = ({
     React.useEffect(() => {
         if (!active) return;
         const lines = lyrics?.lines ?? [];
+        /*
+         * 手上没有这首歌的歌词时**不要推空轴**。
+         *
+         * 原生兜底切歌（通知栏 / WebView 冻结期间的自动下一首）会自己向平台拉歌词、
+         * 就地发布时间轴（publishNativeTrack）。Web 这边认领后若歌词还没拉回来
+         * （在线歌词一趟网络往返，慢平台好几秒），照推的话带出去的是空表 ——
+         * 原生刚发对的那份就被清掉了，用户看到的就是「有概率切歌后壁纸没歌词」。
+         * 空着不推：原生那边的保持原状语义（lines=null 不动时间轴）继续生效，
+         * 等歌词真的到了（lines 变了）这一 effect 自然会再跑一次补上。
+         */
+        if (lines.length === 0 && (title ?? '').length > 0) return;
         const send = () => {
             void publishLyricsWallpaper({
                 title: title ?? '',
@@ -535,11 +691,19 @@ export const useLyricsWallpaperFeed = ({
                 playing,
             });
         };
+        // 回前台补推走的就是这一份闭包（见 pushFullPacket 上面的说明）。
+        pushFullPacket.current = send;
         /*
          * 换歌这一推按住，等主题落定再一次发（原因见 THEME_SETTLE_* 那两行注释）。
          *
          * 闸只在「换了一首歌」时开：歌词晚到、改设置这些**不**重开它 ——
          * 那些本来就该当场生效，按住反而成了「改了半天没反应」。
+         *
+         * ⚠️ 后台**不等**：`setTimeout` 在后台会被系统节流（重的直接冻住），
+         * 等主题那一拍可能一分钟后才跑，而这一分钟里多半又切了歌 —— cleanup 把定时器
+         * 清掉，这一首的整条时间轴（连同 AI 主题的 wordColors）就一次都没推出去，
+         * 桌面叠层一直挂着上一首的样子（用户原话：「AI 主题获取也需要走原生，
+         * 不然后台没有」）。前台那 650ms 是为了少打一次推送，后台没人看着，不值得赌。
          */
         const songKey = `${title ?? ''}\u0000${artist ?? ''}`;
         if (songGateRef.current.key !== songKey) songGateRef.current = { key: songKey, since: Date.now() };
@@ -551,7 +715,8 @@ export const useLyricsWallpaperFeed = ({
             || (Boolean(coverUrl) && !wallpaperCover)
             || Date.now() - since < THEME_SETTLE_MIN_MS
         );
-        if (!waiting) {
+        const pageHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        if (!waiting || pageHidden) {
             send();
             return;
         }
@@ -634,6 +799,25 @@ export const useLyricsWallpaperFeed = ({
             playing,
         });
     }, [active, playing]);
+
+    /*
+     * 心跳：只要壁纸推送开着就定期敲一下「我还活着」。
+     *
+     * 它与上面的锚点推送是两回事 —— 锚点只在换行 / 跳变时推，正常播放期间可能
+     * 几分钟都不吭声，指望不上当心跳。而原生那边「锚点 + 墙钟」只会一直往前走，
+     * 一旦写锚点的一方死透了（应用被划掉后台、WebView 销毁），没人踩刹车，
+     * 歌词就照最后一首歌的时间轴一路唱到头、进度条走满 —— 心跳超时就是那脚刹车：
+     * 壁纸与两层叠层收掉歌词和进度条，只留背景。暂停中也照敲：歌词冻在原地
+     * 是「用户看得见的状态」，不算没人管还在走。
+     *
+     * 只覆盖前台；退到后台 JS 定时器被挂起，由播放服务接管（音频还在放，
+     * 歌词就得继续走）。App 一死两条心跳一起停，超时后壁纸只剩背景。
+     */
+    React.useEffect(() => {
+        if (!active) return undefined;
+        const timer = window.setInterval(() => void wallpaperHeartbeat(), HEARTBEAT_MS);
+        return () => window.clearInterval(timer);
+    }, [active]);
 
     /*
      * 「音频**真的**在不在播」一变，就立刻把锚点同步过去。
@@ -750,6 +934,18 @@ export const useLyricsWallpaperFeed = ({
             // 主题要带：AI 主题的字级高亮（wordColors）就在这一份里，
             // 只推四个颜色的话小窗那边一点效果都没有。
             themeJson: themeJson || undefined,
+            /*
+             * 两个文本色也必须跟着走。
+             *
+             * 它们不在这份快照里 —— 原生把主文本色 / 次色存在自己那张
+             * `WallpaperThemePalette` 表里，而写那张表的**只有**整包这一推。
+             * 挂起前这一份是最后一次机会：只推 themeJson 的话，表里会只更新
+             * 主题 JSON、两个颜色还停在上一次（甚至从来没有过），
+             * 后台期间小窗和壁纸就只拿到半份颜色 —— 那正是「只有精简样式拿不到主题色」
+             * 会出现的形态（精简没有那层 WebView，全靠这张表）。
+             */
+            primaryColor: primaryColor || undefined,
+            secondaryColor: secondaryColor || undefined,
             positionMs: Math.round(getCurrentTime() * 1000),
             playing: latest.current.playing,
         });

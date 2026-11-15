@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { POPOVER_GUTTER, placePopover, type PopoverAlign, type PopoverPlace, type PopoverSide } from './popoverPlace';
+import { GlassLayer } from './GlassLayer';
 
 // src/components/modal/settings/kit/Popover.tsx
 // A layer that opens from a control: a menu, a grid of pictures, a colour picker. It is drawn in
@@ -161,9 +162,28 @@ export const Popover: React.FC<PopoverProps> = ({
                 // It holds focus without a mark of its own.
                 outline: 'none',
             }}
-            className={`st-pop st-scroll absolute z-30 flex flex-col overflow-y-auto overscroll-contain rounded-[10px] bg-[var(--st-menu)] text-[color:var(--st-t1)] shadow-[0_14px_36px_rgba(0,0,0,0.34),0_0_0_1px_var(--st-line2)] ${fill ? '' : 'w-max max-w-[calc(100%-16px)] '}${className}`}
+            // className 里同时出现 relative 和 absolute 会互相覆盖，popover 本来就是绝对定位弹出的，
+            // 交给 style 里的定位（edges）说了算，这里只补 isolate —— 玻璃层要独立成叠加上下文。
+            /*
+             * ★ pointer-events-auto 是必须的，别看它像个多余的一行。
+             *
+             * 这层被 portal 进 `.st-window`，而 `.st-window` 的祖先链上有一层是
+             * `PanelShell` 的 `pointer-events-none`（那是故意的：面板外壳本身不该挡住
+             * 底下的播放页，只有里面几个具体控件该接收事件）。
+             *
+             * pointer-events 是**继承**的：祖先设成 none、这里不显式写回 auto，
+             * 这个弹层就整体收不到指针事件 —— 表现是「内容能看，但手指滑不动，
+             * 滑不到底」。而脚本里设 scrollTop 是能滚的（脚本不受 pointer-events 影响），
+             * 所以只看代码或自动化测试会以为一切正常，只有真手指滑才露出来。
+             *
+             * 横屏时这个弹层高度被压到 191px、内容 346px，正好必须滚动，于是问题最明显。
+             */
+            className={`st-pop st-scroll isolate pointer-events-auto absolute z-30 flex flex-col overflow-y-auto overscroll-contain rounded-[10px] text-[color:var(--st-t1)] shadow-[0_14px_36px_rgba(0,0,0,0.34),0_0_0_1px_var(--st-line2)] ${fill ? '' : 'w-max max-w-[calc(100%-16px)] '}${className}`}
         >
-            {children}
+            <GlassLayer radius="rounded-[10px]" tint="bg-[var(--st-menu)]" />
+            <div className="relative z-10 flex flex-col">
+                {children}
+            </div>
         </div>,
         host,
     );

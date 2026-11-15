@@ -24,13 +24,15 @@ const PresetChips: React.FC<PresetChipsProps> = ({ presetIds, chosen, onChoose, 
 
     return (
         <div className="flex items-start gap-2">
-            <div className="flex flex-1 flex-wrap gap-1.5">
+            {/* 宽窗里预设换行排成两三行，一眼看全；手机上那样会占掉近百像素，把十段推子挤到
+                屏幕外，所以窄窗改成一行横向滚动 —— 滚动条藏起来，右边缘的截断本身就是「还有」。 */}
+            <div className="flex flex-1 flex-wrap gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-0.5 max-sm:[scrollbar-width:none] max-sm:[mask-image:linear-gradient(to_right,transparent_0,black_20px,black_calc(100%-20px),transparent_100%)] max-sm:[&::-webkit-scrollbar]:hidden">
                 {presetIds.map(presetId => (
                     <Button
                         key={presetId}
                         onClick={() => onChoose(presetId)}
                         aria-pressed={chosen === presetId}
-                        className={`st-t-fast h-7 whitespace-nowrap rounded-lg px-3 text-[13px] transition-[background-color,color,scale] active:scale-[0.96] ${chosen === presetId
+                        className={`st-t-fast h-7 shrink-0 whitespace-nowrap rounded-lg px-3 text-[13px] transition-[background-color,color,scale] active:scale-[0.96] ${chosen === presetId
                             ? 'bg-[var(--st-accent)] text-[color:var(--st-on-accent)]'
                             : 'bg-[var(--st-fill)] text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]'}`}
                     >

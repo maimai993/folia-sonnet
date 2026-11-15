@@ -1,6 +1,7 @@
 import React from 'react';
 import { Disc } from 'lucide-react';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
+import { resolveProxiedCollectionCover } from '../../../../services/onlineMusic/onlineCoverFallback';
 import { CARD_TITLE_ATTR, MORPH_FRAME_ATTR } from '../transitions/gridMorphContract';
 import {
     getGrid3DSliderDisplayName,
@@ -56,7 +57,7 @@ export const Grid3DSliderCard: React.FC<Grid3DSliderCardProps> = ({
                     style={{ width: coverSize, height: coverSize }}
                 >
                     {item.coverUrl && hasCover ? (
-                        <img src={getSizedCoverUrl(item.coverUrl, coverSize)} alt={typeof displayName === 'string' ? displayName : ''} loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none select-none" />
+                        <img src={getSizedCoverUrl(resolveProxiedCollectionCover(item.coverUrl), coverSize)} alt={typeof displayName === 'string' ? displayName : ''} loading="lazy" decoding="async" className="w-full h-full object-cover pointer-events-none select-none" />
                     ) : (
                         <div className="w-full h-full bg-zinc-800/20 flex items-center justify-center">
                             <Disc size={64} className="opacity-20" />

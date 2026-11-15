@@ -37,6 +37,8 @@ export type LibrarySuiteId = string;
  * | --- | --- | --- |
  * | play / enqueue | 条目本身可播放 | —（卡片 / 行上的动作） |
  * | play-scope / enqueue-scope | useCollectionActions 的 scope | play-filtered / enqueue-filtered |
+ * | collect / collect-scope | 宿主的播放端口给了 collectTracks（收进速记簿） | collect-filtered（只有 collect-scope） |
+ * | save-to-playlist | 宿主的播放端口给了 pickPlaylistFor，且 canPickPlaylistFor 说这首能进（应用的歌单选择器，含「我喜欢」） | —（卡片上的按钮） |
  * | filter | 浏览会话（总是可用） | —（命令面板的筛选框） |
  * | sort | 本地文件夹才排序 | sort-file-name / sort-modified-date / sort-album-track / sort-toggle-direction |
  * | reload | useCollectionActions 的 reload | reload-online-collection |
@@ -49,6 +51,7 @@ export type LibrarySuiteId = string;
  * | resync-all-folders | .resyncAllFolders | resync-all-folders |
  * | export-playlist | .exportPlaylist | export-playlist |
  * | edit-entity | .editEntity | edit-entity |
+ * | set-cover | .setCover | set-cover |
  * | organize-song-info | .organizeSongInfo | organize-song-info |
  * | match-song | .matchSong | — |
  * | add-to-playlist | .addToPlaylist | — |
@@ -64,6 +67,9 @@ export type LibraryActionId =
     | 'enqueue'
     | 'play-scope'
     | 'enqueue-scope'
+    | 'collect'
+    | 'collect-scope'
+    | 'save-to-playlist'
     | 'filter'
     | 'sort'
     | 'reload'
@@ -76,6 +82,7 @@ export type LibraryActionId =
     | 'resync-all-folders'
     | 'export-playlist'
     | 'edit-entity'
+    | 'set-cover'
     | 'organize-song-info'
     | 'match-song'
     | 'add-to-playlist'
@@ -99,8 +106,9 @@ export type LibraryActionId =
  * | directory-rescan-root / directory-remove-root / directory-clear-ignore | rescan-root / remove-root / clear-ignore |
  * | directory-manage-hidden / directory-toggle-hidden | manage-hidden / toggle-hidden |
  * | home-import-folder / home-refresh-folders / home-import-playlist | 本地列表的 import-folder / refresh-folders / import-playlist |
- * | home-scan-device-music | 本地列表的 scan-device-music（安卓原生才有的「扫描设备音乐库」，见 core/model/localHomeModel） |
+ * | home-manage-songs / home-scan-device-music | 本地列表的 manage-songs（管理歌曲，进本地曲库管理那层）/ scan-device-music（安卓原生才有的「扫描设备音乐库」，见 core/model/localHomeModel） |
  * | home-refresh-navidrome | Navidrome 列表的 refresh |
+ * | explore-collect / explore-save-to-playlist | 探索页歌曲卡片上的加入速记簿 / 收藏到歌单（宿主的播放端口给了 collectTracks / pickPlaylistFor，与集合页的 collect / save-to-playlist 同一对） |
  */
 export type LibraryHomeActionId =
     | 'directory-filter'
@@ -119,7 +127,9 @@ export type LibraryHomeActionId =
     | 'home-import-playlist'
     | 'home-manage-songs'
     | 'home-scan-device-music'
-    | 'home-refresh-navidrome';
+    | 'home-refresh-navidrome'
+    | 'explore-collect'
+    | 'explore-save-to-playlist';
 
 /**
  * 歌手页 surface 的语义动作（P4.2）。能力由 core/artist/artistSurface 从歌手资源的快照判定（纯规则），
@@ -135,6 +145,7 @@ export type LibraryHomeActionId =
  * | resume-sync | 专辑分页失败中断 | retry-albums |
  * | edit-entity | 本地歌手且描述带实体 id | edit-entity |
  * | open-album / open-artist | 有专辑 / 有热门歌曲（专辑卡、歌曲上的歌手 / 专辑链接） | — |
+ * | open-all-songs | 在线歌手、详情已到且热门歌曲之外还有歌（快照的 hasMoreSongs）；打开「全部歌曲」那一层集合 | open-all-songs |
  */
 export type LibraryArtistActionId =
     | 'play'
@@ -146,7 +157,8 @@ export type LibraryArtistActionId =
     | 'resume-sync'
     | 'edit-entity'
     | 'open-album'
-    | 'open-artist';
+    | 'open-artist'
+    | 'open-all-songs';
 
 /**
  * 某个 surface 上实际渲染它的那套 suite 声明的动作：core 动作与 suite 自己的局部动作
@@ -167,6 +179,35 @@ export type LibraryDeclaredActions = {
  * registry 把它还原成 React 组件类型再交给宿主渲染。
  */
 export type LibrarySurfaceComponent<Props> = (props: Props) => unknown;
+
+/**
+ * 横滑卡流的条目：首页那套「居中那张放大、两侧渐小变暗」的卡片流把它画成一张卡。
+ * 只放数据不放节点——契约在 core 层，这里不引 React 的节点类型；主标题按文案传。
+ */
+export type LibraryCardRailItem = {
+    id: string | number;
+    name: string;
+    coverUrl?: string;
+    description?: string;
+    summary?: string;
+    trackCount?: number;
+    trackIds?: string[];
+    type?: string;
+    isVirtual?: boolean;
+};
+
+/** 横滑卡流的入参：与首页那套卡流同形，`cardRail` 声明了它的 suite 才提供。 */
+export type LibraryCardRailProps = {
+    items: LibraryCardRailItem[];
+    focusedIndex: number;
+    onFocusedIndexChange: (index: number) => void;
+    onSelect: (item: LibraryCardRailItem, index: number) => void;
+    isInteractive?: boolean;
+    isLoading?: boolean;
+    emptyMessage?: string;
+    isDaylight: boolean;
+    hasFloatingPlayer?: boolean;
+};
 
 /**
  * 集合层的导航动作：宿主实现（压栈、返回、解析目录引用）。
@@ -238,6 +279,11 @@ export type LibraryArtistSurfaceProps = LibrarySurfaceBaseProps & LibraryCollect
     isDaylight: boolean;
     /** 本地歌手实体的编辑对话框（宿主挂载）。 */
     onEditEntity: (entityId: string) => void;
+    /**
+     * 压入一层集合（宿主的导航栈，与打开专辑同一条路）。歌手页用它打开「全部歌曲」：core 的 artistSongsCollection
+     * 给出那一层的描述（在线集合，type 'artist_songs'），suite 只调 useArtistView 的 openAllSongs。没给时没有这个入口。
+     */
+    onOpenCollection?: (collection: LibraryCollectionDescriptor) => void;
 };
 
 /** Host-owned navigation entry; suites present it without knowing its implementation. */
@@ -260,6 +306,11 @@ export type LibraryHomeSurfaceProps = LibrarySurfaceBaseProps & LibraryHomeData 
      */
     account: LibraryAccountController;
     onOpenGridView: (collection: LibraryCollectionDescriptor) => void;
+    /**
+     * 播放端口（宿主按首页模型装配，与集合页的同形）。首页自己的播放仍走 onPlaySong 那几个回调；
+     * 用到它的是探索页歌曲卡片上的「加入速记簿」「收藏到歌单」（explore-collect / explore-save-to-playlist）。
+     */
+    playback: LibraryPlaybackPort;
     /** 本地目录的批量动作控制器（宿主装配端口后创建，见 library/app/useLibraryDirectoryBatchController）。 */
     directoryActions?: LibraryDirectoryBatchController;
     /** 首页的资源与控制器（宿主创建，见 library/app/useLibraryHomeResources）；suite 只订阅。 */
@@ -446,4 +497,10 @@ export type LibrarySuiteManifest = {
      * 那套 suite 的动作可用。不声明则没有外观动作（grid 与 TUI 都不声明：网格的局部动作走 grid surface）。
      */
     chromeActions?: readonly LibrarySuiteChromeActionMeta[];
+    /**
+     * 供其它界面复用的独立部件：不挂 surface、不带动作表，props 由部件自己定。
+     * 目前只有首页那套横滑卡流——洛雪工作台的歌单 / 电台 / 专辑 / 榜单页要的正是它，
+     * 宿主只能经 registry 取到，所以这里给它一个声明位。
+     */
+    cardRail?: LibrarySurfaceComponent<LibraryCardRailProps>;
 };

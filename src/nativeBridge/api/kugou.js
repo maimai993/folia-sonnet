@@ -1,5 +1,6 @@
 import CryptoJS from '../vendor/crypto-es.mjs';
 import { noteLibraryStep } from './libraryTrace.js';
+import { clearSessionOnLogout } from './kugou/logout.js';
 import {
   clearCookieCache,
   getKGCookie as readKGCookie,
@@ -74,6 +75,8 @@ async function saveKGLoginPersist(patch) {
 }
 
 async function restoreKGLoginPersistIfNeeded() {
+  const generation = kgSessionGeneration;
+  if (kgSignedOut) return false;
   let header = '';
   try { header = await getKGCookie(); } catch (_) {}
   if (kgCookieUserId(header) && kgCookieToken(header)) return false;
@@ -105,8 +108,10 @@ async function restoreKGLoginPersistIfNeeded() {
   if (stored.KUGOU_API_WEBGL) cookiePatch.KUGOU_API_WEBGL = String(stored.KUGOU_API_WEBGL);
   const kuGoo = stored.KuGoo || buildKuGooCookieValue(cookiePatch);
   if (kuGoo) cookiePatch.KuGoo = kuGoo;
+  if (kgSignedOut || generation !== kgSessionGeneration) return false;
   try {
     await setBrowserCookies('https://www.kugou.com/', cookiePatch);
+    if (kgSignedOut || generation !== kgSessionGeneration) return false;
     await setBrowserCookies('https://m.kugou.com/', cookiePatch);
   } catch (_) {
     return false;
@@ -116,8 +121,11 @@ async function restoreKGLoginPersistIfNeeded() {
 }
 
 export async function ensureKGCookie() {
+  if (kgSignedOut) return '';
+  const generation = kgSessionGeneration;
   clearCookieCache();
   let header = await getKGCookie();
+  if (kgSignedOut || generation !== kgSessionGeneration) return '';
   if (kgCookieUserId(header) && kgCookieToken(header)) return header;
   const restored = await restoreKGLoginPersistIfNeeded();
   if (!restored) return header;
@@ -126,6 +134,7 @@ export async function ensureKGCookie() {
 }
 
 async function persistKGLoginCookies(patch) {
+  const generation = kgSessionGeneration;
   const kuGoo = buildKuGooCookieValue(patch);
   const cookiePatch = Object.assign(
     {},
@@ -133,12 +142,18 @@ async function persistKGLoginCookies(patch) {
     patch || {},
   );
   if (kuGoo && !cookiePatch.KuGoo) cookiePatch.KuGoo = kuGoo;
+  if (generation !== kgSessionGeneration) return false;
+  kgSignedOut = false;
   try {
     await setBrowserCookies('https://www.kugou.com/', cookiePatch);
+    if (generation !== kgSessionGeneration) return false;
     await setBrowserCookies('https://m.kugou.com/', cookiePatch);
   } catch (_) {}
+  if (generation !== kgSessionGeneration) return false;
   await saveProviderCookie('kg', cookiePatch);
+  if (generation !== kgSessionGeneration) return false;
   await saveKGLoginPersist(cookiePatch);
+  return generation === kgSessionGeneration;
 }
 /** Official KuGouMusicApi song_url hardcoded clientver for /v5/url */
 const KG_TRACKER_CLIENTVER = 11430;
@@ -189,7 +204,24 @@ let kgVipSessionCache = {
   appToken: '', sourceToken: '', authAt: 0, at: 0,
 };
 let kgAuthRefreshPromise = null;
+let kgSessionGeneration = 0;
+let kgSignedOut = false;
 const kgPlayUrlCache = new Map();
+
+// 先使旧异步答复失效，再清持久化来源；设备身份与迁平台标记不属于账号。
+export async function clearKGSessionOnLogout() {
+  kgSessionGeneration += 1;
+  kgSignedOut = true;
+  kgSessionCache = { key: '', at: 0, session: null };
+  kgVipSessionCache = {
+    userId: '', vipType: 0, vipToken: '', vipLabel: '', expireTime: '', isVip: false,
+    appToken: '', sourceToken: '', authAt: 0, at: 0,
+  };
+  kgAuthRefreshPromise = null;
+  kgVipTokenRefreshAt = 0;
+  kgPlayUrlCache.clear();
+  await clearSessionOnLogout();
+}
 
 function md5(text) {
   return CryptoJS.MD5(String(text || '')).toString();
@@ -405,6 +437,8 @@ function buildKGAuthHeaders(token) {
 }
 
 async function loadKGVipSessionCache(userId) {
+  const generation = kgSessionGeneration;
+  if (kgSignedOut) return null;
   userId = String(userId || '').trim();
   if (!userId) return null;
   if (kgVipSessionCache.userId === userId && (Date.now() - kgVipSessionCache.at) < KG_VIP_STORAGE_TTL_MS) {
@@ -413,6 +447,7 @@ async function loadKGVipSessionCache(userId) {
   try {
     const stored = await chrome.storage.local.get(['kgVipSession']);
     const data = stored && stored.kgVipSession;
+    if (kgSignedOut || generation !== kgSessionGeneration) return null;
     if (data && String(data.userId || '') === userId && (Date.now() - Number(data.at || 0)) < KG_VIP_STORAGE_TTL_MS) {
       kgVipSessionCache = {
         userId,
@@ -433,16 +468,20 @@ async function loadKGVipSessionCache(userId) {
 }
 
 async function clearKGVipAppToken(userId) {
+  const generation = kgSessionGeneration;
+  if (kgSignedOut) return;
   userId = String(userId || '').trim();
   if (!userId) return;
   const prev = await loadKGVipSessionCache(userId);
-  if (!prev || !prev.appToken) return;
+  if (!prev || !prev.appToken || kgSignedOut || generation !== kgSessionGeneration) return;
   const next = Object.assign({}, prev, { appToken: '', sourceToken: '', authAt: 0, at: Date.now() });
   kgVipSessionCache = next;
   try { await chrome.storage.local.set({ kgVipSession: next }); } catch (_) {}
 }
 
 async function saveKGVipSessionCache(userId, patch) {
+  const generation = kgSessionGeneration;
+  if (kgSignedOut) return null;
   userId = String(userId || '').trim();
   if (!userId || !patch) return;
   const prev = (await loadKGVipSessionCache(userId)) || {
@@ -460,6 +499,7 @@ async function saveKGVipSessionCache(userId, patch) {
     isVip: !!(patch.isVip || prev.isVip || Number(patch.vipType) > 0 || prev.vipToken || patch.vipToken),
     at: Date.now(),
   };
+  if (kgSignedOut || generation !== kgSessionGeneration) return null;
   if (!next.isVip && next.vipToken) next.isVip = true;
   if (next.isVip && !next.vipType) next.vipType = 6;
   if (next.isVip && !next.vipLabel) next.vipLabel = 'VIP';
@@ -539,6 +579,8 @@ async function enrichKGCookieHeader(cookieHeader, opts) {
 }
 
 async function refreshKGLoginByToken(cookieHeader) {
+  const generation = kgSessionGeneration;
+  if (kgSignedOut) return null;
   cookieHeader = String(cookieHeader || '');
   const userId = kgCookieUserId(cookieHeader);
   // Always use raw web/KuGoo token as refresh input (never use cached android appToken).
@@ -629,6 +671,7 @@ async function refreshKGLoginByToken(cookieHeader) {
           keys: Object.keys(data).slice(0, 16).join(','),
         });
       }
+      if (kgSignedOut || generation !== kgSessionGeneration) return null;
       const nextToken = String(data.token || data.t || '').trim();
       const vipToken = String(data.vip_token || data.vipToken || '').trim();
       const vipType = Number(data.vip_type || data.vipType || 0) || 0;
@@ -641,6 +684,7 @@ async function refreshKGLoginByToken(cookieHeader) {
         if (vipType) cookiePatch.vip_type = String(vipType);
         if (Object.keys(cookiePatch).length) await setBrowserCookies('https://www.kugou.com/', cookiePatch);
       } catch (_) {}
+      if (kgSignedOut || generation !== kgSessionGeneration) return null;
       await saveKGVipSessionCache(userId, {
         appToken: nextToken || '',
         sourceToken: token,
@@ -706,8 +750,9 @@ async function ensureKGAndroidAuth(cookieHeader, opts) {
     return { cookieHeader: enriched, vipToken, token: cookieToken, refreshed: false, hasAppToken: !!appToken };
   }
   if (!kgAuthRefreshPromise) {
-    kgAuthRefreshPromise = refreshKGLoginByToken(cookieHeader)
-      .finally(() => { kgAuthRefreshPromise = null; });
+    const pending = refreshKGLoginByToken(cookieHeader)
+      .finally(() => { if (kgAuthRefreshPromise === pending) kgAuthRefreshPromise = null; });
+    kgAuthRefreshPromise = pending;
   }
   const refreshed = await kgAuthRefreshPromise;
   const nextCached = await loadKGVipSessionCache(userId);
@@ -4618,6 +4663,7 @@ export async function handleKGLoginQrCreate(key) {
  * status: 0 过期, 1 等待扫码, 2 待确认, 4 成功(返回 token)
  */
 export async function handleKGLoginQrCheck(key) {
+  const generation = kgSessionGeneration;
   key = String(key || '').trim();
   if (!key) return { provider: 'kg', status: 0, code: 0, message: '缺少二维码 key' };
   const body = await kgFetchWebSignedGet('https://login-user.kugou.com', '/v2/get_userinfo_qrcode', {
@@ -4642,6 +4688,7 @@ export async function handleKGLoginQrCheck(key) {
       error_code: body && body.error_code,
     };
   }
+  if (generation !== kgSessionGeneration) return { provider: 'kg', status: 0, code: 0, loggedIn: false };
   const userId = String(data.userid || data.user_id || data.KugooID || '').trim();
   const token = String(data.token || data.t || '').trim();
   if (!userId || !token) {
@@ -4669,9 +4716,11 @@ export async function handleKGLoginQrCheck(key) {
   if (avatar) cookiePatch.pic = avatar;
   if (vipToken) cookiePatch.vip_token = vipToken;
   if (vipType) cookiePatch.vip_type = String(vipType);
+  let saved = false;
   try {
-    await persistKGLoginCookies(cookiePatch);
+    saved = await persistKGLoginCookies(cookiePatch);
   } catch (_) {}
+  if (!saved || generation !== kgSessionGeneration) return { provider: 'kg', status: 0, code: 0, loggedIn: false };
   // QR token is android-compatible (appid 1005) — store as appToken for cloudlist/VIP.
   await saveKGVipSessionCache(userId, {
     appToken: token,
@@ -4684,6 +4733,8 @@ export async function handleKGLoginQrCheck(key) {
   });
   const cookieHeader = await ensureKGCookie();
   const info = await getKGLoginStatus(cookieHeader);
+  const hasVipToken = !!resolveKGEffectiveVipToken(cookieHeader, await loadKGVipSessionCache(userId));
+  if (generation !== kgSessionGeneration) return { provider: 'kg', status: 0, code: 0, loggedIn: false };
   return {
     provider: 'kg',
     status: 4,
@@ -4693,7 +4744,7 @@ export async function handleKGLoginQrCheck(key) {
     userId,
     token,
     hasAppToken: true,
-    hasVipToken: !!resolveKGEffectiveVipToken(cookieHeader, await loadKGVipSessionCache(userId)),
+    hasVipToken,
     ...info,
     nickname: info.nickname || nickname || `酷狗 ${userId}`,
     avatar: info.avatar || avatar,
@@ -4710,9 +4761,11 @@ export async function handleKGLoginCookie(raw) {
       message: '酷狗 cookie 缺少 userid 或 token',
     };
   }
-  await persistKGLoginCookies(normalized);
+  const generation = kgSessionGeneration;
+  if (!await persistKGLoginCookies(normalized)) return { provider: 'kg', loggedIn: false, saved: false };
   const cookieHeader = await ensureKGCookie();
   const info = await getKGLoginStatus(cookieHeader);
+  if (generation !== kgSessionGeneration) return { provider: 'kg', loggedIn: false, saved: false };
   return { ...info, saved: info.loggedIn, hasCookie: info.loggedIn };
 }
 

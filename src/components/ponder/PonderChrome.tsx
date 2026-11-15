@@ -80,7 +80,13 @@ const PonderChrome: React.FC<PonderChromeProps> = ({
 
     return (
         <>
-            <div className="absolute left-6 right-5 top-0 flex h-[60px] items-center justify-between gap-4">
+            {/* 顶部条要避开状态栏：安卓上沉浸到屏幕顶端，top-0 会把「退出」顶进状态栏里点不到。
+                走 --folia-safe-area-top（原生侧量好写进 <html>）——安卓 WebView 的 env() 恒为 0，
+                直接写 env() 在手机上不生效（见 androidPhoneFit.css ⑥ 开头的说明）。 */}
+            <div
+                data-folia-safe-top="shift"
+                className="absolute left-6 right-5 top-0 flex h-[60px] items-center justify-between gap-4"
+            >
                 <div className="flex min-w-0 items-center gap-2 text-sm text-[color:var(--st-t2)]">
                     <Lightbulb size={16} className="shrink-0" />
                     <span className="shrink-0">{t('ponder.title')}</span>

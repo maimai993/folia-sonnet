@@ -25,7 +25,7 @@ const collectSourceFiles = async (relativeDir: string): Promise<string[]> => {
     return files.flat();
 };
 
-describe('lyrics architecture', () => {
+describe('D113 lyrics architecture', () => {
     it('keeps Netease call sites on the shared processing helper', async () => {
         const directProcessingCallSites = [
             'src/services/onlineMusic/netease/neteaseProvider.ts',
@@ -77,7 +77,8 @@ describe('lyrics architecture', () => {
         }
 
         expect(offenders).toEqual([]);
-    });
+        // 要把 src 下每个 .ts(x) 读一遍，默认 5 秒在慢机器上不够。
+    }, 120_000);
 
     it('keeps worker and compatibility wrappers wired to parserCore', async () => {
         const workerContent = await readRepoFile('src/workers/lyricsParser.worker.ts');
@@ -98,7 +99,9 @@ describe('lyrics architecture', () => {
         ];
 
         for (const file of callers) {
-            expect(await readRepoFile(file), file).toMatch(/alternateArtist: \(\) => omni\.getAlternateArtistName\(/);
+            const content = await readRepoFile(file);
+            expect(content, file).toMatch(/alternateArtist: \(\) => omni\.getAlternateArtistName\(/);
+            expect(content, file).toMatch(/searchAlias: \(\) => omni\.getLyricSearchAlias\(/);
         }
     });
 

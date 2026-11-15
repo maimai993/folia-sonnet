@@ -37,6 +37,11 @@ export interface ParsedVersion {
     build: number;
 }
 
+// 测试版的写法：`0.7.25.dev2` / `0.7.25.1.dev2`。dev 后面那个序号只是给人看的，
+// Android 的 versionCode 由 package.json 的 androidVersionCode 显式给出 —— 名字里推不出来
+// （code 的最后一位是这一轮测试版在数，和 dev 序号不是同一个计数器）。
+export const DEV_VERSION_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?\.dev(\d+)$/;
+
 export function parseVersion(version: string): ParsedVersion | null {
     const matched = VERSION_PATTERN.exec(String(version).trim());
     if (!matched) return null;
@@ -48,13 +53,17 @@ export function parseVersion(version: string): ParsedVersion | null {
     };
 }
 
-// 与 android/app/build.gradle 同一套算法：patch 和 build 超过 99 会被截断。
+// 与 android/app/build.gradle 的 versionCodeOf 一个字不差：**major 不参与**，
+// minor 占 10^6，patch 占 10^4，build 占 10^0，patch / build 超过 99 截断。
+//
+// 位宽必须和 gradle 对齐。`0.7.27.2` 在 gradle 里是 `7*1000000 + 27*10000 + 2 = 7270002`；
+// 这里早先是按 100/1 进位的（`minor*100000 + patch*100 + build`），算出 702702 ——
+// 差一个数量级，门禁于是「通过」了一个系统会判成降级安装的号。
 export function versionCodeOf(version: string): number {
     const parsed = parseVersion(version);
     if (!parsed) return 0;
-    return parsed.major * 1000000
-        + parsed.minor * 100000
-        + Math.min(parsed.patch, 99) * 100
+    return parsed.minor * 1000000
+        + Math.min(parsed.patch, 99) * 10000
         + Math.min(parsed.build, 99);
 }
 
@@ -120,7 +129,41 @@ export function checkVersionPolicy(root: string = repoRoot): string[] {
     }
 
     // 3. 版本号：格式、Android 的 versionCode 推导、与锁文件顶层版本一致。
-    failures.push(...versionNumberIssues(pkg.version));
+    // 测试版的名字放 displayVersion（桌面打包只吃三段 semver，`.devN` 塞进 version 会被改写），
+    // 所以判定看的是 displayVersion ?? version；version 本身必须仍是三段的数字。
+    const declaredVersion = typeof pkg.displayVersion === 'string' && pkg.displayVersion.trim()
+        ? String(pkg.displayVersion).trim()
+        : String(pkg.version).trim();
+    const devMatched = DEV_VERSION_PATTERN.exec(declaredVersion);
+    if (devMatched) {
+        /*
+         * 测试版：code 显式给，且必须落在「正式码 × 10 + 1..999」这个槽里 ——
+         * 它一定比同一个版本号的正式版高（覆盖安装不会 INSTALL_FAILED_VERSION_DOWNGRADE），
+         * 又撞不到下一个小版本的正式码。上界留到 +999 而不是 +9：dev 后面的序号和这最后两位
+         * 不是同一个计数器（写 dev2 的那一包可能正是第 1 个测试包），要求它们相等只会逼着改名字。
+         * 超过 10 位的那天再说。
+         */
+        failures.push(...versionNumberIssues(pkg.version));
+        const base = versionCodeOf(String(pkg.version));
+        const code = pkg.androidVersionCode;
+        if (!Number.isInteger(code)) {
+            failures.push('测试版（displayVersion 带 devN）必须在 package.json 里写 androidVersionCode：名字里推不出它');
+        } else if (code <= base * 10 || code > base * 10 + 999) {
+            failures.push(`androidVersionCode ${code} 不在 ${base * 10 + 1}..${base * 10 + 999} 之间（正式码 ${base} 乘 10 再加序列）`);
+        }
+        const declaredBase = declaredVersion.replace(/\.dev\d+$/, '');
+        if (declaredBase !== String(pkg.version).trim()) {
+            failures.push(`displayVersion 的数字部分是 ${declaredBase}，与 version ${pkg.version} 对不上`);
+        }
+    } else {
+        if (pkg.displayVersion !== undefined) {
+            failures.push('displayVersion 只给测试版用（写成 A.B.C.devN）；正式版不要写');
+        }
+        if (pkg.androidVersionCode !== undefined) {
+            failures.push('正式版不该写 androidVersionCode：它由版本号推导（见 versionCodeOf）');
+        }
+        failures.push(...versionNumberIssues(pkg.version));
+    }
     if (exists('package-lock.json')) {
         const lock = readJson('package-lock.json');
         const lockVersion = lock.packages?.['']?.version ?? lock.version;
@@ -139,7 +182,10 @@ function main(): void {
         return;
     }
     const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-    console.log(`版本约束检查通过：${pkg.version} → versionCode ${versionCodeOf(pkg.version)}；平台依赖 ${PLATFORM_DEPS.length} 个钉死，Docker 部署版本一致`);
+    // 测试版的 code 在 package.json 里显式写着，名字推不出来（见第 3 条检查）。
+    const code = Number.isInteger(pkg.androidVersionCode) ? pkg.androidVersionCode : versionCodeOf(pkg.version);
+    const shownVersion = typeof pkg.displayVersion === 'string' && pkg.displayVersion.trim() ? pkg.displayVersion.trim() : pkg.version;
+    console.log(`版本约束检查通过：${shownVersion} → versionCode ${code}；平台依赖 ${PLATFORM_DEPS.length} 个钉死，Docker 部署版本一致`);
 }
 
 // 只有直接 `node ci/checkVersionPolicy.ts` 才跑检查；被单测 import 时不产生副作用。

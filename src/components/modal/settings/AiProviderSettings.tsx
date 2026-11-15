@@ -1,5 +1,5 @@
 import React, { useState, useSyncExternalStore } from 'react';
-import { Check, Cloud, ExternalLink, Loader2, Sparkles, X } from 'lucide-react';
+import { Check, Cloud, Copy, ExternalLink, Loader2, RefreshCw, Sparkles, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
     readAiSettings,
@@ -26,12 +26,18 @@ import {
     subscribeDirectorState,
     updateDirectorSettings,
 } from '../../../services/lyricDirector/state';
-import { listDirectorModes } from '../../../services/lyricDirector/catalog';
+import { listDirectorModes, describeHostDirectorMode } from '../../../services/lyricDirector/catalog';
+import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '@/components/visualizer/registry';
 import {
     testConfiguredAiConnection,
     type AiConnectionTestResult,
 } from '../../../services/aiThemeClient';
 import { Button, TextField } from '@/components/ui';
+import { ensureMachineCode } from '../../../services/foliaMachineCode';
+import { fetchFoliaCredits, type FoliaCredits } from '../../../services/foliaCredits';
+import { FOLIA_WORK_SHARE_PAGE_URL } from '../../../../shared/ai/foliawork.mjs';
+import { openExternalUrl } from '../../../utils/openExternalUrl';
+import { FoliaCheckinButton, copyMachineCode } from './pages/ai/FoliaCreditsRow';
 
 // src/components/modal/settings/AiProviderSettings.tsx
 // 安卓/网页版没有 Electron 主进程，AI 凭据由用户自己填并保存在本机 —— 这是「AI 主题」在
@@ -92,6 +98,20 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     useSyncExternalStore(subscribeDirectorState, getDirectorStateVersion);
     const directorSettings = readDirectorSettings();
 
+    /*
+     * 剩余额度：进来问一次，「刷新」再问一次。
+     * 四种状态要分清 —— 没绑定 / 已停用 / 查不到 / 有数字，别糊成一句话。
+     */
+    const [creditsState, setCreditsState] = React.useState<'loading' | 'ready' | 'unknown'>('loading');
+    const [credits, setCredits] = React.useState<FoliaCredits | null>(null);
+    const refreshCredits = async (): Promise<void> => {
+        setCreditsState('loading');
+        const result = await fetchFoliaCredits();
+        setCredits(result);
+        setCreditsState(result === null ? 'unknown' : 'ready');
+    };
+    React.useEffect(() => { void refreshCredits(); }, []);
+
     // 即改即存：没有「保存」按钮，避免用户填完忘了提交。
     const update = (patch: Parameters<typeof writeAiSettings>[0]) => {
         setSettings(writeAiSettings(patch));
@@ -143,6 +163,18 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     const ghostButtonClass = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-default';
     const rowDividerClass = isDaylight ? 'border-black/5' : 'border-white/5';
 
+    /*
+     * 这份清单要能划掉**所有**样式，包括 mod 投稿的那些（mod:<modId>:<id>）。catalog 在叶子层，
+     * 不认识注册表，所以由这里把 mod 的条目递进去；mod 名字取 entry 的 labelKey/fallback，
+     * 与随机池同一个来源，两边叫法不会打架。
+     */
+    const modModes = VISUALIZER_REGISTRY.filter((entry) => entry.mode.startsWith('mod:'));
+    const modModeIds = new Set(modModes.map((entry) => entry.mode));
+    const directorModes = listDirectorModes(
+        (key) => t(key),
+        modModes.map((entry) => describeHostDirectorMode(entry.mode, getVisualizerModeLabel(entry.mode, t))),
+    );
+
     /* The two switches the AI lyric animation director answers to. They sit
      * under the credential because that is what gates them: no key configured,
      * nothing is ever decided. */
@@ -186,6 +218,12 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     );
 
     const provider = settings.provider;
+    /*
+     * 免费渠道（foliawork）：密钥是本机的机器码，模型与地址写死。
+     * 其余服务商照旧 —— 这是「默认选免费」，不是「只能免费」。
+     */
+    const isFreeChannel = provider === 'foliawork';
+    const machineCode = isFreeChannel ? ensureMachineCode() : '';
     const preset = aiPresetOf(provider);
     const protocol = aiProtocolOf(provider);
     const endpoints = preset?.endpoints ?? [];
@@ -195,6 +233,15 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     const activeEndpoint = endpoints.find((endpoint) => endpoint.baseUrl === currentBaseUrl);
     const consoleUrl = PROVIDER_CONSOLE_URLS[provider];
     const apiKey = provider === 'gemini' ? settings.geminiApiKey : settings.apiKeys[provider] ?? '';
+
+    const creditsLabel = ((): string => {
+        if (creditsState === 'loading') return t('options.aiCreditsLoading');
+        if (creditsState === 'unknown') return t('options.aiCreditsUnknown');
+        if (!credits?.bound) return t('options.aiCreditsUnbound');
+        if (credits.disabled) return t('options.aiCreditsDisabled');
+        if (credits.remaining === null) return t('options.aiCreditsUnlimited');
+        return t('options.aiCreditsRemaining', { remaining: credits.remaining });
+    })();
 
     return (
         <div className={`rounded-xl border overflow-hidden ${settingsCardClass}`}>
@@ -263,6 +310,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                     t('options.geminiApiUrlDesc'),
                 )}
 
+                {!isFreeChannel && (
                 <div className="space-y-1.5 text-left">
                     <label className="block space-y-1">
                         <span className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
@@ -295,8 +343,69 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                         </a>
                     )}
                 </div>
+                )}
 
-                {protocol !== 'gemini' && renderRow(
+                {/* 免费渠道：机器码（可复制）+ 剩余额度 + 贡献账号 */}
+                {isFreeChannel && (
+                    <>
+                        <div className="space-y-1.5 text-left">
+                            <div className="flex items-center justify-between gap-4">
+                                <span className="text-sm opacity-70 shrink-0" style={{ color: 'var(--text-secondary)' }}>
+                                    {t('options.aiMachineCodeTitle')}
+                                </span>
+                                <code className="text-[11px] break-all text-right select-all" style={{ color: 'var(--text-primary)' }}>
+                                    {machineCode}
+                                </code>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <Button
+                                    onClick={() => void copyMachineCode(machineCode, t)}
+                                    className={ghostButtonClass}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <Copy size={13} />
+                                    {t('options.aiMachineCodeCopy')}
+                                </Button>
+                                <Button
+                                    onClick={() => void refreshCredits()}
+                                    className={ghostButtonClass}
+                                    style={{ color: 'var(--text-primary)' }}
+                                >
+                                    <RefreshCw size={13} className={creditsState === 'loading' ? 'animate-spin' : ''} />
+                                    {t('options.aiCreditsRefresh')}
+                                </Button>
+                            </div>
+                            <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.aiMachineCodeHint')}
+                            </span>
+                        </div>
+                        {renderRow(
+                            t('options.aiCreditsTitle'),
+                            <span className="text-[11px] opacity-70" style={{ color: 'var(--text-primary)' }}>{creditsLabel}</span>,
+                            t('options.aiCreditsNote'),
+                        )}
+                        {/*
+                            签到：只有确认「已经绑定」才让点（没绑就签到等于对着空气点按钮），
+                            点开是内嵌的 Turnstile 小框，通过后由 koishi 那边加积分。
+                        */}
+                        <FoliaCheckinButton credits={credits} onCheckedIn={() => { void refreshCredits(); }} />
+                        <div className="space-y-1.5 text-left">
+                            <Button
+                                onClick={() => { void openExternalUrl(FOLIA_WORK_SHARE_PAGE_URL); }}
+                                className={ghostButtonClass}
+                                style={{ color: 'var(--text-primary)' }}
+                            >
+                                <ExternalLink size={13} />
+                                {t('options.aiShareAccountAction')}
+                            </Button>
+                            <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.aiShareAccountWarning')}
+                            </span>
+                        </div>
+                    </>
+                )}
+
+                {!isFreeChannel && protocol !== 'gemini' && renderRow(
                     t('options.aiModel'),
                     <TextField
                         type="text"
@@ -324,7 +433,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                         style={{ color: 'var(--text-primary)' }}
                     />,
                 )}
-                {protocol === 'openai' && preset?.stream && (
+                {!isFreeChannel && protocol === 'openai' && preset?.stream && (
                     <div className="flex items-center justify-between gap-4 text-left">
                         <div className="space-y-1 min-w-0">
                             <div className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
@@ -399,7 +508,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                         {t('aiDirector.blockedModesDesc')}
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {listDirectorModes((key) => t(key)).map((mode) => {
+                        {directorModes.map((mode) => {
                             const blocked = directorSettings.blockedModes.includes(mode.id);
                             return (
                                 <Button
@@ -407,7 +516,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                                     aria-pressed={blocked}
                                     onClick={() => toggleBlockedMode(mode.id)}
                                     title={mode.hint}
-                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${isDaylight ? 'border-black/15' : 'border-white/15'} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
+                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {mode.label}

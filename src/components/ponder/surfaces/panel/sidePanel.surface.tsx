@@ -28,7 +28,6 @@ import {
     Shuffle,
     SkipBack,
     SkipForward,
-    SlidersHorizontal,
     Sparkles,
     Star,
     Sun,
@@ -186,7 +185,7 @@ const Segments: React.FC<Paint & { count: number; active: number; className: str
 );
 
 /**
- * 控制页，从上到下：音量一行；循环、智能过渡、音频效果器三格；歌词样式、背景类型两行（动画强度在按钮右边，其余小控件在按钮下面）；
+ * 控制页，从上到下：音量一行；循环、智能过渡两格；歌词样式、背景类型两行（动画强度在按钮右边，其余小控件在按钮下面）；
  * 「播放页透明背景」一行开关；一道线；主题来源一行；当前主题一行。
  */
 const ControlsRows: React.FC<Paint> = ({ accent, line, outline }) => (
@@ -199,9 +198,9 @@ const ControlsRows: React.FC<Paint> = ({ accent, line, outline }) => (
             <span className="h-[18%] w-[8%] shrink-0 rounded-full opacity-60" style={{ backgroundColor: line }} />
         </div>
 
-        {/* 三格：图标在上，名字在下。前两格点一下就开关，第三格点开是一个窗口，所以右上角多一个箭头。 */}
-        <div data-ponder-panel-sound-tiles className="grid grid-cols-3 gap-[2.4%]" style={relativeRectStyle(C.soundTiles)}>
-            {[Repeat, Blend, SlidersHorizontal].map((Icon, index) => (
+        {/* 两格：图标在上，名字在下。两格点一下就开关。 */}
+        <div data-ponder-panel-sound-tiles className="grid grid-cols-2 gap-[2.4%]" style={relativeRectStyle(C.soundTiles)}>
+            {[Repeat, Blend].map((Icon, index) => (
                 <span
                     key={index}
                     data-ponder-panel-sound-tile
@@ -210,7 +209,6 @@ const ControlsRows: React.FC<Paint> = ({ accent, line, outline }) => (
                 >
                     <Icon className="h-[30%] w-auto self-start opacity-65" />
                     <span className="h-[9%] w-[62%] rounded-full" style={{ backgroundColor: outline }} />
-                    {index === 2 && <ChevronRight className="absolute right-[8%] top-[14%] h-[22%] w-auto opacity-40" />}
                 </span>
             ))}
         </div>

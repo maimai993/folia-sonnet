@@ -39,6 +39,8 @@ const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string
     bodian: { label: '波', iconUrl: getProviderAppIcon('bodian'), className: 'bg-teal-600' },
     feiniu: { label: '飞', iconUrl: getProviderAppIcon('feiniu'), className: 'bg-zinc-600' },
     qishui: { label: '汽', iconUrl: getProviderAppIcon('qishui'), className: 'bg-cyan-600' },
+    // 洛雪免登录，也没有账号头像：亮它自己的应用图标。
+    lxmusic: { label: '雪', iconUrl: getProviderAppIcon('lxmusic'), className: 'bg-zinc-600' },
 };
 
 // Providers without a builtin badge (Folium mod sources) get their name's first letter, like the
@@ -51,7 +53,7 @@ const fallbackBadge = (provider: ProviderAccountSummary) => ({
 const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {
     const badge = AVATAR_BADGE_BY_PROVIDER[provider.providerId] ?? fallbackBadge(provider);
     return provider.user?.avatarUrl
-        ? <img src={typeof window !== 'undefined' && window.electron ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
+        ? <img src={typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
         : (
             <span
                 aria-label={provider.displayName}

@@ -35,7 +35,8 @@ export const QuickControlChip: React.FC<QuickControlChipProps> = ({
     buttonRef,
     expanded,
 }) => (
-    <Tooltip text={title} className="flex">
+    // `shrink-0` 给外层：参数那一条是横向滚动容器，被压窄的话 chip 会挤成一团。
+    <Tooltip text={title} className="flex shrink-0">
         <Button
             ref={buttonRef}
             onClick={onClick}

@@ -131,6 +131,16 @@ row 数量由可用高度决定：
 
 然后 Partita 会把连续的 `layoutUnit` 切成不均匀的 chunks。这里故意不做完全平均，因为 Partita 想要的是手写乐谱一样的错落感，而不是机械网格。
 
+### 窄屏宽度兜底
+
+高度分行历史上完全不看视口宽度，行是 `whitespace-nowrap` 居中排，窄视口（手机竖屏）下长句会超出屏幕被 `VisualizerShell` 的 `overflow-hidden` 裁掉。因此切完 chunks 后还有一个宽度检查：
+
+- 组件把视口宽高、主行渲染字号（`resolvePartitaBaseFontPx`，与组件的 clamp 字号同源）和字体串传进布局（`PartitaViewport`）；实测宽度用 canvas `measureText`（`partitaTextWidth.ts`，按字体+文本缓存，Web 字体加载后作废重测）。
+- 每行的实测宽度加上词距、chunk padding、引导线伸出量、词级抖动和 active 词的 ×1.4 峰值，不得超出视口半径（`getPartitaRowHalfSpan`）。
+- 历史切法的每一行都放得下时（桌面常态），输出与旧实现一致，行为不变。
+- 放不下时依次尝试：先保留历史分组、只把 stagger 与 chunk scale 收到该行剩余空间内；仍不行则按实测宽度贪心重分行（unit 不可拆），行数超过高度预算时字号按档位（0.9 → 0.58）下调重试。布局通过 `fontDensityScale` 把最终档位交回组件，组件的 clamp 字号乘上它后与测量用的字号一致。
+- 最小档位仍放不下（例如不可拆的超长单词）时接受残余溢出并 `console.warn`。
+
 此时需要记住：
 
 - 一个 `chunk` 就是一行可见 row。
@@ -225,4 +235,4 @@ PartitaWord 负责 display word 级动画和 glow layer 逐字动画。
 
 ## 预热与缓存
 
-当前实现会把当前行的 `PartitaSequentialLayout` 缓存在 renderer 内，并在 `shouldPreheatLine()` 判定下一句进入 `0.18s` 至 `1.2s` 的预热窗口时提前构建下一句布局。缓存 key 包含歌词文本、主题、窗口高度和 Partita tuning；缓存只服务布局产物，不改变 `Line.words` 的原始 timing。
+当前实现会把当前行的 `PartitaSequentialLayout` 缓存在 renderer 内，并在 `shouldPreheatLine()` 判定下一句进入 `0.18s` 至 `1.2s` 的预热窗口时提前构建下一句布局。缓存 key 包含歌词文本、主题、窗口宽高、主行字号、字体串和 Partita tuning；缓存只服务布局产物，不改变 `Line.words` 的原始 timing。Web 字体加载完成（`useFontsEpoch`）时会同时作废测宽缓存与布局缓存。

@@ -1,8 +1,12 @@
 name: CI
 
-# 重构期间的守门 CI：类型检查、单测、打包冒烟、版本约束。
+# 安卓项目的守门 CI：类型检查、单测、版本约束、密钥检查、UI 门禁。
 # 检查逻辑都在仓库根目录的 ci/（见 ci/README.md），这个文件只做组装。
 # APK/AAB 出包在 android-release.yml，不在这里重复跑。
+#
+# 本 fork 只出安卓包：上游的 build-web（web 打包冒烟）与 typecheck-sync-server
+# （Node 部署的后端）都删了 —— web 产物在 android-release.yml 里经
+# build:capacitor 照样会编一遍，sync-server 不在这条发布链上。
 #
 # dev 和 main 上也跑一次，唯一目的是把 node_modules 缓存写进 base 分支的 scope。Actions 的缓存
 # 作用域规则是「PR 能读 base 分支的缓存，分支之间互相不可见」，而这个 workflow 原本只在
@@ -70,74 +74,6 @@ jobs:
 
       - name: Run unit tests
         run: npm run test:unit
-
-  typecheck-sync-server:
-    name: Typecheck sync-server
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-    # 与 test-unit 并行。sync-server 只有 46 个包，却量到过一次 5 分钟的 npm ci，串在根依赖
-    # 后面等于把这份抖动直接加进关键路径。它和根依赖没有任何关系，分开跑就只取两者的较大值。
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Restore sync-server node_modules
-        id: sync-server-node-modules
-        uses: actions/cache@v4
-        with:
-          path: sync-server/node_modules
-          key: sync-server-node-modules-ubuntu-latest-node24-${{ hashFiles('sync-server/package-lock.json') }}
-
-      - name: Install sync-server dependencies
-        if: steps.sync-server-node-modules.outputs.cache-hit != 'true'
-        run: npm ci
-        working-directory: ./sync-server
-
-      - name: Run sync-server typecheck
-        run: npm run build:node
-        working-directory: ./sync-server
-
-  build-web:
-    name: Build web bundle
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-
-    steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v6
-
-      - name: Install Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: Restore node_modules
-        id: node-modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: node-modules-ubuntu-latest-node24-${{ hashFiles('package-lock.json') }}
-
-      - name: Install dependencies
-        if: steps.node-modules.outputs.cache-hit != 'true'
-        run: npm ci
-
-      # typecheck 到不了 vite 的打包阶段：多页入口、postcss、public/ 资源、import.meta.glob
-      # 只有打包时才暴露，而重构最容易断在这一层。跑一遍 build 也算把 api-ts 的编译带上。
-      - name: Build web bundle
-        run: npm run build
-
-      # 密钥进前端包只有打包之后才看得见（VITE_ 变量被内联、依赖里的字符串被带进来），所以接在 build 后面。
-      - name: Scan web bundle for secrets
-        run: node ci/checkSecrets.ts --dist dist
 
   version-policy:
     name: Version policy

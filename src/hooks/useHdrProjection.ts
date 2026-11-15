@@ -7,7 +7,7 @@ import {
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 
 // src/hooks/useHdrProjectionExit.ts
-// HDR 投影下「点一下空白把界面收起来」的二次确认。
+// HUD 投影下「点一下空白把界面收起来」的二次确认。
 //
 // 投到挡风玻璃上时屏幕是反着看的，误触的概率比平时高得多：界面一收，反射里就只剩
 // 一块黑，用户连该点哪儿把它叫回来都看不出来。所以第一次点只弹一句提示，再点一次
@@ -19,7 +19,7 @@ import { setStatusMessage } from '../stores/useStatusMessageStore';
 // 切完歌浏览器补的那个 click 也照旧被 consumeSuppressedClick 吃掉，不会被当成
 // 「点了第二次」。
 
-/** 当前是不是 HDR 投影（跟着开关走，改了会通知）。 */
+/** 当前是不是 HUD 投影（跟着开关走，改了会通知）。 */
 export const useHdrProjectionActive = (): boolean => {
     const [active, setActive] = useState(() => readStoredHdrProjection());
     useEffect(() => subscribeHdrProjection(setActive), []);

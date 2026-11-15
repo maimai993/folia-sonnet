@@ -70,7 +70,8 @@ describe('computeModDigest', () => {
             files[`file-${index}.txt`] = String(index);
         }
         expect(computeModDigest(makeModDirectory(files))).toBeNull();
-    });
+        // 这里真的会建 maxFiles + 1 个文件，默认 5 秒在慢机器上不够。
+    }, 120_000);
 });
 
 describe('shortDigest', () => {

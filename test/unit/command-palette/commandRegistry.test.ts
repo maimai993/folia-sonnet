@@ -45,6 +45,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             personalFmSelection: { mode: 'DEFAULT' as const, scene: null },
             isPersonalFmModeSupported: true,
             setPersonalFmSelection: vi.fn(),
+            isRecommendationPreferencesOffered: () => false,
             togglePlay: vi.fn(),
             toggleLoop: vi.fn(),
             next: vi.fn(),
@@ -67,6 +68,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             runAutoMatchBestLyric: vi.fn(async () => true),
             toggleCurrentSongPureMusicMark: vi.fn(async () => true),
             canToggleCurrentSongPureMusicMark: true,
+            isHifiRoute: () => false,
+            openHifiSignalPath: vi.fn(),
         },
         navigation: {
         navigateToHome: vi.fn(),
@@ -106,6 +109,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             canChooseLibrarySuite: vi.fn(() => true),
             chooseLibrarySuite: vi.fn(),
             isLibraryWallLookAvailable: vi.fn(() => false),
+            isGridLibraryActive: vi.fn(() => true),
             libraryWallLook: vi.fn(() => 'partial' as const),
             setLibraryWallLook: vi.fn(),
             libraryWallWindowsPerBlock: vi.fn(() => 3),
@@ -113,6 +117,8 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleLibraryWallStackEdges: vi.fn(),
             libraryWallSeamClear: vi.fn(() => false),
             toggleLibraryWallSeamClear: vi.fn(),
+            liquidGlassEnabled: vi.fn(() => true),
+            toggleLiquidGlass: vi.fn(),
             libraryWallSeamStyle: vi.fn(() => 'paper' as const),
             setLibraryWallSeamStyle: vi.fn(),
             toggleLibraryWallBackdropLyrics: vi.fn(),
@@ -129,6 +135,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleGridViewSquareCards: vi.fn(),
             canUseGridViewSquareCards: vi.fn(() => true),
             toggleLatticeVignette: vi.fn(),
+            toggleLatticeBadgeCurrentOnly: vi.fn(),
             toggleLatticeAutoFocusOnSongChange: vi.fn(),
             toggleReduceLatticeMotion: vi.fn(),
             toggleFollowSystemReducedMotion: vi.fn(),
@@ -145,15 +152,21 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleTranscodeFallback: vi.fn(),
             togglePlaybackFade: vi.fn(),
             toggleAutoSkipUnplayable: vi.fn(),
+            toggleBackgroundSilentSkip: vi.fn(),
             toggleAlwaysShowMainWindowTitlebar: vi.fn(),
+            togglePlayerHeaderBlur: vi.fn(),
+            toggleTitlebarSide: vi.fn(),
             toggleHideFullscreenButton: vi.fn(),
             toggleNativeMacFullscreenButton: vi.fn(),
+            toggleNativeMacTrafficLights: vi.fn(),
             toggleAutoHideCursorWithPlayerChrome: vi.fn(),
             toggleHideCursorWhenIdle: vi.fn(),
             canAutoScanLocalLibrary: vi.fn(() => false),
             toggleLocalLibraryAutoScan: vi.fn(),
             canReportPlayback: vi.fn(() => false),
             togglePlaybackReport: vi.fn(),
+            toggleAutoAiLyricSegmentation: vi.fn(),
+            toggleKeepProviderWordTiming: vi.fn(),
             voiceInputPauseSupported: false,
             modSystemEnabled: false,
             toggleVoiceInputPause: vi.fn(),
@@ -163,8 +176,10 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             toggleCloseToTray: vi.fn(),
             toggleHideRemoteControlTitlebar: vi.fn(),
             toggleRemoteControlExpandCover: vi.fn(),
+            toggleRemoteControlTextShade: vi.fn(),
             unlockRemoteControl: vi.fn(),
             toggleObsKeepMainWindowAnimation: vi.fn(),
+            toggleTrackCardInObs: vi.fn(),
             toggleWallpaperMacAutohideDock: vi.fn(),
             gpuPreference: () => 'auto',
             setGpuPreference: vi.fn(),
@@ -175,7 +190,7 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             sleepTimerMinutes: 0,
             setSleepTimerMinutes: vi.fn(),
             sleepTimerDeadlineMs: null,
-            sleepTimerEndAction: 'pause',
+            sleepTimerEndAction: 'pause' as const,
             setSleepTimerMinutesMode: vi.fn(),
             canGenerateAITheme: true,
             isGeneratingTheme: false,
@@ -191,20 +206,32 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
             setTransitionMode: vi.fn(),
             toggleTransitionPerformance: vi.fn(),
             canUseTransitionPerformance: vi.fn(() => true),
+            isHifiSupported: () => true,
+            isHifiEnabled: () => false,
+            isHifiVolumeConfirmed: () => false,
+            setHifiEnabled: vi.fn(),
+            toggleHifiExclusive: vi.fn(),
+            toggleHifiNavidrome: vi.fn(),
+            toggleHifiSoftwareVolume: vi.fn(),
+            canRedetectHifiRuntime: () => true,
+            redetectHifiRuntime: vi.fn(async () => null),
+            canInstallHifiRuntime: () => false,
+            installHifiRuntime: vi.fn(async () => null),
         },
         visualizer: {
             visualizerMode: 'classic',
             visualizerBackgroundMode: 'latent',
             setVisualizerMode: vi.fn(),
-            setSmartBeatMode: vi.fn(),
-            toggleSmartBeat: vi.fn(),
             toggleRandomVisualizerModePerSong: vi.fn(),
             toggleGlowBlurQuantize: vi.fn(),
-            toggleRenderPixelRatio: vi.fn(),
             setVisualizerBackgroundMode: vi.fn(),
             setMonetBackgroundTuning: vi.fn(),
             setLatentBackgroundTuning: vi.fn(),
+            cycleNebbiaBehind: vi.fn(() => 'aquarium' as const),
+            cycleNebbiaGlass: vi.fn(() => 'dew' as const),
             toggleVideoLayer: vi.fn(),
+            setSmartBeatMode: vi.fn(),
+            toggleSmartBeat: vi.fn(),
             pickVideoLayerFile: vi.fn(async () => null),
             usesWordSegmentation: true,
             lyricSegmentation: {
@@ -497,6 +524,24 @@ describe('command palette registry', () => {
             .some(entry => entry.command.id === 'playback-clear-queue')).toBe(false);
     });
 
+    it('switches Nebbia\'s window scene and front glass, only while Nebbia is on screen', () => {
+        const context = createContext({ visualizer: { visualizerMode: 'nebbia' } });
+
+        const [scene] = getCommandPaletteMatches('切换窗外', context);
+        expect(scene.command.id).toBe('visualizer-nebbia-behind-cycle');
+        expect(scene.command.execute(scene.input, context)).toBe(true);
+        expect(context.visualizer.cycleNebbiaBehind).toHaveBeenCalled();
+        expect(context.shared.setStatusMsg).toHaveBeenCalledWith({ type: 'success', text: 'Outside the window: aquarium' });
+
+        const [glass] = getCommandPaletteMatches('glass style', context);
+        expect(glass.command.id).toBe('visualizer-nebbia-glass-cycle');
+        expect(glass.command.execute(glass.input, context)).toBe(true);
+        expect(context.visualizer.cycleNebbiaGlass).toHaveBeenCalled();
+
+        expect(getCommandPaletteMatches('切换玻璃', createContext())
+            .some(entry => entry.command.id === 'visualizer-nebbia-glass-cycle')).toBe(false);
+    });
+
     it('matches commands by Chinese keyword and pinyin', () => {
         expect(getCommandPaletteMatches('本地 bad apple')[0].command.id).toBe('search-local');
         expect(getCommandPaletteMatches('bendi bad apple')[0].command.id).toBe('search-local');
@@ -700,7 +745,7 @@ describe('command palette registry', () => {
     });
 
     it('retains settings-desktop command in desktop app environment', () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const matches = getCommandPaletteMatches('desktop');
@@ -823,7 +868,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes desktop window toggle commands', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const context = createContext();
@@ -842,7 +887,7 @@ describe('command palette registry', () => {
     });
 
     it('hides the always-on-top command where the window cannot stay on top (native Wayland)', () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
 
         try {
             const context = createContext();
@@ -858,7 +903,7 @@ describe('command palette registry', () => {
     it('toggles the desktop-local lyrics API', async () => {
         const getLyricApiStatus = vi.fn().mockResolvedValue({ enabled: false, running: false });
         const setLyricApiEnabled = vi.fn().mockResolvedValue({ enabled: true, running: true });
-        vi.stubGlobal('window', { electron: { getLyricApiStatus, setLyricApiEnabled } });
+        vi.stubGlobal('window', { electron: { platform: 'win32', getLyricApiStatus, setLyricApiEnabled } });
 
         try {
             const context = createContext();
@@ -873,7 +918,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes the desktop display sleep toggle', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         try {
             const context = createContext();
             const [match] = getCommandPaletteMatches('播放时阻止休眠', context);
@@ -886,7 +931,7 @@ describe('command palette registry', () => {
     });
 
     it('matches and executes the desktop background throttling toggle', async () => {
-        vi.stubGlobal('window', { electron: {} });
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
         try {
             const context = createContext();
             const [match] = getCommandPaletteMatches('后台节流', context);

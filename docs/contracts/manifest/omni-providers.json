@@ -1,8 +1,11 @@
 {
   "providers": [
+    "appleMusic",
+    "bilibili",
     "bodian",
     "feiniu",
     "kugou",
+    "lxmusic",
     "netease",
     "qishui",
     "qq",

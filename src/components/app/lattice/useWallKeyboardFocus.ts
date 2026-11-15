@@ -17,10 +17,10 @@ import {
     pickAdjacentInstance,
     type WallDirection,
 } from '../../wall/wallNavigation';
+import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 import { useLatticePosterSelection } from './useLatticePosterSelection';
 import type { LatticeTile } from './latticeModel';
 import type { ActiveLatticePoster } from './useLatticePlaybackFocus';
-import { hasBlockingWindow } from '../../../utils/keyboardTargets';
 
 // Keyboard layer for the wall: Escape clears card focus before leaving, while arrows walk the wall.
 
@@ -153,6 +153,9 @@ export const useWallKeyboardFocus = ({
 
     const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
         if (event.altKey || event.ctrlKey || event.metaKey) return;
+        // A window opened over the wall has the keyboard, also while the focus stays on the card it was opened
+        // from (the lyrics timeline takes none): its keys are not the wall's, as on the library wall and the grid.
+        if (hasBlockingWindow()) return;
 
         if (event.key === 'Escape') {
             event.preventDefault();

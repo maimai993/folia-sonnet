@@ -74,8 +74,10 @@ const snapshotWith = (provider: ProviderAccountSummary): LibraryAccountSnapshot 
     providers: [provider],
     activeProviderId: provider.providerId,
     login: null,
+    setup: null,
     pendingSwitch: null,
     logout: { providerId: null, status: 'idle' },
+    sync: { providerId: null, status: 'idle' },
     lastLoginCompletion: null,
 });
 
@@ -97,6 +99,7 @@ const renderAccountTab = (controller: LibraryAccountController) => {
         onAudioQualityChange: () => {},
         onSyncData: () => {},
         isSyncing: false,
+        isDaylight: false,
         onNavigateHome: () => {},
     })));
     const logoutButton = () => host.querySelector<HTMLButtonElement>('button[aria-label="account.logout"]');

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 chthollyphile
-import type { IconNode } from 'lucide-react';
 import type { Texture } from 'pixi.js';
 import { resolveLucideIconNode } from '../../../../services/lucideIconResolver';
+import { lucideIconPath2d } from '../../lucidePath2d';
 import type { PixiModule } from '../types';
 import { CANDY, CANDY_INK, HANABI_FALLBACK_ICON, type PatchPattern, type StickerShape, type StripStyle, type TapePattern } from './collagePlan';
 
@@ -13,8 +13,31 @@ import { CANDY, CANDY_INK, HANABI_FALLBACK_ICON, type PatchPattern, type Sticker
 // 图标贴纸：主题的 lucide 图标按 SVG 节点画进画布（Path2D 直接吃 path 的 d），一圈粗白边 + 浅阴影 + 彩色描线。
 // 颜色直接画进纹理（白边、深色字不能跟着 tint 变），所以 key 里带颜色；同一首歌里重复的组合不多。
 
-/** 装饰字用的圆体：系统里有就用，没有回落到主题字体。 */
+/**
+ * 装饰字（拟声字、重复字）的字体。
+ *
+ * 以前这里是写死的一串圆体系统字体，用户没法换 —— 想用别的字体只能等系统装了才有。
+ * 现在改用字体市场里选的那一款（用户在「连接与集成 → 市场 → 字体」里挑），
+ * 没挑过才回落到这套系统圆体。
+ *
+ * 为什么保留回退：装饰字是画在 Canvas 上的，如果市场字体还没加载完就画，
+ * 字会以默认衬线体出现、之后也不会重绘（纹理是缓存起来的）。
+ * 回退到系统圆体至少场景不会突然变得难看。
+ */
 export const POP_FONT_FAMILIES = '"M PLUS Rounded 1c", "Zen Maru Gothic", "Kosugi Maru", "Hiragino Maru Gothic ProN", "Arial Rounded MT Bold", "Yu Gothic UI", "Meiryo UI", "Microsoft YaHei UI"';
+
+/**
+ * 市场里选中的字体家族名。
+ *
+ * 由 `setCollageFontFamily` 在字体装好之后写进来；模块级变量是因为纹理是
+ * 一次性画进缓存的，不需要跟着 React 重渲染。
+ */
+let marketCollageFont: string | null = null;
+
+/** 设置装饰字用的字体（传 null 表示回退到系统圆体）。 */
+export const setCollageFontFamily = (family: string | null): void => {
+    marketCollageFont = family;
+};
 
 type Context2D = CanvasRenderingContext2D;
 
@@ -136,7 +159,17 @@ const SHAPE_PATHS: Record<StickerShape, (context: Context2D, c: number, r: numbe
 };
 
 /** 圆体粗字的 font 串。 */
-const popFont = (px: number, fallback: string) => `800 ${px}px ${POP_FONT_FAMILIES}, ${fallback}`;
+/**
+ * 装饰字用的 font 串。
+ *
+ * 市场字体排在最前：它是用户明确选的，系统圆体只在没选时兜底。
+ */
+const popFont = (px: number, fallback: string) => {
+    const families = marketCollageFont
+        ? `"${marketCollageFont}", ${POP_FONT_FAMILIES}`
+        : POP_FONT_FAMILIES;
+    return `800 ${px}px ${families}, ${fallback}`;
+};
 
 export const createCollageTextureCache = (pixi: PixiModule, resolution: number, fallbackFont: string): CollageTextureCache => {
     const scale = Math.max(1, Math.min(2, resolution || 1));
@@ -505,39 +538,6 @@ export const createCollageTextureCache = (pixi: PixiModule, resolution: number, 
         });
     };
 
-    /** lucide 的 IconNode → 一条 Path2D（24×24 viewBox 里）；不认识的标签跳过，带子节点的（g）递归。 */
-    const iconPath = (node: IconNode, into = new Path2D()) => {
-        node.forEach(entry => {
-            const [tag, attrs, children] = entry as unknown as [string, Record<string, unknown>, unknown?];
-            const n = (key: string, fallback = 0) => {
-                const value = Number.parseFloat(String(attrs[key] ?? ''));
-                return Number.isFinite(value) ? value : fallback;
-            };
-            if (tag === 'path' && typeof attrs.d === 'string') into.addPath(new Path2D(attrs.d));
-            else if (tag === 'circle') {
-                into.moveTo(n('cx') + n('r'), n('cy'));
-                into.arc(n('cx'), n('cy'), n('r'), 0, Math.PI * 2);
-            } else if (tag === 'ellipse') {
-                into.moveTo(n('cx') + n('rx'), n('cy'));
-                into.ellipse(n('cx'), n('cy'), n('rx'), n('ry'), 0, 0, Math.PI * 2);
-            } else if (tag === 'rect') {
-                into.roundRect(n('x'), n('y'), n('width'), n('height'), Math.min(n('rx', n('ry')), n('width') / 2, n('height') / 2));
-            } else if (tag === 'line') {
-                into.moveTo(n('x1'), n('y1'));
-                into.lineTo(n('x2'), n('y2'));
-            } else if (tag === 'polyline' || tag === 'polygon') {
-                const numbers = String(attrs.points ?? '').trim().split(/[\s,]+/).map(Number).filter(Number.isFinite);
-                for (let i = 0; i + 1 < numbers.length; i += 2) {
-                    if (i === 0) into.moveTo(numbers[i]!, numbers[i + 1]!);
-                    else into.lineTo(numbers[i]!, numbers[i + 1]!);
-                }
-                if (tag === 'polygon') into.closePath();
-            }
-            if (Array.isArray(children)) iconPath(children as IconNode, into);
-        });
-        return into;
-    };
-
     const icon = (name: string, color: number, size: number) => {
         const node = resolveLucideIconNode(name) ?? resolveLucideIconNode(HANABI_FALLBACK_ICON);
         const side = Math.max(16, Math.round(size));
@@ -550,7 +550,7 @@ export const createCollageTextureCache = (pixi: PixiModule, resolution: number, 
             context.scale(scale, scale);
             context.lineJoin = 'round';
             context.lineCap = 'round';
-            const path = node ? iconPath(node) : null;
+            const path = node ? lucideIconPath2d(node) : null;
             const draw = (stroke: string, width: number, dx = 0, dy = 0) => {
                 context.save();
                 context.translate(dx, dy);

@@ -37,10 +37,10 @@ const SUITE_OPTIONS: readonly LibrarySuiteOption[] = Object.freeze(
 export const listLibrarySuiteOptions = (): readonly LibrarySuiteOption[] => SUITE_OPTIONS;
 
 /**
- * 首启引导第一页只问这两套：网格（经典）与 bravais（无限），顺序固定。TUI 这类开发用 suite 即使在这个构建里
- * 可用也不出现——引导是给第一次打开的人看的，设置页与命令面板照旧列出全部可用的 suite。
+ * 首启引导第一页问这三套：网格（经典）、bravais（无限）与 rhine（莱茵生命）。TUI 这类开发用 suite
+ * 即使在这个构建里可用也不出现——引导是给第一次打开的人看的，设置页与命令面板照旧列出全部可用的 suite。
  */
-export const ONBOARDING_LIBRARY_SUITE_IDS: readonly LibrarySuiteId[] = Object.freeze(['grid', 'bravais']);
+export const ONBOARDING_LIBRARY_SUITE_IDS: readonly LibrarySuiteId[] = Object.freeze(['grid', 'bravais', 'rhine']);
 
 /** 从可用的 suite 里挑出引导要问的那几套（按 ONBOARDING_LIBRARY_SUITE_IDS 的顺序）。 */
 export const pickOnboardingLibrarySuiteIds = (available: readonly LibrarySuiteId[]): readonly LibrarySuiteId[] => (

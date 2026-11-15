@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Menu, Progress, Reveal, Row } from '../kit';
 import { openOutsideLink } from '../../../../utils/system/outsideLink';
 import { useSettingsPage } from './settingsPageContext';
-import { Button as UiButton } from '@/components/ui';
+import { offersChinaDrives } from './ChinaDrivesRow';
 
 // src/components/modal/settings/pages/FoundUpdateRow.tsx
 // The row a found update gets, on the 通用 page and on the Help page: the new version, the list of
@@ -39,7 +39,7 @@ export const FoundUpdateRow: React.FC<FoundUpdateRowProps> = ({ sub }) => {
     const isLinuxBuild = updateStatus?.platform === 'linux';
     const isStableChannel = electronSettings.UPDATE_CHANNEL === 'realeco';
     // The two drives are offered for the stable channel, and not on Linux.
-    const offersDrives = isStableChannel && !isLinuxBuild;
+    const offersDrives = offersChinaDrives(updateStatus, electronSettings.UPDATE_CHANNEL);
     // What a found version needs from the listener where the app cannot update itself.
     const manualNotice = updateStatus?.platform === 'darwin'
         ? t('options.macManualUpdateNotice')
@@ -72,7 +72,8 @@ export const FoundUpdateRow: React.FC<FoundUpdateRowProps> = ({ sub }) => {
     return (
         <Reveal when={Boolean(version)}>
             <Row sub={sub} notice={t('options.newVersionFound', { version: version ?? '' })}>
-                <UiButton
+                <button
+                    type="button"
                     ref={sourcesRef}
                     aria-haspopup="menu"
                     aria-expanded={sourcesOpen}
@@ -88,7 +89,7 @@ export const FoundUpdateRow: React.FC<FoundUpdateRowProps> = ({ sub }) => {
                 >
                     {t('options.downloadSources')}
                     <ChevronDown size={14} className={`st-t-move text-[color:var(--st-t2)] transition-transform ${sourcesOpen ? 'rotate-180' : ''}`} />
-                </UiButton>
+                </button>
                 <Menu
                     anchorRef={sourcesRef}
                     open={sourcesOpen}

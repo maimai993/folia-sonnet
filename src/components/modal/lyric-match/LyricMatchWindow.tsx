@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, FileAudio, Loader2, Music, Search, X } from 'lucide-react';
+import { Check, FileAudio, Music, Search, X } from 'lucide-react';
 import type { SongResult } from '../../../types';
 import { getSizedCoverUrl } from '../../../utils/coverUrl';
 import { calculateMatchScoreDetails } from '../../../utils/lyrics/matchScore';
@@ -15,6 +15,7 @@ import { DurationMatchBadge } from '../DurationMatchBadge';
 import { LyricPreviewPanel } from './LyricPreviewPanel';
 import type { LyricMatchSearch } from './useLyricMatchSearch';
 import { Button, TextField } from '@/components/ui';
+import { LoadingBars } from '../../shared/LoadingBars';
 
 // src/components/modal/lyric-match/LyricMatchWindow.tsx
 // The window for matching lyrics to a song by hand: source tabs, a search box, the results, and
@@ -196,7 +197,7 @@ export const LyricMatchWindow: React.FC<LyricMatchWindowProps> = ({
                                     disabled={isSearching}
                                     className={`px-4 rounded-2xl text-sm font-medium transition-colors ${searchBtnBg}`}
                                 >
-                                    {isSearching ? <Loader2 size={16} className="animate-spin" /> : t('localMusic.search')}
+                                    {isSearching ? <LoadingBars size={24} /> : t('localMusic.search')}
                                 </Button>
                             </form>
                         </div>
@@ -205,7 +206,7 @@ export const LyricMatchWindow: React.FC<LyricMatchWindowProps> = ({
                         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
                             {isSearching ? (
                                 <div className="flex justify-center items-center h-40">
-                                    <Loader2 className="animate-spin opacity-50" size={28} />
+                                    <LoadingBars className="opacity-50" size={36} />
                                 </div>
                             ) : results.length === 0 ? (
                                 <div className={`flex flex-col items-center justify-center h-40 opacity-50 ${textSecondary}`}>
@@ -348,7 +349,7 @@ export const LyricMatchWindow: React.FC<LyricMatchWindowProps> = ({
                     >
                         {isSaving ? (
                             <>
-                                <Loader2 className="animate-spin" size={14} />
+                                <LoadingBars size={22} />
                                 <span>{savingLabel}</span>
                             </>
                         ) : (

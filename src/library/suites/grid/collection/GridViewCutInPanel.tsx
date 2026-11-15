@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Disc, Download, ListPlus, Loader2, Pencil, Play, Plus, RefreshCw, Star, Tags, Trash2 } from 'lucide-react';
+import { Disc, Download, ImagePlus, ListPlus, Loader2, Pencil, Play, Plus, RefreshCw, Star, Tags, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { Button, TextField } from '../../../../components/ui';
@@ -61,6 +61,7 @@ type GridViewCutInPanelProps = {
     onResyncFolder: () => void;
     onResyncAllFolders: () => void;
     onOrganizeSongInfo: () => void;
+    onSetCover: () => void;
     showSubscribeButton: boolean;
     playlistSubscribed: boolean | null;
     isOnlineAlbum: boolean;
@@ -118,6 +119,7 @@ export const GridViewCutInPanel = ({
     onResyncFolder,
     onResyncAllFolders,
     onOrganizeSongInfo,
+    onSetCover,
     showSubscribeButton,
     playlistSubscribed,
     isOnlineAlbum,
@@ -362,6 +364,15 @@ export const GridViewCutInPanel = ({
                             >
                                 <Tags size={14} />
                                 {t('localMusic.organizeSongInfo')}
+                            </Button>
+                        )}
+                        {mutationCapabilities.setCover.supported && (
+                            <Button
+                                onClick={onSetCover}
+                                className="w-full py-2.5 rounded-full text-xs font-semibold bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-800/15 dark:hover:bg-zinc-100/20"
+                            >
+                                <ImagePlus size={14} />
+                                {t('localCollectionCover.menuLabel')}
                             </Button>
                         )}
                         {mutationCapabilities.resyncAllFolders.supported && (

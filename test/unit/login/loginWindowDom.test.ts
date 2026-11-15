@@ -14,7 +14,7 @@ import type { ProviderAccountSummary } from '@/types/onlineMusic';
 const seen = vi.hoisted(() => ({ done: null as null | { playing: boolean; providerId: string | null } }));
 
 vi.mock('@/services/onlineMusic/omni', () => ({
-    omni: { getProviderLabel: (id: string) => id },
+    omni: { getProviderLabel: (id: string) => id, getLoginForm: () => null },
 }));
 vi.mock('@/components/modal/settings/kit/motion', async original => ({ ...(await original() as object), useKitReducedMotion: () => false }));
 vi.mock('@/components/login/PlatformMark', () => ({
@@ -46,7 +46,7 @@ const row = (providerId: string, extra: Partial<ProviderAccountSummary> = {}): P
 const signedIn = (providerId: string) => row(providerId, { status: 'authenticated', user: { id: 1, nickname: 'someone' } });
 // The pill reads the platforms and the one in use from the account controller: one that only shows them.
 const accountShowing = (providers: ProviderAccountSummary[], activeProviderId: string): LibraryAccountController => {
-    const snapshot = { providers, activeProviderId, login: null, pendingSwitch: null, logout: { providerId: null, status: 'idle' as const }, lastLoginCompletion: null };
+    const snapshot = { providers, activeProviderId, login: null, pendingSwitch: null, logout: { providerId: null, status: 'idle' as const }, sync: { providerId: null, status: 'idle' as const }, lastLoginCompletion: null };
     return { getSnapshot: () => snapshot, subscribe: () => () => { } } as unknown as LibraryAccountController;
 };
 
@@ -76,10 +76,16 @@ describe('the sign-in window, drawn', () => {
             isOpen, onClose: () => { }, rows: [row('a')], activeProviderId: null, chosen: { providerId: 'a', lead: 'sign-in' },
             login: {
                 id: 1, providerId: 'a', phase, methods: [], selectedMethodId: null, inBrowser: false, codeImage: '', canReopenLoginPage: false,
-                failure: null, selfCheck: null, passwordForm: null, backend: { failed: false, detail: null, restarting: false, canRestart: false }, copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: null }, localService: { available: false, failed: false, error: null, restarting: false }, texts: null,
+                failure: null, selfCheck: null, localService: { available: false, failed: false, error: null, restarting: false },
+                // 扫码登录没有密码表单；后端没出事；标题与说明用 controller 那一份默认键。
+                passwordForm: null,
+                backend: { failed: false, detail: null, restarting: false, canRestart: false },
+                copy: { title: { key: 'home.loginTitle' }, note: { key: 'home.loginNote' }, status: null },
+                texts: null,
+                checksAfterLogin: false,
             },
-            onChoose: () => { }, onStart: () => { }, onSelectMethod: () => { }, onReopenBrowser: () => { }, onRestartService: () => { },
-            onSwitch: () => { }, onSignOut: () => { }, onSubmitPassword: () => { }, buildReport: async () => '',
+            onChoose: () => { }, onStart: () => { }, onSubmitForm: async () => ({ sessionId: 0, providerId: 'a', outcome: 'completed' }), onSelectMethod: () => { }, onReopenBrowser: () => { }, onRestartService: () => { },
+            onSwitch: () => { }, onSignOut: () => { }, onSync: () => { }, buildReport: async () => '',
         } satisfies LoginScreenProps);
         draw(screen(true, 'scanned'));
         expect(seen.done).toEqual({ playing: true, providerId: 'a' });

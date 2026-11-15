@@ -39,7 +39,7 @@
 ## QQ 音乐（`qq`）
 
 - **上游**：第三方库 `@yakult-green-tea/qq-music-api`（仓库 yakult-green-tea/qq-music-api），代我们向 QQ 音乐的接口发请求。
-- **版本**：3.3.3，根目录 `package.json`（钉死）和 `deploy/docker/qq-api/package.json` 都是。
+- **版本**：3.3.6，根目录 `package.json`（钉死）和 `deploy/docker/qq-api/package.json` 都是。
 - **怎么用**：
   - 桌面端：主进程 require 这个包，包在 require 时自己起一个 HTTP 服务（`electron/qq/qqApiStartup.cjs`）；页面经 `window.electron.getQqPort` 拿到端口，向 `http://127.0.0.1:<端口>` 发请求（`qq/qqTransport.ts`）。登录会话由 `electron/qq/qqAuthSessionRepository.cjs` 存。
   - 网页版：用包的 `./serverless` 导出，Vercel 的入口是 `api-ts/qq.ts`（编译成入库的 `api/qq.js`），Cloudflare 的是 `worker/qq.ts`，扫码登录通道在 `worker/qqQrChannel.ts`。两边都挂在 `/api/qq`，`VITE_QQ_API_BASE` 填 `/api/qq`。
@@ -93,14 +93,17 @@
   - Spotify 自己应用用的两个服务，没有公开文档：查询服务 `https://api-partner.spotify.com/pathfinder/v2/query` 和 `https://spclient.wg.spotify.com`（`electron/spotify/spotifyApiBridge.cjs`）。公开的 Web API 对这种登录一律答 429（那个文件开头记着 2026-10-08 实测）。
   - 登录走 `https://accounts.spotify.com/authorize` 和 `/api/token`（`electron/spotify/signIn.cjs`）。
   - 音频：`@lox-audioserver/node-librespot`（仓库 lox-audioserver/node-librespot），librespot 的 Node 原生模块，用账号连上 Spotify 拿到文件位置和密钥；文件从 CDN 按范围读、边读边解密（`electron/spotify/audio.cjs`）。
+  - 备用的播放方式：Spotify 官方的 Soloist 程序（文档 https://developer.spotify.com/documentation/soloist），给 Spotify 不发音频密钥的账号用。用的人自己下载、自己生成 API 密钥；Folia 启动它、经它的本机 WebSocket 控制接口播放（`electron/spotify/soloist.cjs`）。
 - **版本**：
   - 查询服务：每个查询的名字和哈希写在 `spotifyApiBridge.cjs` 的 `QUERIES`（改账号的那些在同一文件的另一张表），注释写着 2026-10-08 读到的。这就是“钉住的版本”。
   - `@lox-audioserver/node-librespot` 0.5.1，在根目录 `package.json` 的 `optionalDependencies`：没有现成构建的系统上装不上也不让整个安装失败。现成构建是 win32-x64、darwin-arm64、linux-x64 和 linux-arm64（glibc），没有 darwin-x64；打包时这些 `.node` 文件放在 `asarUnpack` 里。
-- **我们包了什么**：查询和改动只能经桥接层发，页面只能发 `QUERIES` 里的名字；token 不出主进程。歌曲缓存存的是 Spotify 加密过的文件，密钥不落盘（`audioFiles.cjs`）。
+  - Soloist 不随 Folia 分发（Spotify 不许转发它的压缩包和程序），也就没有钉住的版本：用的人选哪个构建就是哪个。每个构建从构建日起 90 天后拒绝启动（退出码 10），版本号和构建时间从 `soloist --version` 读（`soloistBuild.cjs`，输出格式没有文档，读法是宽松的）。
+- **我们包了什么**：查询和改动只能经桥接层发，页面只能发 `QUERIES` 里的名字；token 不出主进程。歌曲缓存存的是 Spotify 加密过的文件，密钥不落盘（`audioFiles.cjs`）。Soloist 的 API 密钥用系统钥匙串加密存在主进程，不回给页面；它的控制接口只开在 `127.0.0.1` 上、端口由系统挑，页面不知道端口。
 - **上游变了怎么跟**：
   - Spotify 换掉一个查询时答复里带 `PersistedQueryNotFound`，主进程记一行 `[Spotify] query <名字> failed`。要改的是 `QUERIES` 里那个哈希，以及 `spotify/spotifyNormalize.ts` 里读答复的地方。新的哈希从哪里读到，代码和文档都没写：不清楚。
   - `test/unit/spotify/` 下的测试（`spotifyApiBridge.test.ts`、`spotifyAudio.test.ts`、`spotifyAudioFiles.test.ts` 等）用替身，抓不到 Spotify 改了查询或答复。
   - 升级 node-librespot 前看它支持哪些系统；平台条目里的实测在同目录 `README.md` 的 `spotify/spotifyProvider.ts` 一条。
+  - Soloist 的命令行参数和控制接口（`-n` 设备名、`-k`、`-D`、`-C`、`-z`（0 或 100 以上的 MB）、`-i` 初始音量、`-w 127.0.0.1:0` 与数据目录里的 `ws.port`，命令 `play` / `pause` / `seek` / `set_volume` / `set_repeat_*`，事件 `auth_state` / `playback_state` / `track_changed` / `position_sync`）照 2026-11 的官方文档写；它改了，`soloist.cjs` 跟着改。它没有曲目结束事件、会自己续播推荐，结束是按位置判断的；`test/unit/spotify/soloist.test.ts` 用替身，抓不到它改了协议。
 
 ## 汽水音乐（`qishui`，仅桌面端）
 
@@ -116,3 +119,47 @@
 - **上游**：用户自己的 Navidrome 服务，走 Subsonic API（`/rest/<接口>`），入口是 `src/services/navidromeService.ts`。歌词等扩展先问 `getOpenSubsonicExtensions` 再决定用不用。
 - **版本**：请求里写 `v=1.16.1`（Subsonic API 版本）、`c=Folia`；鉴权用 `md5(密码 + salt)` 的 token。没有要装的包。
 - **上游变了怎么跟**：Subsonic 是公开的协议，服务端版本由用户自己定。`test/unit/navidrome/navidromeService.test.ts` 用替身代替服务端，管的是我们拼请求和读答复的写法。
+
+## Apple Music（`appleMusic`）原生宿主
+
+- **上游**：Apple Music 官方网页与页面内 MusicKit；网页会变化，没有固定版本。macOS 使用系统 WKWebView，不引入独立浏览器 SDK。
+- **Windows SDK**：`Microsoft.Web.WebView2` 固定为 `1.0.4314.35`，在 `electron/appleMusic/windows/FoliaAppleMusicCompanion.csproj` 用 NuGet 精确版本区间 `[1.0.4314.35]` 声明。升级时只改这个宿主的 SDK 声明，并重新构建及执行 Windows 验收。
+- **Windows 运行时**：使用本机 WebView2 Evergreen，独立于 SDK 更新；不随仓库分发浏览器。需要系统 .NET Framework 4.8。源码已提供，未在 Windows 编译或验证 DRM，默认入口停用；实验开关与验收见 `electron/appleMusic/windows/README.md`。
+- **哪些测试能抓到**：Vitest 覆盖父进程请求、队列、协议与平台可用性分支；抓不到 C# 编译、WebView2 登录/DRM 出声或运行时升级造成的网页行为变化，必须在 Windows 实机验收。
+
+## 飞牛音乐（`fnmusic`，仅桌面端）
+
+- **上游**：用户自己的飞牛（fnOS）NAS 上的飞牛音乐服务，走其网页端 HTTP API（`/music/api/v1/...`，fnOS 内网服务）。登录 `POST /music/api/v1/user/password-login`（SHA-256 密码摘要 + 32hex deviceId；2026-10-28 实测不需要 `authx` 签名），后续请求带设备 Cookie（`music-token`）。
+- **版本**：无外部 npm 包；协议按用户机器上运行的 fnOS 网页端实测（接口路径与答复字段记录在 `src/services/onlineMusic/fnmusic/` 下）。没有要装的依赖。
+- **怎么用**：`electron/fnmusic/fnmusicApiBridge.cjs` 导出 `createFnmusicApiBridge({ store, safeStorage })`，凭据用 `safeStorage` 加密保存，地址与 token 都从主进程读取，不从 URL 取。播放与封面走 `folia-fnmusic://` 自定义协议（主进程 `protocol.handle` 实时转发、带 Cookie，无需本地 HTTP 代理）。渲染进程的 `fnmusicTransport.ts` 只发操作名，不经手凭据与 token。
+- **我们不改上游**：Folia 不覆盖 fnOS 网页端文件，不保留客户端标识、签名或协议实现，只适配其公开 HTTP 接口。
+- **上游变了怎么跟**：fnOS 网页端改接口或字段后，`fnmusicApiBridge.cjs` 的请求与 `fnmusicProvider.ts` 的归一化要跟着改；登录失败、接口返回变化以 `[FnMusic]` 前缀日志为准。
+- **测试**：`test/unit/fnmusic/` 覆盖归一化、登录参数构造、翻页与可播性检查；桥接层逻辑在 `test/unit/electron/` 下用替身测操作白名单与加密配置恢复。
+
+## 飞牛音乐（`feiniu`，fork 独有）
+
+- **与 `fnmusic` 的关系**：同一台飞牛（fnOS）NAS 的两种接入。`fnmusic` 走主进程桥接（仅桌面端，凭据用 `safeStorage` 加密、播放走 `folia-fnmusic://` 协议）；`feiniu` 是纯渲染进程的 HTTP 层（`feiniuTransport.ts`），地址由用户在登录表单里填，安卓端整条走原生 OkHttp 代发。
+- **上游**：飞牛音乐服务的网页端 HTTP API（`/music/api/v1/...`）。地址不带前缀，发请求时才拼上；翻页一次最多取 300 条。
+- **为什么安卓端要原生代发**：App 里页面跑在 `https://localhost` 上，而 NAS 上的服务几乎不会下发 `Access-Control-Allow-Origin`，WebView 的 fetch 会卡在同源检查上，抛出来的只是一句 `TypeError: Failed to fetch`——和「地址填错」「NAS 没开机」长得完全一样，界面上只能干巴巴报「网络错误」。所以真机上整条 HTTP 都改用原生 OkHttp 代发（没有同源策略这回事），桌面 / 网页端仍是浏览器 fetch。
+- **我们不改上游**：不覆盖 fnOS 网页端文件，只适配其公开 HTTP 接口。
+- **上游变了怎么跟**：网页端改接口或字段后，`feiniuTransport.ts` 的请求与拆包要跟着改；账号或密码错误是服务端的 code `120001`（msg 是英文，界面要换成自己的提示）。
+
+## 洛雪音源（`lxmusic`，fork 独有）
+
+- **上游**：各音乐平台的公开网页接口（`lxPublicApi`），照 LX Music 客户端的分工来——搜索 / 歌单广场 / 榜单 / 歌单与专辑曲目走公开接口，不需要账号；播放地址与歌词优先用公开接口，取不到时交给导入的 LX 音源（LX 自定义音源只干这件事：把 musicUrl / lyric / pic 续出来）。
+- **歌曲 id**：统一编成 `平台:原生id`（`wy:123` / `kg:<hash>` / `kw:456`），providerData 里再留一份，换成别的 provider 也不会丢来源。
+- **音源**：用户自己导入的 LX 音源脚本存在 `lxSourceStore`，健康度记在 `lxSourceHealth`（`web:lxmusic_source_health_v1`）。
+- **上游变了怎么跟**：某家公开接口改版后，改 `lxPublicApi` 里对应平台的那一支；播放取不到地址时先看 `[LxMusic]` 前缀日志和 `lxDiagnostics` 记的尝试记录，再判断是公开接口失效还是导入的音源坏了。
+- **我们不改上游**：不内置、不分发任何第三方音源脚本，也不替用户去爬别家的会员内容；只跑用户自己导入的那份。
+
+## B 站（`bilibili`，仅安卓）
+
+- **它是什么**：一个**视频**平台，不是一个音乐平台。首页推荐一屏投稿，点开就放那条视频的画面和声音。之所以仍然注册成 Omni 的 provider，是因为播放、队列、进度、标题、封面这一整套设施都在 provider 之后；挂在它下面就不必再写一条平行的播放路径。
+- **上游**：B 站网页版公开接口，全部经 `android/app/src/main/java/top/izuna/foliamajor/FoliaBilibiliPlugin.kt` 用 OkHttp 代发（`services/bilibili/api.ts` 只拼地址）。搜索 `/x/web-interface/wbi/search/type`、详情 `/x/web-interface/view`、取流 `/x/player/wbi/playurl`、首页推荐 `/x/web-interface/wbi/index/top/feed/rcmd`。搜索、详情、取流这几个要 WBI 签名（`services/bilibili/wbi.ts`）。
+- **音画怎么同步**：B 站的 DASH 本来就把画面和声音拆成两条独立的流（`dash.video[]` / `dash.audio[]`）。这里**两条都取**：声音交给播放器当音源，画面注入到播放页已有的视频层（`visualizer/videoLayer`）当背景。两端同源，所以不需要「音画偏移」那种东西 —— 播放器的时钟就是画面跟着走的时钟。
+- **登录**：扫码，凭据落在原生 `CookieManager` 里，渲染层拿不到也不存。登录了推荐接口回的是这个人自己的推荐、取流拿到大会员画质；没登录回平台默认推荐、上限 480P。同一个接口，不在这里分叉。
+- **它不做什么**：没有歌词（`capabilities.lyrics: false`），没有收藏 / 歌单（`likes` / `playlistTrackMutations: false`）—— 界面上的歌词入口、红心读这些开关，所以会自动不出现。
+- **清晰度**：「音质」那三档（`standard` / `high` / `ultra`）在 B 站就是 480P / 720P / 1080P，界面上按平台换成清晰度的说法（`AccountTab` 的 `VIDEO_QUALITY_LABEL_KEYS`）。
+- **上游变了怎么跟**：先看 `[Bilibili]` 前缀日志；WBI 签名用到的两张混淆表会变，`wbi.ts` 里取 mixin key 的那一步要跟着网页版走。推荐接口的 `item[].goto` 会混进直播、番剧和广告位，只认 `av`。
+
+

@@ -132,3 +132,81 @@ export const rankSongTitleMatch = (candidateTitle: string, requestedTitle: strin
 /** 打分 3 不是候选。 */
 export const isSongTitleCandidate = (candidateTitle: string, requestedTitle: string): boolean =>
   rankSongTitleMatch(candidateTitle, requestedTitle) < 3;
+
+/*
+ * ── 倒排索引用到的 token ──
+ *
+ * `LIKE '%歌名%'` 用不上任何索引，只能顺着 `kind` 把整片分区扫一遍再逐行比。库一大
+ * （4 万条、每条 6KB 时实测 14ms，而 better-sqlite3 是同步的，这 14ms 里整个进程都停着），
+ * 而且**库越大越慢** —— 多进程只能摊薄它，不能根治。
+ *
+ * 这里把歌名预先切成几种 token 存进 `ai_cache_title_token`，查询时按 token 精确命中，
+ * 走索引直接定位到那几行 —— 实测 4 万条（每种歌名 6 个版本）时，现网的 LIKE 要 358ms，
+ * 倒排 0.37ms，而且**与库的大小无关**。
+ *
+ * token 分三类，各自兜住一种「歌名对不上」的情况：
+ *
+ *   `K:` 归一后的整个核心名 —— 「晴天」「晴天 (Live)」「晴天【伴奏】」都是 `K:晴天`。
+ *   `S:` 「歌手 - 歌名」拆段之后的每一段 —— 请求「周杰伦 - 晴天」要能命中库里的「晴天」。
+ *   `D:` 首字/首词的钩子 —— 两边名字写法差太多时的最后一道入口（见 `songTitleSeed`）。
+ *
+ * **`D:` 单独查。** 它基数很大（实测 4 万条库里 `D:晴` 命中 1338 行），和 `K:`/`S:` 混在
+ * 一条 `IN (...)` 里会把 `LIMIT` 撑满，反而把精确命中的那几十行挤掉 —— 那是「越优化越糟」
+ * 的典型。所以先用 `K:`/`S:` 查，**只有一条都没查到时**才拿 `D:` 兜底（见 aiCache.ts 的
+ * `findResolveCandidates`）。
+ *
+ * **不做单字 token。** 中文常用字更泛：「海」「曲」「晴」各能命中几千行（实测 `C:海`
+ * 命中 5022 行），拿它去查等于换个方式全扫。
+ *
+ * **只放进入口，不放宽判定**：命中之后仍旧由 `rankSongTitleMatch` 打分、客户端拿高亮词
+ * 终判。多捞回几条没关系，判错的代价由那一层兜着。
+ */
+
+/** token 的三种前缀。改这里的含义等于改索引格式，要跟着重建索引。 */
+export const TITLE_TOKEN_FULL = 'K:';
+export const TITLE_TOKEN_SEGMENT = 'S:';
+export const TITLE_TOKEN_SEED = 'D:';
+
+/** 一个歌名在索引里该有哪些 token。空数组表示这个名字不值得进索引。 */
+const tokensFor = (value: string): string[] => {
+  const full = songTitleKey(value);
+  if (!full) return [];
+  const tokens = new Set<string>([`${TITLE_TOKEN_FULL}${full}`]);
+  songTitleSegments(value).forEach((segment) => {
+    const key = songTitleKey(segment);
+    if (key) tokens.add(`${TITLE_TOKEN_SEGMENT}${key}`);
+  });
+  const seed = songTitleSeed(value);
+  /*
+   * `songTitleSeed` 的拉丁分支保留原样大小写（它本来是拿去 `startsWith` 比 core 名的），
+   * 但 token 是要**逐字相等**才能命中的，所以这里统一转小写 —— 否则「Someone Like You」
+   * 写进去是 `D:Someone`，问的时候如果不巧大小写不同就永远命不中。
+   */
+  if (seed) tokens.add(`${TITLE_TOKEN_SEED}${seed.toLowerCase()}`);
+  return [...tokens];
+};
+
+/**
+ * 写索引时用：这一行歌名要拆成哪些 token。
+ *
+ * 与 `songTitleQueryTokens` 同一套规则 —— 两边不一致就会「写进去的问不到」。
+ */
+export const songTitleTokens = tokensFor;
+
+/**
+ * 查索引时用：**第一轮**要问的 token（精确的那一批）。
+ *
+ * 只要 `K:`（整个核心名）和 `S:`（拆段）—— 它们的基数都很小，命中多少就是多少。
+ * 一条都没命中时才轮到 `songTitleFallbackTokens`。
+ */
+export const songTitleQueryTokens = (value: string): string[] =>
+  tokensFor(value).filter((token) => !token.startsWith(TITLE_TOKEN_SEED));
+
+/**
+ * 查索引时用：**兜底**那一个 token（`D:` 首字/首词）。
+ *
+ * 基数大，所以只在第一轮颗粒无收时才单独问一次 —— 和精确 token 混在一条 `IN (...)`
+ * 里会把它撑满、把精确命中挤掉。
+ */
+export const songTitleFallbackTokens = (value: string): string[] =>
+  tokensFor(value).filter((token) => token.startsWith(TITLE_TOKEN_SEED));

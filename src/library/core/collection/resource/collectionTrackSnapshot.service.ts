@@ -11,6 +11,8 @@ import type { CollectionSyncPage } from './onlineCollectionSync.service';
  * 改动这个数会把所有在线集合的曲目缓存清空一次（只是重拉，不丢用户数据）。
  */
 export const COLLECTION_TRACK_SNAPSHOT_SCHEMA_VERSION = 8;
+// 8：补页以前会被集合描述里过期的曲目数提前截断（只剩首页 150 首），并把截断的结果记成读完了；
+// 换版本让这些快照一次作废，打开时重新读。
 
 export type CollectionTrackSnapshot<T> = {
     schemaVersion: number;

@@ -79,7 +79,14 @@ const MonetBackgroundLayer: React.FC<MonetBackgroundLayerProps> = ({
     // The processed picture of what is shown now is still being made: the root says that a part is
     // still to come, so that a small picture of this background is not taken with the raw cover.
     const [isPipelinePending, setIsPipelinePending] = useState(false);
-    const sourceUrl = resolveMonetSourceUrl(coverUrl, monetBackgroundImage, tuning);
+    /*
+     * 关掉「显示封面」时把图源整个摘掉：下面所有取图、做管线、画背景的地方都只认
+     * `sourceUrl`，置空之后自然退回渐变底（不会留下一张没做完的图，也不会继续
+     * 为一张不显示的图跑管线）。`backgroundSource` 的取值不动，重新打开还是那张。
+     */
+    const sourceUrl = tuning.backgroundShowCover
+        ? resolveMonetSourceUrl(coverUrl, monetBackgroundImage, tuning)
+        : null;
     // A copy for a new song (or a new type) is ready once its first picture is made, and shows that
     // picture at once rather than crossfading it in from the raw cover: the background layer around
     // it plays the change. Later pictures (another theme, a setting) crossfade in place, as they did.

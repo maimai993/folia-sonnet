@@ -89,12 +89,35 @@ async function playableUrlForNativeRef(ref: string): Promise<string | null> {
 export async function getAudioFromLocalSong(song: LocalSong): Promise<string | null> {
     // 安卓原生曲库：文件在 MediaStore 或 App 私有目录里，WebView 拿不到句柄，
     // 走原生那个回环的小服务（地址按当前端口现拼，见 nativeAudioUrlForRef）。
+    /*
+     * 播放失败时最需要知道的就是「这首歌到底有没有 ref」。
+     * 没有 ref 说明它压根不是原生入库的（或是旧版本导入、字段没写进去），
+     * 再往下查回环服务是白费功夫 —— 这条路只会落到「重新导入」那句提示上。
+     */
+    if (!song.nativeAudioRef) {
+        console.warn(
+            `[LocalMusic] Song ${song.id} has no nativeAudioRef (filePath=${song.filePath ?? '(none)'});`
+            + ' it was not imported through the Android native path.',
+        );
+    }
     if (song.nativeAudioRef) {
-        const direct = await playableUrlForNativeRef(song.nativeAudioRef);
+        /*
+         * 探活结果必须打出来。
+         *
+         * 之前这里全程静默：直连失败 → 复制 → 复制也失败，最后才在函数末尾
+         * 统一打一句「No accessible handle」。可那句提示指向「重新导入」，
+         * 而真正的原因（回环服务 404 / 端口没起来 / 复制被拒）全被吞掉了，
+         * 在真机上完全看不出该往哪查。
+         */
+        const ref = song.nativeAudioRef;
+        const nativeUrl = await nativeAudioUrlForRef(ref);
+        console.info(`[LocalMusic] Playback ref=${ref} url=${nativeUrl ?? '(no-port)'}`);
+        const direct = await playableUrlForNativeRef(ref);
         if (direct) {
             lastLocalAudioFailure = null;
             return direct;
         }
+        console.warn(`[LocalMusic] Direct playback failed for ref=${ref}, reason=${lastLocalAudioFailure ?? 'unknown'}; trying a private copy.`);
 
         /*
          * 自己复制一份。
@@ -155,7 +178,13 @@ export async function getAudioFromLocalSong(song: LocalSong): Promise<string | n
     }
 
     // No accessible handle available - permission may need to be restored or the file moved.
-    console.warn(`[LocalMusic] No accessible handle for song ${song.id}. Permission restore or re-import is required.`);
+    console.warn(
+        `[LocalMusic] No accessible handle for song ${song.id}.`
+        + ` nativeAudioRef=${song.nativeAudioRef ?? '(none)'}`
+        + ` filePath=${song.filePath ?? '(none)'}`
+        + ` fileName=${song.fileName ?? '(none)'}`
+        + ' Permission restore or re-import is required.',
+    );
     return null;
 }
 

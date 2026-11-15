@@ -15,7 +15,7 @@ import { Button } from '../../../components/ui';
 // 说登录是为了什么 —— 见 bravaisAccount.css。字和光晕都只画在「真的没人登录」上：登录失效那一档
 // （is-expired）不画，和 HomeLoginPanel 的 nudge 同一个判断。书脊上的 compact 也走同一套（只是没有那行字：
 // 64px 的书脊只有一颗图标，写不下），否则缝收起来时提示就没了。
-// data-bravais-account：已登录 signed-in，未登录 guest。
+// data-bravais-account：已登录 signed-in，未登录 guest，正在确认 checking。
 
 const BravaisSeamAccountSwitcher: React.FC<{
     account: BravaisHomeAccount;
@@ -43,7 +43,7 @@ const BravaisSeamAccountSwitcher: React.FC<{
             <span className="bravais-account-switcher">
                 <span className={`bravais-account-entry ${account.guest ? 'bravais-account-connect' : 'bravais-account-toggle'}`}>
                     <span className="bravais-account-avatar" />
-                    <span className="is-name">{account.guest ? account.connectLabel : account.nickname ?? account.providerLabel}</span>
+                    <span className="is-name">{account.checking ? account.detail : account.guest ? account.connectLabel : account.nickname ?? account.providerLabel}</span>
                 </span>
             </span>
         );
@@ -61,12 +61,12 @@ const BravaisSeamAccountSwitcher: React.FC<{
     }
 
     return (
-        <div className={`bravais-account-switcher${state}`} data-bravais-account={account.guest ? 'guest' : 'signed-in'}>
+        <div className={`bravais-account-switcher${state}`} data-bravais-account={account.checking ? 'checking' : account.guest ? 'guest' : 'signed-in'}>
             <Button className={`bravais-account-entry ${account.guest ? 'bravais-account-connect' : 'bravais-account-toggle'}`}
                 data-bravais-account-toggle={account.guest ? 'connect' : 'strip'} aria-haspopup="dialog" aria-label={label} title={label} onClick={open}>
                 {nudge && <span className="is-nudge">{t('home.guestCta')}</span>}
                 {picture}
-                <span className="is-name">{account.guest ? account.connectLabel : account.nickname ?? account.providerLabel}</span>
+                <span className="is-name">{account.checking ? account.detail : account.guest ? account.connectLabel : account.nickname ?? account.providerLabel}</span>
             </Button>
         </div>
     );

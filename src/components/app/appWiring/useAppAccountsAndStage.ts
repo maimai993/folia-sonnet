@@ -6,13 +6,12 @@ import { useNeteaseLibrary } from '../../../hooks/useNeteaseLibrary';
 import { createLibraryAccountSwitchCleanupPort } from '../../../library/app/createLibraryAccountPort';
 import { useLibraryAccountController } from '../../../library/app/useLibraryAccountController';
 import { resolveActiveProviderSummary } from '../../../library/core/account/accountRules';
-import { useLibraryAccountProviders } from '../../../library/core/account/useLibraryAccount';
+import { selectAccountSyncPending, useLibraryAccountProviders, useLibraryAccountSelector } from '../../../library/core/account/useLibraryAccount';
 import { omni } from '../../../services/onlineMusic/omni';
+import { syncAccountData } from '../../login/syncAccountData';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { useSearchNavigationStore } from '../../../stores/useSearchNavigationStore';
-import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { OnlineProviderId } from '../../../types/onlineMusic';
-import { errorFields } from '../../../utils/errorText';
 import { useProviderSignOut } from '../dialogs/useProviderSignOut';
 import { useStagePlaybackController } from '../playback/useStagePlaybackController';
 import { useState, useCallback, useMemo } from 'react';
@@ -25,8 +24,8 @@ type Input = AppFoundation & AppAudioOutput & AppThemeAndNavigation;
 
 export const useAppAccountsAndStage = (model: Input) => {
     const {
-        audioRef, automixRef, currentOnlineAudioUrlFetchedAtRef, isDev, isElectronWindow, lastAudioRecoverySourceRef,
-        navigateToPlayer, pendingResumeTimeRef, setIsLyricsLoading, setIsProviderSyncing, setLyrics, setLyricsStable,
+        audioRef, automixRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, isDev, isElectronWindow, lastAudioRecoverySourceRef,
+        navigateToPlayer, pendingResumeTimeRef, setIsLyricsLoading, setLyrics, setLyricsStable,
         shouldAutoPlay, t
     } = model;
     const {
@@ -78,34 +77,11 @@ export const useAppAccountsAndStage = (model: Input) => {
     // （resolveSongLiked → omni.isSongLiked）经 getState 读各平台的 likedSongIds，账户摘要里没有它，
     // 只订阅 controller 快照的话收藏之后心形不会当场更新。取值没有用处。
     useOnlineProviderAccountStore(state => state.accounts);
-    // 当前平台的已喜欢列表：resolveSongLiked 判在线歌的「已收藏」只认这个集合。
-    const likedOnlineSongIds = useOnlineProviderAccountStore(
-        state => state.accounts[state.activeProviderId]?.likedSongIds,
-    );
-    const likedSongIds = useMemo(
-        () => new Set<string | number>(likedOnlineSongIds ?? []),
-        [likedOnlineSongIds],
-    );
-    const handleActiveProviderSyncData = useCallback(async () => {
-        const providerId = activeProviderId;
-        setIsProviderSyncing(true);
-        try {
-            const synced = await onlineProviderRefreshers[providerId]?.();
-            const refreshedAccount = useOnlineProviderAccountStore.getState().accounts[providerId];
-            const authExpired = synced === false && refreshedAccount?.error === 'auth-required';
-            setStatusMsg({
-                type: synced === false ? 'error' : 'success',
-                text: synced === false
-                    ? t(authExpired ? 'status.loginExpired' : 'status.syncFailed')
-                    : t('status.dataSynced'),
-            });
-        } catch (error) {
-            console.warn('[OmniSync] Provider data sync failed', { providerId, ...errorFields(error) });
-            setStatusMsg({ type: 'error', text: t('status.syncFailed') });
-        } finally {
-            setIsProviderSyncing(false);
-        }
-    }, [activeProviderId, onlineProviderRefreshers, setStatusMsg, t]);
+    // 面板账户页的「同步数据」：经账户 controller 同步当前平台（和登录窗口账号那一幅同一条路，同一时间一个）。
+    const isProviderSyncing = useLibraryAccountSelector(accountController, selectAccountSyncPending);
+    const handleActiveProviderSyncData = useCallback(() => {
+        void syncAccountData(accountController, activeProviderId, t);
+    }, [accountController, activeProviderId, t]);
     const refreshActiveProviderPlaylists = useCallback(
         () => omni.refreshProviderPlaylists(activeProviderId),
         [activeProviderId],
@@ -147,6 +123,7 @@ export const useAppAccountsAndStage = (model: Input) => {
         isDev,
         isElectronWindow,
         audioRef,
+        blobUrlRef,
         shouldAutoPlayRef: shouldAutoPlay,
         pendingResumeTimeRef,
         lastAudioRecoverySourceRef,
@@ -161,7 +138,7 @@ export const useAppAccountsAndStage = (model: Input) => {
         accountController, activeProvider, activeProviderId, clearPersistedStagePlaybackCache,
         clearStagePlaybackSession, cloudPlaylist, getNowPlayingDisplayTime, getPlayerCapDisplayTime,
         getSyntheticStageLyricsTime, handleActiveProviderSyncData, interruptStagePlaybackForMainTransition,
-        isNowPlayingStageActive, isPlayerCapStageActive, isSearchOpen, leaveStagePlayback, likedSongIds,
+        isNowPlayingStageActive, isPlayerCapStageActive, isProviderSyncing, isSearchOpen, leaveStagePlayback,
         loadMoreSearchResults, loadStageSessionIntoPlayback, mainPlaybackSnapshotRef, nowPlayingConnectionStatus,
         nowPlayingDebugInfo, nowPlayingLyricPayload, nowPlayingPaused, nowPlayingProgressMs,
         nowPlayingProgressQuality, nowPlayingTrack, onlineProviders, openStagePlayer, playerCapConnectionStatus,

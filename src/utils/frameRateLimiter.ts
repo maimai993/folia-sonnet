@@ -2,6 +2,7 @@
 // Shared helpers and global RAF gate for optional visualizer frame throttling.
 
 import type { VisualizerFrameRate } from '../types';
+import { isAndroidAppShell } from '../platform/runtime';
 
 type AnimationFrameCallback = FrameRequestCallback;
 type RequestAnimationFrameFn = (callback: AnimationFrameCallback) => number;
@@ -41,6 +42,34 @@ export const parseVisualizerFrameRate = (value: string | null): VisualizerFrameR
 
     const parsed = Number(value);
     return isVisualizerFrameRate(parsed) ? parsed : 'off';
+};
+
+/**
+ * 手机上的默认帧率上限。
+ *
+ * 桌面（Electron / 浏览器）默认「不限」是对的：那台机器有余量，120Hz 屏上跑满才顺。
+ * 手机是另一回事 —— 高分屏、播放页常常同时有两三个全屏 WebGL 上下文，单帧二三十毫秒，
+ * 「不限」等于一直占满一个核去画肉眼分不出来的帧。真机读数里播放页 76% 的 CPU 中，
+ * 音频处理器只占 2%，剩下的几乎都是这里。
+ *
+ * 60 而不是 30：60 在手机上是「跟手」的下限，再低歌词滚动就能看出台阶。
+ */
+const MOBILE_DEFAULT_FRAME_RATE: VisualizerFrameRate = 60;
+
+/**
+ * 启动时定帧率档位：**只在没存过**的时候给平台默认。
+ *
+ * 用户自己在「性能与动效」里选过（包括选「不限」）一律照用户 —— 这一条很重要，
+ * 否则升级一次就把人手动关掉的限制又打开了。
+ *
+ * 启动装限帧器与读设置 store 两处都要用同一个判据，所以放在这里，
+ * 不让两边各写一份「null 该怎么办」。
+ */
+export const resolveInitialVisualizerFrameRate = (stored: string | null): VisualizerFrameRate => {
+    if (stored === null) {
+        return isAndroidAppShell() ? MOBILE_DEFAULT_FRAME_RATE : 'off';
+    }
+    return parseVisualizerFrameRate(stored);
 };
 
 /**
@@ -222,7 +251,7 @@ export const installGlobalVisualizerFrameRateLimiter = (overrideFrameRate?: Visu
     }
 
     const initialFrameRate = overrideFrameRate
-        ?? parseVisualizerFrameRate(window.localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
+        ?? resolveInitialVisualizerFrameRate(window.localStorage.getItem(VISUALIZER_FRAME_RATE_STORAGE_KEY));
     if (initialFrameRate === 'off') {
         restoreGlobalVisualizerFrameRateLimiter();
         return;

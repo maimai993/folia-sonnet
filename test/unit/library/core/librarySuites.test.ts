@@ -198,6 +198,8 @@ describe('initial choice and the effective suite (B0)', () => {
         expect(DEFAULT_LIBRARY_SUITE_ID).toBe('grid');
         // 测试配置用 VITE_LIBRARY_INITIAL_SUITE=grid 钉住；没有覆盖时是开发阶段的 bravais。
         expect(LIBRARY_SUITE_INITIAL_CHOICE).toBe('grid');
+        // 内置初始选择是 bravais：rhine 曲库合入后曾经改叫 rhine，但那一版没跟着改这里，
+        // 紧接着的 ffc42c8d1 又把 src 改回 bravais（「不再默认选中 Rhine Lab」），所以这里也回到 bravais。
         expect(resolveLibrarySuiteInitialChoice(undefined)).toBe('bravais');
         expect(resolveLibrarySuiteInitialChoice('')).toBe('bravais');
         expect(resolveLibrarySuiteInitialChoice('  ')).toBe('bravais');

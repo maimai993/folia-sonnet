@@ -273,7 +273,12 @@ export const CustomSelectMenu: React.FC<CustomSelectMenuProps> = ({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={hidden}
             transition={{ duration: reducedMotion ? 0 : 0.15, ease: 'easeOut' }}
-            className={`fixed z-[200] border overscroll-contain custom-scrollbar ${compact ? 'rounded-[10px]' : 'rounded-xl shadow-xl backdrop-blur-md'}${isVirtualized ? '' : ' overflow-y-auto'}`}
+            // 两条分支都带 backdrop-blur：非 compact 一直有，compact（设置页里的下拉走这条）
+            // 原来没有，所以液态玻璃打开后设置页的下拉是一块实板，跟别处不像一套材质。
+            // 菜单是 portal 到 document.body 的，不在设置窗口那层玻璃的屏障里，模糊能真生效。
+            // rouned + backdrop-blur 写在同一元素上，靠 index.css 里
+            // [class*="backdrop-blur"][class*="rounded"] 那条 overflow:hidden 自裁收圆角。
+            className={`fixed z-[200] border overscroll-contain custom-scrollbar backdrop-blur-md ${compact ? 'rounded-[10px]' : 'rounded-xl shadow-xl'}${isVirtualized ? '' : ' overflow-y-auto'}`}
             data-wheel-scroll-region
             role="listbox"
             aria-label={ariaLabel}

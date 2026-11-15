@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ImagePlus } from 'lucide-react';
+import { Button } from '../../../ui/Button';
 import { computeHexCardFrame } from '../../../../utils/hexCardFalloff';
+import type { ScratchpadHandleStyle } from '../../../../stores/useScratchpadSettingsStore';
+import ScratchpadHandleRest from '../../../app/scratchpad/ScratchpadHandleRest';
 import { SAMPLE_COVERS } from '../kit';
+import type { LiquidGlassPresetId } from '../../../../shinoinject/liquidglass';
 
 // src/components/modal/settings/pages/pictures.tsx
 // What the pages draw themselves: the small pictures of the choices that differ in look, and the
@@ -145,3 +150,102 @@ export const GridCardsPreview: React.FC<GridCardsPreviewProps> = ({ minScale, mi
         </>
     );
 };
+
+/**
+ * 流体玻璃预设的效果图占位：图片存在就显示图片（object-cover 铺满框），
+ * 不存在就画一个虚线占位框（图片+ 图标），放图即自动显示、无需改代码。
+ * 把效果图放到 public/glass-presets/<预设 id>.png：毛玻璃 frosted、通透流体 clear、
+ * 朦胧流体 hazy、节能 eco。
+ *
+ * 这段与上游 folia-major 的 GlassPresetPicture 逐字一致（只把 import 路径换成本仓库的）。
+ */
+export const GlassPresetPicture: React.FC<{ id: LiquidGlassPresetId }> = ({ id }) => {
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
+    return (
+        <span className="relative flex h-full w-full items-center justify-center">
+            {!failed && (
+                <img
+                    src={`${import.meta.env.BASE_URL}glass-presets/${id}.png`}
+                    alt=""
+                    draggable={false}
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setFailed(true)}
+                    className={`h-full w-full object-cover transition-opacity ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                />
+            )}
+            {!loaded && (
+                <span className="absolute inset-1 flex items-center justify-center rounded-md border border-dashed border-[var(--st-line)] text-[color:var(--st-t2)]">
+                    <ImagePlus size={16} strokeWidth={1.75} />
+                </span>
+            )}
+        </span>
+    );
+};
+
+/**
+ * 流体玻璃预设的两列预览网格（2×2）：大图铺满整行宽度（每格即半行宽），高 = 宽 − 30px，
+ * 方便看清折射与模糊；选中项套一圈强调色边环。图与占位都来自 GlassPresetPicture。
+ *
+ * 布局、尺寸与配色与上游 folia-major 逐字一致。唯一改动是外面那层从上游的手写按钮标签换成
+ * 控件库的 Button：本仓库 `npm run check:ui` 禁止手写按钮，且 Button 自带 role/aria 所需的
+ * 键盘处理，热区与焦点环也跟着全站一致。role="radio" 与 aria-checked 原样保留。
+ */
+export const GlassPresetGrid: React.FC<{
+    value: string;
+    label: string;
+    options: ReadonlyArray<{ value: string; label: string }>;
+    onChange: (value: string) => void;
+}> = ({ value, label, options, onChange }) => (
+    <div role="radiogroup" aria-label={label} className="grid w-full grid-cols-2 gap-3 py-1">
+        {options.map((entry) => {
+            const selected = entry.value === value;
+            return (
+                <Button
+                    key={entry.value}
+                    variant="bare"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => {
+                        if (!selected) onChange(entry.value);
+                    }}
+                    className="group flex min-w-0 flex-col items-center gap-1.5 rounded-lg"
+                >
+                    <span className="relative block w-full">
+                        {/* 高 = 宽 − 30px：padding-top 的百分比按包含块宽度算，这里正好是半行宽。 */}
+                        <span aria-hidden className="block w-full" style={{ paddingTop: 'calc(100% - 30px)' }} />
+                        <span
+                            aria-hidden
+                            className={`st-t-fast absolute inset-0 overflow-hidden rounded-lg bg-[var(--st-pv)] shadow-[inset_0_0_0_1px_var(--st-line)] transition-opacity ${selected ? '' : 'opacity-70 group-hover:opacity-100'}`}
+                        >
+                            <GlassPresetPicture id={entry.value as LiquidGlassPresetId} />
+                        </span>
+                        {selected && (
+                            <span aria-hidden className="st-t-fast absolute -inset-[3px] rounded-[11px] shadow-[inset_0_0_0_2px_var(--st-accent)]" />
+                        )}
+                    </span>
+                    <span className={`st-t-fast max-w-full truncate text-center text-sm leading-5 transition-colors ${selected ? 'text-[color:var(--st-t1)]' : 'text-[color:var(--st-t2)] group-hover:text-[color:var(--st-t1)]'}`}>
+                        {entry.label}
+                    </span>
+                </Button>
+            );
+        })}
+    </div>
+);
+
+/**
+ * One of the scratchpad side tab's resting looks (scratchpadHandleStyle): two covers stand for the wall,
+ * and on the frame's left edge sits what the tab shows while the pointer is away. A static mark, not a
+ * live preview of the tab.
+ */
+export const ScratchpadHandleStylePicture: React.FC<{ handleStyle: ScratchpadHandleStyle }> = ({ handleStyle }) => (
+    // The tab lives on the dark wall, so the frame is that wall whatever the settings theme is.
+    // scratchpad-look gives it the scratchpad's accent marks (defined in scratchpad.css).
+    <span className="scratchpad-look relative block h-full w-full" style={{ background: '#121114' }}>
+        <span className="absolute right-2 top-2 h-9 w-9 rounded-[3px] opacity-60" style={{ background: SAMPLE_COVERS[1] }} />
+        <span className="absolute right-12 top-6 h-7 w-7 rounded-[3px] opacity-60" style={{ background: SAMPLE_COVERS[2] }} />
+        <span className="absolute left-0 top-0 flex h-full items-center">
+            <ScratchpadHandleRest handleStyle={handleStyle} scale={0.75} vivid />
+        </span>
+    </span>
+);

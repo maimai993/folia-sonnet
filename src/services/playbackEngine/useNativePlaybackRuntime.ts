@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
+import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nativePlaybackSync';
 import type { MutableRefObject } from 'react';
 import { setDuration } from '../../stores/usePlaybackStore';
 import { currentTime } from '../../stores/motionSignals';
@@ -26,6 +29,11 @@ type UseNativePlaybackRuntimeOptions = {
     enabled: boolean;
     audioSrc: string | null;
     shouldAutoPlayRef: MutableRefObject<boolean>;
+    /**
+     * 上次听到哪儿（秒）。两条起播路读的是同一个 ref：`<audio>` 那边由 `onLoadedMetadata`
+     * 消费，这里在 `setSource` 时带走。谁先跑到谁消费，另一边读到 null 就从头开始。
+     */
+    pendingResumeTimeRef: MutableRefObject<number | null>;
     isLyricsLoading: boolean;
     getTargetPlaybackVolume: () => number;
     /** 单曲循环：交给 ExoPlayer 自己重复，Web 侧就收不到 `ended` 了（这正是想要的）。 */
@@ -38,6 +46,7 @@ export const useNativePlaybackRuntime = ({
     enabled,
     audioSrc,
     shouldAutoPlayRef,
+    pendingResumeTimeRef,
     isLyricsLoading,
     getTargetPlaybackVolume,
     repeatOne,
@@ -48,11 +57,12 @@ export const useNativePlaybackRuntime = ({
     const callbacksRef = useRef({ onEnded, onError, getTargetPlaybackVolume, repeatOne });
     callbacksRef.current = { onEnded, onError, getTargetPlaybackVolume, repeatOne };
 
-    const takes = enabled && nativePlaybackEngine.supports(audioSrc);
+    const reconciling = useSyncExternalStore(subscribeNativePlaybackSync, isNativePlaybackReconciling, () => false);
+    const takes = enabled && !reconciling && nativePlaybackEngine.supports(audioSrc);
 
     // 地址 → 播放器。blob 地址（本地歌）原生吃不下，那种歌整首回落到 <audio>。
     useEffect(() => {
-        if (!enabled || !audioSrc) return;
+        if (!enabled || reconciling || isNativePlaybackReconciling() || !audioSrc) return;
         if (!nativePlaybackEngine.supports(audioSrc)) {
             // 「开关开了但这首歌还是网页在播」的全部答案都在这行日志里 —— 均衡器还能听出
             // 变化，就是因为它根本没走原生。看日志比猜快。
@@ -61,18 +71,36 @@ export const useNativePlaybackRuntime = ({
         }
         console.info('[NativePlayer] 接管这一首', audioSrc.slice(0, 24));
         nativePlaybackEngine.setRepeatMode(callbacksRef.current.repeatOne ? 1 : 0);
-        void nativePlaybackEngine.setSource(audioSrc).catch(error => {
+        const song = usePlaybackStore.getState().currentSong;
+        /*
+         * 恢复会话时的续播位置。在这里消费而不是在引擎里：引擎不知道「这一首是新装的还是
+         * 重新协商的」，而对后者再跳一次位置会把正在播的歌拽回去。
+         */
+        const resumeAtSec = pendingResumeTimeRef.current;
+        pendingResumeTimeRef.current = null;
+        void nativePlaybackEngine.setSource(audioSrc, {
+            songKey: song ? getPlaybackSongKey(song) : null,
+            startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
+        }).catch(error => {
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
-    }, [audioSrc, enabled]);
+    }, [audioSrc, enabled, reconciling, pendingResumeTimeRef]);
 
     // 关掉开关、或没有歌了 → 收掉播放器，别让上一首在后台继续响。
     useEffect(() => {
-        if (!enabled) return;
+        if (!enabled || reconciling || isNativePlaybackReconciling()) return;
         if (audioSrc && nativePlaybackEngine.supports(audioSrc)) return;
         void nativePlaybackEngine.stop().catch(() => undefined);
-    }, [audioSrc, enabled]);
+    }, [audioSrc, enabled, reconciling]);
+
+    // 单曲循环随时能按，不能等下一次装地址才生效（那首歌的循环会丢：ExoPlayer 还是
+    // OFF，歌放完停在末尾，进度条不动；Web 那条路的 <audio>.loop 是元素属性，React
+    // 一渲染就生效，原生这里得显式补一趟）。已经在播的不重新装地址 —— 那会从头再来。
+    useEffect(() => {
+        if (!enabled || !audioSrc || !nativePlaybackEngine.supports(audioSrc)) return;
+        nativePlaybackEngine.setRepeatModeNow(repeatOne ? 1 : 0);
+    }, [audioSrc, enabled, repeatOne]);
 
     // 自动播放。`shouldAutoPlayRef` 由 playSong 置位，Web 那条路（元素有 src 才走）在
     // 原生模式下会因为 src 对不上而自然跳过，所以这里是唯一的消费点。
@@ -100,8 +128,8 @@ export const useNativePlaybackRuntime = ({
              */
             const pageHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
             if (pageHidden && typeof event.positionMs === 'number' && event.type !== 'ready') {
-                // 走引擎而不是直接写事件里的采样值：它那里有「只进不退」的夹子，
-                // 直接写会让界面上已经画出去的那一帧往回抽一下。
+                // 走引擎而不是直接写事件里的采样值：引擎那边已经把这一拍的锚点还原到
+                // 它真正产生的时刻，直接写采样值会丢掉这段换算。
                 currentTime.set(nativePlaybackEngine.getPositionSec());
             }
             switch (event.type) {
@@ -111,7 +139,7 @@ export const useNativePlaybackRuntime = ({
                     }
                     break;
                 case 'ended':
-                    callbacksRef.current.onEnded();
+                    // 原生服务已经处理 ended 并推进队列；Web 只观察，不能再次 requestSkip。
                     break;
                 case 'error':
                     console.error('[NativePlayer] player error', event.message);

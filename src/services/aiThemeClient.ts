@@ -66,6 +66,11 @@ type AiThemeRawResponse = {
     finishReason: string;
     status: number;
     textLength: number;
+    /**
+     * 已经结构化的答案。只有免费渠道（foliawork）会填：那边交过来的就是
+     * `{ theme, decision? }`，不必再拿文本去 parse 一遍。
+     */
+    theme?: unknown;
 };
 
 const readErrorDetail = async (response: Response): Promise<string> => {
@@ -262,6 +267,9 @@ const requestOpenAiThemeJson = async (systemPrompt: string, sourcePrompt: string
 };
 
 /**
+};
+
+/**
  * 用用户自己配置的服务商生成主题。
  * 抛出的错误消息与桌面版一致，`isMissingAiApiKeyError` 才能识别「还没填 Key」。
  */
@@ -281,15 +289,16 @@ export const generateThemeWithConfiguredAi = async (
 
     try {
         const raw = protocol === 'gemini'
-            ? await requestGeminiThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt)
-            : protocol === 'anthropic'
-                ? await requestAnthropicThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt)
-                : await requestOpenAiThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt);
+                ? await requestGeminiThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt)
+                : protocol === 'anthropic'
+                    ? await requestAnthropicThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt)
+                    : await requestOpenAiThemeJson(THEME_GENERATION_PROMPT_PREFIX, sourcePrompt);
 
         stage = 'parse';
         let parsed: unknown;
         try {
-            parsed = parseAiThemeJsonInput(raw.text);
+            // 免费渠道已经给过结构化主题；其余三家要给的是「模型吐出来的那段文本」。
+            parsed = raw.theme ?? parseAiThemeJsonInput(raw.text);
         } catch (error) {
             // 把响应形态带进错误：finish=length 说明是被输出上限截断（推理模型很常见），
             // 否则就是模型没按双主题 JSON 的格式回答。
@@ -339,7 +348,12 @@ const summarizeError = (error: unknown): string => (
     error instanceof Error ? error.message : String(error ?? '')
 );
 
-/** 本机已经填过凭据、可以走「设备本地生成」这条路吗。 */
+/**
+ * 本机已经可以走「设备本地生成」这条路吗。
+ *
+ * 免费渠道自带凭据，选中它就算可用 —— 否则设置页会把「已经能用了」显示成「还没配置」，
+ * 用户就会去别处找一个 Key，而免费那档本来就是给不想找 Key 的人准备的。
+ */
 export const isLocalAiThemeAvailable = (): boolean => isAiConfigured();
 
 /**
@@ -352,6 +366,7 @@ export const testConfiguredAiConnection = async (): Promise<AiConnectionTestResu
 
     const protocol = aiProtocolOf(settings.provider);
     try {
+
         if (protocol === 'anthropic') {
             const apiKey = resolveAiApiKey(settings);
             if (!apiKey) {

@@ -3,7 +3,7 @@
 // CI 的 issue-link job 跑的是同一份实现（ci/checkIssueLink.ts）。
 
 import { describe, expect, it } from 'vitest';
-import { explainMissingLink, hasIssueLink, parseIssueRefs } from '../../../ci/checkIssueLink.ts';
+import { explainMissingLink, hasIssueLink, parseIssueRefs, requiresIssueLink } from '../../../ci/checkIssueLink.ts';
 
 describe('parseIssueRefs', () => {
     it('四种动词都认，大小写不敏感，编号取数字', () => {
@@ -59,6 +59,25 @@ describe('hasIssueLink', () => {
         expect(hasIssueLink('见 issue #12 的讨论')).toBe(false);
         expect(hasIssueLink('')).toBe(false);
         expect(hasIssueLink(null)).toBe(false);
+    });
+});
+
+describe('requiresIssueLink', () => {
+    it('fix/* 分支强制关联，不看标签', () => {
+        expect(requiresIssueLink({ branch: 'fix/login-timeout', labels: [] })).toBe(true);
+        expect(requiresIssueLink({ branch: 'fix/login-timeout', labels: ['bug'] })).toBe(true);
+    });
+
+    it('其他分支只在带 bug 标签时强制，标签大小写不敏感', () => {
+        expect(requiresIssueLink({ branch: 'feat/export-playlist', labels: ['bug'] })).toBe(true);
+        expect(requiresIssueLink({ branch: 'feat/export-playlist', labels: ['BUG'] })).toBe(true);
+        expect(requiresIssueLink({ branch: 'feat/export-playlist', labels: ['enhancement'] })).toBe(false);
+        expect(requiresIssueLink({ branch: 'feat/export-playlist', labels: [] })).toBe(false);
+    });
+
+    it('只认 fix/ 前缀，fixes/ 这样的分支名不算', () => {
+        expect(requiresIssueLink({ branch: 'fixes/login-timeout', labels: [] })).toBe(false);
+        expect(requiresIssueLink({ branch: '', labels: [] })).toBe(false);
     });
 });
 

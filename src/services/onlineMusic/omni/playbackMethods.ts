@@ -11,6 +11,7 @@ import type {
     OmniSongReplacement,
 } from '../../../types/onlineMusic';
 import { applyOmniAudioHook } from '../../hostExtensionHooks';
+import { applyImportedAudioResolver } from '../importedAudioRouting';
 import { toSafePlaybackUrl } from '../../../utils/appPlaybackHelpers';
 import { getOnlineMusicProvider, getOnlineMusicProviderForSong, providerSupports, requireOnlineMusicProvider } from '../providerRegistry';
 import { saveSongReplayGain } from '../resourceCache';
@@ -138,17 +139,24 @@ export const playbackMethods = {
     },
 
     async getAudioSource(song: SongResult, quality: AudioQualityPreference): Promise<OmniAudioSource | null> {
-        const provider = providerForSong(song);
-        const level = audioQualityFor(provider.id, quality);
-        let source: OmniAudioSource | null;
-        try {
-            source = await runRequest(provider, 'audio', async () => await (provider.playback?.getAudioSource(song, level) ?? null));
-        } catch (error) {
-            // The provider gave no address. An extension may still give one, as it may where the provider answers null;
-            // without one the very error goes on, for the caller to sort (failure/onlineFailureCase.ts).
-            const fromHook = await applyOmniAudioHook(song, null);
-            if (fromHook?.url) return fromHook;
-            throw error;
+        // Imported LX sources get first chance for every online song, including ones owned by
+        // another provider. A null answer (no sources, unmapped platform, all of them failed)
+        // leaves the provider path exactly as it was.
+        const imported = await applyImportedAudioResolver(song, quality);
+        const hasImported = Boolean(imported?.url);
+        const provider = hasImported ? null : providerForSong(song);
+        const level = provider ? audioQualityFor(provider.id, quality) : quality;
+        let source: OmniAudioSource | null = hasImported ? imported : null;
+        if (!source && provider) {
+            try {
+                source = await runRequest(provider, 'audio', async () => await (provider.playback?.getAudioSource(song, level) ?? null));
+            } catch (error) {
+                // The provider gave no address. An extension may still give one, as it may where the provider answers null;
+                // without one the very error goes on, for the caller to sort (failure/onlineFailureCase.ts).
+                const fromHook = await applyOmniAudioHook(song, null);
+                if (fromHook?.url) return fromHook;
+                throw error;
+            }
         }
         // Written here rather than at either caller because this is the only moment a provider ever
         // states a track's ReplayGain, and both callers - the prefetch pass and playback itself -
@@ -162,7 +170,7 @@ export const playbackMethods = {
         // (A provider that lists the levels it tells apart is the exception: where it names another
         // of them, the file is that level's own, and a copy of it is kept as of that level. Kept as
         // of the level asked for, it would play in that level's place for good.)
-        const listed = provider.playback?.audioQualityLevels;
+        const listed = provider?.playback?.audioQualityLevels;
         if (source?.url) {
             noteAudioSourceLevel(source.url, {
                 level: listed?.includes(source.quality) ? source.quality : level,

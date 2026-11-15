@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { Trash2, Upload } from 'lucide-react';
 import { DEFAULT_NOMAND_BACKGROUND_TUNING, type MonetBackgroundImage, type NomandBackgroundSource, type NomandBackgroundTuning } from '../../../../types';
 import { Button, Group, Reveal, Row, Segmented, type SettingsGroupDef } from '../../../modal/settings/kit';
+import MarketEntryButton from '../../../modal/settings/pages/integration/market/MarketEntryButton';
 import { TextField } from '../../../ui';
 import { percent, SliderRow, ToggleRow } from '../../panelRows';
 import NomandBackgroundEffectSettings from './NomandBackgroundEffectSettings';
@@ -84,6 +85,8 @@ const NomandBackgroundSettingsCard: React.FC<NomandBackgroundSettingsCardProps> 
                     >
                         {t('options.monetClearBackground')}
                     </Button>
+                    {/* 和 monet 那张卡片一致：自选图旁边给市场入口。 */}
+                    <MarketEntryButton tab="background" />
                     <TextField
                         ref={inputRef}
                         type="file"

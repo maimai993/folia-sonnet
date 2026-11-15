@@ -13,12 +13,11 @@ import { isLocalPlaybackSong, isNavidromePlaybackSong, resolveNavidromePlaybackC
 type SongLikedSources = {
     isLocalSongLiked: (song: SongResult) => boolean;
     starredNavidromeSongIds: Set<string>;
-    likedSongIds: Set<string | number>;
 };
 
 export const resolveSongLiked = (
     song: SongResult | null,
-    { isLocalSongLiked, starredNavidromeSongIds, likedSongIds }: SongLikedSources,
+    { isLocalSongLiked, starredNavidromeSongIds }: SongLikedSources,
 ): boolean => {
     if (!song) {
         return false;
@@ -30,5 +29,5 @@ export const resolveSongLiked = (
         const navidromeSong = resolveNavidromePlaybackCarrier(song);
         return navidromeSong ? starredNavidromeSongIds.has(navidromeSong.navidromeData.id) : false;
     }
-    return omni.isSongLiked(song, likedSongIds);
+    return omni.isSongLiked(song);
 };

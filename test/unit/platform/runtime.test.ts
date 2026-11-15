@@ -33,8 +33,16 @@ describe('platform runtime', () => {
   });
 
   it('gives Electron precedence when its bridge exists', () => {
-    vi.stubGlobal('window', { electron: {} });
+    vi.stubGlobal('window', { electron: { platform: 'win32' } });
     expect(getRuntimeEnvironment()).toBe('electron');
+  });
+
+  // 回归：判据是 `platform`，不是 `electron` 对象本身。安卓端的模组 shim 只装
+  // `window.electron.mods`（没有 platform），若按对象存在判成 electron，桌面专属的
+  // 设置页/窗口控件会在安卓上出现并在调用主进程方法时抛。
+  it('does not mistake an electron shim without a platform for Electron', () => {
+    vi.stubGlobal('window', { electron: { mods: { listMods: () => Promise.resolve({ mods: [] }) } } });
+    expect(getRuntimeEnvironment()).not.toBe('electron');
   });
 
   // 安卓的本地曲库走原生（MediaStore 扫描 / 系统文件管理器 / 本地音频服务），

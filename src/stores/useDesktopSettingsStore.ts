@@ -31,6 +31,8 @@ export const REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY = 'remote_control_click_th
 
 export const REMOTE_CONTROL_EXPAND_COVER_STORAGE_KEY = 'remote_control_expand_cover';
 
+export const REMOTE_CONTROL_TEXT_SHADE_STORAGE_KEY = 'remote_control_text_shade';
+
 export const WALLPAPER_MODE_STORAGE_KEY = 'wallpaper_mode';
 
 export const WALLPAPER_ENTRY_CONFIRMED_STORAGE_KEY = 'wallpaper_entry_confirmed';
@@ -78,6 +80,8 @@ export type DesktopSettingsState = {
     remoteControlClickThrough: boolean;
     /** Remote control window: when idle, the cover opens into the large sleeve. On by default. */
     remoteControlExpandCover: boolean;
+    /** Remote control window, transparent background: the idle type sits on a soft dark shade. Off by default. */
+    remoteControlTextShade: boolean;
     wallpaperMode: boolean;
     /** Persisted: the one-time entry explanation has been accepted, so later entries go straight in. */
     wallpaperEntryConfirmed: boolean;
@@ -97,7 +101,7 @@ export type DesktopSettingsState = {
     backgroundThrottling: boolean;
     /** Transient (never persisted), from the main process: false on native Wayland, where always-on-top is silently ignored. */
     windowAlwaysOnTopSupported: boolean;
-    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; REMOTE_CONTROL_HIDE_TITLEBAR?: unknown; REMOTE_CONTROL_CLICK_THROUGH?: unknown; REMOTE_CONTROL_EXPAND_COVER?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; GPU_PREFERENCE?: unknown; BACKGROUND_THROTTLING?: unknown; wallpaper_mode?: unknown; wallpaper_entry_confirmed?: unknown; wallpaper_mac_autohide_dock?: unknown; window_always_on_top_supported?: unknown; }) => void;
+    setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; REMOTE_CONTROL_HIDE_TITLEBAR?: unknown; REMOTE_CONTROL_CLICK_THROUGH?: unknown; REMOTE_CONTROL_EXPAND_COVER?: unknown; REMOTE_CONTROL_TEXT_SHADE?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; GPU_PREFERENCE?: unknown; BACKGROUND_THROTTLING?: unknown; wallpaper_mode?: unknown; wallpaper_entry_confirmed?: unknown; wallpaper_mac_autohide_dock?: unknown; window_always_on_top_supported?: unknown; }) => void;
     handleToggleMinimizeToTray: (enable: boolean) => void;
     handleToggleCloseToTray: (enable: boolean) => void;
     handleToggleVoiceInputPause: (enable: boolean) => void;
@@ -108,6 +112,7 @@ export type DesktopSettingsState = {
     handleToggleHideRemoteControlTitlebar: (enable: boolean) => void;
     handleToggleRemoteControlClickThrough: (enable: boolean) => void;
     handleToggleRemoteControlExpandCover: (enable: boolean) => void;
+    handleToggleRemoteControlTextShade: (enable: boolean) => void;
     /**
      * The user-facing wallpaper switch (settings card, command palette, tray request). Leaving
      * applies at once; the first-ever entry opens the confirmation and waits for
@@ -129,12 +134,16 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     closeToTray: getStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, false),
     voiceInputPauseEnabled: getStoredBoolean(VOICE_INPUT_PAUSE_STORAGE_KEY, false),
     preventDisplaySleepDuringPlayback: getStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, false),
-    modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, false),
+    // 模组系统默认开：装完就有内置模组可用，不用先去设置里翻开关。
+    // 存过的值优先（`getStoredBoolean` 只在 localStorage 没有这个键时才用 fallback），
+    // 所以用户显式关掉过的话不会被这里翻回来。
+    modSystemEnabled: getStoredBoolean(MOD_SYSTEM_ENABLED_STORAGE_KEY, true),
     hideTaskbarIcon: getStoredBoolean(HIDE_TASKBAR_ICON_STORAGE_KEY, false),
     hideRemoteControlTaskbarIcon: getStoredBoolean(REMOTE_CONTROL_SKIP_TASKBAR_STORAGE_KEY, false),
     hideRemoteControlTitlebar: getStoredBoolean(REMOTE_CONTROL_HIDE_TITLEBAR_STORAGE_KEY, false),
     remoteControlClickThrough: getStoredBoolean(REMOTE_CONTROL_CLICK_THROUGH_STORAGE_KEY, false),
     remoteControlExpandCover: getStoredBoolean(REMOTE_CONTROL_EXPAND_COVER_STORAGE_KEY, true),
+    remoteControlTextShade: getStoredBoolean(REMOTE_CONTROL_TEXT_SHADE_STORAGE_KEY, false),
     wallpaperMode: getStoredBoolean(WALLPAPER_MODE_STORAGE_KEY, false),
     wallpaperEntryConfirmed: getStoredBoolean(WALLPAPER_ENTRY_CONFIRMED_STORAGE_KEY, false),
     wallpaperEntryConfirmOpen: false,
@@ -184,6 +193,10 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         if (typeof settings.REMOTE_CONTROL_EXPAND_COVER === 'boolean') {
             patch.remoteControlExpandCover = settings.REMOTE_CONTROL_EXPAND_COVER;
             setStoredBoolean(REMOTE_CONTROL_EXPAND_COVER_STORAGE_KEY, settings.REMOTE_CONTROL_EXPAND_COVER);
+        }
+        if (typeof settings.REMOTE_CONTROL_TEXT_SHADE === 'boolean') {
+            patch.remoteControlTextShade = settings.REMOTE_CONTROL_TEXT_SHADE;
+            setStoredBoolean(REMOTE_CONTROL_TEXT_SHADE_STORAGE_KEY, settings.REMOTE_CONTROL_TEXT_SHADE);
         }
         if (typeof settings.wallpaper_mode === 'boolean') {
             patch.wallpaperMode = settings.wallpaper_mode;
@@ -253,6 +266,13 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('MOD_SYSTEM_ENABLED', enable);
         }
+        // 安卓没有那个主进程：模组跑在 nodejs-mobile 宿主里，得显式告诉它，
+        // 否则关掉总开关只是把 UI 藏起来，已经激活的模组照旧在后台跑。
+        // 桌面端这里不会命中（mods 桥在安卓上才有 setModSystemEnabled）。
+        const modsBridge = (window.electron as { mods?: { setModSystemEnabled?: (on: boolean) => Promise<unknown> } } | undefined)?.mods;
+        if (typeof modsBridge?.setModSystemEnabled === 'function') {
+            void modsBridge.setModSystemEnabled(enable).catch(() => undefined);
+        }
     },
     handleTogglePreventDisplaySleepDuringPlayback: (enable) => {
         setStoredBoolean(PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK_STORAGE_KEY, enable);
@@ -302,6 +322,13 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
         set({ remoteControlExpandCover: enable });
         if (window.electron?.saveSettings) {
             void window.electron.saveSettings('REMOTE_CONTROL_EXPAND_COVER', enable);
+        }
+    },
+    handleToggleRemoteControlTextShade: (enable) => {
+        setStoredBoolean(REMOTE_CONTROL_TEXT_SHADE_STORAGE_KEY, enable);
+        set({ remoteControlTextShade: enable });
+        if (window.electron?.saveSettings) {
+            void window.electron.saveSettings('REMOTE_CONTROL_TEXT_SHADE', enable);
         }
     },
     handleToggleWallpaperMode: (enable) => {
@@ -410,6 +437,7 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     hideRemoteControlTitlebar: state.hideRemoteControlTitlebar,
     remoteControlClickThrough: state.remoteControlClickThrough,
     remoteControlExpandCover: state.remoteControlExpandCover,
+    remoteControlTextShade: state.remoteControlTextShade,
     wallpaperMode: state.wallpaperMode,
     wallpaperMacAutohideDock: state.wallpaperMacAutohideDock,
     openPlayerOnLaunch: state.openPlayerOnLaunch,
@@ -423,6 +451,7 @@ export const selectDesktopSettingsSnapshot = (state: DesktopSettingsState) => ({
     handleToggleHideRemoteControlTitlebar: state.handleToggleHideRemoteControlTitlebar,
     handleToggleRemoteControlClickThrough: state.handleToggleRemoteControlClickThrough,
     handleToggleRemoteControlExpandCover: state.handleToggleRemoteControlExpandCover,
+    handleToggleRemoteControlTextShade: state.handleToggleRemoteControlTextShade,
     handleToggleWallpaperMode: state.handleToggleWallpaperMode,
     handleToggleWallpaperMacAutohideDock: state.handleToggleWallpaperMacAutohideDock,
     handleToggleOpenPlayerOnLaunch: state.handleToggleOpenPlayerOnLaunch,

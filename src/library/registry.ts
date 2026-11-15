@@ -1,10 +1,12 @@
 import type React from 'react';
 import type {
+    LibraryCardRailProps,
     LibraryDeclaredActions,
     LibrarySuiteId,
     LibrarySuiteManifest,
     LibrarySuiteStageProps,
     LibrarySuiteTransitions,
+    LibrarySurfaceComponent,
     LibrarySurfaceId,
     LibrarySurfacePropsMap,
 } from './core/suite/suite.contract';
@@ -35,6 +37,15 @@ export const listLibrarySuites = (): readonly LibrarySuiteManifest[] => SUITE_IN
 export const hasLibrarySuite = (suiteId: string): suiteId is LibrarySuiteId => SUITE_INDEX.has(suiteId);
 
 export const getLibrarySuite = (suiteId: string): LibrarySuiteManifest | undefined => SUITE_INDEX.get(suiteId);
+
+/**
+ * 横滑卡流：只有声明了 `cardRail` 的 suite 才提供（目前是默认的 grid）。
+ * 洛雪工作台的歌单 / 电台 / 专辑 / 榜单页靠它复用首页那套卡片流；suite 之外的界面不许直接 import
+ * suites 里的组件（layerBoundaries 会拦），所以出口放在这里。
+ */
+export const resolveCardRail = (): React.ComponentType<LibraryCardRailProps> | undefined => (
+    getLibrarySuite(DEFAULT_LIBRARY_SUITE_ID)?.cardRail as unknown as React.ComponentType<LibraryCardRailProps> | undefined
+);
 
 /**
  * 实际生效的 suite：store 里存的选择可能是这个构建里没有的（初始选择、旧版本的记录），那时生效的是默认 suite。

@@ -14,7 +14,9 @@ import type { ChorusRange } from '../../../utils/lyrics/chorusEffects';
 import { getOriginalCoverUrl } from '../../../utils/coverUrl';
 import { resolveProxiedUrl } from '../../proxiedUrl';
 
-const isElectron = typeof window !== 'undefined' && (window as any).electron;
+// 只认 platform（只有 Electron 的 preload 会写）：安卓端的模组 shim 也装了
+// `window.electron`，按对象存在与否判断会让安卓绕过同源代理、并且丢掉 cookie。
+const isElectron = typeof window !== 'undefined' && typeof (window as any).electron?.platform === 'string';
 
 /**
  * Sends a POST request to u.y.qq.com via proxy or directly in Electron.

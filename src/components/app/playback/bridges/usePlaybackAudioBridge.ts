@@ -8,53 +8,23 @@ import { calculateReplayGain } from '../../../../utils/replayGain';
 import { applyAudioEqualizerSettings, planAudioEqualizerApply } from '../../../../services/audioEqualizerGraph';
 import { type AudioEffectChain } from '../../../../services/audioEffects/effectChain';
 import { buildPlaybackGraph } from '../../../../services/playbackGraph';
-import { createSpectrumTap } from '../../../../services/spectrumTap';
 import { cachePlayedTrackAssets } from '../../../../services/playedTrackCache';
 import { registerPlaybackFadeGraph } from '../../../../services/playbackFade';
+import { registerRoomSlot } from '../../../../services/sceneSound/roomStage';
+import { applySavedAudioOutputToContext } from '../../../../services/audioOutputSink';
 import { rampGain, type AutomixDeckChain } from '../../../../services/automix/crossfadeGraph';
+import { onTrackProfile } from '../../../../services/automix/profileService';
+import { onPlayWrapped } from '../../../../services/volumeBalance/balanceMeter';
+import { createBalancePlay } from '../../../../services/volumeBalance/balancePlay';
+import { onBalanceRecord } from '../../../../services/volumeBalance/balanceRecords';
 import { setStatusMessage as setStatusMsg } from '../../../../stores/useStatusMessageStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
-import { setPlayerState } from '../../../../stores/usePlaybackStore';
+import { setPlayerState, setReplayGainAppliedDb, setReplayGainEstimated } from '../../../../stores/usePlaybackStore';
 import { useTranslation } from 'react-i18next';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
-import { noteAnalyser, noteAudioContext } from '../../../../utils/mediaDiagnostics';
 import { resolveHeardAudioEqualizerSettings } from '../../../../utils/audioEqualizerModCurve';
 
 // src/components/app/playback/bridges/usePlaybackAudioBridge.ts
-
-/**
- * 输出缓冲：**`balanced`** —— 掉帧与撕裂是一对矛盾，这一档是唯一两头都站住的落点。
- *
- * ⚠️ **必须两头一起看**：只看掉帧会撞上撕裂，只看撕裂会撞上掉帧。三档都上过真机：
- *
- *  · 缓冲**大**（0.1s / 0.2s，`6116eb11` / `44c34ef4`）→ **不撕裂，但播放页掉帧**
- *  · 缓冲**最小**（不指定 = `interactive`，v0.7.20 那版）→ **不掉帧，但切 app 时撕裂**：
- *    系统一把 CPU 抢走，音频线程来不及填满那么小的 buffer
- *  · **`balanced`（这里，当前取值）→ 两头都好**：不掉帧、切 app 也不撕裂（2026-10-19 实测）
- *
- * ⚠️ 关键教训：这个参数**不是单调的**，而且**同一个值在不同时候测出来的结论会互相打脸** ——
- * 「0.2 一度不卡」不代表 0.2 是对的，只是那一次碰巧。别再按「越大越稳」
- * 或「一定有个最优值」去推，实测出来什么就是什么。
- *
- * 上一轮（`44c34ef4`）我拿一段 Blink 源码断言「缓冲与掉帧无关」，据此把 0.1 抬到 0.2，
- * 还写下「别指望它治卡顿」。**源码推理推翻不了实测** —— 源码只能解释机制
- * （说得通的是音频线程抢占：缓冲越大，音频线程每次被唤醒要处理的数据块越大、
- * 占住实时优先级越久，主线程连同 rAF 被顶掉的机会越多），**但不能否定现象**。现象优先。
- *
- * ⚠️ **为什么不做「后台自动拉大」**（很自然会想到，但做不了）：
- * `latencyHint` 只能在 `new AudioContext()` 时给，**运行时改不了**；要换档就得重建 ctx，
- * 而 `createMediaElementSource(element)` 对同一个 element **只能调一次**
- * （见 `services/automix/crossfadeGraph` 的 `connectAutomixDeck`），重建会抛 `InvalidStateError`。
- * 真要绕，得改用 `element.captureStream()` + `createMediaStreamSource`（每次新建 stream），
- * 代价大且会带来新的延迟 —— 先不碰。
- *
- * ⚠️ **为什么不做「后台停频谱」来省音频线程**：`src/entries/wallpaperSurface.tsx` 那条
- * 壁纸叠层**没有自己的 AudioContext**，它的频谱是从这边 `payload.spectrum` 传过去的。
- * 而叠层恰恰要在应用退后台时照常画（画在桌面上），一停就把它一起停了。
- *
- * 顺带澄清一笔：`services/spectrumTap` 把频谱搬到音频线程是对的，它解的是
- * 「主线程每帧现算 FFT」那一笔，**跟这里无关** —— 别因为调缓冲有效就以为频谱那条无用。
- */
 
 type UsePlaybackAudioBridgeParams = {
 
@@ -82,6 +52,8 @@ type UsePlaybackAudioBridgeParams = {
 
 /** How often a mod's equalizer change held back for a blend checks whether the blend has ended. */
 const DEFERRED_EQUALIZER_POLL_MS = 250;
+/** How often 智能平衡 looks again at a playing song: its deck's meter, a blend that ended. */
+const BALANCE_POLL_MS = 500;
 
 // Bridges audio element setup, autoplay, replay gain, and media caching.
 export function usePlaybackAudioBridge({
@@ -110,6 +82,8 @@ export function usePlaybackAudioBridge({
 
     const previousAudioSrcRef = useRef<string | null>(null);
     const replayGainLogSignatureRef = useRef<string | null>(null);
+    const balancePlayRef = useRef<ReturnType<typeof createBalancePlay> | null>(null);
+    balancePlayRef.current ??= createBalancePlay();
     const equalizerNodesRef = useRef<BiquadFilterNode[]>([]);
     const effectChainRef = useRef<AudioEffectChain | null>(null);
     const audioEqualizerSettings = useAudioSettingsStore(state => state.audioEqualizerSettings);
@@ -157,14 +131,30 @@ export function usePlaybackAudioBridge({
             replayGainInfo = currentSong.replayGain;
         }
 
-        const calculation = calculateReplayGain(replayGainInfo, replayGainMode);
-
         try {
             // Onto the deck rather than the shared output: loudness compensation is a per-track
             // value, so during a blend the two decks legitimately need different ones.
             const activeChain = getActiveChain();
+            // 智能平衡 decides per play, from what it knows of the song (services/volumeBalance).
+            if (replayGainMode === 'auto') {
+                const applied = balancePlayRef.current!.apply({
+                    song: currentSong,
+                    info: replayGainInfo,
+                    chain: activeChain,
+                    context: audioContextRef.current,
+                    transitionAudible: isTransitionAudibleRef.current?.() ?? false,
+                });
+                // With no deck to take it nothing is applied, and the last song's figure must not stay shown.
+                setReplayGainAppliedDb(applied?.gainDb ?? 0);
+                setReplayGainEstimated(applied?.estimated ?? false);
+                return;
+            }
+            balancePlayRef.current!.reset();
+            setReplayGainEstimated(false);
+            const calculation = calculateReplayGain(replayGainInfo, replayGainMode);
             if (activeChain) {
                 rampGain(audioContextRef.current, activeChain.replayGain, calculation.linearGain, 0.1);
+                setReplayGainAppliedDb(calculation.effectiveGainDb);
             }
 
             const replayGainLogSignature = JSON.stringify({
@@ -189,20 +179,19 @@ export function usePlaybackAudioBridge({
         // not let this run twice, because createMediaElementSource throws on a second call.
         if (!audioRef.current || audioContextRef.current) return;
         try {
+            try {
+                const nav = navigator as Navigator & { audioSession?: { type: string } };
+                if (nav.audioSession) nav.audioSession.type = 'playback';
+            } catch { /* audioSession unsupported */ }
             const AudioContextClass = window.AudioContext || (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-            // 走 'balanced'：不指定（= interactive）不掉帧但切 app 撕裂，指定秒数（0.1 / 0.2）
-            // 不撕裂但掉帧 —— 只有这一档两头都站住（2026-10-19 实测）。为什么这么选、
-            // 以及为什么不做「后台自动拉大」，见上面的注释。
-            const ctx = new AudioContextClass({ latencyHint: 'balanced' });
+            const ctx = new AudioContextClass();
             audioContextRef.current = ctx;
-            noteAudioContext(ctx, 'balanced');
+            void applySavedAudioOutputToContext(ctx, useAudioSettingsStore.getState().audioOutputDeviceId);
 
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
             analyser.smoothingTimeConstant = 0.6;
             analyserRef.current = analyser;
-            // 只为那张频谱读数：让它能分清「analyser 没建」和「建了但没数据」。
-            noteAnalyser(analyser);
 
             const { gainNode, fadeNode, effectChain, decksConnected } = buildPlaybackGraph({
                 context: ctx,
@@ -215,43 +204,12 @@ export function usePlaybackAudioBridge({
             // Hands the transport its own fade node; until this runs (or if setup fails) pause and
             // resume see no graph and fall back to plain element pause/play.
             registerPlaybackFadeGraph({ context: ctx, gain: fadeNode });
+            // Where a scene's room goes when one is shown with its sound on; nothing is wired until then.
+            registerRoomSlot({ context: ctx, from: fadeNode, to: gainNode });
             effectChainRef.current = effectChain;
             if (!decksConnected) {
                 console.warn('[AudioContext] Deck setup incomplete, automix will stay idle');
             }
-
-            /*
-             * 频谱改由音频线程抽（AudioWorklet），主线程只读最新一份 —— 见 services/spectrumTap。
-             *
-             * 这一步是**加成**不是依赖：走不通（没有 AudioWorklet / WebView 不让加载 Blob）
-             * 它就自己返回 false，取频谱照旧走 analyser 的 getByteFrequencyData，只是那就还是
-             * 每帧等一次音频线程。挂在 analyser 之后，拿到的是同一份信号。
-             *
-             * 但要**等这个 ctx 真的跑起来再挂**：它是上面那一行刚 new 出来的，自动播放策略下
-             * 通常还停在 `suspended`（要等一次用户手势才 resume，而 resume 是异步的）。
-             * `audioWorklet.addModule()` 的 Promise 在 suspended 的 context 上并不保证推进 ——
-             * 挂在还没跑起来的 ctx 上，tap 就一直建不起来，取频谱永远落在 AnalyserNode 那条
-             * 同步兜底上。界面上的症状是整页掉帧、而且所有可视化模式一起慢。
-             */
-            const attachSpectrumTap = () => {
-                void createSpectrumTap(ctx, analyser, {
-                    fftSize: 2048,
-                    // 与上面 analyser 的平滑同一个值：换一条路不等于换一套观感。
-                    smoothingTimeConstant: analyser.smoothingTimeConstant,
-                });
-            };
-
-            if (ctx.state === 'running') {
-                attachSpectrumTap();
-            } else {
-                const onContextStateChange = () => {
-                    if (ctx.state !== 'running') return;
-                    ctx.removeEventListener('statechange', onContextStateChange);
-                    attachSpectrumTap();
-                };
-                ctx.addEventListener('statechange', onContextStateChange);
-            }
-
             applyReplayGain();
             syncOutputGain(getTargetPlaybackVolume(), 0);
         } catch (error) {
@@ -300,6 +258,23 @@ export function usePlaybackAudioBridge({
     useEffect(() => {
         applyReplayGain();
     }, [applyReplayGain]);
+
+    // 智能平衡 looks again when a reading lands - a profile, the song's own record, the deck's meter once it
+    // has heard enough - and when a blend ends; the rules decide whether a playing song may still move. A loop
+    // come round is a new play, set at once rather than at the next poll.
+    useEffect(() => {
+        if (replayGainMode !== 'auto') return undefined;
+        const offProfile = onTrackProfile(() => applyReplayGain());
+        const offRecord = onBalanceRecord(() => applyReplayGain());
+        const offWrap = onPlayWrapped(() => applyReplayGain());
+        const timer = setInterval(() => applyReplayGain(), BALANCE_POLL_MS);
+        return () => {
+            offProfile();
+            offRecord();
+            offWrap();
+            clearInterval(timer);
+        };
+    }, [applyReplayGain, replayGainMode]);
 
     /*
      * Writes what is heard into the graph. A mod's change waits while an automix blend can be heard and is

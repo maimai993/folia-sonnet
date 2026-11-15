@@ -149,6 +149,7 @@ describe('obsBrowserSource utilities', () => {
             monet: {
                 tuning: {
                     backgroundSource: 'uploaded-global',
+                    backgroundShowCover: true,
                     backgroundLayout: 'full-overlay',
                     backgroundBlurPx: 6,
                     backgroundOverlayOpacity: 0.74,

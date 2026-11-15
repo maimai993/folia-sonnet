@@ -1,0 +1,12 @@
+{
+  "passed": true,
+  "stats": {
+    "tracks": 3,
+    "search": 1,
+    "settings": 1,
+    "play": 1,
+    "enqueue": 1
+  },
+  "userAgent": "Mozilla/5.0 (Linux; Android 14; BVL-AN00 Build/UQ1A.240205.10161358; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.82 Mobile Safari/537.36",
+  "subscriptions": 1
+}

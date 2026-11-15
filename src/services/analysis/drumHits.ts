@@ -1,15 +1,23 @@
 import { melSpectrogramOffThread } from '../automix/analysisOffThread';
 import { getFromCache, saveToCache } from '../db';
-import { BEAT_THIS_FPS, BEAT_THIS_SAMPLE_RATE, MEL_BANDS, melBandCentresHz, type MelSpectrogram } from './beatThis';
-import { hasWebGpu } from './beatThisGpu';
+import { BEAT_THIS_FPS, BEAT_THIS_SAMPLE_RATE } from './beatThis';
+import {
+    DRUM_HAT, DRUM_KICK, DRUM_SNARE, DRUMLESS_COVERAGE, drumBandTracks, drumCoverage, ENERGY_HOP, energyFrames, isDrumAnalysis,
+    LIVE_EVERY_MS, LIVE_MIN_SECONDS, liveTailFrames, MIX_DRUM_REGULARIZE, pickBandHits, regularizeDrumHits, SHARE_WINDOW,
+    type DrumAnalysis, type DrumHits,
+} from './drumHitPicking';
 import { DRUM_HITS_PREFIX } from './beatGridKeys';
 import { createDrumBandStream, streamNeedsFrom, type DrumBands } from './drumHitStream';
-import { drumStemSegments, separateDrumStem, startDrumStem, type DrumStemProgress } from './drumStem';
+import { drumStemSegments, startDrumStem, type DrumStemProgress } from './drumStem';
+import type { StemReader } from './stemPass';
+import { runTrackStems, setWantedStemTrack, stemTrackWanted, type StemTask } from './trackStemRun';
 import { dropStemDrums, setStemDrumsKeptListener } from './stemRange';
 import { HTDEMUCS_GPU_SEGMENT } from './beatThisGpu';
 import { modelCanRun } from './modelAvailability';
 import { decodeAtRate } from './trackAudio';
 import { decodeTrackAtRate } from './trackBytes';
+import { analyzeDrumBandsNativeFromUrl, isNativeModelsAvailable } from '../automix/nativeModels';
+import { waitForForeground } from '../../utils/foregroundYield';
 
 // src/services/analysis/drumHits.ts
 // A whole track's drum hits, read off htdemucs' drum stem (drumStem.ts, the renderer's GPU) and kept:
@@ -19,19 +27,7 @@ import { decodeTrackAtRate } from './trackBytes';
 // (components/visualizer/pendolo/usePendoloBeatFx.ts): the user found the drums' own hits far truer
 // than any rule over beat_this' beats (2026-10-17).
 //
-// A hit is where the stem rises: each of three bands (kick below KICK_MAX_HZ, snare up to SNARE_MAX_HZ,
-// hats from HAT_MIN_HZ) against that band's own loud hits (HIT_TOP), a hit wherever the largest of the
-// three peaks (a local maximum over PEAK_HALF frames either side, at least MIN_HIT_GAP apart) above
-// HIT_ONSET_FLOOR, filed under the band that rose most, as strong as that share (0..1).
-//
-// A track with next to no drums has none (`getDrumHits` null): htdemucs still hands back a stem, and
-// in a track without drums it is what leaked in - a bass line read as kicks (雪绒花). The guard is how
-// much of the track the drums play in (`drumCoverage`), not how loud they are on the median: a song
-// with drums in only half of it (小半, 麦恩莉) reads near 0 on the median like 雪绒花. Measured on the
-// user's 21 separated tracks (2026-10-17): Edelweiss 0.006, 理想三旬 0.024, 第二圆舞曲 0.043, then
-// every track with a drum kit from 0.135 up (走马 0.148), so DRUMLESS_COVERAGE sits in that gap. The
-// stem's and the mix's energy are stored beside the hits so the guard can be tuned without separating
-// anything again.
+// The hits themselves, and the drumless guard, are worked out in drumHitPicking.ts.
 //
 // GPU only, and only with htdemucs_gpu installed (`canRunDrumStem`): without them there are no hits,
 // and 时计 plays beat_this' beats as it always did. A separation takes ~15 s of GPU for a four-minute
@@ -39,7 +35,12 @@ import { decodeTrackAtRate } from './trackBytes';
 // once another is wanted - skipping through tracks does not queue their separations up. The wanted
 // track is the one 智能动感模式 plays while it is on (hooks/useBeatFxTrack.ts), not only while 时计 is
 // on screen: a separation stopped on a picture switch threw away what it had, and coming back to 时计
-// separated the track again from the start.
+// separated the track again from the start. Under 智能动感模式's `cached` nothing separates: only a
+// stored analysis is read (`loadStoredDrumHits`), and switching to it stops a separation as leaving the
+// track does - its hits so far go with it (the `finally` in loadTrackDrumHits).
+// (From the PR #750 review: the two sentences above on a picture switch are PR #734's; since the
+// analysis service's 2b a picture switch stops the separation again, and it keeps where it was and
+// the hits so far (DrumResume) to carry on from - see the note at the end of hooks/useBeatFxTrack.ts.)
 //
 // A track separating now has hits before it is done: the stem is read as its head is finished
 // (drumHitStream.ts), and about once a second (LIVE_EVERY_MS) the hits so far are picked again and
@@ -51,76 +52,37 @@ import { decodeTrackAtRate } from './trackBytes';
 // playback (some 15x on an M-series GPU), so the hits are there in about a second, and the stored
 // analysis is the last pick - the whole track's.
 
+// What callers have always imported from here.
+export {
+    DRUM_HAT, DRUM_KICK, DRUM_SNARE, DRUMLESS_COVERAGE, drumBandTracks, drumCoverage, energyFrames, pickBandHits, pickDrumHits,
+} from './drumHitPicking';
+export type { DrumAnalysis, DrumHitKind, DrumHits } from './drumHitPicking';
+
 /** htdemucs' rate. A change to the stem or the picking bumps the version in DRUM_HITS_PREFIX. */
 const STEM_RATE = 44100;
+/** The drum hits' kind on a track's stem run (trackStemRun.ts). */
+export const DRUM_HITS_TASK = 'drum hits';
 
-export type DrumHitKind = 0 | 1 | 2;
-export const DRUM_KICK: DrumHitKind = 0;
-export const DRUM_SNARE: DrumHitKind = 1;
-export const DRUM_HAT: DrumHitKind = 2;
-export interface DrumHits {
-    times: Float64Array;
-    strengths: Float32Array;
-    kinds: Uint8Array;
-    /** While the track is still separating: the time (s) the hits reach, none after it known yet. */
-    until?: number;
-}
-
-/** What one separation leaves behind: the hits, and the stem's and the mix's energy per ENERGY_HOP. */
-export interface DrumAnalysis {
-    hits: DrumHits;
-    drumEnergy: Float32Array;
-    mixEnergy: Float32Array;
-}
-
-/** The rise window around a frame, at 50 fps - the same as beatAccents.ts. */
-const PEAK_BEFORE = 1;
-const PEAK_AFTER = 2;
-const BASE_FROM = 6;
-const BASE_TO = 2;
-const HIT_TOP = 0.99;
-const HIT_ONSET_FLOOR = 0.15;
-const PEAK_HALF = 3;
-const MIN_HIT_GAP = 0.09;
-const KICK_MAX_HZ = 150;
-const SNARE_MAX_HZ = 4000;
-const HAT_MIN_HZ = 6000;
-
-/** Energy frames: 10 ms at 44.1 kHz. */
-const ENERGY_HOP = 441;
-/** The coverage is counted over windows of this many energy frames (0.25 s)... */
-const SHARE_WINDOW = 25;
-/** ...where the mix is louder than this share of its median window (silence and fades left out)... */
-const SHARE_AUDIBLE = 0.05;
-/** ...a window having drums when the stem holds at least this share of its energy (about -15 dB). */
-const DRUMS_PLAYING_SHARE = 0.03;
-/** A track whose drums play in less than this share of its audible windows is drumless. */
-export const DRUMLESS_COVERAGE = 0.08;
-
-/** A track still separating has hits from this much of its stem on (s); the guard needs a stretch. */
-const LIVE_MIN_SECONDS = 10;
-/** And they are picked again about this often (ms) while it separates. */
-const LIVE_EVERY_MS = 1000;
 /**
- * The last frames of the head are left out of a pick: a peak there may be beaten by one just after it
- * (PEAK_HALF, MIN_HIT_GAP), and a rise needs PEAK_AFTER frames past it.
+ * Whether a drum **stem** can be had here: the real htdemucs separation.
+ *
+ * 只有桌面有：htdemucs_gpu 已安装，且有可用的 WebGPU。
+ *
+ * 安卓不算 —— 那边的原生 onnxruntime 能跑 htdemucs，但一段 3.9 秒的音频要 4～8 秒，
+ * 比播放慢，分离永远追不上播放头（详见 `loadMixDrumHits` 的头注释）。安卓的鼓点
+ * 因此改从混音的频带取，不走分轨；这里回答 false，连带让人声分轨（雾笺）也不再
+ * 在手机上启动一条追不上的慢路径。
  */
-const liveTailFrames = () => PEAK_AFTER + PEAK_HALF + Math.ceil(MIN_HIT_GAP * BEAT_THIS_FPS);
-
-const quantile = (values: number[], q: number): number => {
-    if (!values.length) return 0;
-    const sorted = [...values].sort((a, b) => a - b);
-    return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+export const canRunDrumStem = (): boolean => {
+    if (isNativeModelsAvailable()) return false;
+    return typeof window !== 'undefined'
+        && typeof window.electron?.getHtdemucsGpuWeights === 'function'
+        && typeof navigator !== 'undefined' && 'gpu' in navigator
+        && modelCanRun('htdemucs_gpu');
 };
 
-/** Whether the drum stem can run here: the weights are there (whichever copy) and there is a WebGPU to run them on. */
-export const canRunDrumStem = (): boolean =>
-    typeof window !== 'undefined'
-    && modelCanRun('htdemucs_gpu')
-    && hasWebGpu();
-
-/** 44.1 kHz mono to the 22.05 kHz beat_this rate, by the browser's own resampler. */
-const resample = async (signal: Float32Array): Promise<Float32Array> => {
+/** 44.1 kHz mono to the 22.05 kHz beat_this rate, by the browser's own resampler; the vocal envelope's too (vocalStemRun.ts). */
+export const resampleStem = async (signal: Float32Array): Promise<Float32Array> => {
     const length = Math.ceil(signal.length * BEAT_THIS_SAMPLE_RATE / STEM_RATE);
     const context = new OfflineAudioContext(1, length, BEAT_THIS_SAMPLE_RATE);
     const source = context.createBufferSource();
@@ -132,118 +94,6 @@ const resample = async (signal: Float32Array): Promise<Float32Array> => {
     return (await context.startRendering()).getChannelData(0);
 };
 
-/** Per frame, the mean of the drum mel's bands centred in [fromHz, toHz). */
-const bandTrack = (mel: MelSpectrogram, fromHz: number, toHz: number): Float32Array => {
-    const bands = melBandCentresHz().map((hz, band) => (hz >= fromHz && hz < toHz ? band : -1)).filter(band => band >= 0);
-    const out = new Float32Array(mel.frames);
-    for (let frame = 0; frame < mel.frames; frame += 1) {
-        let sum = 0;
-        for (const band of bands) sum += mel.data[frame * MEL_BANDS + band];
-        out[frame] = bands.length ? sum / bands.length : 0;
-    }
-    return out;
-};
-
-const riseAt = (track: Float32Array, frame: number): number => {
-    let peak = 0;
-    for (let at = frame - PEAK_BEFORE; at <= frame + PEAK_AFTER; at += 1) {
-        if (at >= 0 && at < track.length) peak = Math.max(peak, track[at]);
-    }
-    let base = 0;
-    let count = 0;
-    for (let at = frame - BASE_FROM; at <= frame - BASE_TO; at += 1) {
-        if (at >= 0 && at < track.length) { base += track[at]; count += 1; }
-    }
-    return Math.max(0, peak - (count ? base / count : 0));
-};
-
-/** A band's rise per frame as a share of its loud hits, capped at 1. */
-const riseShares = (track: Float32Array): Float32Array => {
-    const rise = new Float32Array(track.length);
-    for (let frame = 0; frame < track.length; frame += 1) rise[frame] = riseAt(track, frame);
-    // Sorted as a typed array: picked again every second while a track separates, on the UI thread.
-    const loud = rise.filter(value => value > 0).sort();
-    const top = (loud.length ? loud[Math.min(loud.length - 1, Math.floor(HIT_TOP * loud.length))] : 0) || 1;
-    return rise.map(value => Math.min(1, value / top));
-};
-
-/** A drum stem spectrogram's kick, snare and hat bands per frame. */
-export const drumBandTracks = (mel: MelSpectrogram): DrumBands => [
-    bandTrack(mel, 0, KICK_MAX_HZ),
-    bandTrack(mel, KICK_MAX_HZ, SNARE_MAX_HZ),
-    bandTrack(mel, HAT_MIN_HZ, Infinity),
-];
-
-/** The hits of a drum stem's spectrogram (see the header). */
-export const pickDrumHits = (mel: MelSpectrogram): DrumHits => pickBandHits(drumBandTracks(mel), mel.frames);
-
-/** The hits of the first `frames` frames of a drum stem's three bands. */
-export const pickBandHits = (tracks: DrumBands, frames: number): DrumHits => {
-    const bands = tracks.map(track => riseShares(track.subarray(0, frames)));
-    const top = new Float32Array(frames);
-    const kindOf = new Uint8Array(frames);
-    for (let frame = 0; frame < frames; frame += 1) {
-        for (let kind = 0; kind < bands.length; kind += 1) {
-            if (bands[kind][frame] > top[frame]) { top[frame] = bands[kind][frame]; kindOf[frame] = kind; }
-        }
-    }
-    const times: number[] = [];
-    const strengths: number[] = [];
-    const kinds: number[] = [];
-    for (let frame = 0; frame < frames; frame += 1) {
-        const share = top[frame];
-        if (share < HIT_ONSET_FLOOR) continue;
-        let peak = true;
-        for (let at = Math.max(0, frame - PEAK_HALF); at <= Math.min(frames - 1, frame + PEAK_HALF) && peak; at += 1) {
-            if (top[at] > share || (top[at] === share && at < frame)) peak = false;
-        }
-        if (!peak) continue;
-        const time = frame / BEAT_THIS_FPS;
-        const last = times.length - 1;
-        if (last >= 0 && time - times[last] < MIN_HIT_GAP) {
-            if (share > strengths[last]) { times[last] = time; strengths[last] = share; kinds[last] = kindOf[frame]; }
-            continue;
-        }
-        times.push(time);
-        strengths.push(share);
-        kinds.push(kindOf[frame]);
-    }
-    return { times: Float64Array.from(times), strengths: Float32Array.from(strengths), kinds: Uint8Array.from(kinds) };
-};
-
-export const energyFrames = (signal: Float32Array): Float32Array => {
-    const out = new Float32Array(Math.ceil(signal.length / ENERGY_HOP));
-    for (let at = 0; at < signal.length; at += 1) out[Math.floor(at / ENERGY_HOP)] += signal[at] * signal[at];
-    return out;
-};
-
-/**
- * How much of the track the drums play in: of the SHARE_WINDOW windows where the mix is audible, the
- * share whose stem holds DRUMS_PLAYING_SHARE of the energy. 0 for a silent track.
- */
-export const drumCoverage = (drumEnergy: Float32Array, mixEnergy: Float32Array): number => {
-    const windows: Array<{ drum: number; mix: number }> = [];
-    for (let from = 0; from < mixEnergy.length; from += SHARE_WINDOW) {
-        let drum = 0;
-        let mix = 0;
-        for (let at = from; at < Math.min(mixEnergy.length, from + SHARE_WINDOW); at += 1) {
-            drum += drumEnergy[at] ?? 0;
-            mix += mixEnergy[at];
-        }
-        windows.push({ drum, mix });
-    }
-    const floor = quantile(windows.map(window => window.mix), 0.5) * SHARE_AUDIBLE;
-    const audible = windows.filter(window => window.mix > floor && window.mix > 0);
-    if (!audible.length) return 0;
-    return audible.filter(window => window.drum >= DRUMS_PLAYING_SHARE * window.mix).length / audible.length;
-};
-
-const isDrumAnalysis = (value: unknown): value is DrumAnalysis => {
-    const entry = value as DrumAnalysis | null;
-    return Boolean(entry?.hits?.times instanceof Float64Array && entry.hits.strengths instanceof Float32Array
-        && entry.hits.kinds instanceof Uint8Array && entry.drumEnergy instanceof Float32Array
-        && entry.mixEnergy instanceof Float32Array);
-};
 
 /** Per key, the hits 时计 plays, set once a track's analysis is in and it has drums. */
 const hitLists = new Map<string, DrumHits>();
@@ -251,15 +101,87 @@ const runs = new Map<string, Promise<DrumAnalysis | null>>();
 /** Hit lists kept in memory; the analyses themselves are on disk. */
 const MAX_TRACKS = 24;
 
-/** The track whose separation may run; any other in flight stops at its next segment. */
-let wanted: string | null = null;
+/*
+ * 给设置页那一行状态用的订阅。
+ *
+ * 「时计不动」在画面上只有一种表现，原因却有五六种。状态行已经能说「只吃鼓点」，
+ * 但用户看不出鼓点到底是**还没读**、**读到一半**还是**读完了**。这三个都能从
+ * 下面这个快照同步读出来，于是不必再让用户去翻日志。
+ */
+const hitListeners = new Set<() => void>();
+
+/** Subscribes to the hit lists changing (a live pick, a completed analysis). */
+export const subscribeDrumHits = (listener: () => void): (() => void) => {
+    hitListeners.add(listener);
+    return () => {
+        hitListeners.delete(listener);
+    };
+};
+
+const notifyDrumHits = (): void => {
+    for (const listener of hitListeners) listener();
+};
+
+/**
+ * 鼓点读到哪一步了。
+ *
+ * 这一行存在的理由：`正在从混音里读鼓点…` 在界面上是一个**静止**的状态 —— 取音频（在线曲目
+ * 要先拿直链、整曲下载）、解码（一首四分钟的歌在 WebView 里要几秒到几十秒）、挑鼓点，三段
+ * 加起来新手机会等半分钟，而这半分钟里一个字都不变，用户只会以为卡死了。
+ * 分开说之后，至少知道它在哪一段、有没有往前走。
+ */
+export type DrumStage = 'bytes' | 'decode' | 'pick' | 'no-bytes';
+
+const stages = new Map<string, DrumStage>();
+
+/** 进入某一段；`null` 清掉（分析完成或放弃）。 */
+export const setDrumStage = (key: string, stage: DrumStage | null): void => {
+    if (stage === null) {
+        if (!stages.delete(key)) return;
+    } else {
+        if (stages.get(key) === stage) return;
+        stages.set(key, stage);
+    }
+    notifyDrumHits();
+};
+
+/** The step `key`'s drum hits are at, if a read is running. */
+export const getDrumStage = (key: string | null): DrumStage | null => (key ? stages.get(key) ?? null : null);
+
+/**
+ * A stable string for `key`'s hits: how many, how far they reach (`until`, empty once the whole track
+ * is picked), and the step a read is at when there are none yet. A string so `useSyncExternalStore`
+ * sees the same value until something changes.
+ */
+export const drumHitsSnapshot = (key: string | null): string => {
+    const hits = key ? hitLists.get(key) : undefined;
+    const stage = key ? stages.get(key) : undefined;
+    const base = hits
+        ? `${hits.times.length}|${hits.until === undefined ? '' : hits.until.toFixed(1)}`
+        : '0|';
+    return stage ? `${base}|${stage}` : base;
+};
+
+/** Reads a `drumHitsSnapshot` back. */
+export const parseDrumHitsSnapshot = (snapshot: string): { count: number; until: number | null; stage: DrumStage | null } => {
+    const [count, until, stage] = snapshot.split('|');
+    const known: DrumStage[] = ['bytes', 'decode', 'pick', 'no-bytes'];
+    return {
+        count: Number(count) || 0,
+        until: until ? Number(until) : null,
+        stage: known.includes(stage as DrumStage) ? (stage as DrumStage) : null,
+    };
+};
+
 
 /**
  * Names the track whose drum hits are wanted now, or null for none (it was left, or 智能动感模式 is
- * off). Set when a picture asks for the hits; cleared on the track change, not on a picture switch.
+ * off). Set when a picture asks for the hits; cleared when it is left - the track changes, the
+ * picture switches (since the analysis service's 2b: the separation stops and keeps where it was, see
+ * DrumResume) or the switch goes off.
  */
 export const setWantedDrumTrack = (key: string | null): void => {
-    wanted = key;
+    setWantedStemTrack(key);
 };
 
 /** The drum hits of `key`, or null when the track has none (yet, or drumless). */
@@ -307,13 +229,21 @@ export const forgetSettledDrumHits = (): void => {
 };
 
 const keep = (key: string, hits: DrumHits) => {
+    /*
+     * 混音的鼓点在这里收一遍（见 drumHitPicking.ts 的 `regularizeDrumHits`）：
+     * 混音里贝斯与人声的起音也会落进 kick / snare 的频带，不收敛的话鼓面被敲得
+     * 比拍点密好几倍，听感上就是「鼓点和动感模式一个快一个慢」。
+     * 真分轨（桌面 htdemucs）不经过这里：它本来就是鼓，规整只会抹平演奏。
+     */
+    const shaped = usesMixBands() ? regularizeDrumHits(hits, MIX_DRUM_REGULARIZE) : hits;
     hitLists.delete(key);
-    hitLists.set(key, hits);
+    hitLists.set(key, shaped);
     while (hitLists.size > MAX_TRACKS) {
         const oldest = hitLists.keys().next().value;
         if (oldest === undefined) break;
         hitLists.delete(oldest);
     }
+    notifyDrumHits();
 };
 
 const remember = (key: string, analysis: DrumAnalysis, note: string) => {
@@ -323,8 +253,10 @@ const remember = (key: string, analysis: DrumAnalysis, note: string) => {
     const drumless = coverage < DRUMLESS_COVERAGE;
     console.info(`[DrumHits] ${key}: ${drumless ? 'drumless' : `${analysis.hits.times.length} hits`} | drum coverage ${coverage.toFixed(3)} | kick ${counted[DRUM_KICK]} snare ${counted[DRUM_SNARE]} hat ${counted[DRUM_HAT]} | ${note}`);
     // A track whose head looked drummed may still be judged drumless as a whole: its live hits go.
-    if (drumless) hitLists.delete(key);
-    else keep(key, analysis.hits);
+    if (drumless) {
+        hitLists.delete(key);
+        notifyDrumHits();
+    } else keep(key, analysis.hits);
     settled.delete(key);
     settled.add(key);
     while (settled.size > MAX_SETTLED) {
@@ -338,9 +270,9 @@ const remember = (key: string, analysis: DrumAnalysis, note: string) => {
 /**
  * What a separation stopped part way keeps, to carry on from (analysis service plan, 2b): the hits it
  * had, and of everything else only what the rest needs - the stem from where the band stream and the
- * energy will read it again up to the last sample a separated segment reached, the weight from where
- * the sum is not yet divided, the bands and the drum energy so far (only as far as they go), and the
- * next segment. Some 0.4 MB plus about 0.3 KB per second separated, against the ~80 MB the decoded
+ * energy will read it again up to the last sample a separated segment reached, the bands and the
+ * drum energy so far (only as far as they go), and the next segment (no weight since the stem pass:
+ * stemPass.ts works it out at each sample). Some 0.4 MB plus about 0.3 KB per second separated, against the ~80 MB the decoded
  * track and the stem take while separating, which are let go. In memory only: a track not finished is
  * never stored, and after a restart it separates from the start.
  */
@@ -351,8 +283,6 @@ interface DrumResume {
     tailStart: number;
     /** The stem in [tailStart, reached): divided up to `divided`, a running sum past it. */
     drums: Float32Array;
-    /** The weight in [divided, reached); before `divided` it is no longer read. */
-    weight: Float32Array;
     /** The bands of the frames before `done`. */
     bands: DrumBands;
     done: number;
@@ -375,95 +305,112 @@ const keepResume = (key: string, resume: DrumResume) => {
     }
 };
 
-const separateAndRead = async (key: string, bytes: ArrayBuffer, resume: DrumResume | null = null): Promise<DrumAnalysis | null> => {
-    const started = performance.now();
-    const buffer = await decodeTrackAtRate(key, STEM_RATE, bytes, decodeAtRate, 'drum hits', 'own');
-    if (!buffer) return null;
-    const left = buffer.getChannelData(0);
-    const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
-    const mix = new Float32Array(buffer.length);
-    for (let at = 0; at < mix.length; at += 1) mix[at] = (left[at] + right[at]) / 2;
-    const mixEnergy = energyFrames(mix);
-    const drumEnergy = new Float32Array(mixEnergy.length);
-    let measured = 0;
-    const progress = startDrumStem(buffer.length);
-    // Carried on only from a stop of this very decode's length; anything else starts again.
-    const from = resume && resume.total === buffer.length ? resume : null;
-    if (resume && !from) console.info(`[DrumHits] ${key}: the track decodes to another length than when it stopped, separating from the start`);
-    if (from) {
-        progress.drums.set(from.drums, from.tailStart);
-        progress.weight.set(from.weight, from.divided);
-        progress.next = from.next;
-        progress.divided = from.divided;
-        drumEnergy.set(from.drumEnergy);
-        measured = from.measured;
-        console.info(`[DrumHits] ${key}: carrying on from ${(from.divided / STEM_RATE).toFixed(1)}s`);
-    }
-    // Kept until this run stops again (and keeps its own) or finishes: a run that throws loses nothing.
-    if (resume && !from) resumes.delete(key);
-    const stream = createDrumBandStream(buffer.length, { resample, mel: melSpectrogramOffThread, bands: drumBandTracks }, from ? { bands: from.bands, done: from.done } : undefined);
-    // The hits of the head so far, for 时计 while the rest separates (see the header).
-    const pickLive = async (drums: Float32Array, final: number) => {
-        for (; measured < final; measured += 1) drumEnergy[Math.floor(measured / ENERGY_HOP)] += drums[measured] * drums[measured];
-        await stream.advance(drums, final, false);
-        if (wanted !== key) return;
-        const windows = Math.floor(final / ENERGY_HOP / SHARE_WINDOW) * SHARE_WINDOW;
-        if (drumCoverage(drumEnergy.subarray(0, windows), mixEnergy.subarray(0, windows)) < DRUMLESS_COVERAGE) {
-            hitLists.delete(key);
-            return;
+/**
+ * The drum hits as a task on the track's stem run (trackStemRun.ts): one drum reader on its pass, the
+ * whole stem laid into `progress.drums`; the live picks as segments come in, the analysis at the end,
+ * and what carries it on when the run stops first (DrumResume) - the stopped run's own `resume` taken
+ * up here when it was of this decode's length.
+ */
+const drumHitsTask = (key: string, resume: DrumResume | null): StemTask<DrumAnalysis | null> => ({
+    kind: DRUM_HITS_TASK,
+    open: ({ left, right }) => {
+        const started = performance.now();
+        const total = left.length;
+        const mix = new Float32Array(total);
+        for (let at = 0; at < total; at += 1) mix[at] = (left[at] + right[at]) / 2;
+        const mixEnergy = energyFrames(mix);
+        const drumEnergy = new Float32Array(mixEnergy.length);
+        let measured = 0;
+        const progress = startDrumStem(total);
+        // Carried on only from a stop of this very decode's length; anything else starts again.
+        const from = resume && resume.total === total ? resume : null;
+        if (resume && !from) console.info(`[DrumHits] ${key}: the track decodes to another length than when it stopped, separating from the start`);
+        if (from) {
+            progress.drums.set(from.drums, from.tailStart);
+            progress.next = from.next;
+            progress.divided = from.divided;
+            drumEnergy.set(from.drumEnergy);
+            measured = from.measured;
+            console.info(`[DrumHits] ${key}: carrying on from ${(from.divided / STEM_RATE).toFixed(1)}s`);
         }
-        const until = Math.max(0, stream.done - liveTailFrames()) / BEAT_THIS_FPS;
-        const hits = pickBandHits(stream.bands, stream.done);
-        const count = hits.times.findIndex(time => time >= until);
-        const head = count < 0 ? hits.times.length : count;
-        if (!shown) {
-            shown = true;
-            console.info(`[DrumHits] ${key}: live hits ${((performance.now() - started) / 1000).toFixed(1)}s in, to ${until.toFixed(1)}s of the track`);
-        }
-        keep(key, {
-            times: hits.times.slice(0, head),
-            strengths: hits.strengths.slice(0, head),
-            kinds: hits.kinds.slice(0, head),
-            until,
-        });
-    };
-    let shown = false;
-    let live: Promise<void> | null = null;
-    let liveAt = -Infinity;
-    let complete = false;
-    try {
-        const drums = await separateDrumStem(left, right, (_done, _count, stem, final) => {
-            if (live || final < LIVE_MIN_SECONDS * STEM_RATE || performance.now() - liveAt < LIVE_EVERY_MS) return;
-            liveAt = performance.now();
-            live = pickLive(stem, final)
-                .catch(error => console.warn(`[DrumHits] ${key}: live hits failed`, error))
-                .finally(() => { live = null; });
-        }, () => wanted === key, progress, key);
-        await live;
-        if (!drums) {
-            if (wanted !== key) console.info(`[DrumHits] ${key}: separation stopped at ${(progress.divided / STEM_RATE).toFixed(1)}s, the track or the picture was left`);
-            if (progress.next > 0) await stopForLater(key, progress, stream, drumEnergy, measured, buffer.length);
-            return null;
-        }
-        // The energy the live picks summed so far, finished to the end: the same sums in the same order
-        // as `energyFrames(drums)`, so the same bits, without the stem's head (gone after a resume).
-        for (; measured < drums.length; measured += 1) drumEnergy[Math.floor(measured / ENERGY_HOP)] += drums[measured] * drums[measured];
-        await stream.advance(drums, drums.length, true);
-        const analysis: DrumAnalysis = {
-            hits: pickBandHits(stream.bands, stream.frames),
-            drumEnergy,
-            mixEnergy,
+        // Kept until this run stops again (and keeps its own) or finishes: a run that throws loses nothing.
+        if (resume && !from) resumes.delete(key);
+        const stream = createDrumBandStream(total, { resample: resampleStem, mel: melSpectrogramOffThread, bands: drumBandTracks }, from ? { bands: from.bands, done: from.done } : undefined);
+        // The hits of the head so far, for 时计 while the rest separates (see the header).
+        const pickLive = async (drums: Float32Array, final: number) => {
+            for (; measured < final; measured += 1) drumEnergy[Math.floor(measured / ENERGY_HOP)] += drums[measured] * drums[measured];
+            await stream.advance(drums, final, false);
+            if (!stemTrackWanted(key)) return;
+            const windows = Math.floor(final / ENERGY_HOP / SHARE_WINDOW) * SHARE_WINDOW;
+            if (drumCoverage(drumEnergy.subarray(0, windows), mixEnergy.subarray(0, windows)) < DRUMLESS_COVERAGE) {
+                hitLists.delete(key);
+                notifyDrumHits();
+                return;
+            }
+            const until = Math.max(0, stream.done - liveTailFrames()) / BEAT_THIS_FPS;
+            const hits = pickBandHits(stream.bands, stream.done);
+            const count = hits.times.findIndex(time => time >= until);
+            const head = count < 0 ? hits.times.length : count;
+            if (!shown) {
+                shown = true;
+                console.info(`[DrumHits] ${key}: live hits ${((performance.now() - started) / 1000).toFixed(1)}s in, to ${until.toFixed(1)}s of the track`);
+            }
+            keep(key, {
+                times: hits.times.slice(0, head),
+                strengths: hits.strengths.slice(0, head),
+                kinds: hits.kinds.slice(0, head),
+                until,
+            });
         };
-        complete = true;
-        resumes.delete(key);
-        remember(key, analysis, `separated in ${((performance.now() - started) / 1000).toFixed(1)}s`);
-        await saveToCache(`${DRUM_HITS_PREFIX}${key}`, analysis);
-        return analysis;
-    } finally {
-        // A separation left or failed part way leaves no hits behind: a later play would read them as whole.
-        if (!complete && getDrumHits(key)?.until !== undefined) hitLists.delete(key);
-    }
-};
+        let shown = false;
+        let live: Promise<void> | null = null;
+        let liveAt = -Infinity;
+        const reader: StemReader = {
+            source: 'drums',
+            next: progress.next,
+            divided: progress.divided,
+            window: { samples: progress.drums, base: 0 },
+            read: (final) => {
+                progress.next = reader.next;
+                progress.divided = final;
+                if (!live && final >= LIVE_MIN_SECONDS * STEM_RATE && performance.now() - liveAt >= LIVE_EVERY_MS) {
+                    liveAt = performance.now();
+                    live = pickLive(progress.drums, final)
+                        .catch(error => console.warn(`[DrumHits] ${key}: live hits failed`, error))
+                        .finally(() => { live = null; });
+                }
+                // The whole stem stays: the live picks read it after the segment is in.
+                return 0;
+            },
+        };
+        return {
+            readers: [reader],
+            finish: async () => {
+                await live;
+                const drums = progress.drums;
+                // The energy the live picks summed so far, finished to the end: the same sums in the same order
+                // as `energyFrames(drums)`, so the same bits, without the stem's head (gone after a resume).
+                for (; measured < drums.length; measured += 1) drumEnergy[Math.floor(measured / ENERGY_HOP)] += drums[measured] * drums[measured];
+                await stream.advance(drums, drums.length, true);
+                const analysis: DrumAnalysis = {
+                    hits: pickBandHits(stream.bands, stream.frames),
+                    drumEnergy,
+                    mixEnergy,
+                };
+                resumes.delete(key);
+                remember(key, analysis, `separated in ${((performance.now() - started) / 1000).toFixed(1)}s`);
+                await saveToCache(`${DRUM_HITS_PREFIX}${key}`, analysis);
+                return analysis;
+            },
+            stop: async () => {
+                await live;
+                if (!stemTrackWanted(key)) console.info(`[DrumHits] ${key}: separation stopped at ${(progress.divided / STEM_RATE).toFixed(1)}s, the track or the picture was left`);
+                if (progress.next > 0) await stopForLater(key, progress, stream, drumEnergy, measured, total);
+                return null;
+            },
+        };
+    },
+});
 
 /**
  * Keeps what a separation stopped at a segment boundary needs to carry on (DrumResume): the energy and
@@ -478,7 +425,7 @@ const stopForLater = async (
     total: number,
 ) => {
     let measured = measuredSoFar;
-    const { drums, weight, divided, next } = progress;
+    const { drums, divided, next } = progress;
     for (; measured < divided; measured += 1) drumEnergy[Math.floor(measured / ENERGY_HOP)] += drums[measured] * drums[measured];
     try {
         await stream.advance(drums, divided, false);
@@ -496,7 +443,6 @@ const stopForLater = async (
         divided,
         tailStart,
         drums: drums.slice(tailStart, reached),
-        weight: weight.slice(divided, reached),
         bands: [stream.bands[0].slice(0, stream.done), stream.bands[1].slice(0, stream.done), stream.bands[2].slice(0, stream.done)],
         done: stream.done,
         drumEnergy: drumEnergy.slice(0, Math.ceil(measured / ENERGY_HOP)),
@@ -506,13 +452,153 @@ const stopForLater = async (
 };
 
 /**
+ * 安卓：不跑 htdemucs，直接拿**混音**的三个频带当鼓点。
+ *
+ * 为什么必须换一条路（真机实测的结论，不是猜的）：
+ *   · htdemucs 一段 3.9 秒的音频，桌面 8 核 CPU 上 0.85 秒；手机上（2 线程、大核更少）
+ *     要 4～8 秒。一首四分钟的歌 60 多段，合计 4～8 分钟；
+ *   · 而分离是**边播边分**的：播放头 3.9 秒走完一段，分离却要 4～8 秒才出一段，
+ *     于是 `until`（已分到的时间）永远落在播放头后面，`getDrumHits` 里没有一个
+ *     落在"当前时间"上的 hit —— 仿真鼓面一动不动。用户看到的就是「时计没效果」。
+ *
+ * 混音上直接取频带没有这个问题：整曲解码一次（不到一秒），每 10 秒做一次 mel
+ * （worker 里，几十到几百毫秒），第一个 10 秒的 hits 半秒内就到手，全程快于播放。
+ *
+ * 代价是准确度：混音的低频带里有贝斯，中频带里有人声和钢琴，高频带里有镲和齿音 ——
+ * 这些起音都会被记成 kick / snare / hat。鼓面因此比真分轨"忙"一些，但**跟着音乐动**，
+ * 而且桌面（真 htdemucs_gpu）的行为一点没变：这条只在安卓生效，缓存在独立的前缀下。
+ *
+ * 桌面那条路（`drumHitsTask` + `runTrackStems`）原样保留。
+ */
+const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix_`;
+/** 每读这么多秒，重挑一次 hits 交出去（见上面：第一个 10 秒半秒内就到手）。 */
+const MIX_CHUNK_SECONDS = 10;
+
+/** 等这首歌的音频最多这么久（见 `readWithTimeout`）：在线直链失效时不再无限等。 */
+const READ_BYTES_TIMEOUT_MS = 90_000;
+
+/** 安卓的混音频带分析：读字节、解码、分块取 mel、边算边交（见上面）。 */
+const loadMixDrumHits = async (
+    key: string,
+    readBytes: () => Promise<ArrayBuffer | null>,
+    nativeUrl: string | null = null,
+): Promise<DrumAnalysis | null> => {
+    const started = performance.now();
+    /*
+     * ★ 先试原生：解码 + mel 都在 Kotlin 里做，一两秒出整曲的频带。
+     *
+     * WebView 的 `decodeAudioData` 解一首四分钟的歌要几秒到几十秒，那段时间鼓面只能停着；
+     * 而原生用 MediaCodec（播放器本来就在用），四分钟的歌一两秒。
+     * 只回传三条频带，挑点仍是下面的 `pickBandHits` —— 起音判据只有一份。
+     * 原生不可用（旧 APK、非在线曲目、解码失败）就落到下面那条 WebView 的路。
+     */
+    if (nativeUrl) {
+        setDrumStage(key, 'decode');
+        const native = await analyzeDrumBandsNativeFromUrl(nativeUrl);
+        if (native && stemTrackWanted(key)) {
+            setDrumStage(key, 'pick');
+            /*
+             * `drumCoverage` 要的两条能量在这里没有：原生只回传频带。
+             * 给一对相等的 1 —— 覆盖率因此是 1（「有鼓」），这和混音路径本来的结论一致：
+             * 混音里总能挑出鼓点，从来没有「这首歌没有鼓」这个分支。
+             */
+            const analysis: DrumAnalysis = {
+                hits: pickBandHits(native.bands, native.frames),
+                drumEnergy: Float32Array.of(1),
+                mixEnergy: Float32Array.of(1),
+            };
+            remember(key, analysis, `native bands in ${((performance.now() - started) / 1000).toFixed(1)}s (${native.seconds.toFixed(1)}s of audio)`);
+            await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+            return analysis;
+        }
+        console.info(`[DrumHits] ${key}: native drum bands unavailable, falling back to the WebView decode`);
+    }
+    const bytes = await readBytes();
+    if (!bytes) {
+        console.info(`[DrumHits] ${key}: mix bands need the track's bytes, none read yet`);
+        return null;
+    }
+    if (!stemTrackWanted(key)) return null;
+    setDrumStage(key, 'decode');
+    const buffer = await decodeTrackAtRate(key, STEM_RATE, bytes, decodeAtRate, 'drum-mix', 'own');
+    if (!buffer) {
+        console.info(`[DrumHits] ${key}: mix bands could not decode the track`);
+        setDrumStage(key, 'no-bytes');
+        return null;
+    }
+    const left = buffer.getChannelData(0);
+    const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+    const total = left.length;
+    // 单声道解码（WebView 常见）就不必再复制一份：一首四分钟的歌那是 42MB。
+    let mix = left;
+    if (buffer.numberOfChannels > 1) {
+        const mono = new Float32Array(total);
+        for (let at = 0; at < total; at += 1) mono[at] = (left[at] + right[at]) / 2;
+        mix = mono;
+    }
+    const mixEnergy = energyFrames(mix);
+    const stream = createDrumBandStream(total, { resample: resampleStem, mel: melSpectrogramOffThread, bands: drumBandTracks });
+    const step = MIX_CHUNK_SECONDS * STEM_RATE;
+    let announced = false;
+    setDrumStage(key, 'pick');
+    for (let at = 0; at < total; at += step) {
+        /*
+         * The track (or the picture) was left: the rest is not read.
+         *
+         * 后台也一样：没人看着画面时，这一整首歌的 mel 没有理由继续算 ——
+         * 桌面端关掉了后台节流，不定在这里就会在兜里把四分钟的活干完。
+         * 等回前台接着算，结果完全相同。
+         */
+        const wanted = await waitForForeground(() => stemTrackWanted(key));
+        if (!wanted) {
+            console.info(`[DrumHits] ${key}: mix bands stopped at ${(at / STEM_RATE).toFixed(1)}s, the track or the picture was left`);
+            return null;
+        }
+        const final = Math.min(total, at + step);
+        const end = final >= total;
+        await stream.advance(mix, final, end);
+        const until = end ? total / STEM_RATE : Math.max(0, stream.done - liveTailFrames()) / BEAT_THIS_FPS;
+        const hits = pickBandHits(stream.bands, stream.done);
+        // 与真分轨的 live pick 同样的截断：末尾几帧的峰可能被下一帧盖过，先不交出去。
+        const head = (() => {
+            const count = hits.times.findIndex(time => time >= until);
+            return count < 0 ? hits.times.length : count;
+        })();
+        keep(key, {
+            times: hits.times.slice(0, head),
+            strengths: hits.strengths.slice(0, head),
+            kinds: hits.kinds.slice(0, head),
+            until,
+        });
+        if (!announced) {
+            announced = true;
+            console.info(`[DrumHits] ${key}: mix bands, first ${head} hits ${((performance.now() - started) / 1000).toFixed(1)}s in, to ${until.toFixed(1)}s of the track`);
+        }
+        // 让出主线程：一个 10 秒块算完立刻进下一块，会把画面帧挤掉。
+        await new Promise<void>(resolve => { setTimeout(resolve, 0); });
+    }
+    const analysis: DrumAnalysis = {
+        hits: pickBandHits(stream.bands, stream.frames),
+        drumEnergy: mixEnergy,
+        mixEnergy,
+    };
+    remember(key, analysis, `mix bands in ${((performance.now() - started) / 1000).toFixed(1)}s`);
+    await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+    return analysis;
+};
+
+/** 安卓上鼓点从混音频带取（见 `loadMixDrumHits`），缓存也分开存，免得和真分轨的结果混用。 */
+const usesMixBands = (): boolean => isNativeModelsAvailable();
+
+/**
  * A track's drum analysis from the cache only, never separated (智能动感模式's `cached`). Once it is
  * in, `getDrumHits(key)` answers its hits. Null when none is stored. A run in flight is not joined:
  * only `on` starts one, and leaving `on` stops it (`setWantedDrumTrack(null)`).
  */
 export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | null> => {
     try {
-        const stored = await getFromCache<DrumAnalysis>(`${DRUM_HITS_PREFIX}${key}`);
+        const cacheKey = usesMixBands() ? `${MIX_HITS_PREFIX}${key}` : `${DRUM_HITS_PREFIX}${key}`;
+        const stored = await getFromCache<DrumAnalysis>(cacheKey);
         if (!isDrumAnalysis(stored)) return null;
         remember(key, stored, 'from the cache');
         return stored;
@@ -528,36 +614,70 @@ export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | nu
  * hits. Null when none can be had now, which is not remembered: a later play may find the bytes.
  * Separates only while `key` is the wanted track (`setWantedDrumTrack`).
  */
-export const loadTrackDrumHits = (key: string, readBytes: () => Promise<ArrayBuffer | null>): Promise<DrumAnalysis | null> => {
+export const loadTrackDrumHits = (
+    key: string,
+    readBytes: () => Promise<ArrayBuffer | null>,
+    nativeUrl: string | null = null,
+): Promise<DrumAnalysis | null> => {
     const existing = runs.get(key);
     // Joined - but a run whose track was left and is wanted again before it reached its next segment
     // is stopping, and answers null: then one fresh run, rather than no hits for the rest of the play.
     // Only on null: a drumless track answers an analysis, and is not separated again.
-    if (existing) return existing.then(found => (found === null && wanted === key && !runs.has(key) ? loadTrackDrumHits(key, readBytes) : found));
+    if (existing) return existing.then(found => (found === null && stemTrackWanted(key) && !runs.has(key) ? loadTrackDrumHits(key, readBytes, nativeUrl) : found));
     const run = (async (): Promise<DrumAnalysis | null> => {
-        const stored = await getFromCache<DrumAnalysis>(`${DRUM_HITS_PREFIX}${key}`);
+        const mixBands = usesMixBands();
+        const stored = await getFromCache<DrumAnalysis>(`${mixBands ? MIX_HITS_PREFIX : DRUM_HITS_PREFIX}${key}`);
         if (isDrumAnalysis(stored)) {
             remember(key, stored, 'from the cache');
             return stored;
         }
-        if (!canRunDrumStem() || wanted !== key) return null;
+        if (!stemTrackWanted(key)) return null;
+        setDrumStage(key, 'bytes');
+        /*
+         * 取音频这一步也要有上限：在线曲目要先拿直链再整曲下载，直链失效或者网络卡住时
+         * 这里会**一直**不回来 —— 界面上就是「正在从混音里读鼓点…」永远不变。
+         * 90 秒还没到手就当作取不到，让界面说出「取不到这首歌的音频」而不是装作在忙。
+         */
+        const readWithTimeout = async (): Promise<ArrayBuffer | null> => {
+            const bytes = await Promise.race([
+                readBytes(),
+                new Promise<null>((resolve) => { setTimeout(() => resolve(null), READ_BYTES_TIMEOUT_MS); }),
+            ]);
+            if (!bytes) setDrumStage(key, 'no-bytes');
+            return bytes;
+        };
+        /*
+         * 安卓走混音频带，桌边走真的 htdemucs 分轨（见 `loadMixDrumHits` 的头注释）：
+         * 手机上的 htdemucs 比播放慢，鼓点永远追不上播放头，鼓面就一动不动。
+         * 这条要在 `canRunDrumStem` 之前问：那个函数在安卓上回答 false。
+         */
+        if (mixBands) return loadMixDrumHits(key, readWithTimeout, nativeUrl);
+        if (!canRunDrumStem()) return null;
+        setDrumStage(key, 'pick');
         // A separation stopped earlier: its hits play at once, while the track decodes again.
         const resume = resumes.get(key) ?? null;
         if (resume?.hits) keep(key, resume.hits);
         let analysis: DrumAnalysis | null = null;
         try {
-            const bytes = await readBytes();
-            analysis = bytes ? await separateAndRead(key, bytes, resume) : null;
+            analysis = await runTrackStems(key, readWithTimeout, drumHitsTask(key, resume));
             return analysis;
         } finally {
-            // Hits put back from a stop, and no separation got under way (no bytes, no decode): taken
-            // off again, like any a separation left part way leaves.
+            // Hits put back from a stop, or picked live, and no analysis came (no bytes, no decode, a
+            // separation left or failed part way): taken off again - a later play would read them as whole.
             if (!analysis && getDrumHits(key)?.until !== undefined) hitLists.delete(key);
         }
-    })().catch((error) => {
-        console.warn(`[DrumHits] ${key}: failed`, error);
-        return null;
-    });
+    })().then(
+        (result): DrumAnalysis | null => {
+            // 分析结束（成功、无鼓、被放弃）都清掉阶段：界面上「在忙」的提示必须能停下来。
+            setDrumStage(key, null);
+            return result;
+        },
+        (error): DrumAnalysis | null => {
+            console.warn(`[DrumHits] ${key}: failed`, error);
+            setDrumStage(key, 'no-bytes');
+            return null;
+        },
+    );
     runs.set(key, run);
     // Only the run in flight is kept: an answer lives on in `hitLists` and on disk, a null is retried.
     void run.then(() => {

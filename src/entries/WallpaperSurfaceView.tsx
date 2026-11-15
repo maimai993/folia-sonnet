@@ -11,7 +11,8 @@ import { getWallpaperSnapshot, isWallpaperContentPainted, markWallpaperContentPa
 import { resolveLyricsFontFamily } from './wallpaperSurfaceFonts';
 import { stageSize } from './wallpaperSurfaceLayout';
 import { msToSec, toLines } from './wallpaperSurfaceLines';
-import { lightenColor, stepColorTowards } from './wallpaperSurfaceTheme';
+// 四个颜色的来源判定与平滑都在这里：见 resolveWallpaperColors / stepColorTowards 的注释。
+import { resolveWallpaperColors, stepColorTowards } from './wallpaperSurfaceTheme';
 import { useBridgedAudio } from './useWallpaperBridgedAudio';
 
 // src/entries/WallpaperSurfaceView.tsx
@@ -27,6 +28,12 @@ import { useBridgedAudio } from './useWallpaperBridgedAudio';
  * 用户看到的就是「歌词淡入正常，动态效果突然出现」。这 400ms 是为了吃掉那段空窗。
  */
 const CONTENT_DWELL_MS = 400;
+
+/**
+ * 群唱自定义图的空数组：身份必须稳定，不能每次渲染都新建一个 []。
+ * 可视化那边把它当 props 依赖，新建一次就等于「配置变了」，会把头像层重建一遍。
+ */
+const NO_CAPPELLA_IMAGES: never[] = [];
 
 /**
  * 叠层的内容要**等 payload 安静下来**才画。
@@ -105,12 +112,33 @@ const WallpaperSurface: React.FC = () => {
     /**
      * 主题必须**整体由原生推来的颜色构建**，不能拿内置主题打底再改两个字段。
      *
-     * 内置那对明暗主题是从封面随机生成的，颜色之间本来没有约束；
+     * 内置那对明暗主题是从封面随机生成的（`buildBuiltinDualTheme()` 不传参数时
+     * `random` 就是 `Math.random`），颜色之间本来没有约束，**每重载一次都不一样**；
      * 只覆盖背景色和高亮色、留下 primary/secondary 不管的话，
      * 有些模式（比如商籁）用的正是 secondary —— 于是歌词就变成"绿不拉几"的随机色。
-     * 这里让四个颜色都来自同一个高亮色，观感才是自洽的。
+     * 四个颜色到底各走哪一路、缺的时候怎么兜，全部收敛到
+     * `resolveWallpaperColors` 一处（见它上面那段），这里只负责把平滑值喂进去。
      */
     const dualTheme = React.useMemo(() => buildBuiltinDualTheme(), []);
+    const colors = React.useMemo(() => resolveWallpaperColors({
+        /*
+         * 四个颜色一律走平滑值：换歌时 payload 里的主题色是瞬间替换的，
+         * 直接用会让整个可视化的配色硬跳一下（「还是上一个主题色，然后突然变色」）。
+         * smooth 值在 rAF 里向目标插值（首份直接落位），过渡约 600ms。
+         * smooth 还是 null（首份颜色没到）时退回 payload 原值，行为与之前一致。
+         */
+        accent: smoothAccent || payload.accent,
+        backgroundColor: smoothBase || payload.backgroundColor,
+        // 主文本色 / 次色也走同一套平滑（见上面 smoothPrimary / smoothSecondary 的说明）。
+        primaryColor: smoothPrimary || payload.primaryColor,
+        secondaryColor: smoothSecondary || payload.secondaryColor,
+        // 整份主题：它带着 AI 主题的 wordColors / lyricsIcons，也给四个颜色当第二来源。
+        theme: payload.theme,
+        skeleton: isDaylight ? dualTheme.light : dualTheme.dark,
+        isDaylight,
+    }), [dualTheme, isDaylight, smoothAccent, smoothBase, smoothPrimary, smoothSecondary,
+        payload.accent, payload.backgroundColor, payload.primaryColor, payload.secondaryColor,
+        payload.theme]);
     const theme = React.useMemo<Theme>(() => {
         /*
          * 打底用的是 App 推下来的整份主题（有就优先），内置主题只当兜底。
@@ -122,36 +150,22 @@ const WallpaperSurface: React.FC = () => {
          */
         const skeleton = isDaylight ? dualTheme.light : dualTheme.dark;
         const base = payload.theme ? { ...skeleton, ...payload.theme } : skeleton;
-        /*
-         * 颜色一律走平滑值：换歌时 payload 里的主题色是瞬间替换的，
-         * 直接用会让整个可视化的配色硬跳一下（「还是上一个主题色，然后突然变色」）。
-         * smooth 值在 rAF 里向目标插值（首份直接落位），过渡约 600ms。
-         * smooth 还是 null（首份颜色没到）时退回 payload 原值，行为与之前一致。
-         */
-        const accent = smoothAccent || payload.accent || skeleton.accentColor;
-        /*
-         * 主文本色 / 次色一律用 App 推下来的那一份。
-         *
-         * 之前这两个是从高亮色派生的（主色 = 高亮色、次色 = 高亮色混白），
-         * 于是叠层的配色只由高亮色决定：App 里换成 AI / 自定义主题之后，
-         * 高亮色跟着变了、文本色却还是按"高亮色"那一套算出来的 ——
-         * 叠层看着就是「主题没换」。现在直接用 App 那份，两边才是一套。
-         */
-        const primary = smoothPrimary || payload.primaryColor || accent;
         return {
             ...base,
             name: 'wallpaper',
-            backgroundColor: smoothBase || payload.backgroundColor || skeleton.backgroundColor,
-            primaryColor: primary,
-            accentColor: accent,
             /*
-             * 次色必须和主色拉开明度，不能直接等于主色。
+             * 四个颜色全部来自 `resolveWallpaperColors`（顺序：整包 → 整份主题 →
+             * 由高亮色派生 → 内置）。这里不再就地拼兜底：散在这三五行里的 `||` 链
+             * 正是之前「高亮色到了、另外三个退回内置随机色」没人察觉的原因。
              *
-             * 有些模式拿次色画**当前行**高亮；主色常常是从封面取出来的暗色，
-             * 一旦等于背景色，那一行就等于隐形了（用户报的「有一句歌词和背景同色」）。
-             * 朝白色混一档，既和主色同源，又保证在任何底色上都看得见。
+             * 派生那一支里次色朝白色混一档、不直接等于主色：有些模式拿次色画**当前行**
+             * 高亮，主色常常是封面取出来的暗色，一旦和背景同色那一行就等于隐形
+             * （用户报的「有一句歌词和背景同色」）。
              */
-            secondaryColor: smoothSecondary || payload.secondaryColor || lightenColor(accent, 0.5),
+            backgroundColor: colors.backgroundColor,
+            primaryColor: colors.primaryColor,
+            accentColor: colors.accent,
+            secondaryColor: colors.secondaryColor,
             /*
              * 歌词字体：只在**这一页注册成功了**才往主题上写。
              *
@@ -167,9 +181,35 @@ const WallpaperSurface: React.FC = () => {
             fontFamily: lyricsFontFamily ?? base.fontFamily,
             fontFamilyStack: lyricsFallbackFamilies.length ? lyricsFallbackFamilies : base.fontFamilyStack,
         };
-    }, [dualTheme, isDaylight, smoothAccent, smoothBase, smoothPrimary, smoothSecondary,
-        payload.accent, payload.backgroundColor, payload.primaryColor, payload.secondaryColor,
-        payload.theme, lyricsFontFamily, lyricsFallbackFamilies]);
+    }, [dualTheme, isDaylight, colors, payload.theme, lyricsFontFamily, lyricsFallbackFamilies]);
+
+    /*
+     * 配色来源要留一条日志（真机上定位「叠层颜色和 App 对不上」全靠它）。
+     *
+     * 只在**来源组合或颜色真的变了**时才打：这一份每秒会重渲染很多次，
+     * 无条件打会把 logcat / 调试面板刷满，反而看不见换歌那几下。
+     * 四种来源的含义见 `WallpaperColorSource`：
+     * payload = 随每一份整包推来的；theme = 整份主题 JSON 里的；
+     * derived = 由高亮色现算的；builtin = 内置主题兜底（也就是「App 那份根本没到」）。
+     */
+    const lastColorLogRef = React.useRef('');
+    React.useEffect(() => {
+        const signature = [
+            colors.sources.accent, colors.sources.backgroundColor,
+            colors.sources.primaryColor, colors.sources.secondaryColor,
+            colors.accent, colors.backgroundColor, colors.primaryColor, colors.secondaryColor,
+        ].join('|');
+        if (signature === lastColorLogRef.current) return;
+        lastColorLogRef.current = signature;
+        console.log('[Wallpaper] 叠层配色落定', {
+            sources: colors.sources,
+            accentColor: colors.accent,
+            backgroundColor: colors.backgroundColor,
+            primaryColor: colors.primaryColor,
+            secondaryColor: colors.secondaryColor,
+            themeJson: payload.theme ? 'present' : 'missing',
+        });
+    }, [colors, payload.theme]);
 
     /*
      * 画面上**真正决定观感**的那几项拼成的签名。
@@ -493,6 +533,13 @@ const WallpaperSurface: React.FC = () => {
                  * 优先用地址：它每首必变、能直接加载；base64 那份只在地址也没有时才用。
                  */
                 coverUrl={payload.coverUrl ?? payload.cover ?? null}
+                /*
+                 * 群唱自定义头像 / 表情图：原生从主应用那边收下来再推给我们（见
+                 * WallpaperOverlay.pushCappellaImagesIfChanged）。不传的话这一层的
+                 * IndexedDB 是空的，Cappella 会按「没有自定义头像」回退到封面。
+                 */
+                cappellaCustomAvatarImages={payload.cappellaAvatarImages ?? NO_CAPPELLA_IMAGES}
+                cappellaCustomEmojiImages={payload.cappellaEmojiImages ?? NO_CAPPELLA_IMAGES}
                 /*
                  * 叠层的封面默认是隐藏的。
                  *

@@ -9,6 +9,8 @@
 // 区别只是预设的地址与推荐模型，所以一份通用的「Key + 模型 + 站点」就能接下九家。
 
 import { AI_PROVIDER_PRESETS as SHARED_AI_PROVIDER_PRESETS } from '../../shared/ai/providerRegistry.mjs';
+import { FOLIA_WORK_MODEL } from '../../shared/ai/foliawork.mjs';
+import { ensureMachineCode } from './foliaMachineCode';
 import { normalizeChatCompletionsUrl, resolveOpenAICompatibleModel } from '../../shared/openAICompatibleRequest.mjs';
 import {
     GEMINI_DEFAULT_MODEL,
@@ -16,10 +18,14 @@ import {
 } from '../../shared/geminiEndpoint.mjs';
 
 export type AiProviderId =
+    | 'foliawork'
     | 'gemini' | 'deepseek' | 'mimo' | 'qwen' | 'tencentcloud'
     | 'openai' | 'anthropic' | 'kimi' | 'glm' | 'custom';
 
-/** 三种请求协议；除 Gemini 与 Anthropic 外都是 OpenAI 兼容。 */
+/**
+ * 请求协议。除 Gemini 与 Anthropic 外都是 OpenAI 兼容 —— 免费渠道（foliawork）也是，
+ * 它的「密钥」只是本机的机器码（见 services/foliaMachineCode.ts）。
+ */
 export type AiProtocol = 'openai' | 'anthropic' | 'gemini';
 
 export interface AiProviderEndpoint {
@@ -110,7 +116,14 @@ const STORAGE_KEY = 'foliaAiProviderSettings';
 export const AI_SETTINGS_CHANGED_EVENT = 'folia-ai-settings-changed';
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
-    provider: 'gemini',
+    /*
+     * 默认免费渠道。
+     *
+     * 装好就能生成主题是这个应用的底线：让新用户先去申请一个 Key 才能看到第一套主题，
+     * 那第一屏永远是空的。所以默认选中 foliawork（地址与凭据都写死在包里，零配置），
+     * 它在设置页排在最前面；想要更高质量的人再自己去选别家并填 Key。
+     */
+    provider: 'foliawork',
     geminiApiKey: '',
     // 留空 = 用默认地址。写成常量反而会让「用户清空输入框」和「用默认」变成两回事。
     geminiApiUrl: '',
@@ -123,7 +136,7 @@ export const DEFAULT_AI_SETTINGS: AiSettings = {
 };
 
 const normalizeProvider = (value: unknown): AiProviderId => (
-    AI_PROVIDER_IDS.includes(value as AiProviderId) ? value as AiProviderId : 'gemini'
+    AI_PROVIDER_IDS.includes(value as AiProviderId) ? value as AiProviderId : DEFAULT_AI_SETTINGS.provider
 );
 
 const asText = (value: unknown, fallback = ''): string => (
@@ -214,12 +227,21 @@ export const resolveAiBaseUrl = (settings: AiSettings): string => (
         : settings.apiBaseUrls[settings.provider]?.trim() || aiPresetOf(settings.provider)?.baseUrl || ''
 );
 
-/** 当前 provider 对应的密钥（Gemini 单独存，其余按服务商各存一份）。 */
-export const resolveAiApiKey = (settings: AiSettings): string => (
-    settings.provider === 'gemini'
-        ? settings.geminiApiKey.trim()
-        : settings.apiKeys[settings.provider]?.trim() ?? ''
-);
+/**
+ * 当前 provider 对应的密钥（Gemini 单独存，其余按服务商各存一份）。
+ *
+ * foliawork 的密钥是本机的**机器码**：首次用到时生成一个 `sk-` 开头的随机串并落盘，
+ * 之后一直用它（见 services/foliaMachineCode.ts）。用户看不到也不用填 —— 它既是身份
+ * 也是额度载体，用户要做的是把机器码发到群里绑定、然后每天签到。
+ *
+ * 所以这里返回的不是「用户填的东西」，但它的用法和普通 Key 完全一样：主进程、
+ * 安卓原生、网页三条路都只是把它当 `Authorization: Bearer` 发出去，谁都不用为它开例外。
+ */
+export const resolveAiApiKey = (settings: AiSettings): string => {
+    if (settings.provider === 'foliawork') return ensureMachineCode();
+    if (settings.provider === 'gemini') return settings.geminiApiKey.trim();
+    return settings.apiKeys[settings.provider]?.trim() ?? '';
+};
 
 /**
  * Anthropic 的 Messages 端点：与桌面主进程同一套拼法（electron/ai/anthropicClient.cjs）——
@@ -251,6 +273,12 @@ export const resolveAiModel = (settings: AiSettings): string => {
     const configured = settings.apiModels[settings.provider]?.trim() ?? '';
     if (configured) return configured;
     const preset = aiPresetOf(settings.provider);
+    /*
+     * foliawork 的模型是写死的，而且**不跟随用户配置**：那边白名单里倍率为 0 的还有
+     * kling-video-v3 / minimax-video-h3 这类视频模型，让「免费优先」去挑会挑到它们然后
+     * 必然失败。所以哪怕有人从别处塞进来一个 OPENAI_API_MODEL，这里也一律用固定的那个。
+     */
+    if (settings.provider === 'foliawork') return FOLIA_WORK_MODEL;
     if (preset?.recommendedModel) return preset.recommendedModel;
     const apiUrl = resolveAiChatCompletionsUrl(settings);
     return resolveOpenAICompatibleModel(apiUrl, '');
@@ -274,6 +302,13 @@ export const buildAiEnv = (settings: AiSettings = readAiSettings()): Record<stri
     // Anthropic speaks its own protocol, which the shared segmentation service
     // cannot speak, so it is announced as unconfigured there.
     const openaiCompatible = isOpenAiCompatibleProvider(settings.provider);
+    /*
+     * 免费渠道（foliawork）也是 OpenAI 兼容，所以它也进这份 env —— 分词、导演这些任务
+     * 拿它跑得通（机器码就是它的 Key）。
+     *
+     * 唯一要留意的是额度：分词与主题共用同一把机器码，分会烧掉签到来的积分。
+     * 这是刻意的取舍 —— 让用户能用同一份额度换到完整的 AI 体验，比省着只用主题更值。
+     */
     return {
         AI_PROVIDER: settings.provider === 'gemini' ? 'gemini' : openaiCompatible ? 'openai' : undefined,
         GEMINI_API_KEY: settings.geminiApiKey.trim() || undefined,

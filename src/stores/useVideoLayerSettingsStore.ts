@@ -28,6 +28,31 @@ export type VideoLayerFit = 'cover' | 'contain';
 /** `needs-permission`: a stored pick exists but the browser wants a click to read it again. */
 export type VideoLayerLocalFileStatus = 'none' | 'ready' | 'needs-permission';
 
+/**
+ * 注入进这一层的地址带这个固定前缀。
+ *
+ * 它只做一件事：让「这一条是别处临时放进来的」和「这一条是用户自己选的」分得开。
+ * 注入方（播放页的 MV 层）写进来时加前缀，清理时只清带前缀的 —— 用户自己设的视频
+ * 永远不会被误删。真正交给 `<video>` 之前用 stripInjectPrefix 剥掉。
+ */
+export const INJECT_URL_PREFIX = 'folia-mv://';
+
+/** 这个地址是不是别处临时注入的。 */
+export const isInjectedVideoUrl = (url: string | null | undefined): boolean => (
+    typeof url === 'string' && url.startsWith(INJECT_URL_PREFIX)
+);
+
+/** 剥掉注入前缀，拿到真正要播的地址；不是注入的就原样返回。 */
+export const stripInjectPrefix = (url: string | null | undefined): string | null => {
+    if (typeof url !== 'string' || url.length === 0) return null;
+    return url.startsWith(INJECT_URL_PREFIX) ? url.slice(INJECT_URL_PREFIX.length) : url;
+};
+
+/** 给要注入的地址加上前缀。 */
+export const withInjectPrefix = (url: string): string => (
+    url.startsWith(INJECT_URL_PREFIX) ? url : `${INJECT_URL_PREFIX}${url}`
+);
+
 export const VIDEO_LAYER_OPACITY_BOUNDS = { min: 0.1, max: 1 } as const;
 const VIDEO_LAYER_OPACITY_DEFAULT = 0.6;
 
@@ -57,6 +82,14 @@ export type VideoLayerSettingsState = {
     localFileStatus: VideoLayerLocalFileStatus;
     /** False where the pick falls back to <input type=file> and is forgotten on restart. */
     canPersistLocalFile: boolean;
+    /**
+     * 别人临时塞进来的一条画面流，优先于用户自己选的视频。
+     *
+     * 只活在这次运行里：不落盘、不进设置，重启就没了，用户原本选的视频随后原样回来。
+     * B 站 MV 走的就是这条路 —— 它不是什么新的一层背景，只是这一层临时换了源。
+     */
+    injectedUrl: string | null;
+    setInjectedUrl: (url: string | null) => void;
     setVideoLayerEnabled: (enabled: boolean) => void;
     setVideoLayerUrl: (url: string) => void;
     setVideoLayerOpacity: (opacity: number) => void;
@@ -64,6 +97,13 @@ export type VideoLayerSettingsState = {
     /** Opens the file picker; resolves to the picked name, or null when cancelled. */
     pickLocalFile: () => Promise<string | null>;
     clearLocalFile: () => Promise<void>;
+    /**
+     * 只把界面上的本地文件摘掉，不动原生那份。
+     *
+     * `clearLocalFile` 里有原生调用，原生不 resolve 时整条链会卡住；市场换视频那条路
+     * 不能等它 —— 等不到就会一直画着上一支视频。这里给一个纯同步的脱手口。
+     */
+    setLocalFileDropped: () => void;
     /** Rebuilds the pick from the stored handle without prompting. */
     restoreLocalFile: () => Promise<void>;
     /** Asks the browser again for a stored pick whose permission lapsed. Needs a user gesture. */
@@ -134,6 +174,13 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
         localFileName: null,
         localFileStatus: 'none',
         canPersistLocalFile: canPersistVideoLayerFile(),
+        // 运行时注入的那条：不读盘，所以重启一定是 null。
+        injectedUrl: null,
+        setInjectedUrl: (url) => {
+            set({ injectedUrl: url });
+            // 注入了就把它露出来：用户点了「看这个视频」，看不到才是怪事。
+            if (url) set({ videoLayerEnabled: true });
+        },
         setVideoLayerEnabled: (enabled) => {
             set({ videoLayerEnabled: enabled });
             setStoredBoolean(VIDEO_LAYER_ENABLED_KEY, enabled);
@@ -171,6 +218,12 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
             await clearVideoLayerFileHandle();
             // 安卓那一端删的是私有目录里的副本：不清，下次开回来它又回来了。
             await clearNativeVideoLayerPick();
+        },
+        setLocalFileDropped: () => {
+            // 和 clearLocalFile 一样要把 revision 推上去，否则一个迟到的 restore 会把它写回来。
+            fileRevision += 1;
+            restoreStarted = true;
+            dropFile();
         },
         restoreLocalFile: () => loadStoredFile(false),
         regrantLocalFile: () => loadStoredFile(true),

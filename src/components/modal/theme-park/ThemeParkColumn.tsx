@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tabs, useSettingsKitTheme } from '../settings/kit';
 import { settingsTokens } from '../settings/kit/kitTheme';
+import { useGlassSurfaceSettingsStore } from '../../../stores/useGlassSurfaceSettingsStore';
 import { kitMotionTokens, useKitReducedMotion } from '../settings/kit/motion';
 import type { AiThemePromptSource } from './aiThemeTransfer';
 import ThemeParkAiPanel from './ThemeParkAiPanel';
@@ -36,6 +37,8 @@ const ThemeParkColumn: React.FC<ThemeParkColumnProps> = ({ editor, recommendedCo
     const { t } = useTranslation();
     const { isDaylight, theme } = useSettingsKitTheme();
     const reduced = useKitReducedMotion();
+    // 液态玻璃开着时主题乐园栏的表面转半透明（settingsTokens 的 glass 参数）。
+    const glassOn = useGlassSurfaceSettingsStore(state => state.liquidGlassEnabled);
     const [activeTab, setActiveTab] = useState<ThemeParkTab>('colors');
     // The first pane is there with the column; a pane chosen later comes in.
     const tabChangedRef = useRef(false);
@@ -44,7 +47,7 @@ const ThemeParkColumn: React.FC<ThemeParkColumnProps> = ({ editor, recommendedCo
     return (
         <div
             className="st-window relative flex h-full min-h-0 flex-col text-[color:var(--st-t1)]"
-            style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reduced) }}
+            style={{ ...settingsTokens(isDaylight, theme, glassOn), ...kitMotionTokens(reduced) }}
         >
             <Tabs
                 label={t('theme.themePark')}

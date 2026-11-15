@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BravaisSuiteArt, GridSuiteArt } from './librarySuiteArt';
+import { BravaisSuiteArt, GridSuiteArt, RhineSuiteArt } from './librarySuiteArt';
 import { OnboardingChoiceCards, type OnboardingChoiceArt, type OnboardingChoiceCard } from './OnboardingChoiceCards';
 import {
     chooseLibrarySuite,
@@ -17,6 +17,7 @@ import type { LibrarySuiteId } from '../../../library/core/suite/suite.contract'
 const ART_BY_SUITE: Readonly<Record<string, OnboardingChoiceArt>> = {
     grid: GridSuiteArt,
     bravais: BravaisSuiteArt,
+    rhine: RhineSuiteArt,
 };
 
 type LibrarySuiteOnboardingOptionsProps = {

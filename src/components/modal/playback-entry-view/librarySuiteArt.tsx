@@ -106,3 +106,44 @@ export const BravaisSuiteArt: React.FC<ArtProps> = ({ accentColor, className }) 
         </svg>
     );
 };
+
+/**
+ * 莱茵生命：三维档案阵列。
+ *
+ * 和另外两张同一个画法（160×100、currentColor 画结构、强调色只给焦点）。
+ * 这里是侧俯视的一张档案卡：卡面上的两个同心环是这套界面的标志物，
+ * 下面几道横线代表堆叠的卡片。
+ */
+export const RhineSuiteArt: React.FC<ArtProps> = ({ accentColor, className }) => (
+    <svg viewBox="0 0 160 100" className={className} role="presentation" aria-hidden="true">
+        <rect {...FRAME_PROPS} />
+        {/* 后方堆叠的卡片，越靠后越淡 */}
+        {[0, 1, 2].map(layer => (
+            <rect
+                key={layer}
+                x={124 + layer * 7}
+                y={30 - layer * 6}
+                width={26}
+                height={44}
+                rx="2"
+                fill="currentColor"
+                fillOpacity={0.06 + layer * 0.02}
+            />
+        ))}
+        {/* 主卡片 */}
+        <rect x="30" y="20" width="96" height="52" rx="3" fill="currentColor" fillOpacity="0.1" />
+        <rect x="30" y="20" width="96" height="52" rx="3" fill="none" stroke="currentColor" strokeOpacity="0.3" />
+        {/* 卡面上的两个人眼般的环 */}
+        <circle cx="66" cy="46" r="16" fill="none" stroke="currentColor" strokeOpacity="0.34" strokeWidth="3" />
+        <circle cx="66" cy="46" r="7" fill="none" stroke="currentColor" strokeOpacity="0.22" strokeWidth="2" />
+        <circle cx="99" cy="41" r="9" fill="none" stroke={accentColor} strokeOpacity="0.85" strokeWidth="3" />
+        <circle cx="99" cy="41" r="3.5" fill={accentColor} fillOpacity="0.4" />
+        {/* 标注线 */}
+        <path d="M46 60 L84 30" stroke="currentColor" strokeOpacity="0.3" strokeWidth="1.2" />
+        <rect x="38" y="26" width="20" height="3" rx="1.5" fill="currentColor" fillOpacity="0.3" />
+        <rect x="38" y="32" width="13" height="2.5" rx="1.25" fill="currentColor" fillOpacity="0.18" />
+        {/* 底部字幕 */}
+        <rect x="30" y="78" width="42" height="3" rx="1.5" fill={accentColor} fillOpacity="0.8" />
+        <rect x="78" y="78" width="26" height="3" rx="1.5" fill="currentColor" fillOpacity="0.2" />
+    </svg>
+);

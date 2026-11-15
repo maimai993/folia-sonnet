@@ -1,12 +1,12 @@
 import React from 'react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
-import { ListEnd, ListMusic, ListPlus, PanelsTopLeft, Shuffle, Trash2 } from 'lucide-react';
+import { ListEnd, ListMusic, ListPlus, NotebookPen, PanelsTopLeft, Shuffle, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SongResult } from '../../types';
 import TextInputDialog from '../shared/TextInputDialog';
 import { Button } from '../modal/settings/kit';
 import { useKitReducedMotion } from '../modal/settings/kit/motion';
-import { getSongUnavailableLabel, isSongUnavailable } from '../../services/onlineMusic/songAvailability';
+import { getSongTag, isSongUnavailable } from '../../services/onlineMusic/songAvailability';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { queueIndexOfKey } from '../../utils/playbackNeighbors';
@@ -47,6 +47,8 @@ interface QueueTabProps {
     canSaveLocalPlaylist?: boolean;
     /** Opens the same queue as a poster wall; absent when the host has no wall to show. */
     onOpenLattice?: () => void;
+    /** 在速记簿里展开队列（打开速记簿的播放队列页、展开成画布）。 */
+    onOpenScratchpadQueue?: () => void;
     onSaveCurrentQueueAsPlaylist?: (name: string) => Promise<void>;
     isDaylight?: boolean;
 }
@@ -62,6 +64,7 @@ type QueueRowProps = {
     onRemoveSong: QueueTabProps['onRemoveSong'];
     labels: {
         unavailable: string;
+        video: string;
         playNext: string;
         moveToEnd: string;
         remove: string;
@@ -92,6 +95,7 @@ const QueueCell = ({
 }) => {
     const isActive = currentSongKey === getPlaybackSongKey(song);
     const isUnavailable = isSongUnavailable(song);
+    const tag = getSongTag(song, labels);
 
     return (
         <div
@@ -103,9 +107,9 @@ const QueueCell = ({
             <div className={`min-w-0 flex-1 ${isUnavailable ? 'opacity-55' : ''}`}>
                 <div className="flex items-center gap-2 text-[13px] leading-[19px]">
                     <span className={`truncate ${isActive ? 'font-semibold' : ''}`}>{song.name}</span>
-                    {isUnavailable && (
+                    {tag && (
                         <span className="shrink-0 rounded bg-[var(--st-fill2)] px-[5px] py-px text-[11px] leading-[15px] text-[color:var(--st-t2)]">
-                            {getSongUnavailableLabel(song, labels.unavailable)}
+                            {tag}
                         </span>
                     )}
                 </div>
@@ -194,6 +198,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
     onMoveSongToNext,
     canSaveLocalPlaylist = false,
     onOpenLattice,
+    onOpenScratchpadQueue,
     onSaveCurrentQueueAsPlaylist,
     isDaylight = false,
 }) => {
@@ -224,6 +229,7 @@ const QueueTab: React.FC<QueueTabProps> = ({
         onRemoveSong,
         labels: {
             unavailable: t('status.songUnavailableTag'),
+            video: t('status.songVideoTag'),
             playNext: t('queue.playNext'),
             moveToEnd: t('queue.moveToEnd'),
             remove: t('queue.remove'),
@@ -312,6 +318,11 @@ const QueueTab: React.FC<QueueTabProps> = ({
                         <Button variant="quiet" onClick={handleSavePlaylist}>
                             {t('localMusic.saveQueueAsPlaylist')}
                         </Button>
+                    )}
+                    {onOpenScratchpadQueue && (
+                        <PanelIconButton size="s" label={t('scratchpad.openQueueCanvas')} onClick={onOpenScratchpadQueue}>
+                            <NotebookPen size={15} />
+                        </PanelIconButton>
                     )}
                     {onOpenLattice && (
                         <PanelIconButton size="s" label={t('home.lattice')} onClick={onOpenLattice}>

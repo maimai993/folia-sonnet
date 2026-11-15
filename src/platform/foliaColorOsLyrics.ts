@@ -1,4 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
+import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
 
 // src/platform/foliaColorOsLyrics.ts
 // ColorOS 原生锁屏歌词的 Web 侧入口。原生实现见 android/.../coloros/ColorOsLyricBridge。
@@ -72,6 +73,7 @@ export const publishColorOsLyricInfo = async (
     hasTranslation: boolean,
     songKey: string | null,
 ): Promise<boolean> => {
+    if (isNativePlaybackReconciling()) return false;
     try {
         const result = await FoliaColorOsLyrics.publish({ lyricInfo, hasTranslation, songKey });
         return Boolean(result?.ok);
@@ -82,6 +84,7 @@ export const publishColorOsLyricInfo = async (
 
 /** 没有在播的东西（或这首歌没词）：把上一段歌词撤掉。 */
 export const clearColorOsLyricInfo = async (): Promise<void> => {
+    if (isNativePlaybackReconciling()) return;
     try {
         await FoliaColorOsLyrics.clear();
     } catch {

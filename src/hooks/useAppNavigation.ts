@@ -25,6 +25,7 @@ import { useAppViewStore } from '../stores/useAppViewStore';
 import type { AppView, LatticeSource } from '../stores/useAppViewStore';
 import { usePlaybackStore } from '../stores/usePlaybackStore';
 import { resolvePlaybackSurface, usePlaybackEntryViewStore, type PlaybackEntryView } from '../stores/usePlaybackEntryViewStore';
+import { useRhineOverlayStore } from '../stores/useRhineOverlayStore';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import i18n from '../i18n/config';
 
@@ -89,8 +90,10 @@ const getSearchHistorySnapshot = (): NavigationHistoryState['search'] => {
     const searchState = useSearchNavigationStore.getState();
     return searchState.isSearchOpen
         ? {
-            query: searchState.searchQuery,
+            // 记下的是搜出当前结果的词：恢复时按它查缓存，输入框里没提交的字查不到。
+            query: searchState.submittedQuery,
             sourceTab: searchState.searchSourceTab,
+            kind: searchState.searchKind,
             returnView: searchState.searchReturnView,
         }
         : null;
@@ -422,6 +425,15 @@ export function useAppNavigation() {
         // fb3「留在原处」：播放不带人去任何地方——资料库的卡片 / 墙自己显示正在播放（暂停 / 继续）。
         // 已经在播放页上（例如自动切歌）时照旧走下面的 navigateToPlayer，与另外两个值一致。
         if (entryView === 'stay' && view !== 'player') return;
+        /*
+         * 莱茵「卡片变歌词可视化」开着时，同样不该跳走。
+         *
+         * 这个开关的意义就是让可视化留在档案首页那张卡上 —— 一旦点播放就跳进
+         * 全屏播放页，卡片上那层可视化根本没机会看，开关等于没用。
+         *
+         * 与「留在原处」的区别只在于它是莱茵专属的，不影响别的资料库界面。
+         */
+        if (useRhineOverlayStore.getState().cardVisualizer && view !== 'player') return;
         if (entryView === 'lattice' && view !== 'player' && !usePlaybackStore.getState().isFmMode) {
             navigateToLattice();
             return;
@@ -486,7 +498,8 @@ export function useAppNavigation() {
         returnView?: SearchReturnView;
     }) => {
         useCollectionNavigationStore.getState().clear();
-        const search = { query, sourceTab, returnView };
+        // 搜索先提交、再压历史：种类按提交时定下的记（来源搜不到的种类已退回单曲）。
+        const search = { query, sourceTab, kind: useSearchNavigationStore.getState().searchKind, returnView };
         pushNavigationState({
             view: 'home',
             replace,

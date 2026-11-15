@@ -116,8 +116,8 @@ describe('轨迹过渡的设置接入', () => {
         expect(resolveLumiereCompileOptions({ seamlessTransitions: true })).toEqual({ seamless: true });
         expect(resolveLumiereCompileOptions({ seamlessTransitions: false })).toEqual({ seamless: false });
         expect(resolveLumiereCompileOptions(DEFAULT_LUMIERE_TUNING)).toEqual({ seamless: true });
-        const off = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: false }, { showText: true });
-        const on = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: true }, { showText: true });
+        const off = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: false }, { showText: true, keywordColoringEnabled: true });
+        const on = toLumiereSceneTuning({ ...DEFAULT_LUMIERE_TUNING, seamlessTransitions: true }, { showText: true, keywordColoringEnabled: true });
         expect(on).toEqual(off);
         expect(requiresLumiereSceneRebuild(off, on)).toBe(false);
     });

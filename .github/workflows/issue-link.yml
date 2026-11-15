@@ -1,7 +1,7 @@
 name: Issue link
 
-# PR 正文必须写 Closes / Fixes / Resolves / Refs + #编号，说明这次改动对应哪个 issue。
-# 检查逻辑在 ci/checkIssueLink.ts，这个文件只做触发；规则与流程见 docs/issue-workflow.md。
+# fix/* 分支和带 bug 标签的 PR，正文必须写 Closes / Fixes / Resolves / Refs + #编号，说明这次改动对应哪个 issue。
+# 其他 PR（feat / docs / refactor 等）不要求关联。检查逻辑在 ci/checkIssueLink.ts，这个文件只做触发；规则与流程见 docs/issue-workflow.md。
 on:
   pull_request:
     types:
@@ -9,6 +9,8 @@ on:
       - edited
       - synchronize
       - reopened
+      - labeled
+      - unlabeled
     # 只要求发向 dev / main 的 PR，别处的 PR 不跑。
     branches:
       - dev

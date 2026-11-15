@@ -17,6 +17,38 @@ import { omniService } from './serviceAccess';
 // The liked songs of an account: the hearts pressed in Folia, what the platform answers, and the one
 // rule that settles them (account/keptAfterRead.ts).
 
+/** 原生补写的一条红心：WebView 冻结期间通知栏 / 锁屏那颗心已经写到服务器上了。 */
+export interface NativeLikeOverrideInput {
+    providerId: string;
+    serverSongId: string;
+    liked: boolean;
+}
+
+/**
+ * 把原生补写的红心对齐进账号缓存（likedSongIds）。
+ *
+ * 原生扣下通知栏控制权时，那颗心由原生直接写服务器；Web 这边不知道，缓存里还是旧状态，
+ * 打开 App 时两边会打架。这里只改缓存、不再写一遍平台 —— 平台那边已经是目标状态了，
+ * 再写一遍是浪费；之后的账号读取也会从服务器带回同一个状态，两边天然收敛。
+ * 账号还没读进来（没 user）时跳过：那时也没有旧状态可翻，等读取即可。
+ */
+export const applyNativeLikeOverrides = (overrides: NativeLikeOverrideInput[]): void => {
+    const accounts = useOnlineProviderAccountStore.getState().accounts;
+    const updates = new Map<OmniProviderId, MediaId[]>();
+    for (const item of overrides) {
+        const providerId = item.providerId as OmniProviderId;
+        const account = accounts[providerId];
+        if (!account?.user || !item.serverSongId) continue;
+        const current = updates.get(providerId) ?? [...(account.likedSongIds || [])];
+        const filtered = current.filter(id => String(id) !== String(item.serverSongId));
+        updates.set(providerId, item.liked ? [...filtered, item.serverSongId as MediaId] : filtered);
+    }
+    updates.forEach((likedSongIds, providerId) => {
+        useOnlineProviderAccountStore.getState().updateAccount(providerId, { likedSongIds });
+        void persistProviderLikedSongIds(providerId);
+    });
+};
+
 // 点赞状态改完要落盘：只更内存的话，重启后靠快照 hydration 的那一帧会恢复旧心形，
 // 后台刷新再失败就一直是旧的。
 export const persistProviderLikedSongIds = async (providerId: OmniProviderId): Promise<void> => {

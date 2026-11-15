@@ -80,13 +80,13 @@ describe('the password form of a sign-in', () => {
         draw({ needsServerUrl: true });
         const { url, name, secret } = fields();
         act(() => {
-            type(url!, ' http://192.168.1.5:5666 ');
+            type(url!, ' http://nas.lan:5666 ');
             type(name!, ' someone ');
             type(secret!, 'a-secret');
         });
         act(() => place.querySelector('button[type="submit"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
         // 前后空白不是账号的一部分。
-        expect(submitted).toEqual([{ serverUrl: 'http://192.168.1.5:5666', username: 'someone', password: 'a-secret' }]);
+        expect(submitted).toEqual([{ serverUrl: 'http://nas.lan:5666', username: 'someone', password: 'a-secret' }]);
     });
 
     it('holds the submit back until the name and the password are both filled', () => {
@@ -110,11 +110,12 @@ describe('the password form of a sign-in', () => {
     });
 
     it('asks for what the chosen method asks for, without knowing which method it is', () => {
-        // 同一个平台的一种连接只要一个 ID、另一种要整条地址：第一栏叫什么、例子写什么，都按选中的方式说。
-        draw({ field: { labelKey: 'home.loginFeiniuFnId', placeholderKey: 'home.loginFeiniuFnIdPlaceholder' } });
+        // 第一栏叫什么、例子写什么，全按传进来的 field 说 —— 表单自己不认识任何平台，
+        // 也不替平台拼地址：填进去的是什么就原样交出去。
+        draw({ field: { labelKey: 'test.customField', placeholderKey: 'test.customFieldPlaceholder' } });
         const { url } = fields();
-        expect(place.textContent).toContain('home.loginFeiniuFnId');
-        expect(url?.getAttribute('placeholder')).toBe('home.loginFeiniuFnIdPlaceholder');
+        expect(place.textContent).toContain('test.customField');
+        expect(url?.getAttribute('placeholder')).toBe('test.customFieldPlaceholder');
         act(() => {
             type(url!, 'abcd1234');
             type(fields().name!, 'someone');

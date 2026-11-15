@@ -44,9 +44,26 @@ export interface LyricBackgroundVocal {
   alternateTexts?: LyricAlternateText[];
 }
 
-// 'both' stacks romanization above translation; only the shared bottom subtitle overlay renders both rows.
+// 'both' stacks romanization above translation.
 // Modes that lay translation out inside their own lyric layout (Monet, Pendolo, Lattice, Still) fall back to translation only.
+// The shared bottom subtitle overlay does not read this: it has its own rows (SubtitleOverlayLayout).
 export type SubtitleContentMode = 'translation' | 'romanization' | 'both' | 'none';
+
+// One row of the shared bottom subtitle overlay: the line on screen, the line after it, or the line on screen's translation / romanization.
+export type SubtitleOverlayRowSource = 'current' | 'next' | 'translation' | 'romanization';
+export type SubtitleOverlayFollowRow = Exclude<SubtitleOverlayRowSource, 'current'>;
+// The shared bottom subtitle overlay's rows, top to bottom, joined with '+'.
+// The first row is the current line, its translation or its romanization (so a stack can leave the original text out);
+// each row after it is the next line, the translation or the romanization.
+export type SubtitleOverlayFirstRow = Exclude<SubtitleOverlayRowSource, 'next'>;
+export type SubtitleOverlayRowsLayout =
+  | SubtitleOverlayFirstRow
+  | `${SubtitleOverlayFirstRow}+${SubtitleOverlayFollowRow}`
+  | `${SubtitleOverlayFirstRow}+${SubtitleOverlayFollowRow}+${SubtitleOverlayFollowRow}`;
+// A line the rows have nothing for (a translation row on a song without one) previews the coming lyrics instead.
+// The '|only' ending turns that off: the overlay then shows its rows and nothing else.
+// Stored and carried as this string.
+export type SubtitleOverlayLayout = SubtitleOverlayRowsLayout | `${SubtitleOverlayRowsLayout}|only`;
 
 export interface LyricAgent {
   id: string;
@@ -108,7 +125,14 @@ export interface Theme {
   description?: string;
 }
 
-export type CustomLyricsFontSource = 'system' | 'uploaded';
+/**
+ * 歌词自定义字体的来源。
+ *
+ * `market` 是字体市场（ZeoSeven）选的：它的 family 由运行时注入的 @font-face 提供，
+ * 本机既没有字体文件、也不在系统字体表里，所以冷启动时必须按 fontId 重新登记一遍
+ * （见 services/fontMarket.ts 的 restoreMarketFontChoice / fontMarket/zeosevenFont.ts）。
+ */
+export type CustomLyricsFontSource = 'system' | 'uploaded' | 'market';
 
 export interface StoredCustomLyricsFont {
   source: CustomLyricsFontSource;
@@ -127,8 +151,26 @@ export type ThemeMode = 'default' | 'ai' | 'custom';
 export type BuiltinVisualizerMode = 'classic' | 'cadenza' | 'partita' | 'fume' | 'monet';
 export type VisualizerMode = BuiltinVisualizerMode | (string & {});
 export type VisualizerFrameRate = 'off' | 120 | 90 | 60 | 30;
-/** 画布渲染分辨率的上限，见 utils/renderPixelRatio.ts。 */
+/** 画布渲染分辨率的上下限，见 utils/renderPixelRatio.ts。 */
 export type RenderPixelRatio = 0.5 | 0.75 | 1 | 1.25 | 1.5 | 2;
+
+/**
+ * 用 canvas / WebGL 画的歌词样式的渲染分辨率：相对样式自己默认像素密度（大多是屏幕的 devicePixelRatio，钳到 2）的倍数，
+ * 大于 1 是超采样（utils/lyricRenderQuality.ts）。
+ */
+export type LyricRenderScale = 0.5 | 0.75 | 1 | 1.5 | 2;
+/** 歌词画布的抗锯齿：auto 是各样式自己的默认（有的开 MSAA，有的靠后处理）。 */
+export type LyricAntialias = 'auto' | 'on' | 'off';
+/** 「动画与性能」里的全局挡位：各样式默认跟随它。 */
+export interface LyricRenderQuality {
+  scale: LyricRenderScale;
+  antialias: LyricAntialias;
+}
+/** 一个歌词样式自己的分辨率与抗锯齿（存在样式的 tuning 里）：global 跟随全局挡位。 */
+export interface LyricRenderOverride {
+  scale: 'global' | LyricRenderScale;
+  antialias: 'global' | 'on' | 'off';
+}
 
 export type HomeViewTab = 'playlist' | 'local' | 'albums' | 'navidrome' | 'radio' | 'cloud' | 'explore';
 
@@ -199,12 +241,32 @@ export type StageLyricSource =
   | StageNavidromeLyricSource
   | StageQrcLyricSource;
 
+/** Where an external player is, as last reported to the Stage API (POST /stage/lyrics or /stage/lyrics/clock). */
+export interface StageLyricsClock {
+  positionMs: number;
+  paused: boolean;
+  /** The main process's Date.now() when the position was received; the clock runs on from it. */
+  sampledAtMs: number;
+}
+
 export interface StageLyricsSession {
   title?: string;
   artist?: string;
   album?: string;
-  lyricSource: StageLyricSource;
+  /** Absent for a session that only shows a track (its lyrics not found, or not here yet). */
+  lyricSource?: StageLyricSource;
+  durationMs?: number;
+  coverUrl?: string;
+  /** Present when an external player drives the session's time. */
+  clock?: StageLyricsClock;
   updatedAt: number;
+}
+
+/** What POST /stage/lyrics/clock sends to the window: the clock of the session with that `updatedAt`. */
+export interface StageLyricsClockUpdate {
+  sessionUpdatedAt: number;
+  clock: StageLyricsClock;
+  durationMs?: number;
 }
 
 export interface StageMediaSession {
@@ -226,18 +288,41 @@ export interface StageMediaSession {
 
 export type StageSession = StageMediaSession;
 
+/** One song a Stage search found; `songRef` (`<provider>:<songId>`) plays or queues it. */
 export interface StageSearchResult {
-  songId: number;
+  songId: number | string;
   title: string;
   artists: string[];
   album: string;
   durationMs: number | null;
   coverUrl: string | null;
+  provider: string;
+  songRef: string;
 }
 
-export interface StageExternalPlayRequest {
+/** A song the Stage API names: the omni provider and its id there. */
+export interface StageSongRef {
+  providerId: string;
+  songId: number | string;
+}
+
+/** A search the Stage API asks the renderer to run at one omni provider. */
+export interface StagePlayerSearchRequest {
   requestId: string;
-  songId: number;
+  providerId: string;
+  query: string;
+  limit: number;
+}
+
+export interface StagePlayerSearchResult {
+  requestId: string;
+  ok: boolean;
+  error?: string | null;
+  songs?: StageSearchResult[];
+}
+
+export interface StageExternalPlayRequest extends StageSongRef {
+  requestId: string;
   appendToQueue?: boolean;
 }
 
@@ -352,8 +437,8 @@ export interface StagePlayerControlRequest {
 export interface StagePlayerQueueRequest {
   requestId: string;
   action: 'append' | 'insert-next' | 'remove' | 'move' | 'select' | 'clear';
-  songId?: number;
-  songIds?: number[];
+  /** The songs an append or insert-next adds, in order. */
+  songs?: StageSongRef[];
   queueItemId?: string;
   fromQueueItemId?: string;
   fromIndex?: number;
@@ -400,6 +485,8 @@ export interface ClassicTuning {
   breathingFloatMultiplier: number;
   useLegacyLayout?: boolean;
   wordSpacing?: number;
+  /** Space the words by how far they are drawn when scaled, turned and offset, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
@@ -407,9 +494,12 @@ export const DEFAULT_CLASSIC_TUNING: ClassicTuning = {
   breathingFloatMultiplier: 1,
   useLegacyLayout: false,
   wordSpacing: 0.7,
+  avoidOverlap: false,
 };
 
 export interface CadenzaTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   fontScale: number;
   widthRatio: number;
   motionAmount: number;
@@ -418,6 +508,7 @@ export interface CadenzaTuning {
 }
 
 export const DEFAULT_CADENZA_TUNING: CadenzaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   fontScale: 1.12,
   widthRatio: 0.72,
   motionAmount: 1,
@@ -430,6 +521,8 @@ export interface PartitaTuning {
   useSemanticLayout: boolean;
   staggerMin: number;
   staggerMax: number;
+  /** Space the words and rows by how far they are drawn when scaled, so none overlaps another. */
+  avoidOverlap?: boolean;
 }
 
 export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
@@ -437,9 +530,12 @@ export const DEFAULT_PARTITA_TUNING: PartitaTuning = {
   useSemanticLayout: true,
   staggerMin: 20,
   staggerMax: 100,
+  avoidOverlap: false,
 };
 
 export interface FumeTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   hidePrintSymbols: boolean;
   disableGeometricBackground: boolean;
   backgroundObjectOpacity: number;
@@ -451,6 +547,7 @@ export interface FumeTuning {
 }
 
 export const DEFAULT_FUME_TUNING: FumeTuning = {
+  render: { scale: 'global', antialias: 'global' },
   hidePrintSymbols: false,
   disableGeometricBackground: true,
   backgroundObjectOpacity: 0.5,
@@ -466,7 +563,18 @@ export interface CladdaghTuning {
   radiusScale: number;
   ellipseTiltDeg: number;
   showAxisLine: boolean;
+  /** 主歌词字符间距（px，每个字间隙额外加的量）。 */
   letterSpacingOffset: number;
+  /** 圆环中心的左右位置（#1124）：相对画面宽度的百分比，0 是正中，正值往右。 */
+  positionX?: number;
+  /** 圆环中心的上下位置（#1124）：相对画面高度的百分比，0 是正中，正值往下。 */
+  positionY?: number;
+  /** 在每句主歌词下方沿圆环显示翻译（#1124）。 */
+  showTranslation?: boolean;
+  /** 翻译字号相对默认（主歌词的一半）的倍率。 */
+  translationScale?: number;
+  /** 翻译字符间距（px），同 letterSpacingOffset 的算法。 */
+  translationLetterSpacingOffset?: number;
 }
 
 export const DEFAULT_CLADDAGH_TUNING: CladdaghTuning = {
@@ -475,6 +583,11 @@ export const DEFAULT_CLADDAGH_TUNING: CladdaghTuning = {
   ellipseTiltDeg: 45,
   showAxisLine: true,
   letterSpacingOffset: 0,
+  positionX: 0,
+  positionY: 0,
+  showTranslation: false,
+  translationScale: 1,
+  translationLetterSpacingOffset: 0,
 };
 
 export type CappellaEmojiPackSource = 'builtin' | 'custom';
@@ -507,6 +620,8 @@ export const DEFAULT_TILT_TUNING: TiltTuning = {
 };
 
 export interface PendoloTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   arcRadius: number;
   arcAngleDeg: number;
   wheelCenterX: number;
@@ -517,9 +632,24 @@ export interface PendoloTuning {
   showCenterGradient?: boolean;
   showCoverOnWatchFace?: boolean;
   enableLineGlow?: boolean;
+  /** 歌词左右镜像（#1124）：表盘移到右边、歌词弧线在左；wheelCenterX 改从右边缘量。 */
+  mirrorLayout?: boolean;
+  /** 表盘倾斜（度，正值时倾斜轴上方往屏幕里退）：表盘平面带透视地转出屏幕，0 是平放。 */
+  tiltDeg?: number;
+  /** 倾斜轴的方向（度）：0 是水平轴（前后俯仰），±90 是竖直轴（左右偏转）。 */
+  tiltAxisDeg?: number;
+  /** 分层视差强度：倾斜时齿轮、摆轮、歌词按各自高度浮在表盘上方，0 是全在一个平面上。 */
+  parallaxDepth?: number;
+  /** 轮心视角：相机在轮心后上方、顺着刻度针看向焦点句，代替倾斜；只在 WebGL 下生效。 */
+  hubView?: boolean;
+  /** 轮心视角的相机高度（轮盘半径的倍数）：低时贴着表盘平视，高时接近俯视。 */
+  hubViewHeight?: number;
+  /** 轮心视角的相机从轮心沿刻度针反方向后退多远（轮盘半径的倍数），0 是正在轮心上方。 */
+  hubViewBack?: number;
 }
 
 export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
+  render: { scale: 'global', antialias: 'global' },
   arcRadius: 0.42,
   arcAngleDeg: 100,
   wheelCenterX: 0.0,
@@ -530,11 +660,20 @@ export const DEFAULT_PENDOLO_TUNING: PendoloTuning = {
   showCenterGradient: true,
   showCoverOnWatchFace: false,
   enableLineGlow: false,
+  mirrorLayout: false,
+  tiltDeg: 0,
+  tiltAxisDeg: 0,
+  parallaxDepth: 1,
+  hubView: false,
+  hubViewHeight: 1.4,
+  hubViewBack: 1.2,
 };
 
 export type SonnetOuterFrameMode = 'none' | 'frame' | 'full';
 
 export interface SonnetTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   cameraIntensity: number;
   typographyMotion: number;
   mgDensity: number;
@@ -565,7 +704,7 @@ export interface SonnetTuning {
 }
 
 /**
- * 商奈（sonnet）镜头运动强度的上限 —— 也就是它的默认值。
+ * 商籁（sonnet）镜头运动强度的上限 —— 也是它的默认值。
  *
  * 这一档的相机运动是叠在分镜与转场上的：数值再高，镜头推拉很容易把画面甩出屏幕外（画幅
  * 边缘露黑、歌词被推出画面）。所以「能调多少」就定在 0.7，默认也直接落在 0.7 —— 默认即
@@ -578,6 +717,9 @@ export interface SonnetTuning {
 export const SONNET_CAMERA_INTENSITY_MAX = 0.7;
 
 export const DEFAULT_SONNET_TUNING: SonnetTuning = {
+  render: { scale: 'global', antialias: 'global' },
+  // dev 的默认即安全上限（见上面 SONNET_CAMERA_INTENSITY_MAX 的说明）：合并 v0.7.26 时
+  // 这里一度被上游的 1 覆盖，那会直接越过夹取上限，所以按 dev 取常量。
   cameraIntensity: SONNET_CAMERA_INTENSITY_MAX,
   typographyMotion: 1,
   mgDensity: 1,
@@ -607,9 +749,15 @@ export const DEFAULT_SONNET_TUNING: SonnetTuning = {
 export interface BeatEffectSetting {
   on: boolean;
   strength: number;
+  /**
+   * An effect made of parts, each with its own slider (BeatEffectDef `parts`, 雾笺's 疏雨轻车): their
+   * strengths by part key, 0..2, a part never touched at 1. `strength` is then unused.
+   */
+  parts?: Record<string, number>;
 }
 
-/** 智能动感模式's three settings (2026-10-17, the user's 全开 / 半开 / 不开):
+/**
+ * 智能动感模式's three settings (2026-10-17, the user's 全开 / 半开 / 不开):
  * - `on`: the effects play, and a track with nothing stored is analysed now on the GPU.
  * - `cached`: the effects play from what is already stored - a track analysed before under `on`, or
  *   whose beats automix analysed - and nothing is ever started for them: no model run, no decode, no
@@ -677,6 +825,8 @@ export const DEFAULT_TEMPERA_LAYER_IMAGE: Omit<TemperaLayerImage, 'id' | 'name'>
 };
 
 export interface TemperaTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   cameraIntensity: number;
   /** Per-glyph entrance motion strength, 0..2. */
   glyphMotion: number;
@@ -689,6 +839,12 @@ export interface TemperaTuning {
    * lyric end - continuous, but nothing is ever still. See temperaLayout for the measurements.
    */
   glyphSettleStretch: number;
+  /** 墨染奥行 景深, 0..2: the depth blur and the layers' parallax. Only while 墨染奥行 is on. */
+  depthOfField: number;
+  /** 墨染奥行 镜头平移, 0..2: how far each shot slides in and drifts. Only while 墨染奥行 is on. */
+  depthPan: number;
+  /** 墨染奥行 歌词远近, 0..2: how far small glyphs fade back and big ones lead. Only while 墨染奥行 is on. */
+  glyphDepth: number;
   /** duo derives blocks from theme hues; mono collapses to a grayscale ink/paper ladder. */
   colorMode: TemperaColorMode;
   showBlocks: boolean;
@@ -730,10 +886,14 @@ export interface TemperaTuning {
 }
 
 export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   cameraIntensity: 1,
   glyphMotion: 1,
   wholeLineLyrics: false,
   glyphSettleStretch: 0.5,
+  depthOfField: 1,
+  depthPan: 1,
+  glyphDepth: 1,
   colorMode: 'duo',
   showBlocks: true,
   showDecor: true,
@@ -759,6 +919,8 @@ export const DEFAULT_TEMPERA_TUNING: TemperaTuning = {
 export type LumiereRenderQuality = 'full' | 'balanced' | 'low';
 
 export interface LumiereTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   /** 光强倍率, 0.3..2. */
   lightIntensity: number;
   /** 随音乐变亮, 0..2 (0 = 不随音乐变). */
@@ -817,6 +979,7 @@ export interface LumiereTuning {
 }
 
 export const DEFAULT_LUMIERE_TUNING: LumiereTuning = {
+  render: { scale: 'global', antialias: 'global' },
   lightIntensity: 1,
   audioResponse: 1,
   fogDensity: 1,
@@ -902,6 +1065,8 @@ export const DIORAMA_PARTICLE_GLOW_INTENSITY_MAX = 1.5;
 export const DIORAMA_PARTICLE_GLOW_INTENSITY_STEP = 0.05;
 
 export interface DioramaTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   cameraSpeed: number;
   motionAmount: number;
   audioReactivity: number;
@@ -939,6 +1104,7 @@ export interface DioramaTuning {
 }
 
 export const DEFAULT_DIORAMA_TUNING: DioramaTuning = {
+  render: { scale: 'global', antialias: 'global' },
   cameraSpeed: 1,
   motionAmount: 1,
   audioReactivity: 1,
@@ -969,8 +1135,12 @@ export type NomandBackgroundEffect = 'dithering' | 'fluted-glass' | 'paper-textu
 export type LatentBackgroundDisplayMode = 'dithering' | 'mesh' | 'both';
 export type LatentBackgroundColorSource = 'cover-theme' | 'cover-only';
 export type MonetAudioStyle = 'bar' | 'line';
-export type MonetPortraitSource = 'cover' | 'custom';
-export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora';
+// 'none' 不显示肖像，只留歌词（#1124）。
+export type MonetPortraitSource = 'cover' | 'custom' | 'none';
+// 莫奈的歌曲描述和封面拖动按钮：鼠标移上去才出现（原来的样子）、一直显示、不显示。
+export type MonetChromeVisibility = 'auto' | 'always' | 'hidden';
+export const MONET_CHROME_VISIBILITIES: readonly MonetChromeVisibility[] = ['auto', 'always', 'hidden'];
+export type BuiltinVisualizerBackgroundMode = 'common' | 'monet' | 'nomand' | 'latent' | 'url' | 'sora' | 'particles' | 'sonic' | 'mv';
 export type VisualizerBackgroundMode = BuiltinVisualizerBackgroundMode | (string & {});
 
 export interface UrlBackgroundItem {
@@ -981,6 +1151,14 @@ export interface UrlBackgroundItem {
 
 export interface MonetBackgroundTuning {
   backgroundSource: MonetBackgroundSource;
+  /**
+   * 背景里要不要画那张图（封面派生图 / 上传的图）。
+   *
+   * 关掉就只剩渐变底与纹理：有人只想借莫奈的配色，不想看见封面本身；
+   * 也方便在封面画质差的时候直接藏起来。不影响 `backgroundSource` 的取值，
+   * 所以再打开还是原来那张。
+   */
+  backgroundShowCover: boolean;
   backgroundLayout: MonetBackgroundLayout;
   backgroundBlurPx: number;
   backgroundOverlayOpacity: number;
@@ -1046,18 +1224,110 @@ export interface SoraBackgroundTuning {
   blank: boolean;
 }
 
+/**
+ * 粒子背景（从 Mineradio 的封面粒子搬来）的可调项。
+ *
+ * 只列着色器真的实现了的：Mineradio 那边的 bloom / scatter / twist 在我们这套
+ * 单 pass 渲染里没有对应物，所以不在这里出现 —— 暴露一个不生效的滑条更糟。
+ */
+export interface ParticlesBackgroundTuning {
+  /**
+   * 形态：同一套粒子几何的几种排布。
+   *
+   * auto 自动（按歌挑一种）· silk 丝绸（专辑封面）· tunnel 滚筒 ·
+   * planet 星球 · vinyl 唱片。
+   * 这几个在 Mineradio 里是同一个着色器的几个 preset 分支。
+   */
+  form: 'auto' | 'silk' | 'tunnel' | 'planet' | 'vinyl';
+  /** 每边的格数。越大越细腻，也越吃性能；96 是调好的默认值。 */
+  grid: number;
+  /** 整体强度，乘在频段与尺寸上。1 为标定值。 */
+  intensity: number;
+  /** 单个粒子的大小倍数。 */
+  pointScale: number;
+  /** 主题色染色的强度，0 是完全用封面本身的颜色。 */
+  tintStrength: number;
+  /** 是否随低频自动打涟漪（关掉后只有鼓点爆裂会推一下）。 */
+  autoRipple: boolean;
+}
+
+export const DEFAULT_PARTICLES_BACKGROUND_TUNING: ParticlesBackgroundTuning = {
+  /*
+   * 默认「自动」：按歌挑一种形态（同一首歌总是同一种，换歌才换）。
+   * 用户不用先去设置里选，看几天下来也不会腻。
+   */
+  form: 'auto',
+  grid: 96,
+  intensity: 1,
+  pointScale: 1,
+  tintStrength: 1,
+  autoRipple: true,
+};
+
+/**
+ * 音域回响背景（从 Mineradio 的 sonic-topography-preset 搬来）的可调项。
+ *
+ * 那边的旋钮全是 0..100 的整数（sonicGround*），这里保持同样的取值域，
+ * 默认值直接照抄，不用换算。8 个频段 EQ 与配色不外露 —— 那几个需要
+ * 调音知识才知道怎么调，默认值就能直接用。
+ */
+export interface SonicBackgroundTuning {
+  /** 地形密度：决定每边多少根柱子（平方增长，所以上限卡在 100）。 */
+  density: number;
+  /** 起伏幅度。50 是标定值，往上按平方放大。 */
+  amplitude: number;
+  /** 地面范围。越大铺得越开。 */
+  range: number;
+  /** 垂直位置。越大压得越低。 */
+  lower: number;
+  /** 景深：地形往后推多远。 */
+  depth: number;
+  /** 发光强度。 */
+  glow: number;
+  /** 平滑度：静息起伏更偏噪声（低）还是更偏波纹（高）。 */
+  smoothness: number;
+  /** 锐利度：柱子侧面阴影的陡峭程度。 */
+  sharpness: number;
+}
+
+export const DEFAULT_SONIC_BACKGROUND_TUNING: SonicBackgroundTuning = {
+  density: 46,
+  amplitude: 50,
+  range: 82,
+  lower: 68,
+  depth: 62,
+  glow: 68,
+  smoothness: 50,
+  sharpness: 50,
+};
+
 export interface MonetTuning {
+  /** 分辨率与抗锯齿（#929）：默认跟随「动画与性能」里的全局挡位（utils/lyricRenderQuality.ts）。 */
+  render: LyricRenderOverride;
   keywordColoringEnabled: boolean;
+  /** Whether the description shows at all; kept equal to `descriptionVisibility !== 'hidden'` for older readers. */
   showDescription: boolean;
+  /** How the song description shows. Older tunings have only `showDescription`: on is 'auto'. */
+  descriptionVisibility?: MonetChromeVisibility;
+  showAudioVisualization: boolean;
+  audioStyle: MonetAudioStyle;
   fontScale: number;
   portraitSource: MonetPortraitSource;
   portraitOffsetX?: number;
   portraitStyle?: 'square' | 'rectangular';
+  /** Whether the drag handle shows at all; kept equal to `portraitHangerVisibility !== 'hidden'` for older readers. */
   showPortraitDragHanger?: boolean;
+  /** How the portrait's drag handle shows. Older tunings have only `showPortraitDragHanger`: on is 'auto'. */
+  portraitHangerVisibility?: MonetChromeVisibility;
+  /** 歌词左右镜像（#1124）：肖像在左、文字靠右排，整个画面左右对称。 */
+  mirrorLayout?: boolean;
+  /** 自定义的歌曲描述；空着就显示主题自带的描述。 */
+  customDescription?: string;
 }
 
 export const DEFAULT_MONET_BACKGROUND_TUNING: MonetBackgroundTuning = {
   backgroundSource: 'cover-derived',
+  backgroundShowCover: true,
   backgroundLayout: 'full-overlay',
   backgroundBlurPx: 6,
   backgroundOverlayOpacity: 0.74,
@@ -1120,13 +1390,20 @@ export const DEFAULT_SORA_BACKGROUND_TUNING: SoraBackgroundTuning = {
 };
 
 export const DEFAULT_MONET_TUNING: MonetTuning = {
+  render: { scale: 'global', antialias: 'global' },
   keywordColoringEnabled: true,
   showDescription: true,
+  descriptionVisibility: 'auto',
+  showAudioVisualization: true,
+  audioStyle: 'bar',
   fontScale: 1.2,
   portraitSource: 'cover',
   portraitOffsetX: 0,
   portraitStyle: 'square',
   showPortraitDragHanger: true,
+  portraitHangerVisibility: 'auto',
+  mirrorLayout: false,
+  customDescription: '',
 };
 
 export interface StoredCappellaEmojiImage {
@@ -1188,6 +1465,10 @@ export enum PlayerState {
 }
 
 export interface StatusMessage {
+  /** Shows a decorative loader beside the visible status text. */
+  activity?: 'loading' | 'success' | 'error';
+  /** Keeps one loader mounted while its strokes morph into the result. */
+  activityId?: number;
   type: 'error' | 'success' | 'info';
   text: string;
   /** A second line under the text: what to do about it. */
@@ -1200,6 +1481,12 @@ export interface StatusMessage {
   countdown?: { text: string; seconds: number; totalMs: number };
   /** The online platform the message is about: its mark stands before the text, in place of the type's icon. */
   providerId?: OnlineProviderId;
+  /**
+   * 这条提示**不吃点击**（提示条默认是 `pointer-events: auto`，会浮在可视化那一层上面，
+   * 把点击接走）。给「点一下空白 → 弹提示 → 再点一下任意处」这种用法用：不然用户补的
+   * 那一下落在提示条上，就永远到不了下面那一层，于是只能反复弹同一句提示。
+   */
+  inert?: boolean;
   nonce?: number;
   durationMs?: number;
   actionLabel?: string;
@@ -1208,12 +1495,6 @@ export interface StatusMessage {
   onAction?: () => void;
   cancelLabel?: string;
   onCancel?: () => void;
-  /**
-   * 这条提示**不吃点击**（提示条默认是 `pointer-events: auto`，会浮在可视化那一层上面
-   * 把点击接走）。给「点一下空白 → 弹提示 → 再点一下任意处」这种用法用：不然用户补的
-   * 那一下落在提示条上，就永远到不了下面那一层，于是只能反复弹同一句提示。
-   */
-  inert?: boolean;
   persistent?: boolean;
 }
 
@@ -1289,6 +1570,8 @@ export interface SongResult {
   /** Identity of the concrete bytes selected for playback; used to reject stale derived media. */
   playbackSourceRevision?: string;
   fee?: number;
+  // Its audio is a music video's, which may hold an intro, a scene or another mix: rows tag it MV.
+  isVideo?: boolean;
   noCopyrightRcmd?: NoCopyrightRecommendation | null;
   resourceState?: boolean;
   privilege?: SongPrivilege;
@@ -1302,12 +1585,11 @@ export interface SongResult {
   /**
    * 云端缓存里那条主题键 —— 只有从「AI 主题」那一屏（云端歌名清单）挑出来的歌才有。
    *
-   * 点了播放要**直接用上云上那一条**，而不是再生成一遍：生成要有歌词、要有 API Key，
+   * 点了播放要用 *直接用上云上那一条*，而不是再生成一遍：生成要有歌词、要花 API Key，
    * 而这条缓存存在的意义就是不必再算一次。见 services/aiThemeCloud.ts。
    */
   aiCloudThemeKey?: string;
 }
-
 export interface OnlineLyricsState {
   lyricsSource: 'online' | 'imported';
   importedLyrics?: LyricData | null;
@@ -1482,13 +1764,16 @@ export interface UnifiedSong extends SongResult {
   // The row this song was read from, where its collection names its rows: a YouTube Music
   // playlist may hold a song twice, and a removal names the row. It says nothing of the song.
   collectionRowId?: string;
+  // How many times the account played it, as its platform's listening ranking counts, where the song
+  // was read from that ranking. Like collectionRowId it belongs to the row, not to the song.
+  listenCount?: number;
   isLocal?: boolean;
   localRef?: import('./types/localLibrary').LocalSongReference;
   isNavidrome?: boolean;
   navidromeData?: any;
 }
 
-export type ReplayGainMode = 'off' | 'track' | 'album';
+export type ReplayGainMode = 'off' | 'track' | 'album' | 'auto';
 
 // Audio Analysis Types
 import { MotionValue } from 'framer-motion';

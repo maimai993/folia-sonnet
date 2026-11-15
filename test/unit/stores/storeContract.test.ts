@@ -171,6 +171,15 @@ describe('store contract', () => {
             // so the settings store drives the position store. Same shape as the edge above, and
             // the reverse edge is likewise absent: the position store imports no store at all.
             useHomeLayoutSettingsStore: ['useHomeCardPositionStore'],
+            // A headphone profile is nothing but a snapshot of the two setting stores: switching
+            // writes the current sound back into the outgoing profile and applies the chosen one.
+            // It owns no sound of its own, so it must read both; neither of them imports it back,
+            // so the edge cannot close a cycle.
+            useAudioProfilesStore: ['useAudioConsoleStore', 'useAudioSettingsStore'],
+            // The explore feed's own memory across sessions (section order, collections taken out):
+            // this fork keeps it in src/utils (the feed store reads it), which is not a store
+            // directory, so it is not an edge here; the row records the intent all the same.
+            useExploreFeedStore: ['exploreFeedMemory'],
         };
         const INFRASTRUCTURE = new Set([
             'storagePrimitives', 'useStatusMessageStore', 'visualizerSettingsPersistence', 'motionSignals',
@@ -232,5 +241,6 @@ describe('store contract', () => {
         }
 
         expect(dangling).toEqual([]);
-    });
+        // 这里要把 src / test / dev 的每个 .ts(x) 都读一遍，默认 5 秒在慢机器上不够。
+    }, 120_000);
 });

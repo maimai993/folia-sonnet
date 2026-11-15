@@ -7,12 +7,23 @@ import { Group, Row, Status, Toggle, option, useSettingsKitTheme, type SettingsG
 import { SettingsAnchor } from '../navigation/SettingsAnchorContext';
 
 // src/components/modal/settings/pages/ModsPage.tsx
-// The 模组 page (desktop app only): the mod system's master switch, and under it the mod manager.
+// The 模组 page: the mod system's master switch, and under it the mod manager.
 // The manager is the one component the command palette's mods surface also shows
 // (src/mods/manager); here it wears the settings window's colours.
+//
+// 这里原来是 electronOnly：加载器只存在于桌面主进程，安卓上整页不画，
+// 于是设置里只剩一句「模组仅在桌面版可用」。
+//
+// 现在安卓也有模组能力了：随包内置的模组（vinyl-disc / visualizer-jump /
+// listening-archive）走 public/mods/builtin/，打进 APK 后由内置通道加载，
+// 不需要用户往磁盘上放任何东西 —— 所以这一页在安卓上同样能画。
+//
+// ⚠️ 内置模组**不提供卸载**：它们在 APK 里，删不掉，给一个按了没用的按钮
+// 只会让人以为坏了。模组列表那边（ModManager）本来就只对用户自己装的模组
+// 给卸载入口，所以这里不需要额外做什么。
 
-const SYSTEM: SettingsGroupDef = { id: 'modSystem', titleKey: 'options.enableModSystem', electronOnly: true };
-const MANAGER: SettingsGroupDef = { id: 'modList', titleKey: 'mods.title', electronOnly: true };
+const SYSTEM: SettingsGroupDef = { id: 'modSystem', titleKey: 'options.enableModSystem' };
+const MANAGER: SettingsGroupDef = { id: 'modList', titleKey: 'mods.title' };
 
 const O = {
     enabled: option(SYSTEM, 'enableModSystem', 'options.enableModSystem'),

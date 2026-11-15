@@ -31,9 +31,10 @@ export const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'option
 export const AI: SettingsGroupDef = { id: 'electronSettings', titleKey: 'options.electronSettings', electronOnly: true };
 
 /**
- * 显示那一组（fork 独有）：毛玻璃、歌词扁平两端都画；设备类型与手机适配只有安卓有。
+ * 显示那一组（fork 独有）：歌词扁平两端都画；设备类型与横竖屏只有安卓有。
  * 原在「通用」页，那里剩下的都是语言、启动、更新这类「行为」，这几项讲的是「长什么样」，
- * 所以搬到这里，排在歌词那组之后。
+ * 所以搬到这里，排在歌词那组之后。液态玻璃的开关与参数不在这里：它同时是性能设置，
+ * 挂在「性能与动效」页（pages/graphics/LiquidGlassGroup.tsx）。
  */
 export const VIEW: SettingsGroupDef = { id: 'surfaceView', titleKey: 'options.settingsHeadingView' };
 
@@ -74,6 +75,9 @@ export const WALLPAPER = {
 
 export const O = {
     lyricsAnimation: option(LYRICS, 'lyricsAnimationAdjust', 'options.lyricsAnimationAdjust'),
+    scene: option(LYRICS, 'scene', 'ui.scene'),
+    // Not a row of its own: it lives in the scene window, so a search for it lands on the group with the scene row.
+    soundTracing: option(LYRICS, 'soundTracing', 'ui.soundTracing'),
     // 歌词动态壁纸（fork 独有）：整节只有安卓画，搜索里跟着一起退场（组上的 available）。
     lyricsWallpaper: option(LYRICS_WALLPAPER, 'lyricsWallpaper', 'options.lyricsWallpaperSection'),
     daylight: option(THEME, 'daylightMode', 'options.daylightMode'),
@@ -83,6 +87,11 @@ export const O = {
     autoGenerate: option(SONG_THEME, 'autoGenerateSongTheme', 'options.autoGenerateSongTheme'),
     source: option(SONG_THEME, 'themeGenerationSource', 'options.themeGenerationSource'),
     preferCustom: option(SONG_THEME, 'preferCustomTheme', 'options.preferCustomTheme'),
+    // 全局关键词着色（fork 独有）：原来各动画面板里各有一颗、海报墙看的是莫奈那颗，
+    // 现在收编成一颗总闸，管所有画歌词的地方（莫奈 / 镜台 / 绘光 / 海报墙）。
+    keywordColoring: option(SONG_THEME, 'keywordColoring', 'options.keywordColoring', {
+        noteKey: 'options.keywordColoringDesc',
+    }),
     // 下面两项是 AiProviderSettings 那块卡片里的（fork 独有）：桌面端那块由 Electron 主进程
     // 设置顶掉，非桌面才画，搜索里跟着一起退场。
     cloudCache: option(SONG_THEME, 'cloudCache', 'options.cloudCache', {
@@ -93,8 +102,9 @@ export const O = {
         noteKey: 'options.cloudCacheBaseUrlDesc',
         available: () => !hasElectronBridge(),
     }),
-    glassSurface: option(VIEW, 'glassSurface', 'options.glassSurface', { noteKey: 'options.glassSurfaceDesc' }),
     lyricFlat: option(VIEW, 'lyricFlat', 'options.lyricFlat', { noteKey: 'options.lyricFlatDesc' }),
+    // MV 字幕来源：配 MV 时歌词用原平台的还是这条投稿的。
+    mvLyricSource: option(VIEW, 'mvLyricSource', 'options.mvLyricSource', { noteKey: 'options.mvLyricSourceDesc' }),
     deviceType: option(VIEW, 'deviceType', 'options.deviceType', {
         noteKey: 'options.deviceTypeDesc',
         available: isCapacitorAndroid,

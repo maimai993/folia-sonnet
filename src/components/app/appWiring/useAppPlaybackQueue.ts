@@ -8,21 +8,24 @@ import { isWallLibrarySuite, useActiveLibrarySuiteId } from '../../../library/ap
 import { registerLocalTrackFileReader } from '../../../services/analysis/trackAudio';
 import { useAutomixDecks } from '../../../services/automix/useAutomixDecks';
 import { getLocalSongArrayBuffer } from '../../../services/localMusicService';
-import { getSongArtistLabel, getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
+import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../../../services/onlineMusic/songMetadata';
 import { currentTime } from '../../../stores/motionSignals';
 import { selectDisplayCoverUrl, selectDisplayDuration, selectDisplayPlayerState, selectDisplaySong, selectIsShowingTail, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { SongResult, UnifiedSong, LocalSong } from '../../../types';
-import { MediaId } from '../../../types/onlineMusic';
+import { MediaId, ProviderCollection } from '../../../types/onlineMusic';
 import { isLocalPlaybackSong } from '../../../utils/appPlaybackGuards';
 import { toSafeRemoteUrl } from '../../../utils/appPlaybackHelpers';
+import { resolveSongLiked } from '../../../utils/resolveSongLiked';
+import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
 import { resetMediaDiagnostics } from '../../../utils/mediaDiagnostics';
 import { shouldShowNowPlayingToast } from '../overlays/now-playing-toast/nowPlayingToastVisibility';
 import { resolveNextUpTrack } from '../overlays/now-playing-toast/resolveNextUpTrack';
 import { useLyricReadHead } from '../playback/bridges/useLyricReadHead';
 import { usePlaybackUiEffects } from '../playback/bridges/usePlaybackUiEffects';
 import { usePlaybackQueueController } from '../playback/start/usePlaybackQueueController';
-import { createSearchAlbumCollection, createSearchArtistCollection } from '../search/searchCollectionAdapters';
+import { createSearchAlbumCollection, createSearchArtistCollection, createSearchResultCollection } from '../search/searchCollectionAdapters';
+import { useWebEngineYield } from '../../hifi/useWebEngineYield';
 import { useMotionValueEvent } from 'framer-motion';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
@@ -45,12 +48,14 @@ export const useAppPlaybackQueue = (model: Input) => {
         addNavidromeSongsToQueue, audioContextRef, audioRef, audioSrc, automixEnabled, automixRef, blobUrlRef,
         coverUrl, currentOnlineAudioUrlFetchedAtRef, currentSong, currentSongRef, currentView, effectiveLoopMode,
         globalLyricTimelineOffsetMs, handleLocalQueueAdd, interruptStagePlaybackForMainTransition, isFmMode,
-        isNowPlayingStageActive, lastAudioRecoverySourceRef, loadLocalPlaylists, loadLocalSongs,
+        isNowPlayingStageActive, isLocalSongLiked, lastAudioRecoverySourceRef, loadLocalPlaylists, loadLocalSongs,
         loadMoreSearchResults, localLibraryCatalog, localSongs, mainPlaybackSnapshotRef, nativeActive,
+        nativeFailedKeysRef, nativeTakesRef,
         navigateToCollection, navigateToPlaybackView, navigateToSearch, onPlayLocalSong, onPlayNavidromeSong,
         pendingResumeTimeRef, persistLastPlaybackCache, playQueue, playbackAutoSkipCountRef,
         restoreCachedThemeForSong, setCurrentSong, setDuration, setIsLyricsLoading, setIsPanelOpen, setLyrics,
-        setPanelTab, setPlayQueue, shouldAutoPlay, stageTrackPillMode, stageTrackPillOnHome, statusMsg, submitSearch,
+        setPanelTab, setPlayQueue, shouldAutoPlay, stageTrackPillMode, stageTrackPillOnHome, starredNavidromeSongIds,
+        statusMsg, submitSearch,
         t, transitionSettings, user, volumePreviewFrameRef
     } = model;
     // --- Effects ---
@@ -115,6 +120,15 @@ export const useAppPlaybackQueue = (model: Input) => {
         lastAudioRecoverySourceRef,
         getDisplaySong,
         endHeldTransition,
+        // 两轨合一：点歌 / 切歌的分流。nativeTakes 是「这一首交给原生」的即时判定，
+        // 但分流发生在回调里（用户按下时才跑），所以传 ref —— 跟 transport 回调同一套纪律。
+        nativePlaybackRef: nativeTakesRef,
+        // 队列里每首歌的红心状态：同步读账号缓存，随队列一起落进原生镜像。
+        nativeLikeStateOf: (song) => ({
+            liked: resolveSongLiked(song, { isLocalSongLiked, starredNavidromeSongIds }),
+            canLike: !resolveLikeAvailability(song, false, false).disabled,
+        }),
+        nativeFailedKeysRef,
     });
     const handleSearchResultArtistOpen = useCallback(async (
         track: UnifiedSong,
@@ -150,6 +164,11 @@ export const useAppPlaybackQueue = (model: Input) => {
         }
         setStatusMsg({ type: 'error', text: t('search.catalogUnavailable') });
     }, [navigateToCollection, setStatusMsg, t]);
+    // A provider collection from the search overlay opens as a page of its own, not as an album or
+    // an artist: nothing is resolved first, the adapter describes it straight away.
+    const handleSearchResultCollectionOpen = useCallback((collection: ProviderCollection) => {
+        navigateToCollection(createSearchResultCollection(collection), 'search');
+    }, [navigateToCollection]);
 
     usePlaybackUiEffects({
         statusMsg,
@@ -216,6 +235,10 @@ export const useAppPlaybackQueue = (model: Input) => {
     });
 
     automixRef.current = automix;
+    // 路线翻到 HiFi 时，在 mpv 打开设备之前就把两块 deck 静音、挂起 AudioContext。
+    // 上游 v0.7.26 把它挂在 App.tsx 的 automix 之后；本 fork 的 automix 住在这里，
+    // 所以跟着搬过来 —— App.tsx 是薄壳，这一步不能只留在上游那个被删掉的单体里。
+    useWebEngineYield({ audioRef, audioContextRef, automix });
 
     /**
      * The now-playing picture, which lags the app's own idea of what is playing.
@@ -352,6 +375,7 @@ export const useAppPlaybackQueue = (model: Input) => {
             // upgrades the http: covers netease/kugou still hand out - blocked as mixed content in the
             // packaged window - and keeps only the first of a comma-joined multi-value.
             coverUrl: toSafeRemoteUrl(getSongCoverUrl(stageNextUpTrack)) ?? null,
+            album: getSongAlbumLabel(stageNextUpTrack) || null,
         };
     }, [stageTrackPillMode, stageNextUpTrack]);
     const stageIsNextUp = stageNextUp !== null && (isShowingTail || countdownActive);
@@ -390,7 +414,9 @@ export const useAppPlaybackQueue = (model: Input) => {
         addOnlineSongToQueue, addOnlineSongsToQueue, automix, cachePlayedOutRef, clearQueue, displayCoverUrl,
         displayDuration, displayPlayerState, displaySong, handleNextTrack, handlePrevTrack, handleSearchLoadMore,
         handleSearchOverlaySubmit, handleSearchResultAddToQueue, handleSearchResultAlbumOpen,
-        handleSearchResultArtistOpen, handleSearchResultPlay, handleStageExternalPlayRequest,
+        handleSearchResultArtistOpen, handleSearchResultCollectionOpen, handleSearchResultPlay,
+        // 速记簿要用：「插进队列并播这一首」（playback 页）与「拖动重排队列」（queue 页）。
+        handleQueueAddAndPlay, handleStageExternalPlayRequest,
         handleUnavailableReplacementConfirm, incomingLyricTimelineOffsetMs, isShowingTail, loopPositionRef,
         openSongCardPanel, pendingUnavailableReplacement, playOnlineQueueFromStart, playSong,
         setPendingUnavailableReplacement, shuffleQueue, skipAfterPlaybackFailure, stageIsNextUp, stageNextUp,

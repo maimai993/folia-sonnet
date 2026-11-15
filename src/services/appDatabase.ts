@@ -3,9 +3,12 @@ import type { LocalSong } from '../types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
 import type { LocalCoverAsset } from '../types/localCover';
 import { migrateLegacyLocalSongRecords } from './localLibraryV8Migration';
+import type { ArchivePlay } from './listeningArchive/types';
 
 // src/services/appDatabase.ts
 // Owns the complete typed Dexie schema for local songs, entities, and content-addressed cover assets.
+// v10 adds `listeningArchivePlays`: the listening archive grows with every play and is user data, not
+// a rebuildable cache, so it needs its own table instead of sharing one the storage page clears.
 
 export const APP_DATABASE_NAME = 'KineticPlayerDB';
 export const APP_DATABASE_VERSION_CHANGE_EVENT = 'folia-database-version-change';
@@ -34,6 +37,7 @@ export class AppDatabase extends Dexie {
   local_library_entities!: Table<LocalLibraryEntity, string>;
   local_library_assignments!: Table<LocalLibraryAssignment, string>;
   local_cover_assets!: Table<LocalCoverAsset, string>;
+  listeningArchivePlays!: Table<ArchivePlay, string>;
 
   constructor(name = APP_DATABASE_NAME) {
     super(name);
@@ -95,6 +99,22 @@ export class AppDatabase extends Dexie {
       local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
       local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
       local_cover_assets: 'id',
+    });
+
+    // A new version number, not `0.10`: `0.10` is the number 0.1, which sorts below the existing 0.9.
+    // Only the new table is added; every earlier version keeps the schema it shipped with.
+    this.version(10).stores({
+      session: '',
+      api_cache: 'key',
+      user_cache: 'key',
+      media_cache: 'key',
+      metadata_cache: 'key',
+      local_music: 'id, localCoverAssetId',
+      theme_registry: 'fingerprint',
+      local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
+      local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
+      local_cover_assets: 'id',
+      listeningArchivePlays: 'id, startedAt, songKey, [startedAt+songKey]',
     });
 
     this.on('versionchange', event => {
