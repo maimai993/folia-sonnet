@@ -78,7 +78,10 @@ class NativePlaybackEngine {
     private rate = 1;
     /** Invalidates a pending play result when pause, stop, or a new source takes over. */
     private playIntentVersion = 0;
+    private sourceGenerationVersion = 0;
     private sourceReadyPromise: Promise<void> = Promise.resolve();
+    /** Native bridge commands must stay ordered across source changes and transport actions. */
+    private nativeCommandChain: Promise<void> = Promise.resolve();
     private updatedAtMs = 0;
     /**
      * 上一次对外给过的位置（毫秒）。
@@ -195,10 +198,22 @@ class NativePlaybackEngine {
         return this.playIntentVersion;
     }
 
+    /** The current source token; unlike a URL, it also distinguishes ABA source changes. */
+    sourceGeneration(): number {
+        return this.sourceGenerationVersion;
+    }
+
+    private enqueueNativeCommand<T>(command: () => Promise<T>): Promise<T> {
+        const run = this.nativeCommandChain.then(command, command);
+        this.nativeCommandChain = run.then(() => undefined, () => undefined);
+        return run;
+    }
+
     async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number; songKey?: string | null } = {}): Promise<void> {
         if (isNativePlaybackReconciling()) return;
         if (this.hasSource && this.currentUrl === url && (!options.songKey || options.songKey === this.songKey)) return;
         this.playIntentVersion++;
+        const sourceGeneration = ++this.sourceGenerationVersion;
         this.ensureSubscription();
         this.songKey = options.songKey ?? null;
         this.currentUrl = url;
@@ -211,7 +226,7 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
         if (typeof options.repeatMode === 'number') this.repeatMode = options.repeatMode;
-        const sourceReady = (async () => {
+        const sourceReady = this.enqueueNativeCommand(async () => {
             await nativePlayer.prepare({
                 url,
                 startPositionMs: options.startPositionMs ?? null,
@@ -219,19 +234,21 @@ class NativePlaybackEngine {
                 songKey: this.songKey,
             });
             await nativePlayer.setVolume(this.volume);
-        })();
-        this.sourceReadyPromise = sourceReady;
+        });
+        this.sourceReadyPromise = sourceReady.then(() => undefined);
         await sourceReady;
+        if (sourceGeneration !== this.sourceGenerationVersion) return;
     }
 
     async play(): Promise<void> {
         // 同上：没有订阅就没有状态回执，按钮按下去界面只能靠乐观值猜。
         this.ensureSubscription();
         const intentGeneration = ++this.playIntentVersion;
+        const sourceGeneration = this.sourceGenerationVersion;
         await this.sourceReadyPromise;
-        if (intentGeneration !== this.playIntentVersion) return;
-        await nativePlayer.play();
-        if (intentGeneration !== this.playIntentVersion) return;
+        if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
+        await this.enqueueNativeCommand(() => nativePlayer.play());
+        if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
         this.positionMs = this.getPositionSec() * 1000;
@@ -243,7 +260,9 @@ class NativePlaybackEngine {
     async pause(): Promise<void> {
         this.ensureSubscription();
         this.playIntentVersion++;
-        await nativePlayer.pause();
+        const sourceGeneration = this.sourceGenerationVersion;
+        await this.enqueueNativeCommand(() => nativePlayer.pause());
+        if (sourceGeneration !== this.sourceGenerationVersion) return;
         // 冻在听众正看着的那一帧，别退回最后一次采样值。
         this.positionMs = this.getPositionSec() * 1000;
         this.playing = false;
@@ -269,6 +288,7 @@ class NativePlaybackEngine {
 
     async stop(): Promise<void> {
         this.playIntentVersion++;
+        const sourceGeneration = ++this.sourceGenerationVersion;
         this.sourceReadyPromise = Promise.resolve();
         this.hasSource = false;
         this.nativeMediaLive = false;
@@ -278,7 +298,8 @@ class NativePlaybackEngine {
         this.durationMs = 0;
         this.lastDeliveredMs = 0;
         this.currentUrl = null;
-        await nativePlayer.stop();
+        await this.enqueueNativeCommand(() => nativePlayer.stop());
+        if (sourceGeneration !== this.sourceGenerationVersion) return;
     }
 
     /** 用户音量（0..1）。与 [trackGain] 分开：拖音量不该把响度补偿抹掉。 */
