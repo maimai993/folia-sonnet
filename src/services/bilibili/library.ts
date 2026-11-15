@@ -130,7 +130,11 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
 
     // 收藏夹：先拿列表，每个收藏夹自己再去要曲目。
     try {
-        const folders = unwrap(await fetchJson<{ list?: Array<{ id?: number; title?: string; cover?: string; media_count?: number }> }>(
+        /*
+         * 收藏夹这一族也要凭据 + 站内来源：不带 Referer 直接问，接口回的是
+         * -400「请求错误」，外面看到的就是「我的收藏是空的」。用空间站的来源。
+         */
+        const folders = unwrap(await fetchJsonWith<{ list?: Array<{ id?: number; title?: string; cover?: string; media_count?: number }> }>(
             `https://api.bilibili.com/x/v3/fav/folder/created/list-all?up_mid=${uid}`,
         ));
         for (const folder of folders.list ?? []) {
@@ -142,10 +146,23 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                 coverUrl: https(folder.cover),
                 count: folder.media_count,
                 load: async () => {
-                    const page = unwrap(await fetchJson<{ medias?: VlistItem[] }>(
-                        `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${folderId}&pn=1&ps=100&platform=web`,
-                    ));
-                    return (page.medias ?? []).map(toItem).filter(item => item.bvid);
+                    /*
+                     * 分页翻到底：一页最多 20 条（接口的硬上限），收藏夹里常有上百条，
+                     * 只取首页的话列表里看到的数量会和「N 首」对不上。
+                     *
+                     * order / type / tid 这几个参数不是可选的：只带 pn/ps/platform 去问，
+                     * 接口回 -400「请求错误」，收藏夹就永远是「0 首」。
+                     */
+                    const all: BilibiliShelfItem[] = [];
+                    for (let pn = 1; pn <= 20; pn += 1) {
+                        const page = unwrap(await fetchJsonWith<{ medias?: VlistItem[]; has_more?: boolean }>(
+                            `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${folderId}&pn=${pn}&ps=20&platform=web&order=mtime&type=0&tid=0`,
+                        ));
+                        const items = (page.medias ?? []).map(toItem).filter(item => item.bvid);
+                        all.push(...items);
+                        if (items.length === 0 || page.has_more === false) break;
+                    }
+                    return all;
                 },
             });
         }
@@ -168,25 +185,37 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
     ): BilibiliShelf => {
         let cached: BilibiliShelfItem[] | null = null;
         let inflight: Promise<BilibiliShelfItem[]> | null = null;
-        const items = async (): Promise<BilibiliShelfItem[]> => {
-            if (cached) return cached;
-            if (!inflight) {
-                inflight = (async () => {
-                    const payload = space
-                        ? unwrap(await fetchJsonWith(url))
-                        : unwrap(await fetchJson<unknown>(url));
-                    const list = listOf(payload).map(toItem).filter(item => item.bvid);
-                    cached = list;
-                    return list;
-                })().catch(error => {
-                    // 失败不留缓存，下次点还能重试。
-                    inflight = null;
-                    throw error;
-                });
-            }
-            return inflight;
+        const shelf: BilibiliShelf = {
+            id,
+            title,
+            load: async () => {
+                if (cached) return cached;
+                if (!inflight) {
+                    inflight = (async () => {
+                        const payload = space
+                            ? unwrap(await fetchJsonWith(url))
+                            : unwrap(await fetchJson<unknown>(url));
+                        const list = listOf(payload).map(toItem).filter(item => item.bvid);
+                        cached = list;
+                        /*
+                         * 封面 = 这个歌单第一条的封面。
+                         *
+                         * 以前这里根本没给 coverUrl，卡片就只能摆一个渐变色块 —— 看起来
+                         * 像「封面没加载出来」，其实是从来没赋值过。歌单本身没有自己的
+                         * 封面图，用第一条的正好（站内列表也是拿首图当封面的）。
+                         */
+                        if (!shelf.coverUrl && list[0]?.coverUrl) shelf.coverUrl = list[0].coverUrl;
+                        return list;
+                    })().catch(error => {
+                        // 失败不留缓存，下次点还能重试。
+                        inflight = null;
+                        throw error;
+                    });
+                }
+                return inflight;
+            },
         };
-        return { id, title, load: items };
+        return shelf;
     };
 
     /** 列歌单时把每一条的条数补上：取不到就留空，不编一个 0。 */
@@ -206,14 +235,14 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
      * 「我的收藏」是这一站的总收藏 —— 它本身不是一个能翻的列表，站内也是把各个收藏夹
      * 汇总起来看的；这里用同一份收藏夹数据摊平，避免摆一个点进去什么都没有的入口。
      */
-    shelves.push({
+    const recommend: BilibiliShelf = {
         id: 'recommend',
         title: 'shelfRecommend',
         coverUrl: undefined,
         load: async () => {
             try {
                 const feed = await fetchBilibiliZoneFeed(0, 30);
-                return feed
+                const list = feed
                     .filter(hit => hit.bvid)
                     .map(hit => toItem({
                         bvid: hit.bvid,
@@ -222,11 +251,15 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                         pic: hit.coverUrl,
                         duration: hit.durationSec,
                     }));
+                // 封面用推荐流第一条（这一栏本来也没有自己的封面图）。
+                if (!recommend.coverUrl && list[0]?.coverUrl) recommend.coverUrl = list[0].coverUrl;
+                return list;
             } catch {
                 return [];
             }
         },
-    });
+    };
+    shelves.push(recommend);
 
     /*
      * 「我的收藏」：把上面那些收藏夹摊平成一个入口。
@@ -238,7 +271,7 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         .filter(shelf => shelf.id.startsWith('fav:'))
         .map(shelf => shelf.id);
     if (folderShelfIds.length > 0) {
-        shelves.splice(1, 0, {
+        const favorites: BilibiliShelf = {
             id: 'favorites',
             title: 'shelfFavorites',
             load: async () => {
@@ -247,11 +280,14 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                     const shelf = shelves.find(item => item.id === id);
                     if (!shelf) continue;
                     const items = await shelf.load().catch(() => []);
+                    // 封面取第一个收藏夹的封面（总收藏没有自己的图）。
+                    if (!favorites.coverUrl && items[0]?.coverUrl) favorites.coverUrl = items[0].coverUrl;
                     collected.push(...items);
                 }
                 return collected;
             },
-        });
+        };
+        shelves.splice(1, 0, favorites);
     }
 
     /*
@@ -261,20 +297,28 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
      * 和「我的收藏」摊平各收藏夹是同一个模式。分集没有 bvid 也能播 —— 取流走
      * ep_id 那条路（bilibiliProvider 的 getAudioSource 按歌的 ep 前缀分派）。
      */
-    const followList = async (type: 1 | 2): Promise<BilibiliShelfItem[]> => {
+    const followList = async (type: 1 | 2): Promise<{ items: BilibiliShelfItem[]; cover: string }> => {
         try {
+            /*
+             * 这里拿到的已经是 `data` 本身（unwrap 拆过一层信封），所以列表就在
+             * payload.list 上。以前写的是 `payload.result.list` —— 在 data 上找
+             * result 永远是 undefined，于是「我的追番 / 我的追剧」恒为空。
+             */
             const payload = unwrap(await fetchJsonWith<{
-                result?: {
-                    list?: Array<{
-                        season_id?: number;
-                        title?: string;
-                        cover?: string;
-                        season_type?: number;
-                        first_ep?: { ep_id?: number };
-                    }>;
-                };
+                list?: Array<{
+                    season_id?: number;
+                    title?: string;
+                    cover?: string;
+                    season_type?: number;
+                    first_ep?: { ep_id?: number };
+                }>;
             }>(`https://api.bilibili.com/x/space/bangumi/follow/list?type=${type}&follow_status=0&pn=1&ps=30&vmid=${uid}`));
-            const seasons = payload.result?.list ?? [];
+            const seasons = payload?.list ?? [];
+            /*
+             * 封面直接用第一季的封面：追番/追剧这一栏自己没有封面图，
+             * 以前一直留空，卡片就是一块渐变色。
+             */
+            const cover = seasons[0] ? https(seasons[0].cover) : '';
             const collected: BilibiliShelfItem[] = [];
             for (const season of seasons) {
                 const seasonId = season.season_id;
@@ -294,11 +338,23 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                     });
                 }
             }
-            return collected;
+            return { items: collected, cover };
         } catch {
-            return [];
+            return { items: [], cover: '' };
         }
     };
+
+    /** 追番 / 追剧那一栏：load 只回条目，封面在这里补上。 */
+    const followShelf = (id: string, title: string, type: 1 | 2): BilibiliShelf => ({
+        id,
+        title,
+        load: async () => {
+            const { items, cover } = await followList(type);
+            const self = shelves.find(shelf => shelf.id === id);
+            if (self && !self.coverUrl && cover) self.coverUrl = cover;
+            return items;
+        },
+    });
 
     shelves.push(
         simple('toview', 'shelfToview', 'https://api.bilibili.com/x/v2/history/toview'),
@@ -310,16 +366,12 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
             ps: 30,
             order: 'pubdate',
         }), true),
-        {
-            id: 'bangumi',
-            title: 'shelfBangumi',
-            load: () => followList(1),
-        },
-        {
-            id: 'tv',
-            title: 'shelfTv',
-            load: () => followList(2),
-        },
+        /*
+         * 追番 / 追剧：load 只回条目，封面顺手记在这个架上（第一季的封面）。
+         * 这一栏自己没有封面图，不给的话卡片就是一块渐变色。
+         */
+        followShelf('bangumi', 'shelfBangumi', 1),
+        followShelf('tv', 'shelfTv', 2),
     );
 
     // 条数一次问全，而且并着问：它们是同一个账号下的几个小列表。

@@ -166,6 +166,7 @@ export const STORAGE_KEYS = [
     'web:folia.wallpaperOverlayOpacity',
     'web:folia.wallpaperOverlaySkipInstrumental',
     'web:folia.wallpaperVideoRotation',
+    'web:folia:blgVipPromoDismissed',
     'web:folia:gridPanelToggleHintSeen',
     'web:foliaAiProviderSettings',
     'web:foliaAppliedMarketBackground',

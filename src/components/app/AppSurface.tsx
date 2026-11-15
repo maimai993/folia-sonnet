@@ -37,6 +37,7 @@ import { LatticeFmNotice } from '../modal/playback-entry-view/LatticeFmNotice';
 import { PlaybackEntryViewPrompt } from '../modal/playback-entry-view/PlaybackEntryViewPrompt';
 import ReleaseNotesDialog from '../modal/ReleaseNotesDialog';
 import { UserGuideModal } from '../modal/UserGuideModal';
+import { BilibiliVipPromoModal } from '../modal/BilibiliVipPromoModal';
 import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
 import SceneHost from '../scenes/engine/SceneHost';
@@ -707,6 +708,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 onClose={startupExperience.closeReleaseNotes}
             />
             <UserGuideModal theme={theme} />
+            {/* 限时活动弹窗（11.15 12:00 – 11.16 12:00）：不在窗口里它自己不渲染。 */}
+            <BilibiliVipPromoModal theme={theme} />
             <AppUpdatePromptDialog
                 isOpen={updatePrompt.isPromptOpen}
                 isDaylight={isDaylight}

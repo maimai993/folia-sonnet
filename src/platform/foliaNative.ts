@@ -137,6 +137,13 @@ interface FoliaNativePlugin {
      */
     showToast(options: { text: string; long?: boolean }): Promise<void>;
     /**
+     * 用系统 intent 打开地址（给 bilibili:// 这类自有 schema 用）。
+     *
+     * 没装对应 App 且给了 `fallbackUrl` 时，原生侧改用浏览器打开那个地址，
+     * 并在返回值里带 `fellBack: true`。
+     */
+    openUrl(options: { url: string; fallbackUrl?: string }): Promise<{ opened: string; fellBack?: boolean }>;
+    /**
      * 弹一条**自己画**的悬浮提示条，样子照 Web 层那条提示，贴屏幕下边。
      *
      * 与 `showToast` 的区别：系统 Toast 从 Android 11 起后台只给纯文本，画不出我们想要
@@ -305,6 +312,33 @@ export const setSystemBarsAlwaysHidden = async (alwaysHidden: boolean): Promise<
         await FoliaNative.setSystemBarsPolicy({ alwaysHidden });
     } catch {
         // 桌面端 / 插件不可用：静默，系统栏怎么显不该影响其它功能。
+    }
+};
+
+/**
+ * 用系统 intent 打开一个地址，主要给 `bilibili://` 这类自有 schema 用。
+ *
+ * 为什么不在 Web 层直接 `location.href = 'bilibili://...'`：主 WebView 的页面是
+ * https://localhost，跳一个非 http(s) 的 schema 会被 WebView 当成未知协议默默丢掉，
+ * 用户看到的就是点了没反应。原生这条路是确定能落到系统 intent 上的。
+ *
+ * `fallbackUrl`：没装那个 App 时改开这个（活动页 / 下载页）。返回最终打开的是哪一个。
+ * 非 Android 一律返回 null —— 那里没有这套通道。
+ */
+export const openNativeUrl = async (
+    url: string,
+    fallbackUrl?: string,
+): Promise<{ opened: string; fellBack: boolean } | null> => {
+    if (!isCapacitorAndroid() || !url) return null;
+    try {
+        const result = await FoliaNative.openUrl({
+            url,
+            ...(fallbackUrl ? { fallbackUrl } : {}),
+        }) as { opened?: string; fellBack?: boolean };
+        return { opened: result.opened ?? url, fellBack: Boolean(result.fellBack) };
+    } catch (error) {
+        console.warn('[FoliaNative] openUrl failed', error);
+        return null;
     }
 };
 

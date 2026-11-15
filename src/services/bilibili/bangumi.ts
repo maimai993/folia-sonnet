@@ -1,4 +1,4 @@
-import { API_BASE, fetchJson, fetchJsonWithHeaders, signedUrl, unwrap, type ApiEnvelope } from './api';
+import { API_BASE, fetchJsonWithHeaders, signedUrl, unwrap, type ApiEnvelope } from './api';
 import { isBilibiliAvailable } from './transport';
 
 // src/services/bilibili/bangumi.ts
@@ -77,9 +77,21 @@ const https = (url: string | undefined): string => {
     return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
 };
 
+/*
+ * 番剧 / 影视（PGC）那一套接口要「站内」的来源，跟搜索接口一样。
+ *
+ * 不带 Referer 去问 pgc/view/web/season，设备上不是回错误码，而是**一直挂着**
+ * 直到超时 —— 外面看起来就和「这一季没有分集」一模一样：getAlbumTracks 拿到
+ * episodes: 0，点进搜索结果就是空页。所以这里的请求一定要带头。
+ */
+const PGC_HEADERS: Record<string, string> = {
+    Referer: 'https://www.bilibili.com/',
+    Origin: 'https://www.bilibili.com',
+};
+
 const getJson = async <T>(url: string): Promise<T> => {
     try {
-        const envelope = await fetchJson<T>(url);
+        const envelope = await fetchJsonWithHeaders<T>(url, PGC_HEADERS);
         return unwrap(envelope as ApiEnvelope<T>);
     } catch (error) {
         // 设备上「点开番剧零首」抓现场：把真实失败码打进日志（-352 风控 / -404 无此季 / 超时各是不同的病）。
@@ -133,8 +145,23 @@ export const listBangumiSeasons = async (
         }));
 };
 
+/**
+ * 一季（pgc/view/web/season）—— **unwrap 之后**的形状。
+ *
+ * 别在这里再包一层 result：信封是 getJson 拆的，这里多包一层正是
+ * 「点开番剧一集都没有」那个 bug 的由来（类型写错了，编译期也就拦不住）。
+ */
 interface SeasonPayload {
-    result?: {
+    episodes?: Array<{
+        id?: number;
+        title?: string;
+        long_title?: string;
+        bvid?: string;
+        cid?: number;
+        duration?: number;
+    }>;
+    /** 有的季把正片放在 main_section 里（电影就是这种）。 */
+    main_section?: {
         episodes?: Array<{
             id?: number;
             title?: string;
@@ -143,17 +170,6 @@ interface SeasonPayload {
             cid?: number;
             duration?: number;
         }>;
-        /** 有的季把正片放在 main_section 里（电影就是这种）。 */
-        main_section?: {
-            episodes?: Array<{
-                id?: number;
-                title?: string;
-                long_title?: string;
-                bvid?: string;
-                cid?: number;
-                duration?: number;
-            }>;
-        };
     };
 }
 
@@ -275,8 +291,15 @@ export const listBangumiEpisodes = async (
             const payload = await getJson<SeasonPayload>(
                 `https://api.bilibili.com/pgc/view/web/season?${query}`,
             );
-            const result = payload?.result;
-            const episodes = result?.episodes ?? result?.main_section?.episodes ?? [];
+            /*
+             * getJson 已经拆过一层信封了（unwrap 认 data，pgc 这一族认 result），
+             * 走到这里的 payload **就是**那一季本身。
+             *
+             * 以前这里又写了一层 `payload?.result` —— 在一季对象上找 result 永远是
+             * undefined，于是 episodes 恒为空。分集接口本身一直是好的（设备上直接
+             * 问 season_id=98831 回 247 集），表现却是「点开番剧 / 电影是空的」。
+             */
+            const episodes = payload?.episodes ?? payload?.main_section?.episodes ?? [];
             /*
              * 只要有 cid 就留。以前要求 bvid 也在场 —— 番剧（PGC）的分集**本来就没有
              * bvid**，只有 ep_id + cid，取流走 PGC 的 playurl（ep_id 那条路）；
