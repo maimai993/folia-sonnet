@@ -2,6 +2,7 @@ import { fetchBilibiliZoneFeed, fetchJson, fetchJsonWithHeaders, signedUrl, unwr
 import { upgradeCoverUrl } from './bilibiliNormalize';
 import { isBilibiliAvailable } from './transport';
 import { listBangumiEpisodes } from './bangumi';
+import { listBilibiliFans, listBilibiliFollowings } from './account';
 
 /** 站内搜索接口认的来源；用 www 会被风控成 412。 */
 const SEARCH_HEADERS = {
@@ -243,31 +244,65 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
      * 「我的收藏」是这一站的总收藏 —— 它本身不是一个能翻的列表，站内也是把各个收藏夹
      * 汇总起来看的；这里用同一份收藏夹数据摊平，避免摆一个点进去什么都没有的入口。
      */
-    const recommend: BilibiliShelf = {
-        id: 'recommend',
-        title: 'shelfRecommend',
-        coverUrl: undefined,
-        load: async () => {
-            try {
-                const feed = await fetchBilibiliZoneFeed(0, 30);
-                const list = feed
-                    .filter(hit => hit.bvid)
-                    .map(hit => toItem({
-                        bvid: hit.bvid,
-                        title: hit.title,
-                        author: hit.author,
-                        pic: hit.coverUrl,
-                        duration: hit.durationSec,
-                    }));
-                // 封面用推荐流第一条（这一栏本来也没有自己的封面图）。
-                if (!recommend.coverUrl && list[0]?.coverUrl) recommend.coverUrl = list[0].coverUrl;
-                return list;
-            } catch {
-                return [];
-            }
-        },
+    /*
+     * 「我的关注」和「我的粉丝」：都是**人**的名单，但这一栏要的是投稿。
+     *
+     * 站内这两处的原样是「一串人头像」，点进去才是那个人的稿件。这里把它们摊平成
+     * 投稿流：关注的人最近发的东西 / 关注我的人最近发的东西。音乐播放器里摆一串
+     * 点开才有内容的头像没有意义，而投稿是可以直接播的。
+     *
+     * 每个人拉一页（30 条），再按人数截断 —— 逐个人的请求是并发的，但人多了会打爆
+     * 这一站的频率限制，所以只取前 [SHELF_PEOPLE] 个人。
+     */
+    const SHELF_PEOPLE = 12;
+    const peopleShelf = (
+        id: string,
+        title: string,
+        listPeople: () => Promise<Array<{ mid: number; name: string }>>,
+    ): BilibiliShelf => {
+        const shelf: BilibiliShelf = {
+            id,
+            title,
+            coverUrl: undefined,
+            load: async () => {
+                try {
+                    const people = (await listPeople()).slice(0, SHELF_PEOPLE);
+                    const batches = await Promise.all(
+                        people.map(person => loadBilibiliUserUploads(String(person.mid)).catch(() => [])),
+                    );
+                    const merged = batches.flat();
+                    if (!shelf.coverUrl) {
+                        const withCover = merged.find(item => item.coverUrl);
+                        if (withCover) shelf.coverUrl = withCover.coverUrl;
+                    }
+                    return merged
+                        .filter(item => item.bvid)
+                        .map(item => toItem({
+                            bvid: item.bvid,
+                            title: item.title,
+                            author: item.author,
+                            pic: item.coverUrl,
+                            duration: item.durationSec,
+                        }));
+                } catch {
+                    return [];
+                }
+            },
+        };
+        return shelf;
     };
-    shelves.push(recommend);
+
+    const followings = peopleShelf('followings', 'shelfFollowings', async () => {
+        const page = await listBilibiliFollowings(1);
+        return page.users.map(user => ({ mid: user.mid, name: user.name }));
+    });
+    shelves.push(followings);
+
+    const fans = peopleShelf('fans', 'shelfFans', async () => {
+        const page = await listBilibiliFans(1);
+        return page.users.map(user => ({ mid: user.mid, name: user.name }));
+    });
+    shelves.push(fans);
 
     /*
      * 「我的收藏」：把上面那些收藏夹摊平成一个入口。

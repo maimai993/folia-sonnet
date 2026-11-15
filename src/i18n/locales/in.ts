@@ -2158,6 +2158,8 @@ export default {
   },
   "home": {
     "shelfRecommend": "Untukmu",
+    "shelfFollowings": "Mengikuti",
+    "shelfFans": "Pengikut",
     "shelfFavorites": "Favorit saya",
     "shelfToview": "Tonton Nanti",
     "shelfCoins": "Video Baru Diberi Koin",

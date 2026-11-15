@@ -2170,6 +2170,8 @@ export default {
   },
   "home": {
     "shelfRecommend": "推荐",
+    "shelfFollowings": "我的关注",
+    "shelfFans": "我的粉丝",
     "shelfFavorites": "我的收藏",
     "shelfToview": "稍后再看",
     "shelfCoins": "最近投币的视频",

@@ -163,15 +163,19 @@ describe('handleSetVocalMode', () => {
     });
 });
 
-// The 存储 page's master switch: off by default (no pre-separation work), persisted on its own
-// key, and independent of the vocal-mode switches. jsdom is not Android, so no native call happens.
+// The 存储 page's master switch: on by default (the separation is done ahead of time, so switching
+// between vocals and instrumental is instant), persisted on its own key, and independent of the
+// vocal-mode switches. jsdom is not Android, so no native call happens.
 describe('handleTogglePrebuildTracks', () => {
-    it('is off by default', () => {
-        expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(false);
+    it('is on by default', () => {
+        expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(true);
+        // Nothing written until the listener touches it: the default lives in the code, not in storage.
         expect(storage.get(PREBUILD_TRACKS_KEY)).toBeUndefined();
     });
 
     it('persists and exposes the switch', () => {
+        // Off first: it already starts on, and setting the same value is deliberately a no-op.
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
         useAudioSettingsStore.getState().handleTogglePrebuildTracks(true);
         expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(true);
         expect(storage.get(PREBUILD_TRACKS_KEY)).toBe('true');
@@ -193,11 +197,13 @@ describe('handleTogglePrebuildTracks', () => {
     });
 
     it('the same value is a no-op', () => {
+        // Starts on, so turn it off first: the two `false`s below are the pair being compared.
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
         const seen: boolean[] = [];
         const stop = useAudioSettingsStore.subscribe(state => seen.push(state.prebuildTracksEnabled));
-        useAudioSettingsStore.getState().handleTogglePrebuildTracks(true);
-        useAudioSettingsStore.getState().handleTogglePrebuildTracks(true);
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
         stop();
-        expect(seen).toEqual([true]);
+        expect(seen).toEqual([]);
     });
 });

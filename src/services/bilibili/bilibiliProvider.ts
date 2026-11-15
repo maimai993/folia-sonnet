@@ -343,10 +343,18 @@ export const bilibiliProvider: OnlineMusicProvider = {
                 // 字幕不在取流里，得单独问 player/v2（见 fetchBilibiliSubtitles）。
                 const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
                 const tracks = await fetchBilibiliSubtitles(bvid, cid);
+                /*
+                 * 这几行数据是「字幕只显示一句 / 对不上视频」这类反馈的唯一证据来源：
+                 * 轨有几条、挑中的是哪条、拿到多少句、时间轴是不是空的。用户报问题时
+                 * 没有这些就只能靠猜，所以留一行（一条一次，不刷屏）。
+                 */
+                console.info('[Bilibili] subtitle tracks', bvid, cid, tracks.map(track => track.lan));
                 if (tracks.length === 0) return empty;
                 const { primary, secondary } = pickSubtitleTracks(tracks);
                 if (!primary?.subtitle_url) return empty;
                 const primaryCues = await fetchBilibiliSubtitle(primary.subtitle_url);
+                console.info('[Bilibili] subtitle cues', bvid, primary.lan, primaryCues.length,
+                    primaryCues[0] ? `first={${primaryCues[0].from}..${primaryCues[0].to}}` : 'none');
                 if (primaryCues.length === 0) return empty;
                 const secondaryCues = secondary?.subtitle_url
                     ? await fetchBilibiliSubtitle(secondary.subtitle_url).catch(() => [])

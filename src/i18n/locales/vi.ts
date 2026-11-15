@@ -2158,6 +2158,8 @@ export default {
   },
   "home": {
     "shelfRecommend": "Dành cho bạn",
+    "shelfFollowings": "Đang theo dõi",
+    "shelfFans": "Người theo dõi",
     "shelfFavorites": "Yêu thích của tôi",
     "shelfToview": "Xem sau",
     "shelfCoins": "Video tặng xu gần đây",

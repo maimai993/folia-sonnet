@@ -2158,6 +2158,8 @@ export default {
   },
   "home": {
     "shelfRecommend": "For you",
+    "shelfFollowings": "Following",
+    "shelfFans": "Followers",
     "shelfFavorites": "My favourites",
     "shelfToview": "Watch Later",
     "shelfCoins": "Recently Coined",
