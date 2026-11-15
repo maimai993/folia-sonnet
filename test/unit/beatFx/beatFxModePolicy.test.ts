@@ -13,7 +13,7 @@ import {
 //   · 纯文字/静态 + 模组样式完全不做。
 // 这张表一错就是「提示词还在动」「莫奈整页跟着鼓抖」「花火没震动」这类整机级偏差。
 
-const NO_SMART = ['prompt', 'bilibili', 'kinetic', 'still'] as const;
+const NO_SMART = ['prompt', 'kinetic', 'still'] as const;
 const NATIVE = ['sonnet', 'hanabi', 'diorama'] as const;
 // 其余歌词样式：做智能动感，但不接鼓点。
 const SMART = [
@@ -22,7 +22,7 @@ const SMART = [
 ] as const;
 
 describe('beatFxModePolicy', () => {
-    it('① 完全不做的四个样式 + 全部模组样式：不做动感、被判禁做', () => {
+    it('① 完全不做的三个样式 + 全部模组样式：不做动感、被判禁做', () => {
         for (const mode of [...NO_SMART, 'mod:visualizer-jump', 'mod:vinyl-disc']) {
             expect(modeHasSmartBeat(mode), mode).toBe(false);
             expect(modeIsForbidden(mode), mode).toBe(true);

@@ -17,7 +17,7 @@ import { effectMode, modeHasSmartBeat } from './beatFxModePolicy';
 // （上游「最开始没改」的最佳效果），本就不该再往里加效果。整页鼓点震动只属于这三套，
 // 其余样式只在这里读自己那条非鼓点的轨。
 //
-// ① 纯文字 / 静态画面与模组样式（prompt / bilibili / kinetic / still / mod:*）在
+// ① 纯文字 / 静态画面与模组样式（提示词 / 文字PV / 静止 / mod:*）在
 // beatFxModePolicy 里被判为禁做，stepEffectPulses 对它们输出恒 0；背景效果
 // （latent.pulse）不属于任何歌词样式，照常有自己的脉冲，不被误伤。
 //

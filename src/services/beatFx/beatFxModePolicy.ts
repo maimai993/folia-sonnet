@@ -7,8 +7,9 @@ import type { VisualizerMode } from '../../types';
 //
 // 分组定稿：
 //
-//   ① 完全不做智能动感 —— 提示词 / B站MB / 文字PV / 静止 / 跳一跳 / 黑胶唱片（模组）。
-//      纯文字 / 纯文字动画 / 纯静态画面，加任何音轨驱动的效果都是画蛇添足。
+//   ① 完全不做智能动感 —— 提示词 / 文字PV / 静止 / 跳一跳 / 黑胶唱片（模组）。
+//      纯文字 / 纯文字动画 / 纯静态画面，加任何音轨驱动的效果都是画蛇添足。视频 MV 是
+//      背景图层、不属歌词样式，本来就不过这张名单，无需列举。
 //
 //   ② 原生推镜震动 —— 商籁 / 花火 / 镜台。
 //      这三套本来就读 beatImpact / downbeatImpact 做整页推镜、摆动、裂光，是「最开始
@@ -25,7 +26,6 @@ import type { VisualizerMode } from '../../types';
 /** ① 完全不做智能动感的样式。模组样式（`mod:` 前缀）一律用前缀判定，不逐个列举。 */
 export const NO_SMART_BEAT_MODES: ReadonlySet<string> = new Set<VisualizerMode>([
     'prompt',     // 提示词
-    'bilibili',   // B站MB
     'kinetic',    // 文字PV
     'still',      // 静止
 ]);
