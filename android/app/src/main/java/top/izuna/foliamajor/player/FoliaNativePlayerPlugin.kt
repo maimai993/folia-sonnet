@@ -119,9 +119,11 @@ class FoliaNativePlayerPlugin : Plugin() {
         fun refreshDisplayAnchor() {
             val media = mediaSnapshot() ?: return
             val playing = playerAudible(media.playing, media.buffering)
+            // 不用 media.positionMs：那是上一拍的采样，后台一秒才一拍，直接比会把锚点往回拽（#320）。
+            val positionMs = instance?.player?.getDisplayPositionMs(playing) ?: media.positionMs
             val snapshot = WallpaperLyricsState.get()
-            if (displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, media.positionMs)) {
-                WallpaperLyricsState.setAnchor(media.positionMs, playing)
+            if (displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, positionMs)) {
+                WallpaperLyricsState.setAnchor(positionMs, playing)
             }
         }
 
