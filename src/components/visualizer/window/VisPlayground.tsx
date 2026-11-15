@@ -288,7 +288,8 @@ const VisPlayground: React.FC<VisPlaygroundProps> = ({
     const foliumVisualizerEntries = useFoliumRegistryEntries(visualizersRegistry);
     const modeOptions = useMemo(() => (
         [
-            ...VISUALIZER_REGISTRY.map(entry => ({
+            // 藏起来的款式不进选择器（它们另有家门：见 definition.ts 的 hiddenFromPickers）。
+            ...VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).map(entry => ({
                 label: getVisualizerModeLabel(entry.mode, t),
                 value: entry.mode,
             })),

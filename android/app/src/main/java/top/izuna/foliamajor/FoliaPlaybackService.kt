@@ -3166,6 +3166,8 @@ class FoliaPlaybackService : android.app.Service() {
                 "lxmusic" -> return R.drawable.ic_provider_lxmusic
                 // Apple Music（v0.7.27 上游新增）：官方图标去色后的白色剪影。
                 "appleMusic" -> return R.drawable.ic_provider_applemusic
+                // 视频平台：小电视的白色剪影（同样是 alpha-only 的 smallIcon）。
+                "bilibili" -> return R.drawable.ic_provider_bilibili
                 else -> return R.mipmap.ic_launcher
             }
         }

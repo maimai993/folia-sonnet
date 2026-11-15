@@ -317,6 +317,19 @@ export async function loadOnlineSongLyrics(
         if (resolvedLyrics) onLyrics(resolvedLyrics);
         onDone();
 
+        /*
+         * 视频平台的歌不去自动匹配。
+         *
+         * 自动匹配是拿歌名去别的平台的曲库里找同名歌曲 —— 对一首音乐是对的，对一条
+         * 视频是错的：视频标题和别的平台的歌曲没有对应关系，找出来的东西不相干
+         * （标题带「教程」「实况」的那种更是一定错）。这类平台自己就带歌词来源
+         * （字幕），有就有，没有就没有。
+         */
+        if (omni.ownsItsLyricsOnly(song)) {
+            onDone();
+            return;
+        }
+
         try {
             onAutoMatchStart?.();
             const metadata = getProviderSongMetadata(song);

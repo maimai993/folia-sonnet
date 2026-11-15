@@ -37,9 +37,12 @@ import { LatticeFmNotice } from '../modal/playback-entry-view/LatticeFmNotice';
 import { PlaybackEntryViewPrompt } from '../modal/playback-entry-view/PlaybackEntryViewPrompt';
 import ReleaseNotesDialog from '../modal/ReleaseNotesDialog';
 import { UserGuideModal } from '../modal/UserGuideModal';
+import { VipPromoModal } from '../bilibili/promo';
 import ThemeQuickEditorHost from '../panelTab/ThemeQuickEditor';
 import PonderHost from '../ponder/PonderHost';
 import SceneHost from '../scenes/engine/SceneHost';
+import BilibiliMvLayer from '../bilibili/BilibiliMvLayer';
+import BilibiliVideoStage from '../bilibili/BilibiliVideoStage';
 import WallToolsDockHost from '../wall/WallToolsDock';
 import AddToPlaylistHost from './AddToPlaylistHost';
 import AppShell from './AppShell';
@@ -566,6 +569,11 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 <PlayerBottomBarLayoutContext.Provider value={currentView === 'player'}>
                     {shouldMountVisualizer && <SceneHost {...visualizerRendererModel} songThemePair={songThemePair} animateStyleSwitch />}
                 </PlayerBottomBarLayoutContext.Provider>
+                {/* 视频平台的 MV 背景：铺在歌词样式之上（见该组件的文件头）。
+                    只在开关打开时自己挂出来，没开就是 null，不占任何东西。 */}
+                <BilibiliMvLayer />
+                {/* 歌本身就是一条投稿时，把它的画面铺上来（与上面那条 MV 匹配互不相干）。 */}
+                <BilibiliVideoStage />
             </div>
 
             <StageSessionEmptyState
@@ -700,6 +708,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 onClose={startupExperience.closeReleaseNotes}
             />
             <UserGuideModal theme={theme} />
+            {/* 限时活动弹窗：不在活动窗口内时它自己不渲染。 */}
+            <VipPromoModal theme={theme} />
             <AppUpdatePromptDialog
                 isOpen={updatePrompt.isPromptOpen}
                 isDaylight={isDaylight}

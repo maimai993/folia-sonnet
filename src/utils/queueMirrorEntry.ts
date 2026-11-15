@@ -29,6 +29,22 @@ export const resolveLikeIdentity = (song: SongResult | null | undefined): {
 } => {
     const sourceRef = song?.sourceRef?.kind === 'online' ? song.sourceRef : undefined;
     if (!sourceRef) return { providerId: '', serverSongId: '', providerMid: '', providerHash: '', providerAlbumAudioId: '' };
+    /*
+     * 视频站也要在这里认出来。
+     *
+     * 这个函数是「这一条交给原生层去取地址时，用哪个 id」。以前只有音乐平台的分支，
+     * 视频站的歌走到末尾就是全空 —— 原生那边判成「身份不全」，连问都不问，表现就是
+     * 点了没声音、也不报错（日志里只有一行「解析地址失败：队列条目身份不全」）。
+     * 它的 mediaId 就是 bvid，直接当 serverSongId 用。
+     */
+    if (sourceRef.providerId === 'bilibili') {
+        const data = (sourceRef.providerData ?? {}) as Record<string, unknown>;
+        const bvid = String(sourceRef.mediaId ?? '').trim()
+            || (typeof data.bvid === 'string' ? data.bvid.trim() : '');
+        // cid 是多P 投稿的第几集，取流要用它；单P 投稿没有，留空即可。
+        const cid = typeof data.cid === 'number' || typeof data.cid === 'string' ? String(data.cid) : '';
+        return { providerId: 'bilibili', serverSongId: bvid, providerMid: cid, providerHash: '', providerAlbumAudioId: '' };
+    }
     if (sourceRef.providerId === 'netease') {
         return { providerId: 'netease', serverSongId: String(sourceRef.mediaId ?? ''), providerMid: '', providerHash: '', providerAlbumAudioId: '' };
     }
@@ -94,6 +110,14 @@ export type QueueMirrorEntry = {
     providerMid: string;
     providerHash: string;
     providerAlbumAudioId: string;
+    /**
+     * 现成的播放地址。
+     *
+     * 原生那边**先用它**，拿不到才自己去取流（见 FoliaPlaybackService 的 mirrorEntryUrl）。
+     * 视频站的取流要带登录态、要 wbi 签名、还要过本机中转，那套逻辑在 Web 这边已经是
+     * 完备的，原生不认识这一家 —— 所以由这边取好地址放进来。
+     */
+    url?: string;
     liked: boolean;
     canLike: boolean;
 };

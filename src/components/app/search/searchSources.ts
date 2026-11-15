@@ -4,6 +4,7 @@ import type { SearchSource } from '../../../stores/useSearchNavigationStore';
 import { resolveActiveProviderId } from '../../../library/core/account/accountRules';
 import { omni } from '../../../services/onlineMusic/omni';
 import { getNavidromeConfig } from '../../../services/navidromeService';
+import { isBilibiliAvailable } from '../../../services/bilibili/transport';
 import { useOnlineProviderAccountStore } from '../../../stores/useOnlineProviderAccountStore';
 import { useLibraryStore } from '../../../stores/useLibraryStore';
 
@@ -16,14 +17,17 @@ type SearchSourceAvailability = {
     activeProviderId: OnlineProviderId;
     hasLocalSongs: boolean;
     navidromeReady: boolean;
+    /** B 站视频搜索只在有原生代发的平台上列（安卓 App）。 */
+    bilibiliReady?: boolean;
 };
 
-/** 按上面的规则排出来源：「全部」排最前（所有能搜的平台一起搜），当前平台次之，其余能搜的平台，然后本地、云端缓存、Navidrome。 */
+/** 按上面的规则排出来源：「全部」排最前（所有能搜的平台一起搜），当前平台次之，其余能搜的平台，然后本地、云端缓存、Navidrome、B 站。 */
 export const resolveSearchSources = ({
     providers,
     activeProviderId,
     hasLocalSongs,
     navidromeReady,
+    bilibiliReady = false,
 }: SearchSourceAvailability): SearchSource[] => {
     // 只看「配没配置」，不看登没登录：没登录的平台点进去也能搜（游客能搜到歌，播放才需要登录）。
     // 之前沿用上游的「已登录才列」，手机上没登录几家平台时来源栏就只剩网易云一个了。
@@ -38,6 +42,8 @@ export const resolveSearchSources = ({
         ...(hasLocalSongs ? ['local' as const] : []),
         'cloud' as const,
         ...(navidromeReady ? ['navidrome' as const] : []),
+        // B 站搜的是视频，点一条直接在播放页当背景放（见 BilibiliMvStore.pinVideo）。
+        ...(bilibiliReady ? ['bilibili' as const] : []),
     ];
 };
 
@@ -75,6 +81,7 @@ export const useSearchSources = (hasLocalSongs: boolean): { sources: SearchSourc
                 activeProviderId,
                 hasLocalSongs,
                 navidromeReady,
+                bilibiliReady: isBilibiliAvailable(),
             }),
         };
     // signIns 与 registryVersion 只为在它们变了时重读摘要。

@@ -90,6 +90,8 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     const isPlayerPage = useIsPlayerBottomBarHost();
     const playerPanelGuideHotspotRef = useRef(false);
     const touchGuideHideTimeoutRef = useRef<number | null>(null);
+    /** 返回按钮的触摸自动隐藏计时器（触屏没有 leave，见 pointer.move 里的注释）。 */
+    const touchBackHideTimeoutRef = useRef<number | null>(null);
     const resolvedIsDaylight = sharedProps?.isDaylight ?? false;
     const resolvedVisualizerOpacity = sharedProps?.visualizerOpacity ?? visualizerOpacity;
     const resolvedStaticMode = sharedProps?.staticMode ?? false;
@@ -140,6 +142,10 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
 
     useEffect(() => () => {
         clearTouchGuideHideTimeout();
+        if (touchBackHideTimeoutRef.current !== null) {
+            window.clearTimeout(touchBackHideTimeoutRef.current);
+            touchBackHideTimeoutRef.current = null;
+        }
         if (playerPanelGuideHotspotRef.current) {
             playerPanelGuideHotspotRef.current = false;
             onPlayerPanelGuideHotspotChange?.(false);
@@ -147,10 +153,26 @@ const VisualizerShell = forwardRef<HTMLDivElement, VisualizerShellProps>(({
     }, [onPlayerPanelGuideHotspotChange]);
 
     const pointer = {
-        move: (event: { clientX: number; clientY: number }) => {
+        move: (event: { clientX: number; clientY: number; pointerType?: string }) => {
             // Back button is intentionally hidden most of the time.
             // Only reveal it near the top-left hot area so it does not pollute the visual field.
-            updateBackVisibility(event.clientX <= PLAYER_CHROME_HOTSPOT_SIZE && event.clientY <= PLAYER_CHROME_HOTSPOT_SIZE);
+            const nearHotArea = event.clientX <= PLAYER_CHROME_HOTSPOT_SIZE && event.clientY <= PLAYER_CHROME_HOTSPOT_SIZE;
+            updateBackVisibility(nearHotArea);
+            /*
+             * 触屏没有 mouseleave：手指点过左上角、按钮亮起来之后就再没有事件来让它
+             * 熄灭 —— 用户看到的「返回按钮一直挂在那」。触摸时给它一个自动隐藏：
+             * 和触控面板提示（showTouchPanelGuide）同一套计时器模式，几秒后自己收走。
+             * 鼠标不动这一路 —— 指针离开窗口时 leave 会来。
+             */
+            if (nearHotArea && touchBackHideTimeoutRef.current === null) {
+                touchBackHideTimeoutRef.current = window.setTimeout(() => {
+                    touchBackHideTimeoutRef.current = null;
+                    updateBackVisibility(false);
+                }, TOUCH_GUIDE_DISPLAY_MS);
+            } else if (!nearHotArea && touchBackHideTimeoutRef.current !== null) {
+                window.clearTimeout(touchBackHideTimeoutRef.current);
+                touchBackHideTimeoutRef.current = null;
+            }
 
             updatePlayerPanelGuideHotspot(!resolvedIsPanelOpen && isNearPlayerPanelHotspot(event.clientX, event.clientY));
         },

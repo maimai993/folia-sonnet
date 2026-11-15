@@ -27,6 +27,25 @@ export const SYSTEM_LYRICS: SettingsGroupDef = {
     available: () => isCapacitorAndroid(),
 };
 
+/**
+ * 音源脚本那一块：单独成组，不再混在「服务」里。
+ *
+ * 它跟 Navidrome / 同步服务不是一类东西 —— 那两个是「连到别处」，这一块是「换掉音乐从哪来」，
+ * 一进去就是脚本的导入与启停，管的东西完全独立。跟服务组并排放着，用户得先越过 navidrome
+ * 的六七行才看得到它。
+ */
+export const LX_SOURCE: SettingsGroupDef = {
+    id: 'lxSource',
+    titleKey: 'options.settingsHeadingLxSource',
+};
+
+/**
+ * B 站这一组已整个退场。
+ *
+ * MV 背景收编进「外观 → 歌词壁纸」的背景模式（'mv' 一档）；登录在通用登录面板里。
+ * 这里不再留组定义 —— SettingsRegistry 是按组挂面板的，组没了面板自然不画。
+ */
+
 
 export const O = {
     navidrome: option(SERVICES, 'navidrome', 'navidrome.enable'),
@@ -38,6 +57,7 @@ export const O = {
     syncToken: option(SERVICES, 'r2SyncToken', 'options.r2SyncToken'),
     discord: option(SERVICES, 'discordRichPresence', 'options.discordRichPresence', { electronOnly: true }),
     scrobble: option(SERVICES, 'scrobbleSettings', 'options.neteaseScrobble'),
+    // B 站的 MV 开关与登录行都已退场（见上面 BILIBILI 组的说明）。
     transparentBackground: option(STREAMING, 'transparentPlayerBackground', 'options.transparentPlayerBackground'),
     obs: option(STREAMING, 'obsBrowserSource', 'options.obsBrowserSource', { electronOnly: true }),
     obsKeepAnimation: option(STREAMING, 'obsKeepMainWindowAnimation', 'options.obsKeepMainWindowAnimation', { electronOnly: true }),

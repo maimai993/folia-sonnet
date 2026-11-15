@@ -13,6 +13,7 @@ import ObsBrowserSourceApp from './components/obs/ObsBrowserSourceApp';
 import ObsNowPlayingSourceApp from './components/obs/ObsNowPlayingSourceApp';
 import ObsPlayerCapSourceApp from './components/obs/ObsPlayerCapSourceApp';
 import { initializeLocalCoverRuntime } from './services/localCoverRuntime';
+import { installHdslbImageFixer } from './services/bilibili/hdslbImage';
 import { installFoliumHomePageDismissal } from './components/app/home/foliumHomePageDismissal';
 import { installLibrarySuiteChromeCommands } from './library/app/installLibrarySuiteChromeCommands';
 import { noteFoliumFirstScreenMounted, startFoliumForMainWindow } from './mods/runtime/mainWindowStart';
@@ -146,6 +147,9 @@ void Promise.allSettled([bootFolium(), bootNavidrome()])
         // 不等它：封面 worker 接管页面后 controllerchange 会自己把这一期间失败的封面重新要一遍，
         // 为了它卡住首屏不值当（首次安装时它可能要等一整个 precache 下载完才接管）。
         initializeLocalCoverRuntime();
+        // B 站图床封来源，<img> 直连隔三差五 403 —— 挂上「加载失败就换原生代理的
+        // 本地 blob 重试」的兜底。不阻塞启动。
+        installHdslbImageFixer();
         clearTimeout(bootFallbackTimer);
         renderOnce();
     });

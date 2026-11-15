@@ -16,7 +16,7 @@ import { resolveCloudThemeSong } from '../library/core/collection/resource/cloud
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
 const DEFAULT_SEARCH_LIMIT = 30;
-export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'all';
+export type SearchSource = OnlineProviderId | 'local' | 'navidrome' | 'cloud' | 'bilibili' | 'all';
 export type SearchReturnView = 'home' | 'player';
 /** 搜什么：单曲、专辑或歌单。专辑和歌单只有在线平台搜得到（omni.getProviderSearchKinds），本地与 Navidrome 只搜单曲。 */
 export type SearchKind = OmniSearchKind;
@@ -106,7 +106,13 @@ const getSearchCacheKey = (query: string, sourceTab: SearchSource, kind: SearchK
     `${sourceTab}:${kind}:${query.trim().toLowerCase()}`
 );
 
-/** 这个来源能搜的种类：在线平台问 omni，本地 / Navidrome / 云缓存 /「全部」只有单曲。单曲总在第一个。 */
+/**
+ * 这个来源能搜的种类：在线平台问 omni，本地 / Navidrome / 云缓存 /「全部」只有单曲。
+ *
+ * 以前无论平台声明了什么都会把单曲补到最前面。视频站不能这么补：它搜出来的每条本来就
+ * 是一条投稿，「单曲」和「视频」是同一份结果，补上去就多一个点开全是重复内容的页签。
+ * 现在只在这个平台**什么种类都没声明**时才退回单曲。
+ */
 export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
     // 这几种不是某一个平台：云缓存是按歌名去各家搜，「全部」是把各家掺起来 ——
     // 它们都没有「这家平台能搜什么」可问，问了会拿到 unsupported 而把整次搜索打断。
@@ -114,16 +120,17 @@ export const getSearchKinds = (sourceTab: SearchSource): SearchKind[] => {
         return ['song'];
     }
     const kinds = omni.getProviderSearchKinds(sourceTab);
-    return kinds.includes('song') ? kinds : ['song', ...kinds];
+    return kinds.length > 0 ? kinds : (['song'] as SearchKind[]);
 };
 
-/** 来源搜不到要的那一种（换到了没有专辑搜索的平台）就搜单曲。 */
-export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): SearchKind => (
-    getSearchKinds(sourceTab).includes(kind) ? kind : 'song'
-);
+/** 来源搜不到要的那一种（换到了没有专辑搜索的平台）就退到这个来源的第一种。 */
+export const resolveSearchKind = (sourceTab: SearchSource, kind: SearchKind): SearchKind => {
+    const kinds = getSearchKinds(sourceTab);
+    return kinds.includes(kind) ? kind : (kinds[0] ?? 'song');
+};
 
 export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSource => {
-    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'all') {
+    if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'bilibili' || tab === 'all') {
         return tab;
     }
     if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio' && tab !== 'explore') return tab as OnlineProviderId;
@@ -414,7 +421,16 @@ const executeSearch = async (
         return searchAllSources(query, offset, limit, deps, onPartial);
     }
 
-    return kind === 'song'
+    /*
+     * 「视频」那一档走单曲的路。
+     *
+     * 视频站搜出来的每条本来就是一条投稿 —— 「视频」和「单曲」是同一份结果（见
+     * omni.getProviderSearchKinds 的注释）。以前这里只判 `kind === 'song'`，
+     * 「视频」落进了集合路径，集合路径里又没有 video 的实现（落到歌单那档的守卫，
+     * 回一个空页）—— 用户看到的就是「视频搜不出来」。现在视频也交给单曲路径，
+     * 结果照常摆进 `searchResults`。
+     */
+    return kind === 'song' || kind === 'video'
         ? searchOnlineProviderSongs(sourceTab, query, limit, offset)
         : searchOnlineProviderCollections(sourceTab, kind, query, limit, offset);
 };

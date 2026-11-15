@@ -60,7 +60,7 @@ const readModeDescription = (
 
 const buildOptions = (kind: 'visualizer' | 'background', context: CommandPaletteContext): PickerOption[] => (
     kind === 'visualizer'
-        ? VISUALIZER_REGISTRY.map(entry => {
+        ? VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).map(entry => {
             const label = context.shared.t(entry.labelKey, entry.labelFallback);
             return {
                 id: `${PICKER_ID_PREFIX.visualizer}${entry.mode}`,

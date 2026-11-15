@@ -1,6 +1,7 @@
 package top.izuna.foliamajor
 import android.Manifest
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ContentResolver
 import android.content.Intent
@@ -3263,6 +3264,58 @@ class FoliaNativePlugin : Plugin() {
             return false
         } catch (ignored: Throwable) {
             return false
+        }
+    }
+
+    /**
+     * 用系统 intent 打开一个地址 —— 主要给 bilibili:// 这一类自有 schema 用。
+     *
+     * 为什么不能走 Browser 插件（Custom Tab）：Custom Tab 只认 http(s)，把
+     * bilibili://xxx 交给它什么也不会发生，用户看到的就是「点了按钮没反应」。
+     * 而唤端本来就是整件事的一部分（活动页的「免费领大会员」最后就是跳到 App 里领）。
+     *
+     * 两条用法：
+     *   · 只给 url：直接 startActivity，没装 App 就 reject；
+     *   · 给 url + fallbackUrl：没装 App 时改用浏览器打开 fallbackUrl（活动页 / 下载页）。
+     *     Android 11+ 的包可见性让「先查有没有 App」不可靠，所以真正的判定放在
+     *     startActivity 抛 ActivityNotFoundException 那一步。
+     */
+    @PluginMethod
+    fun openUrl(call: PluginCall) {
+        val url = call.getString("url")
+        if (url.isNullOrBlank()) {
+            call.reject("url is required")
+            return
+        }
+        val fallbackUrl = call.getString("fallbackUrl")
+        val activity = getActivity()
+        try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            (activity ?: getContext()).startActivity(intent)
+            val result = JSObject()
+            result.put("opened", url)
+            call.resolve(result)
+        } catch (missing: ActivityNotFoundException) {
+            if (!fallbackUrl.isNullOrBlank()) {
+                try {
+                    (activity ?: getContext()).startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                    val result = JSObject()
+                    result.put("opened", fallbackUrl)
+                    result.put("fellBack", true)
+                    call.resolve(result)
+                    return
+                } catch (fallbackMissing: Exception) {
+                    call.reject("No app can open " + url, fallbackMissing)
+                    return
+                }
+            }
+            call.reject("No app can open " + url, missing)
+        } catch (error: Exception) {
+            call.reject("Failed to open " + url, error)
         }
     }
 

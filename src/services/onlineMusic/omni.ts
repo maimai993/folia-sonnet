@@ -58,6 +58,7 @@ import { resolveProviderLyricsChorus } from '../../utils/lyrics/chorusResolver';
 import { DEFAULT_ONLINE_PROVIDER_ID, OnlineProviderError } from '../../types/onlineMusic';
 import { useOnlineProviderAccountStore } from '../../stores/useOnlineProviderAccountStore';
 import { getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
+import { getPlatformLyricSource } from '../../utils/lyrics/lyricSources';
 import { toSafePlaybackUrl } from '../../utils/appPlaybackHelpers';
 import { saveSongReplayGain } from './resourceCache';
 import {
@@ -657,10 +658,22 @@ export const omni = {
         const provider = getOnlineMusicProvider(providerId);
         if (!provider || !providerSupports(provider, 'search') || !provider.search) return [];
         const search = provider.search;
+        /*
+         * 视频站有 searchVideos 的时候，**不摆「单曲」那一档**。
+         *
+         * 那一站搜出来的每条本来就是一条投稿，单曲和视频是同一份结果 —— 两个页签摆
+         * 出来只会让人以为其中一个坏了（用户看到的正是「视频里啥也搜不出来」）。
+         * 所以有 video 就只要 video，一档顶两档。
+         */
+        const hasVideo = Boolean(search.searchVideos);
         return [
-            'song' as const,
+            ...(hasVideo ? [] : ['song' as const]),
             ...(search.searchAlbums && providerSupports(provider, 'albums') ? ['album' as const] : []),
             ...(search.searchPlaylists && providerSupports(provider, 'playlists') ? ['playlist' as const] : []),
+            // 视频站自己声明这几档；音乐平台不声明，页签就还是三个。
+            ...(hasVideo ? ['video' as const] : []),
+            ...(search.searchSeasons ? ['bangumi' as const, 'movie' as const] : []),
+            ...(search.searchPeople ? ['user' as const] : []),
         ];
     },
 
@@ -674,9 +687,36 @@ export const omni = {
     ): Promise<OmniPage<OmniCollection>> {
         if (!omni.getProviderSearchKinds(providerId).includes(kind)) return emptyPage(page.offset);
         const search = requireOnlineMusicProvider(providerId).search!;
-        const found = kind === 'album'
-            ? await search.searchAlbums!(query, page.limit, page.offset)
-            : await search.searchPlaylists!(query, page.limit, page.offset);
+        /*
+         * 视频站那几档：番剧和电影共用一个实现（按页签选 kind），用户返回的是
+         * 「这个人的投稿」当歌单。它们都由平台自己声明，音乐平台走不到这里。
+         *
+         * 每一档都先确认实现真的在：声明过的档位和实现之间偶尔会脱节（比如某个
+         * 平台声明了歌单搜索但方法没写），那种时候这一档回空 —— **绝不能让它抛**。
+         * 以前这里直接 `search.searchPlaylists!()`，一个 TypeError 就把整次
+         * submitSearch 带崩，连视频那档的结果一起没掉（用户看到的「搜索直接失败」）。
+         */
+        const runKind = async (): Promise<OmniPage<OmniCollection>> => {
+            if (kind === 'album') {
+                return search.searchAlbums
+                    ? search.searchAlbums(query, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            if (kind === 'bangumi' || kind === 'movie') {
+                return search.searchSeasons
+                    ? search.searchSeasons(query, kind, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            if (kind === 'user') {
+                return search.searchPeople
+                    ? search.searchPeople(query, page.limit, page.offset)
+                    : emptyPage(page.offset);
+            }
+            return search.searchPlaylists
+                ? search.searchPlaylists(query, page.limit, page.offset)
+                : emptyPage(page.offset);
+        };
+        const found = await runKind();
         // A provider names its own collections: one that answers with another's would open nowhere.
         return { ...found, items: found.items.filter(collection => collection.providerId === providerId) };
     },
@@ -898,6 +938,23 @@ export const omni = {
         return providerSupports(provider, 'mutations')
             && providerSupports(provider, 'likes')
             && Boolean(provider?.mutations?.likeSong);
+    },
+
+    /**
+     * 这首歌的歌词只能由它自己的平台给，别处不该去匹配。
+     *
+     * 视频平台就是这种：它放的是投稿，字幕就是歌词，而投稿和别的平台的歌曲之间
+     * 没有对应关系 —— 拿视频标题去曲库里搜，搜到的一定是另一首歌。
+     *
+     * 判据是「平台声明了自己有歌词，却不是歌词匹配源」：反过来，一家音乐平台
+     * 声明了 lyrics 又登记成匹配源，就该照常参与匹配。
+     */
+    ownsItsLyricsOnly(song: SongResult): boolean {
+        const source = getPlaybackSourceRef(song);
+        if (source.kind !== 'online') return false;
+        const provider = getOnlineMusicProvider(source.providerId);
+        if (!providerSupports(provider, 'lyrics') || !provider?.lyrics) return false;
+        return !getPlatformLyricSource(source.providerId);
     },
 
     canEditCollectionTracks(collection: OmniCollection): boolean {
@@ -1248,6 +1305,16 @@ export const omni = {
     // `getAudioSource` asks the provider for.
     resolveAudioQuality(providerId: OmniProviderId, preference: AudioQualityPreference): AudioQualityPreference {
         return audioQualityFor(providerId, preference);
+    },
+
+    /**
+     * 这首的地址要不要由 Web 先取好交给原生。
+     *
+     * 原生播放器的取流只认识音乐平台那几家，其余平台拿不到地址就一声不出；
+     * 这些平台在自己的 provider 上标了 `audioResolvedByWeb`。
+     */
+    needsWebResolvedAudio(song: SongResult): boolean {
+        return Boolean(providerForSong(song).playback?.audioResolvedByWeb);
     },
 
     async getAudioSource(song: SongResult, quality: AudioQualityPreference): Promise<OmniAudioSource | null> {
