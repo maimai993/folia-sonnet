@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useTransform } from 'framer-motion';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { Hourglass } from 'lucide-react';
-import { DEFAULT_FUME_TUNING, FumeTuning } from '../../../types';
+import { DEFAULT_FUME_TUNING, type FumeTuning } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import { colorWithAlpha } from '../colorMix';
@@ -328,6 +331,22 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
         if (article) firstFrameDrawn();
     }, [article, firstFrameDrawn]);
 
+    /*
+     * 智能动感（雾墨）：墨的浓淡跟着人声走（唱到的地方墨更实），薄幕随整体能量微微收拢一点 —— 都是这一套本来就有的画面语汇。
+     */
+    const fumeInkWeightStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.fumeInkWeight);
+    const fumeVeilCalmStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.fumeVeilCalm);
+    /*
+     * 墨的重量只读伴奏的厚薄（harmony / brightness），薄幕只读铺底（pad）。
+     * 原来两条都从 `musicBody` / `vocals` 里取 —— 前者掺鼓，后者是整条人声轨，
+     * 于是一下底鼓墨就浓一分。现在鼓点在这两条线上都不存在。
+     */
+    const inkWeight = useEffectTrack(BEAT_EFFECT_IDS.fumeInkWeight);
+    const veilCalm = useEffectTrack(BEAT_EFFECT_IDS.fumeVeilCalm);
+    const musicLayerScale = useTransform(veilCalm, value => 1 - Math.min(1, value * 2.4) * 0.12 * fumeVeilCalmStrength);
+    const musicLayerGlow = useTransform(inkWeight, value => `brightness(${1 + Math.min(1, value * 2.5) * 0.44 * fumeInkWeightStrength})`);
+    const musicLayerActive = fumeInkWeightStrength > 0 || fumeVeilCalmStrength > 0;
+
     return (
         <VisualizerShell
             theme={theme}
@@ -335,89 +354,97 @@ const VisualizerFume: React.FC<VisualizerProps> = (props) => {
             audioBands={audioBands}
             sharedProps={{ ...props, background: fumeBackgroundConfig(props) }}
         >
-            <div ref={viewportRef} className="relative z-10 h-full w-full pointer-events-none">
-                {(article || lines.length === 0) && (
-                    <motion.div
-                        initial={false}
-                        animate={{
-                            opacity: 1,
-                            scale: article && showText ? (hasPrintedContent ? 1 : 0.985) : 1,
-                        }}
-                        transition={{ duration: 0.45, ease: 'easeOut' }}
-                        className="absolute left-1/2 top-0 -translate-x-1/2"
-                        style={{
-                            width: viewport.width,
-                            height: viewport.height,
-                        }}
-                    >
-                        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
-                    </motion.div>
-                )}
 
-                {isLayoutPending && (
-                    // The layout runs while frames keep coming: a picture made of this stage waits for the article.
-                    <motion.div
-                        {...{ [ARRIVING_MARK]: '' }}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 flex items-center justify-center"
-                    >
-                        <div
-                            className="flex min-w-40 flex-col items-center gap-4 rounded-3xl border px-6 py-5"
+            {/* 墨迹的呼吸与浓淡只作用在画面层，字幕独立在外。 */}
+            <div className="pointer-events-none absolute inset-0">
+                <motion.div
+                    ref={viewportRef}
+                    className="relative z-10 h-full w-full pointer-events-none"
+                    style={musicLayerActive ? { filter: musicLayerGlow, scale: musicLayerScale, transformOrigin: '50% 50%' } : undefined}
+                >
+                    {(article || lines.length === 0) && (
+                        <motion.div
+                            initial={false}
+                            animate={{
+                                opacity: 1,
+                                scale: article && showText ? (hasPrintedContent ? 1 : 0.985) : 1,
+                            }}
+                            transition={{ duration: 0.45, ease: 'easeOut' }}
+                            className="absolute left-1/2 top-0 -translate-x-1/2"
                             style={{
-                                backgroundColor: theme.backgroundColor,
-                                borderColor: colorWithAlpha(theme.secondaryColor, 0.24),
-                                boxShadow: `0 18px 60px ${colorWithAlpha(theme.backgroundColor, 0.52)}`,
+                                width: viewport.width,
+                                height: viewport.height,
                             }}
                         >
-                            <Hourglass
-                                size={24}
-                                className="animate-pulse"
-                                style={{ color: colorWithAlpha(theme.primaryColor, 0.78) }}
-                            />
-                            <div className="flex w-28 flex-col gap-2.5">
-                                <div
-                                    className="h-2 rounded-full animate-pulse"
-                                    style={{ backgroundColor: colorWithAlpha(theme.primaryColor, 0.32) }}
-                                />
-                                <div
-                                    className="h-2 rounded-full animate-pulse"
-                                    style={{
-                                        width: '78%',
-                                        backgroundColor: colorWithAlpha(theme.primaryColor, 0.22),
-                                    }}
-                                />
-                                <div
-                                    className="h-2 rounded-full animate-pulse"
-                                    style={{
-                                        width: '56%',
-                                        backgroundColor: colorWithAlpha(theme.secondaryColor, 0.2),
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </motion.div>
-                )}
-            </div>
+                            <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+                        </motion.div>
+                    )}
 
-            <VisualizerSubtitleOverlay
-                showText={showText}
-                activeLine={runtime.activeLine}
-                recentCompletedLine={runtime.recentCompletedLine}
-                nextLines={runtime.nextLines}
-                theme={theme}
-                subtitleTheme={subtitleTheme}
-                translationFontSize={translationFontSize}
-                upcomingFontSize={upcomingFontSize}
-                subtitleOverlayOpacity={subtitleOverlayOpacity}
-                subtitleOverlayBackground={subtitleOverlayBackground}
-                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
-                subtitleFontScale={subtitleFontScale}
-                isPlayerChromeHidden={isPlayerChromeHidden}
-                hideTranslationSubtitle={hideTranslationSubtitle}
-                subtitleOverlayLayout={subtitleOverlayLayout}
-            />
+                    {isLayoutPending && (
+                    // The layout runs while frames keep coming: a picture made of this stage waits for the article.
+                        <motion.div
+                            {...{ [ARRIVING_MARK]: '' }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 flex items-center justify-center"
+                        >
+                            <div
+                                className="flex min-w-40 flex-col items-center gap-4 rounded-3xl border px-6 py-5"
+                                style={{
+                                    backgroundColor: theme.backgroundColor,
+                                    borderColor: colorWithAlpha(theme.secondaryColor, 0.24),
+                                    boxShadow: `0 18px 60px ${colorWithAlpha(theme.backgroundColor, 0.52)}`,
+                                }}
+                            >
+                                <Hourglass
+                                    size={24}
+                                    className="animate-pulse"
+                                    style={{ color: colorWithAlpha(theme.primaryColor, 0.78) }}
+                                />
+                                <div className="flex w-28 flex-col gap-2.5">
+                                    <div
+                                        className="h-2 rounded-full animate-pulse"
+                                        style={{ backgroundColor: colorWithAlpha(theme.primaryColor, 0.32) }}
+                                    />
+                                    <div
+                                        className="h-2 rounded-full animate-pulse"
+                                        style={{
+                                            width: '78%',
+                                            backgroundColor: colorWithAlpha(theme.primaryColor, 0.22),
+                                        }}
+                                    />
+                                    <div
+                                        className="h-2 rounded-full animate-pulse"
+                                        style={{
+                                            width: '56%',
+                                            backgroundColor: colorWithAlpha(theme.secondaryColor, 0.2),
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </motion.div>
+
+                <VisualizerSubtitleOverlay
+                    showText={showText}
+                    activeLine={runtime.activeLine}
+                    recentCompletedLine={runtime.recentCompletedLine}
+                    nextLines={runtime.nextLines}
+                    theme={theme}
+                    subtitleTheme={subtitleTheme}
+                    translationFontSize={translationFontSize}
+                    upcomingFontSize={upcomingFontSize}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
+                    subtitleOverlayBackground={subtitleOverlayBackground}
+                    subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                    subtitleFontScale={subtitleFontScale}
+                    isPlayerChromeHidden={isPlayerChromeHidden}
+                    hideTranslationSubtitle={hideTranslationSubtitle}
+                    subtitleOverlayLayout={subtitleOverlayLayout}
+                />
+            </div>
         </VisualizerShell>
     );
 };

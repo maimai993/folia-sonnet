@@ -1,7 +1,7 @@
 // Only for the you who has yet to exist in this world.
 // DO NOT REMOVE THE LINE ABOVE.
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { useMotionValue, animate, useSpring, motion } from 'framer-motion';
+import { useMotionValue, animate, useSpring, motion, useTransform } from 'framer-motion';
 import { DEFAULT_CLADDAGH_TUNING } from '../../../types';
 import { buildLineGraphemeTimeline } from '../../../utils/lyrics/graphemeTiming';
 import { resolveThemeFontStack, resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../../utils/fontStacks';
@@ -14,6 +14,10 @@ import { adjustCladdaghTimeline } from './claddaghTimeline';
 import { buildMeasuredSpacingInfo } from './claddaghLayout';
 import { RingLine } from './CladdaghRingLine';
 import { isLyricFlat } from '../../../utils/lyricFlat';
+import { musicSway } from '../../../stores/motionSignals';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 // src/components/visualizer/claddagh/VisualizerCladdagh.tsx
 
@@ -250,6 +254,29 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
         return indices;
     }, [centerLineIndex, lines.length, renderBaseIndex]);
 
+    /*
+     * 智能动感（结环）：这一套整个画面就是一枚斜着的环，「环倾」当然是倾角本身 ——
+     * 低频一下整个环绕中心晃一点，乐句推过来时珠串再往下沉一点，都是它本来就有的语义。
+     *
+     * 珠串这一条原来读 kick：底鼓每敲一下，环上的字连同珠串一起往下弹 —— 真机上就是
+     * 「歌词在抖」。环上挂的是字，字该跟着乐句走。现在两条都走 `effectTracks` 的表：
+     * 环倾登记的是伴奏（harmony / pad），珠串登记的是人声 —— 两条都不含鼓。
+     */
+    const ringTiltStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.claddaghRingTilt);
+    const beadHopStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.claddaghBeadHop);
+    const ringTiltLevel = useEffectTrack(BEAT_EFFECT_IDS.claddaghRingTilt);
+    const beadHopLevel = useEffectTrack(BEAT_EFFECT_IDS.claddaghBeadHop);
+    const ringTilt = useTransform(ringTiltLevel,
+        value => Math.min(1, value * 1.6) * 2.6 * ringTiltStrength);
+    /*
+     * 珠串下沉也过一道段落门槛：结环这套整个画面只有这枚环，安静段里它还在一下一下
+     * 往下沉，看起来就是「字在抖」。前奏 / 间奏几乎不动，副歌才跟着乐句沉。
+     */
+    const beadHop = useTransform(
+        [beadHopLevel, musicSway],
+        ([body, sway]: number[]) => -Math.min(1, body * 1.5) * 7 * beadHopStrength * (0.12 + sway * 0.88),
+    );
+
     return (
         <VisualizerShell
             theme={theme}
@@ -262,7 +289,7 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
                 animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 1.04, filter: 'blur(4px)' }}
                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                ref={containerRef as any}
+                ref={containerRef}
                 className="relative flex flex-col items-center justify-center w-full h-full overflow-hidden select-none"
             >
                 {/* Background Dedicated Visuals */}
@@ -285,46 +312,52 @@ const VisualizerCladdagh: React.FC<VisualizerSharedProps> = (props) => {
                     )}
                 </div>
 
-                <div
-                    style={{
-                        width: '100%',
-                        height: '100%',
-                        position: 'relative',
-                        zIndex: 10,
-                        // Percentages of this box, which is the whole stage: the ring's centre moves by the tuning's share of it.
-                        transform: positionX !== 0 || positionY !== 0 ? `translate(${positionX}%, ${positionY}%)` : undefined,
-                    }}
+                <motion.div
+                    style={(ringTiltStrength > 0 || beadHopStrength > 0)
+                        ? { rotate: ringTilt, y: beadHop, transformOrigin: '50% 50%' }
+                        : undefined}
                 >
-                    {showText && Rx > 0 && Ry > 0 && lineIndicesToRender.map(idx => (
-                        <RingLine
-                            key={idx}
-                            line={lines[idx]}
-                            lineIndex={idx}
-                            centerLineIndex={centerLineIndex}
-                            currentTime={currentTime}
-                            lineOffset={lineOffset}
-                            theme={theme}
-                            lyricsFontScale={lyricsFontScale}
-                            Rx={Rx}
-                            Ry={Ry}
-                            audioPower={smoothedBass}
-                            containerWidth={dimensions.width}
-                            containerHeight={dimensions.height}
-                            activeSpacingInfo={activeSpacingInfo}
-                            renderBaseIndex={renderBaseIndex}
-                            lines={lines}
-                            focusScaleRatio={claddaghTuning.focusScaleRatio}
-                            ellipseTiltDeg={claddaghTuning.ellipseTiltDeg}
-                            textSpacingScale={activeTextSpacingScale}
-                            letterSpacingOffset={claddaghTuning.letterSpacingOffset}
-                            translation={showRingTranslation ? lines[idx].translation : undefined}
-                            translationFontStack={translationFontStack}
-                            translationFontWeight={translationFontWeight}
-                            translationScale={claddaghTuning.translationScale ?? 1}
-                            translationLetterSpacingOffset={claddaghTuning.translationLetterSpacingOffset ?? 0}
-                        />
-                    ))}
-                </div>
+                    <div
+                        style={{
+                            width: '100%',
+                            height: '100%',
+                            position: 'relative',
+                            zIndex: 10,
+                            // Percentages of this box, which is the whole stage: the ring's centre moves by the tuning's share of it.
+                            transform: positionX !== 0 || positionY !== 0 ? `translate(${positionX}%, ${positionY}%)` : undefined,
+                        }}
+                    >
+                        {showText && Rx > 0 && Ry > 0 && lineIndicesToRender.map(idx => (
+                            <RingLine
+                                key={idx}
+                                line={lines[idx]}
+                                lineIndex={idx}
+                                centerLineIndex={centerLineIndex}
+                                currentTime={currentTime}
+                                lineOffset={lineOffset}
+                                theme={theme}
+                                lyricsFontScale={lyricsFontScale}
+                                Rx={Rx}
+                                Ry={Ry}
+                                audioPower={smoothedBass}
+                                containerWidth={dimensions.width}
+                                containerHeight={dimensions.height}
+                                activeSpacingInfo={activeSpacingInfo}
+                                renderBaseIndex={renderBaseIndex}
+                                lines={lines}
+                                focusScaleRatio={claddaghTuning.focusScaleRatio}
+                                ellipseTiltDeg={claddaghTuning.ellipseTiltDeg}
+                                textSpacingScale={activeTextSpacingScale}
+                                letterSpacingOffset={claddaghTuning.letterSpacingOffset}
+                                translation={showRingTranslation ? lines[idx].translation : undefined}
+                                translationFontStack={translationFontStack}
+                                translationFontWeight={translationFontWeight}
+                                translationScale={claddaghTuning.translationScale ?? 1}
+                                translationLetterSpacingOffset={claddaghTuning.translationLetterSpacingOffset ?? 0}
+                            />
+                        ))}
+                    </div>
+                </motion.div>
             </motion.div>
 
             {showText && (

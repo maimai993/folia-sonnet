@@ -25,6 +25,22 @@ export interface GlowWordProps<TConfig extends { id: string }> {
     fontSize: string;
     /** Mode-specific spacing merged into the word's own style (e.g. marginRight, alignSelf). */
     layoutStyle: React.CSSProperties;
+    /**
+     * 智能动感：辉光层的缩放，绑在绝对定位的那层文字阴影上。
+     *
+     * 光晕本来就是「流光 / 组曲」这两个模式的画面原子，人声一起它就扩散一点，是同一件事
+     * 变强，不是加了一层滤镜。绑 MotionValue 由 framer 每帧写 transform，词的逐字 variants
+     * 完全不受影响；不传时这一层与原来一字不差。
+     */
+    glowScale?: MotionValue<number>;
+    /**
+     * 智能动感：辉光层的浓淡。
+     *
+     * 只有缩放时，这层发光文字只是整体变大一点 —— 在暗背景上几乎看不出「光变强了」，
+     * 读起来像画面在轻微抖（真机反馈 2026-11-14「感觉有点素」）。浓淡才是辉光本身的
+     * 强度：人声一进来整行亮起来，换气时暗下去，和缩放叠在一起才是「跟着唱」。
+     */
+    glowOpacity?: MotionValue<number>;
 }
 
 export const GlowWord = <TConfig extends { id: string }>({
@@ -40,6 +56,8 @@ export const GlowWord = <TConfig extends { id: string }>({
     isChorus,
     fontSize,
     layoutStyle,
+    glowScale,
+    glowOpacity,
 }: GlowWordProps<TConfig>) => {
     const [status, setStatus] = useState<'waiting' | 'active' | 'passed'>('waiting');
     const rippleScale = useMemo(() => 1.5 + Math.random() * 2, []);
@@ -83,9 +101,10 @@ export const GlowWord = <TConfig extends { id: string }>({
             }}
         >
             {/* Glow Layer - Handles Text Shadow - Absolute Position */}
-            <span
+            <motion.span
                 className="absolute inset-0 select-none pointer-events-none block"
                 aria-hidden="true"
+                style={glowScale || glowOpacity ? { ...(glowScale ? { scale: glowScale } : {}), ...(glowOpacity ? { opacity: glowOpacity } : {}) } : undefined}
             >
                 {graphemeTimings.length > 1 ? (
                     graphemeTimings.map((timing, index) => (
@@ -116,7 +135,7 @@ export const GlowWord = <TConfig extends { id: string }>({
                         {word.text}
                     </motion.span>
                 )}
-            </span>
+            </motion.span>
 
             {/* Body Layer - Handles Color and Blur - Relative Position */}
             <motion.span

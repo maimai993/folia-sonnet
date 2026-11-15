@@ -84,6 +84,12 @@ export default defineVisualizer({
             descKey: 'options.beatEffect_machiScreenFlashDesc',
             source: 'drums',
         },
+            {
+            id: BEAT_EFFECT_IDS.machiNeonGlow,
+            nameKey: 'options.beatEffect_machiNeonGlow',
+            descKey: 'options.beatEffect_machiNeonGlowDesc',
+            source: 'envelopes',
+        },
     ],
     // Deliberately unkeyed on the seed: the runtime takes a track change in place (pixiRuntimeHost.ts).
     render: props => <VisualizerMachi {...props} machiTuning={machiTuning.read(props.visualizerTunings)} />,

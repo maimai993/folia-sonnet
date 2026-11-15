@@ -17,7 +17,9 @@ GitHub 只运行 `.github/workflows/*.yml`，子目录不读。所以那里只�
 - `ci.yml`：调本目录的检查，加上 typecheck、单测、`vite build` 冒烟。
 - `android-release.yml`：APK/AAB 出包，`v*` 标签或手动 `workflow_dispatch` 触发。
 
-其余 workflow（`electron-release`、`canary-pre-release`、`nightly-pre-release`、`release-candidate`、`docker-*`、`triage-*`、`codemap-sync`、`linux-arm64-package-check`、`sync-server-docker-publish`）是沿用上游的旧流程，之后逐个替换或删除；换掉时直接删文件，不要往这里搬。
+其余 workflow（`triage-*`、`codemap-sync`、`issue-link`、`ci-failure-notice`）是沿用上游的旧流程，之后逐个替换或删除；换掉时直接删文件，不要往这里搬。
+
+本 fork 只出安卓包，桌面平台的检查不留：`linux-arm64-package-check`（Linux arm64 打包与原生二进制架构）、`electron-release` / `canary-pre-release` / `nightly-pre-release` / `release-candidate`（Electron 多平台发布）、`sync-server-docker-publish` 与 `typecheck-sync-server`（Node 后端）都已删除。
 
 ## 提 PR：不熟 GitHub 就照着抄
 

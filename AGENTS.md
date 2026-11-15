@@ -108,7 +108,7 @@
 - **`gh` 只是便利工具，不是硬依赖。** 走 SSH 认证、没装 gh、或不想在本机登录 gh 的人都照常提 PR：`npm run pr -- "标题"` 会先跑本地门禁再 push（SSH 用自己的 key），检测不到可用的 gh 时打印 compare 链接，浏览器里点 Create pull request；之后的盯 CI 与写 review 都在网页完成。
 - GitHub 的原生 approval 只能由别人给，AI review 是评论、不会变成 approval：要硬拦就由 owner 在分支保护里开 Require a pull request before merging；要把 AI review 也变成硬门禁，需要给审查账号单独一个 GitHub 身份，或加一个「review 是否存在」的 required check（还没做）。
 - 检查逻辑都放 `ci/`，`.github/workflows/` 只留入口；沿用的旧 workflow 之后逐个替换，新流程不要再直接往 `.github/workflows/` 里加。
-- `.github/workflows/ci.yml`：PR 到 `dev` / `main`，以及这两个分支的 push 都会跑。出包不在这里。现在的 job：`test-unit`（typecheck+单测）、`typecheck-sync-server`、`build-web`（含产物密钥扫描）、`version-policy`、`ui-gates`（手写控件/800 行）、`secret-guard`（源码密钥泄漏）。
+- `.github/workflows/ci.yml`：PR 到 `dev` / `main`，以及这两个分支的 push 都会跑。出包不在这里。现在的 job：`test-unit`（typecheck+单测）、`version-policy`、`ui-gates`（手写控件/800 行）、`secret-guard`（源码密钥泄漏）。本 fork 只出安卓包，`sync-server` 的 typecheck 与桌面 Linux arm64 打包检查都已删除。
 - 密钥泄漏门禁：`node ci/checkSecrets.ts` 扫源码、`node ci/checkSecrets.ts --dist dist` 扫构建产物；`VITE_` 变量名带 KEY/TOKEN/SECRET/PASSWORD/CREDENTIAL/AUTH 一律失败（会被内联进前端包）。误报写进 `ci/secretsAllowlist.json` 并写理由。规则细节见 `docs/contracts/secrets-guard.md` 与 `docs/contracts/secrets.md`。
 - 版本约束实现在 `ci/checkVersionPolicy.ts`，单独跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
 - `.github/workflows/android-release.yml`：推 `release/*` 分支、`v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；标签与分支名都必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。配了 secrets 时 CI 会当场校验 keystore 的口令/alias，并对产物 APK 验签、比对证书指纹；换 keystore 必须同时更新那 4 个 secrets 和 workflow 里的 `EXPECTED_CERT_SHA256`（当前证书 `BC:10:0C:6E:…:50:DA`，`keytool -list -v` 可查）。
@@ -120,6 +120,7 @@
 - 版本约束实现在 `ci/checkVersionPolicy.ts`，本地跑 `npm run check:versions`：平台依赖钉死且根目录与 `deploy/docker/<平台>-api/package.json` 同版本；`.nvmrc`、`engines.node` 与各 workflow 的 Node 版本一致；版本号满足 `android/app/build.gradle` 的 versionCode 推导；锁文件版本与 `package.json` 同步。
 - `.github/workflows/android-release.yml`：推 `v*` 标签或手动 `workflow_dispatch` 出签名 APK/AAB；手动那条可以涨版本、打标签、发 Release，标签必须与 `package.json` 的版本一致。签名要 `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 四个 secrets，缺了只出未签名包。
 - 本地跑一遍与 CI 相同的门禁：`npm run typecheck && npm run test:unit && npm run check:versions`。
+- 本 fork 只出安卓包：桌面平台（Linux arm64 打包、Electron 多平台发布）与 `sync-server` 后端相关的检查都不在 CI 里，不需要为它们准备环境。
 
 ### 生成的文件不手改
 

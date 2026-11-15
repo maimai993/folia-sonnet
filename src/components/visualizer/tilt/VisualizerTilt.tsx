@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useInsertionEffect, useLayoutEffect } from 'react';
-import { motion, AnimatePresence, MotionValue, motionValue } from 'framer-motion';
+import { motion, AnimatePresence, MotionValue, motionValue, useTransform } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 import { Line, Theme, AudioBands, type TiltColorScheme, type TiltTuning, DEFAULT_TILT_TUNING } from '../../../types';
@@ -14,6 +14,10 @@ import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import { buildTiltLineColorRanges, resolveTiltGraphemeColors } from './tiltWordColors';
 import type { WordColorRange } from '../wordColoring';
+import { musicSway } from '../../../stores/motionSignals';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const CHAR_REF_LENGTH = 20;
 const LOG_OFFSET = 4;
@@ -261,8 +265,10 @@ const buildTiltLayout = (fullText: string, lineSeed: number, tuning: TiltTuning,
     const tiltWithWidth = segments.filter(s => s.isTilt).map(s => ({ text: s.text, width: measureAtSize(s.text, tiltBasePx, tiltFontSpec) }));
     const normalWithWidth = segments.filter(s => !s.isTilt).map(s => ({ text: s.text, width: measureAtSize(s.text, normalBasePx, normalFontSpec) }));
 
-    const widestTiltEntry = tiltWithWidth.sort((a, b) => b.width - a.width)[0];
-    const widestNormalEntry = normalWithWidth.sort((a, b) => b.width - a.width)[0];
+    // `.at(0)` 而不是 `[0]`：空数组时前者给 undefined，后面的 `?? 0` 才有意义
+    // （索引访问在类型上永远非空，eslint 会判成「多余的判空」）。
+    const widestTiltEntry = tiltWithWidth.sort((a, b) => b.width - a.width).at(0);
+    const widestNormalEntry = normalWithWidth.sort((a, b) => b.width - a.width).at(0);
 
     const tiltWidth = widestTiltEntry?.width ?? 0;
     const normalWidth = widestNormalEntry?.width ?? 0;
@@ -669,6 +675,27 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
 
     const { translationFontSize, upcomingFontSize } = resolveSubtitleFontSizes(lyricsFontScale);
 
+    /*
+     * 智能动感（倾斜）：这一套的语义本来就是一个「斜」字，所以动的是整行的倾角，不是别的东西。
+     *   leanSway   —— 低频一推，整行斜角跟着摆一下。
+     *   mainReveal —— 整句能量起来时斜角多留一点，主句显得更"立"。
+     * 只写最外层容器的 rotate（transform / 合成层）：逐字的位置、颜色、缩放一个都不动。
+     */
+    const leanSwayStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.tiltLeanSway);
+    const mainRevealStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.tiltMainReveal);
+    /*
+     * 两条都走效果表：leanSway 登记的是伴奏（harmony / pad），mainReveal 是人声。
+     * 原来 leanSway 读 `bass` —— 贝斯轨里的低频律动会把整行字推来推去，虽不是鼓，
+     * 但同样是「字在晃」；倾角这件事该跟和声的厚薄走。
+     */
+    const leanSway = useEffectTrack(BEAT_EFFECT_IDS.tiltLeanSway);
+    const mainReveal = useEffectTrack(BEAT_EFFECT_IDS.tiltMainReveal);
+    const lineTilt = useTransform(
+        [leanSway, mainReveal, musicSway],
+        ([swayLevel, revealLevel, sway]: number[]) => Math.min(1, swayLevel * 1.6) * 2.1 * leanSwayStrength
+            + Math.min(1, revealLevel * 1.5) * 2.0 * mainRevealStrength * (0.12 + sway * 0.88),
+    );
+
     return (
         <VisualizerShell
             theme={theme}
@@ -685,6 +712,7 @@ const VisualizerTilt: React.FC<VisualizerTiltProps & { staticMode?: boolean; }> 
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0, transition: { duration: 0.45, ease: 'easeInOut' } }}
                             className="flex flex-col items-center justify-center gap-y-3 sm:gap-y-4"
+                            style={{ rotate: lineTilt }}
                         >
                             {layout.segments.map((segment, si) => (
                                 <TiltLine

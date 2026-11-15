@@ -55,7 +55,13 @@ const effectsOnScreen = (settings: BeatClockSettings): readonly BeatEffectDef[] 
 export const liveBeatEffects = (settings: BeatClockSettings): BeatEffectDef[] =>
     effectsOnScreen(settings).filter(effect => isBeatEffectLive(settings.smartBeat, effect));
 
-/** True while a live effect on screen reads beat_this' beats: the beat list is analysed and installed. */
+/**
+ * True while a live effect on screen reads beat_this' beats: the beat list is analysed and installed.
+ *
+ * 只有真正声明了 `source: 'beats'` 的效果才装拍点表 —— 也就是花火/商籁/镜台的原生
+ * 推镜震动，以及町景/时计/雾笺那几个本来就按拍点走的小元素。不再给「接鼓点振动」
+ * 的整组样式强装：那会把拍点冲击铺到所有歌词样式上（整页震动 / 闪光弹）。
+ */
 export const visualizerWantsBeats = (settings: BeatClockSettings): boolean =>
     liveBeatEffects(settings).some(effect => effect.source === 'beats');
 
@@ -71,11 +77,21 @@ export const visualizerWantsStems = (settings: BeatClockSettings): boolean =>
     liveBeatEffects(settings).some(effect => effect.source === 'stems');
 
 /**
+ * True while a live effect on screen reads the four music envelopes (凝彩's 低频涌动 and the rest):
+ * the same htdemucs separation gives them, so it is the same run the drum hits use.
+ */
+export const visualizerWantsEnvelopes = (settings: BeatClockSettings): boolean =>
+    liveBeatEffects(settings).some(effect => effect.source === 'envelopes');
+
+/**
  * True while either model is wanted, which is when the beat clock steps: it carries the heard time
  * and the track key that drum hits and the vocal envelope are read against, too.
  */
 export const visualizerWantsBeatClock = (settings: BeatClockSettings): boolean =>
-    visualizerWantsBeats(settings) || visualizerWantsDrumHits(settings) || visualizerWantsStems(settings);
+    visualizerWantsBeats(settings)
+    || visualizerWantsDrumHits(settings)
+    || visualizerWantsStems(settings)
+    || visualizerWantsEnvelopes(settings);
 
 /**
  * The strength of the live effect reading `source`, 0 with none. One per source per picture for

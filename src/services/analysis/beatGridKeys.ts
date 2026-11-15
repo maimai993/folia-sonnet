@@ -32,5 +32,12 @@ export const VOCAL_ENVELOPE_PREFIX = 'vocal_envelope_v1_';
 /** Whether `key` is a track's stored vocal envelope. */
 export const isVocalEnvelopeKey = (key: string): boolean => key.startsWith(VOCAL_ENVELOPE_PREFIX);
 
-/** A track's vocal envelope off htdemucs' vocal stem (vocalEnvelope.ts), for 雾笺; versioned likewise. */
+/**
+ * A track's four music envelopes off the same htdemucs separation (musicEnvelope.ts): bass, vocals,
+ * other and the whole mix. Stored beside the drum hits, the version part of the prefix as there.
+ */
+export const MUSIC_ENVELOPE_PREFIX = 'music_envelope_v1_';
+
+/** Whether `key` is a track's stored music envelopes. */
+export const isMusicEnvelopeKey = (key: string): boolean => key.startsWith(MUSIC_ENVELOPE_PREFIX);
 

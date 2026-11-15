@@ -56,6 +56,7 @@ export const buildPreparedState = (
         theme.animationIntensity,
         line.startTime * 1000,
         line.fullText === '......',
+        viewport.width,
     );
 
     return {

@@ -44,6 +44,12 @@ interface StoredBeatGrid {
     beats: number[];
     downbeats: number[];
     accents?: BeatAccents;
+    /**
+     * 这份表完整到哪一秒。没有这个字段 = 整曲（旧记录都是整曲）。
+     *
+     * 分段交付时边算边存，所以要记下它还没到头：下次读到它先拿来用，再接着补。
+     */
+    until?: number;
 }
 
 /** A beat list, with its accents when they have been measured. */
@@ -57,23 +63,45 @@ const isTimeList = (value: unknown): value is number[] =>
     Array.isArray(value) && value.every(time => typeof time === 'number' && Number.isFinite(time));
 
 /**
- * The stored whole-track beat list for this analysis key, or null. Accents that do not fit
- * the list (another version, another length) are left off rather than failing the beats.
+ * A stored beat list and how far it reaches. `until` undefined means the whole track; a number is a
+ * list picked part way through a run, kept so the next play starts from it instead of from zero.
+ * Accents that do not fit the list (another version, another length) are left off rather than
+ * failing the beats.
  */
-export const readStoredBeatGrid = async (key: string): Promise<AccentedBeatGrid | null> => {
+const readStoredBeatGridEntry = async (
+    key: string,
+): Promise<{ grid: AccentedBeatGrid; until: number | undefined } | null> => {
     const stored = await getFromCache<StoredBeatGrid>(storageKey(key));
     if (!stored || stored.version !== BEAT_GRID_VERSION) return null;
     if (!isTimeList(stored.beats) || !isTimeList(stored.downbeats) || !stored.beats.length) return null;
     const grid: AccentedBeatGrid = { beats: stored.beats, downbeats: stored.downbeats };
     if (isBeatAccents(stored.accents, stored.beats.length)) grid.accents = stored.accents;
-    return grid;
+    const until = typeof stored.until === 'number' && Number.isFinite(stored.until) && stored.until > 0
+        ? stored.until
+        : undefined;
+    return { grid, until };
 };
 
-/** Stores a whole-track beat list, with its accents if it has them; an empty one is not worth keeping. */
-export const storeBeatGrid = async (key: string, grid: AccentedBeatGrid): Promise<void> => {
+/** The stored whole-track beat list for this analysis key, or null. */
+export const readStoredBeatGrid = async (key: string): Promise<AccentedBeatGrid | null> =>
+    (await readStoredBeatGridEntry(key))?.grid ?? null;
+
+/**
+ * Stores a beat list, with its accents if it has them; an empty one is not worth keeping.
+ *
+ * `until` marks a list picked part way through a run: it is still worth storing (the next play reads
+ * it and carries on), but it must not be mistaken for the whole track. A finished run stores without
+ * it, which replaces whatever partial list was there.
+ */
+export const storeBeatGrid = async (
+    key: string,
+    grid: AccentedBeatGrid,
+    until?: number,
+): Promise<void> => {
     if (!grid.beats.length) return;
     const entry: StoredBeatGrid = { version: BEAT_GRID_VERSION, beats: [...grid.beats], downbeats: [...grid.downbeats] };
     if (grid.accents && isBeatAccents(grid.accents, grid.beats.length)) entry.accents = grid.accents;
+    if (until !== undefined && Number.isFinite(until) && until > 0) entry.until = until;
     await saveToCache(storageKey(key), entry);
 };
 
@@ -126,42 +154,64 @@ export interface TrackBeatGridOptions {
  * A GPU-only run that came back null does not answer a caller allowed the CPU; that caller runs again
  * with the fallback, which is the one case two runs of a track can follow each other.
  */
-export const getTrackBeatGrid = async (
+/** 原生回传的拍点表：存与用都是这个形状。 */
+const nativeGrid = (beats: NativeBeat[]): AccentedBeatGrid => ({
+    beats: beats.map(beat => beat.time),
+    downbeats: beats.filter(beat => beat.downbeat).map(beat => beat.time),
+});
+
+/**
+ * Starts one whole-track run; a run already going for this key is joined, never doubled.
+ *
+ * Every chunk the phone hands over is stored before it is passed on: a run that is cut short - the
+ * next track, the app going away, a picture switch - then still leaves behind the beats it did find,
+ * and the next play reads them in a second or two instead of paying for the decode and the model again.
+ */
+const startRun = (
     key: string,
     readMid: () => Promise<Float32Array | null>,
-    { cpuFallback = false, storedOnly = false, urgency = 'background', nativeSourceUrl, onPartial }: TrackBeatGridOptions = {},
+    { cpuFallback = false, urgency = 'background', nativeSourceUrl, onPartial }: TrackBeatGridOptions = {},
 ): Promise<AccentedBeatGrid | null> => {
-    const stored = await readStoredBeatGrid(key);
-    if (stored) return stored;
-
-    const runKey = key;
-    const joined = running.get(runKey);
-    if (joined) {
-        // A picture on screen joining automix's background run: its GPU unit moves up with it.
+    const existing = running.get(key);
+    if (existing) {
         if (urgency !== 'background') raiseGpuUrgency(key, urgency);
-        const grid = await joined.grid;
-        if (grid || joined.cpuFallback || !cpuFallback || storedOnly) return grid;
+        return existing.grid;
     }
-    if (storedOnly) return null;
 
     /*
-     * 安卓：走内置的 beat_this（onnxruntime-android）。
+     * 每算完一块就落一次盘。
      *
-     * 必须排在 `canRunBeatThis()` **之前**：那条判断问的是「桌面主进程的桥在不在，
-     * 或者这个渲染进程有没有 WebGPU」—— 安卓两样都没有，先问它就会在这里直接 return null，
-     * 原生这一条永远到不了。权重在 APK 里、推理在原生线程上，它不需要上面任何一样。
-     *
-     * 音频优先交给原生按地址自己解（`nativeSourceUrl`）：整首歌的 PCM 过桥是 20MB+ 的
-     * base64，桥和堆都撑不住。只有拿不到地址时才退回「JS 解码 + 传样本」。
-     *
-     * 与 GPU 路径刻意不同的是**不产出 accents**：
-     * accents 依赖频谱的打击乐能量，那是 GPU 那套顺带算出来的东西。
-     * 原生这次只交了拍点，没有那份频谱，硬凑一个会让动感模式的
-     * 强弱控制失真。没有 accents 时下游会退回按拍点平均分配，
-     * 那是「不知道强弱」该有的样子，不是编一个出来。
+     * 这是「下次不用重算」的关键：整曲在手机上要二十秒以上，用户常常等不到它算完就切歌、
+     * 切后台或者退出 —— 只在最后存一次，那二三十秒每次都白干。存半份的代价是每块一次
+     * IndexedDB 写入（几百个浮点数，几 KB），换来的是下次播放一两秒就有拍点。
      */
-    if (isNativeBeatAnalysisAvailable()) {
-        return (async () => {
+    const handlePartial = (beats: NativeBeat[], seconds: number) => {
+        if (beats.length) {
+            void storeBeatGrid(key, nativeGrid(beats), seconds).catch((error) => {
+                console.warn('[BeatGrid] storing a partial beat list failed', error);
+            });
+        }
+        onPartial?.(beats, seconds);
+    };
+
+    const grid = (async (): Promise<AccentedBeatGrid | null> => {
+        /*
+         * 安卓：走内置的 beat_this（onnxruntime-android）。
+         *
+         * 必须排在 `canRunBeatThis()` **之前**：那条判断问的是「桌面主进程的桥在不在，
+         * 或者这个渲染进程有没有 WebGPU」—— 安卓两样都没有，先问它就会在这里直接 return null，
+         * 原生这一条永远到不了。权重在 APK 里、推理在原生线程上，它不需要上面任何一样。
+         *
+         * 音频优先交给原生按地址自己解（`nativeSourceUrl`）：整首歌的 PCM 过桥是 20MB+ 的
+         * base64，桥和堆都撑不住。只有拿不到地址时才退回「JS 解码 + 传样本」。
+         *
+         * 与 GPU 路径刻意不同的是**不产出 accents**：
+         * accents 依赖频谱的打击乐能量，那是 GPU 那套顺带算出来的东西。
+         * 原生这次只交了拍点，没有那份频谱，硬凑一个会让动感模式的
+         * 强弱控制失真。没有 accents 时下游会退回按拍点平均分配，
+         * 那是「不知道强弱」该有的样子，不是编一个出来。
+         */
+        if (isNativeBeatAnalysisAvailable()) {
             let analysis: Awaited<ReturnType<typeof analyzeBeatsNative>> | null = null;
             const sourceUrl = nativeSourceUrl ? await nativeSourceUrl() : null;
             if (sourceUrl) {
@@ -174,7 +224,7 @@ export const getTrackBeatGrid = async (
                     // 端口每次启动都变，别把它写进日志；路径本身足以判断走的是哪条来源。
                     const where = sourceUrl.replace(/^(https?:\/\/127\.0\.0\.1):\d+/, '$1:…');
                     console.info(`[BeatGrid] native analysis from ${where}`);
-                    analysis = await analyzeBeatsNativeFromUrl(sourceUrl, undefined, onPartial);
+                    analysis = await analyzeBeatsNativeFromUrl(sourceUrl, undefined, handlePartial);
                 } catch (error) {
                     console.warn('[BeatGrid] native analysis failed', error);
                     return null;
@@ -200,18 +250,14 @@ export const getTrackBeatGrid = async (
                 return null;
             }
             console.info(`[BeatGrid] native analysis: ${analysis.beats.length} beats, ${analysis.beats.filter((beat: NativeBeat) => beat.downbeat).length} downbeats`);
-            const found: AccentedBeatGrid = {
-                beats: analysis.beats.map((beat: NativeBeat) => beat.time),
-                downbeats: analysis.beats.filter((beat: NativeBeat) => beat.downbeat).map((beat: NativeBeat) => beat.time),
-            };
+            const found = nativeGrid(analysis.beats);
+            // 整曲：不带 until，覆盖掉之前存的半份。
             if (found.beats.length) await storeBeatGrid(key, found);
             return found.beats.length ? found : null;
-        })();
-    }
+        }
 
-    if (!canRunBeatThis()) return null;
+        if (!canRunBeatThis()) return null;
 
-    const grid = (async () => {
         const mid = await readMid();
         if (!mid) return null;
         const mel = await melSpectrogramOffThread(mid);
@@ -233,13 +279,62 @@ export const getTrackBeatGrid = async (
         if (found) await storeBeatGrid(key, found);
         return found;
     })();
+
     const run: Run = { grid, cpuFallback };
-    running.set(runKey, run);
-    try {
-        return await grid;
-    } finally {
-        if (running.get(runKey) === run) running.delete(runKey);
+    running.set(key, run);
+    void grid.finally(() => {
+        if (running.get(key) === run) running.delete(key);
+    }).catch(() => undefined);
+    return grid;
+};
+
+/**
+ * A whole track's beats: stored, joined from a run in flight, or run now. Null when the model could
+ * not answer; a grid with no beats when it answered "none".
+ *
+ * `readMid` is called only when the model actually has to run - a stored list or a joined run never
+ * decodes anything. It answers the track's mono (mid) samples at the Beat This! rate, or null when
+ * they cannot be had, which is not remembered: a later call may find the bytes.
+ *
+ * A GPU-only run that came back null does not answer a caller allowed the CPU; that caller runs again
+ * with the fallback, which is the one case two runs of a track can follow each other.
+ *
+ * A list stored part way through (the phone stores each chunk) is handed on as it is and finished in
+ * the background: waiting for the last chunk is what made a replayed track look like it was never
+ * analysed at all.
+ */
+export const getTrackBeatGrid = async (
+    key: string,
+    readMid: () => Promise<Float32Array | null>,
+    options: TrackBeatGridOptions = {},
+): Promise<AccentedBeatGrid | null> => {
+    const { cpuFallback = false, storedOnly = false, urgency = 'background' } = options;
+
+    const stored = await readStoredBeatGridEntry(key);
+    if (stored) {
+        if (stored.until !== undefined && !storedOnly) {
+            /*
+             * 存的是半份：先交出去，让画面现在就动，同时在后台把剩下的补上。
+             * 不 await 那次补齐 —— 用户要的是「立刻有拍点」，补齐只把表接长，
+             * 末尾与已有的重叠，时钟不会因此跳。
+             */
+            void startRun(key, readMid, options).catch((error) => {
+                console.warn('[BeatGrid] finishing a stored partial beat list failed', error);
+            });
+        }
+        return stored.grid;
     }
+
+    const joined = running.get(key);
+    if (joined) {
+        // A picture on screen joining automix's background run: its GPU unit moves up with it.
+        if (urgency !== 'background') raiseGpuUrgency(key, urgency);
+        const grid = await joined.grid;
+        if (grid || joined.cpuFallback || !cpuFallback) return grid;
+    }
+    if (storedOnly) return null;
+
+    return startRun(key, readMid, options);
 };
 
 /**
