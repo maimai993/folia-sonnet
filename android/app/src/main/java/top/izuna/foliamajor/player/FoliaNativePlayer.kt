@@ -193,6 +193,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         post = { task -> handler.post(task) },
         onPlayerThread = { Looper.myLooper() == handler.looper },
         onActionError = { error -> emit("error", cachedPositionMs, cachedDurationMs, error.toString()) },
+        onCompletionError = { error -> android.util.Log.w("FoliaNativePlayer", "命令结算回调失败（桥可能已销毁）", error) },
     )
 
     /**
@@ -407,9 +408,12 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         // keepEpoch：过渡引擎的兜底 prepare 沿用接管时已分配的纪元（armTakeover 已递增过），
         // 不能再递增 —— 否则 Web 紧随其后提交的 play 会被判成旧 source 而丢掉。
         val reuseTakeover = keepEpoch && peekTakeover(url)
+        // 原生自己发起的换源（服务兜底 / 系统控件，没有 Web 令牌）不是用户的播放意图：
+        // 不递增 transportEpoch，否则同一瞬间排队的用户 pause 会被判过期、被吞掉（审查 低-7）。
+        val webInitiated = token.isNotEmpty()
         dispatch(
             NativeCommandKind.PREPARE, completion,
-            bumpSource = !reuseTakeover, bumpTransport = !reuseTakeover,
+            bumpSource = !reuseTakeover, bumpTransport = !reuseTakeover && webInitiated,
             callerSide = { epoch ->
                 if (token.isEmpty()) {
                     // 过渡接管预置过令牌（Web 发起的换歌）：兜底 prepare 沿用它，事件才对得上 Web。
@@ -467,6 +471,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         // 有些源要附带请求头（飞牛的音频流认 Cookie: music-token）：
         // 每次换源都按地址重问一遍，没有就清空，别把上一首的头带给下一首。
         applySourceHeaders(url)
+        // 令牌在 setMediaItem 之前就换：setMediaItem / seekTo 会同步触发的位置跳变回调
+        // 属于新 source，要带新令牌（旧 source 排在这条命令之前的事件在上一条命令里已经发完）。
+        activeSourceToken = token
         current.setMediaItem(mediaItemFor(url, mediaId))
         current.setRepeatMode(requestedRepeatMode)
         current.setVolume(requestedVolume)
@@ -475,8 +482,6 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         if (startPositionMs > 0) {
             current.seekTo(startPositionMs)
         }
-        // 从这一刻起，播放器线程上发出的事件才属于新 source（旧 source 排队中的事件已先发完）。
-        activeSourceToken = token
         cachedPositionMs = if (startPositionMs > 0) startPositionMs else 0L
         cachedDurationMs = 0L
         // 新的一首：快到尾巴这件事重新上膛，回绕判定的上一拍与拖动门槛也清掉。

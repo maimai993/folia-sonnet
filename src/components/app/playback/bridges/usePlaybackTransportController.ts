@@ -116,8 +116,10 @@ export function usePlaybackTransportController({
          */
         if (nativePlaybackEngine.ownsPlayback()) {
             try {
-                await nativePlaybackEngine.play();
+                const applied = await nativePlaybackEngine.play();
                 if (revision !== transportRevision.current) return;
+                // false = 被原生判为已被取代（例如同一瞬间通知栏暂停）：声音没起来，界面不能写成播放中。
+                if (applied === false) return;
                 setPlayerState(PlayerState.PLAYING);
             } catch (error) {
                 if (revision !== transportRevision.current) return;

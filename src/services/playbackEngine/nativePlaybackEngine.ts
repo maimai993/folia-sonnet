@@ -67,14 +67,15 @@ export const NATIVE_PLAYBACK_ENABLED: boolean = true;
  * 两边令牌都已知且不同才可能算旧；任何一边未知（旧版原生没有令牌、尚未认领）一律放行，
  * 退回 songKey 那一道过滤，不因缺字段丢掉真事件。
  *
- * 例外：Web 持有自己的 `w:` 令牌、事件来自原生**自己**换源（`n:` 令牌）时放行，交给 songKey 过滤。
- * 单曲循环 / 单曲队列的「下一首」会让原生重装同一个 songKey，原生不一定发 syncTo 让 Web 认领，
- * 这时按令牌丢事件会让 Web 的播放状态与进度时钟整个停住 —— 比放过一条旧事件糟得多。
- * 旧 source 的迟到事件带的是 Web 自己发过的 `w:` 令牌，不受这条例外影响。
+ * 例外：事件来自原生**自己**换源（`n:` 令牌）时一律放行，交给 songKey 过滤，不论 Web 手上是
+ * `w:`（Web 装的源）还是 `n:`（认领来的源）。单曲循环 / 单曲队列的「下一首」会让原生重装同一个
+ * songKey，原生不一定发 syncTo 让 Web 重新认领，这时按令牌丢事件会让 Web 的播放状态与进度时钟
+ * 整个停住 —— 比放过一条旧事件糟得多。旧 source 的迟到事件带的是 Web 自己发过的 `w:` 令牌
+ * （A→B→A 的 ABA 正是这一种），不受这条例外影响，所以仍然被丢掉。
  */
 export const isStaleSourceEvent = (eventToken: string | undefined, currentToken: string | null): boolean => {
     if (!eventToken || !currentToken || eventToken === currentToken) return false;
-    if (eventToken.startsWith('n:') && currentToken.startsWith('w:')) return false;
+    if (eventToken.startsWith('n:')) return false;
     return true;
 };
 
@@ -140,6 +141,8 @@ class NativePlaybackEngine {
      */
     private sourceToken: string | null = null;
     private sourceTokenSeq = 0;
+    /** 已经应用过的原生事件个数：异步命令的延续靠它判断「这期间有没有更权威的事件到过」。 */
+    private appliedEventSeq = 0;
 
     /**
      * 认领是一个 transport epoch 边界：不向原生发送命令，但必须使认领前的
@@ -299,6 +302,7 @@ class NativePlaybackEngine {
         const sourceGeneration = this.sourceGenerationVersion;
         await this.sourceReadyPromise;
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return false;
+        const eventsBefore = this.appliedEventSeq;
         const played = await this.enqueueNativeCommand(
             () => nativePlayer.play(),
             () => intentGeneration === this.playIntentVersion && sourceGeneration === this.sourceGenerationVersion,
@@ -306,6 +310,10 @@ class NativePlaybackEngine {
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return false;
         // 原生判定这条 play 在执行前已被更新的命令取代：它没有真的播，不能记成 playing。
         if (played && typeof played === 'object' && played.stale) return false;
+        // Promise 现在在播放器线程执行完才结束，这段时间里本 source 的状态事件（buffering / playing …）
+        // 可能已经先到并写过时钟。事件比这条乐观写入更权威，到过就不再覆盖
+        //（否则缓冲期间 stalled 被改回 false，墙钟照走，歌词跑到声音前面）。
+        if (this.appliedEventSeq !== eventsBefore) return true;
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
         this.positionMs = this.getPositionSec() * 1000;
@@ -342,6 +350,8 @@ class NativePlaybackEngine {
          * 时钟停在这次写下的意图值上，原生跳没跳没人知道。
          */
         this.ensureSubscription();
+        // 没有 source 也没有原生在放的东西：没有可跳的对象，别往原生发（它只会回一条空的 seeked）。
+        if (!this.hasSource && !this.nativeMediaLive) return;
         const targetMs = Math.max(0, Math.round(seconds * 1000));
         this.positionMs = targetMs;
         this.updatedAtMs = performance.now();
@@ -457,6 +467,7 @@ class NativePlaybackEngine {
     }
 
     private apply(event: NativePlaybackEvent): void {
+        this.appliedEventSeq++;
         const now = performance.now();
         /*
          * 事件是**过去**发生的：位置是生成那一刻的位置，基准时刻也要退回到那一刻。

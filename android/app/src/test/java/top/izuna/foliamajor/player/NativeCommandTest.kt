@@ -81,17 +81,44 @@ class NativeCommandTest {
 
     @Test
     fun `completion 抛异常不外溢 且仍算已结算`() {
-        val command = PendingCommand(NativeCommandKind.PREPARE) { throw IllegalStateException("bridge gone") }
+        val command = PendingCommand(NativeCommandKind.PREPARE, { throw IllegalStateException("bridge gone") })
         assertTrue(command.settle(NativeCommandResult.Ok(1)))
         assertTrue(command.isSettled)
+    }
+
+    @Test
+    fun `completion 抛异常时交给错误回调记录 不会无痕吞掉`() {
+        val logged = mutableListOf<Throwable>()
+        val command = PendingCommand(NativeCommandKind.PLAY, { throw IllegalStateException("bridge gone") }, { logged.add(it) })
+        assertTrue(command.settle(NativeCommandResult.Ok(1)))
+        assertEquals(1, logged.size)
+        assertEquals("bridge gone", logged[0].message)
+    }
+
+    @Test
+    fun `错误回调自己抛异常也不外溢`() {
+        val command = PendingCommand(NativeCommandKind.PLAY, { throw IllegalStateException("a") }, { throw IllegalStateException("b") })
+        assertTrue(command.settle(NativeCommandResult.Ok(1)))
+        assertTrue(command.isSettled)
+    }
+
+    @Test
+    fun `调度器把 completion 的异常转给 onCompletionError`() {
+        val thread = FakeThread()
+        val logged = mutableListOf<Throwable>()
+        val s = NativeCommandScheduler(thread.post, { thread.onThread }, onCompletionError = { logged.add(it) })
+        s.dispatch(NativeCommandKind.PLAY, { throw IllegalStateException("resolve failed") }, bumpSource = false, bumpTransport = true) {}
+        thread.runAll()
+        assertEquals(1, logged.size)
+        assertEquals(0, s.pendingCount)
     }
 
     @Test
     fun `settleAll 让所有排队命令收尾 且不会重复结算`() {
         val pending = PendingCommands()
         val results = mutableListOf<String>()
-        val a = PendingCommand(NativeCommandKind.PREPARE) { results.add("a:$it") }
-        val b = PendingCommand(NativeCommandKind.PLAY) { results.add("b:$it") }
+        val a = PendingCommand(NativeCommandKind.PREPARE, { results.add("a:$it") })
+        val b = PendingCommand(NativeCommandKind.PLAY, { results.add("b:$it") })
         pending.add(a)
         pending.add(b)
         b.settle(NativeCommandResult.Ok(2))

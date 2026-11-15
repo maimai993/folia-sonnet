@@ -67,6 +67,7 @@ object NativeCommandPolicy {
 class PendingCommand(
     val kind: NativeCommandKind,
     private val completion: NativeCommandCompletion?,
+    private val onCompletionError: (Throwable) -> Unit = {},
 ) {
     private val settled = AtomicBoolean(false)
 
@@ -77,8 +78,13 @@ class PendingCommand(
         if (!settled.compareAndSet(false, true)) return false
         try {
             completion?.invoke(result)
-        } catch (ignored: Throwable) {
-            // completion 里的失败（桥已销毁等）不能传回播放器线程；调用方自己负责记日志。
+        } catch (error: Throwable) {
+            // completion 里的失败（桥已销毁等）不能传回播放器线程，但也不能无痕：交给 onCompletionError 记日志。
+            try {
+                onCompletionError(error)
+            } catch (ignored: Throwable) {
+                // 记日志本身失败就没有更多办法了。
+            }
         }
         return true
     }
@@ -118,6 +124,7 @@ class NativeCommandScheduler(
     private val post: (Runnable) -> Boolean,
     private val onPlayerThread: () -> Boolean,
     private val onActionError: (Throwable) -> Unit = {},
+    private val onCompletionError: (Throwable) -> Unit = {},
 ) {
     private val sourceEpochCounter = AtomicLong(0L)
     private val transportEpochCounter = AtomicLong(0L)
@@ -156,7 +163,7 @@ class NativeCommandScheduler(
         callerSide: ((Long) -> Unit)? = null,
         action: () -> Unit,
     ) {
-        val command = PendingCommand(kind, completion)
+        val command = PendingCommand(kind, completion, onCompletionError)
         var capturedSource = 0L
         var capturedTransport = 0L
         var posted = false

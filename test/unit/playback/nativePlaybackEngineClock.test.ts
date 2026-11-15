@@ -253,7 +253,7 @@ describe('nativePlaybackEngine clock', () => {
 
     it('after adopting a snapshot only events of the adopted token are applied', () => {
         nativePlaybackEngine.adoptSnapshot({ songKey: 'B', sourceToken: 'n:t9', url: 'https://example.invalid/B', positionMs: 5000, durationMs: 90000, playing: false });
-        emit({ type: 'playing', songKey: 'B', sourceToken: 'n:t8', positionMs: 50_000, durationMs: 90000 });
+        emit({ type: 'playing', songKey: 'B', sourceToken: 'w:old.1', positionMs: 50_000, durationMs: 90000 });
         expect(nativePlaybackEngine.isPlaying()).toBe(false);
         emit({ type: 'playing', songKey: 'B', sourceToken: 'n:t9', positionMs: 5000, durationMs: 90000 });
         expect(nativePlaybackEngine.isPlaying()).toBe(true);
@@ -299,8 +299,43 @@ describe('nativePlaybackEngine clock', () => {
         expect(isStaleSourceEvent('w:a.1', 'w:a.1')).toBe(false);
         expect(isStaleSourceEvent('w:a.1', 'w:a.2')).toBe(true);
         expect(isStaleSourceEvent('n:t3', 'w:a.2')).toBe(false);
-        expect(isStaleSourceEvent('n:t3', 'n:t4')).toBe(true);
+        // 原生自己换源（含认领来的 n: 令牌之后再次重装同一首）：交给 songKey 过滤，不按令牌丢
+        expect(isStaleSourceEvent('n:t3', 'n:t4')).toBe(false);
+        // 旧的 Web 令牌（A→B→A 的 ABA）才是真正的旧事件
         expect(isStaleSourceEvent('w:a.1', 'n:t4')).toBe(true);
+    });
+
+    it('keeps accepting a native reload of the same song after the snapshot was adopted (n: after n:)', () => {
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'S', sourceToken: 'n:t1', url: 'https://example.invalid/S', positionMs: 1000, durationMs: 90000, playing: false });
+        nowMs = 500;
+        emit({ type: 'playing', songKey: 'S', sourceToken: 'n:t2', positionMs: 0, durationMs: 90000 });
+        expect(nativePlaybackEngine.isPlaying()).toBe(true);
+    });
+
+    it('does not overwrite a stall that the native player reported while play() was settling', async () => {
+        await nativePlaybackEngine.pause();
+        let releasePlay: (() => void) | undefined;
+        harness.nativePlayer.play.mockImplementationOnce(() => new Promise<undefined>(resolve => {
+            releasePlay = () => resolve(undefined);
+        }));
+        const playing = nativePlaybackEngine.play();
+        await vi.waitFor(() => expect(releasePlay).toBeDefined());
+        // 事件先于 play() 的延续到达：缓冲中
+        emit({ type: 'playing', positionMs: 3000, durationMs: 200_000 });
+        emit({ type: 'buffering', positionMs: 3000, durationMs: 200_000 });
+        releasePlay?.();
+        expect(await playing).toBe(true);
+        nowMs += 5000;
+        // stalled 没有被乐观写入改回 false：墙钟冻在 3 秒
+        expect(nativePlaybackEngine.getPositionSec()).toBeCloseTo(3, 5);
+    });
+
+    it('does not send a seek when nothing is loaded', async () => {
+        await nativePlaybackEngine.stop();
+        harness.nativePlayer.seek.mockClear();
+        emit({ type: 'idle', positionMs: 0, durationMs: 0 });
+        await nativePlaybackEngine.seek(5);
+        expect(harness.nativePlayer.seek).not.toHaveBeenCalled();
     });
 
     it('lets a pause that is superseded by a later play yield to the play', async () => {

@@ -16,6 +16,7 @@ import { refreshPrefetchAfterQueueEdit } from '../../../services/prefetchService
 import { currentTime, lyricCurrentTime } from '../../../stores/motionSignals';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { Album, Artist, PlayerState, SongResult, UnifiedSong } from '../../../types';
+import { errorFields } from '../../../utils/errorText';
 import { useVisualizerRendererModel } from '../../visualizer/useVisualizerRendererModel';
 import { readLiveLyricTime } from '../backgroundThrottling/backgroundLyricHoldStore';
 import { askForSong, showSong } from '../playback/currentSong';
@@ -205,7 +206,9 @@ export const useAppPlaybackActions = (model: Input) => {
          * 用户看到的就是「拖进度条歌词变了，曲还在沿原来的进度播」。
          */
         if (nativePlaybackEngine.ownsPlayback() || nativeTakesRef.current) {
-            void nativePlaybackEngine.seek(time);
+            void nativePlaybackEngine.seek(time).catch(error => {
+                console.warn('[Playback] Native seek failed', errorFields(error));
+            });
             void publishStagePlayerPlaybackUpdate();
             return;
         }
