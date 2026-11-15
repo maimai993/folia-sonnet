@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isBilibiliVipPromoWindow } from '../../../src/components/modal/BilibiliVipPromoModal';
+import { isBilibiliVipPromoWindow } from '../../../src/components/bilibili/BilibiliVipPromoModal';
 
 /*
  * 活动的窗口：系统本地时间 11 月 15 日 12:00 到 11 月 16 日 12:00。

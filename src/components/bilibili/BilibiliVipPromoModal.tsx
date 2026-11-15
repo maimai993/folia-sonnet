@@ -6,7 +6,7 @@ import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { openNativeUrl } from '../../platform/foliaNative';
 import type { Theme } from '../../types';
 
-// src/components/modal/BilibiliVipPromoModal.tsx
+// src/components/bilibili/BilibiliVipPromoModal.tsx
 //
 // 「BLG 夺冠 · 免费领大会员」的限时弹窗。
 //

@@ -137,7 +137,7 @@ interface FoliaNativePlugin {
      */
     showToast(options: { text: string; long?: boolean }): Promise<void>;
     /**
-     * 用系统 intent 打开地址（给 bilibili:// 这类自有 schema 用）。
+     * 用系统 intent 打开地址（给自有 schema 用）。
      *
      * 没装对应 App 且给了 `fallbackUrl` 时，原生侧改用浏览器打开那个地址，
      * 并在返回值里带 `fellBack: true`。
@@ -316,14 +316,9 @@ export const setSystemBarsAlwaysHidden = async (alwaysHidden: boolean): Promise<
 };
 
 /**
- * 用系统 intent 打开一个地址，主要给 `bilibili://` 这类自有 schema 用。
- *
- * 为什么不在 Web 层直接 `location.href = 'bilibili://...'`：主 WebView 的页面是
- * https://localhost，跳一个非 http(s) 的 schema 会被 WebView 当成未知协议默默丢掉，
- * 用户看到的就是点了没反应。原生这条路是确定能落到系统 intent 上的。
- *
- * `fallbackUrl`：没装那个 App 时改开这个（活动页 / 下载页）。返回最终打开的是哪一个。
- * 非 Android 一律返回 null —— 那里没有这套通道。
+ * 用系统 intent 打开地址，给自有 schema 用：WebView 的页面是 https://localhost，
+ * 直接跳非 http(s) 协议会被当成未知协议丢掉，点了没反应。
+ * `fallbackUrl` 是没装那个 App 时的去处。非 Android 返回 null。
  */
 export const openNativeUrl = async (
     url: string,
