@@ -182,12 +182,16 @@ const readTrackBytes = async (song: SongResult, key: string, representation: Pla
 const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> => {
     if (!isNativeModelsAvailable()) return null;
     if (getPlaybackSourceRef(song).kind !== 'online') return null;
-    const prefetched = getPrefetchedData(song);
-    const url = prefetched?.audioUrl;
-    if (!url || url === 'CACHED_IN_DB' || !isUrlValid(prefetched.audioUrlFetchedAt) || !/^https?:/.test(url)) return null;
     if (!(await hasNativeMediaCache())) return null;
     try {
         const cacheKey = getSongResourceCacheKey('audio', song);
+        // `CACHED_IN_DB` means the original URL was deliberately replaced after the bytes
+        // reached the native media cache; read the loopback URL before validating the sentinel.
+        const cachedUrl = await readNativeMediaCacheUrl(cacheKey);
+        if (cachedUrl) return cachedUrl;
+        const prefetched = getPrefetchedData(song);
+        const url = prefetched?.audioUrl;
+        if (!url || url === 'CACHED_IN_DB' || !isUrlValid(prefetched.audioUrlFetchedAt) || !/^https?:/.test(url)) return null;
         const stored = await cacheNativeMediaFromUrl(cacheKey, url, MAX_STREAM_CACHE_BYTES, song.durationMs);
         if (!stored) return null;
         return await readNativeMediaCacheUrl(cacheKey);
