@@ -52,14 +52,34 @@ describe('mix drum hits cache version', () => {
         stem.hits.times = Float64Array.from([0.1, 2]);
         const mix = analysis();
         mix.hits.times = Float64Array.from([5, 6]);
-        store.set(`${DRUM_HITS_PREFIX}song-c`, stem);
+        store.set(`${DRUM_HITS_PREFIX}stem2_song-c`, stem);
         store.set(`${DRUM_HITS_PREFIX}mix2_song-c`, mix);
         await loadStoredDrumHits('song-c');
         expect(getDrumHits('song-c')?.times[0]).toBeCloseTo(0.1, 5);
     });
 
-    it('keeps the old and new mix entries inside the analysis category, so cache usage and clearing still see them', () => {
-        expect(isDrumHitsKey(`${DRUM_HITS_PREFIX}mix_x`)).toBe(true);
-        expect(isDrumHitsKey(`${DRUM_HITS_PREFIX}mix2_x`)).toBe(true);
+    // 审查发现：Android 的鼓轨精修结果同样来自原生 drumBands，旧边界（hat 4000 Hz）算出的条目
+    // 写在 drum_hits_v1_<key> 下，而读取先命中它 —— 只升混音前缀救不了「已精修过」的歌。
+    it('ignores a drum-stem entry that was refined under the old 4000 Hz hat boundary', async () => {
+        const oldStem = analysis();
+        oldStem.hits.times = Float64Array.from([0.1, 2]);
+        const mix = analysis();
+        mix.hits.times = Float64Array.from([5, 6]);
+        store.set(`${DRUM_HITS_PREFIX}song-d`, oldStem); // 旧键：Android 不再读
+        store.set(`${DRUM_HITS_PREFIX}mix2_song-d`, mix);
+        await loadStoredDrumHits('song-d');
+        expect(getDrumHits('song-d')?.times[0]).toBeCloseTo(5, 5);
+    });
+
+    it('with no current entry at all the old stem and old mix entries answer nothing', async () => {
+        store.set(`${DRUM_HITS_PREFIX}song-e`, analysis());
+        store.set(`${DRUM_HITS_PREFIX}mix_song-e`, analysis());
+        expect(await loadStoredDrumHits('song-e')).toBeNull();
+    });
+
+    it('keeps every old and new entry inside the analysis category, so cache usage and clearing still see them', () => {
+        for (const prefix of ['mix_', 'mix2_', 'stem2_', '']) {
+            expect(isDrumHitsKey(`${DRUM_HITS_PREFIX}${prefix}x`)).toBe(true);
+        }
     });
 });

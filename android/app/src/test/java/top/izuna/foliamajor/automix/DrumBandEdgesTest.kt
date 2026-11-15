@@ -12,7 +12,10 @@ import org.junit.Test
 
 class DrumBandEdgesTest {
 
-    private val centres = DrumBandEdges.melBandCentres(128, 30.0, 11000.0)
+    // 用 BeatThisRunner 真正喂模型的那组常量：它的 N_MELS / F_MIN / F_MAX 一改，这里的数值对账就红。
+    private val centres = DrumBandEdges.melBandCentres(
+        BeatThisRunner.N_MELS, BeatThisRunner.F_MIN, BeatThisRunner.F_MAX,
+    )
 
     private fun band(kind: Int) = DrumBandEdges.pickBands(centres, kind)
 

@@ -7,7 +7,6 @@ import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.cos
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -37,9 +36,9 @@ object BeatThisRunner {
     const val SAMPLE_RATE = 22050
     private const val N_FFT = 1024
     private const val HOP = 441
-    private const val N_MELS = 128
-    private const val F_MIN = 30.0
-    private const val F_MAX = 11000.0
+    const val N_MELS = 128
+    const val F_MIN = 30.0
+    const val F_MAX = 11000.0
     private const val LOG_MULTIPLIER = 1000.0
     private const val AMIN = 1e-10
 
@@ -254,18 +253,11 @@ object BeatThisRunner {
     private var filterbank: Array<MelBand>? = null
     private var hann: FloatArray? = null
 
-    private fun hzToMel(hz: Double): Double {
-        val fSp = 200.0 / 3.0
-        if (hz < 1000.0) return hz / fSp
-        return 1000.0 / fSp + ln(hz / 1000.0) / (ln(6.4) / 27.0)
-    }
+    // Slaney mel 的两个换算只留一份（DrumBandEdges，JVM 单测与 Web 的 melBandCentresHz 逐点对账）：
+    // 滤波器组与鼓点频带归属用的是同一套公式，不会各改各的而悄悄漂移。
+    private fun hzToMel(hz: Double): Double = DrumBandEdges.hzToMel(hz)
 
-    private fun melToHz(mel: Double): Double {
-        val fSp = 200.0 / 3.0
-        val minLogMel = 1000.0 / fSp
-        if (mel < minLogMel) return fSp * mel
-        return 1000.0 * exp((ln(6.4) / 27.0) * (mel - minLogMel))
-    }
+    private fun melToHz(mel: Double): Double = DrumBandEdges.melToHz(mel)
 
     private fun buildFilterbank(): Array<MelBand> {
         val bins = N_FFT / 2 + 1

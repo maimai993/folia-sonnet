@@ -483,6 +483,19 @@ const stopForLater = async (
  * 升到 `mix2_`：旧条目仍以 `drum_hits_v1_` 开头，用量统计与「清除缓存」照常管得到，只是不再被读取。
  */
 const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix2_`;
+/** 旧边界（hat 4000 Hz）算出的混音缓存前缀：不再读，只在这首歌写入新缓存时顺手清掉。 */
+const LEGACY_MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix_`;
+/**
+ * Android 上 SCNet 鼓轨精修（`refineDrumHitsWithStem`）的缓存前缀，同样**按频带边界分版本**。
+ *
+ * 精修的频带也来自原生 `BeatThisRunner.drumBands`，旧边界（hat 4000 Hz）算出的条目写在
+ * `drum_hits_v1_<key>` 下，而读取总是先命中它，只升混音前缀救不了这批歌（#344）。
+ * 桌面（htdemucs 真分轨）的 `drum_hits_v1_<key>` 与边界无关，**不动**，免得触发桌面重算。
+ */
+const ANDROID_STEM_HITS_PREFIX = `${DRUM_HITS_PREFIX}stem2_`;
+/** 真分轨那份鼓点的缓存键：Android 的精修结果带频带版本，桌面沿用原键。 */
+const stemHitsKey = (key: string): string =>
+    (usesMixBands() ? `${ANDROID_STEM_HITS_PREFIX}${key}` : `${DRUM_HITS_PREFIX}${key}`);
 /** 每读这么多秒，重挑一次 hits 交出去（见上面：第一个 10 秒半秒内就到手）。 */
 const MIX_CHUNK_SECONDS = 10;
 
@@ -524,6 +537,8 @@ const loadMixDrumHits = async (
             };
             remember(key, analysis, `native bands in ${((performance.now() - started) / 1000).toFixed(1)}s (${native.seconds.toFixed(1)}s of audio)`);
             await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+            // 旧边界（hat 4000 Hz）的混音缓存不再读：这首歌有了新的，顺手清掉旧的，不让它永久占着空间。
+            void removeFromCache(`${LEGACY_MIX_HITS_PREFIX}${key}`).catch(() => undefined);
             // 混音这份已经能播了：后台把鼓轨分离出来，一块一块换成更准的。
             void refineDrumHitsWithStem(key, nativeUrl);
             return analysis;
@@ -614,6 +629,7 @@ const loadMixDrumHits = async (
     };
     remember(key, analysis, `mix bands in ${((performance.now() - started) / 1000).toFixed(1)}s`);
     await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+    void removeFromCache(`${LEGACY_MIX_HITS_PREFIX}${key}`).catch(() => undefined);
     return analysis;
 };
 
@@ -698,7 +714,7 @@ const refineDrumHitsWithStem = (key: string, url: string, startFrom = 0): Promis
                 // 每 30 秒落一次盘：切歌或退出之后，下次从这里接着分离。
                 if (until - lastSaved >= PARTIAL_SAVE_SECONDS) {
                     lastSaved = until;
-                    void saveToCache(`${DRUM_HITS_PREFIX}${key}`, {
+                    void saveToCache(stemHitsKey(key), {
                         hits: { ...hits, until },
                         drumEnergy: Float32Array.of(1),
                         mixEnergy: Float32Array.of(1),
@@ -715,12 +731,13 @@ const refineDrumHitsWithStem = (key: string, url: string, startFrom = 0): Promis
             mixEnergy: Float32Array.of(1),
         };
         remember(key, analysis, `separated drums in ${((performance.now() - started) / 1000).toFixed(1)}s`);
-        await saveToCache(`${DRUM_HITS_PREFIX}${key}`, analysis);
+        await saveToCache(stemHitsKey(key), analysis);
         /*
          * 真鼓轨那份已经完整，混音那份就是次好的了：删掉，免得下次先命中它。
          * 删失败也无所谓 —— 读取时会先看真分轨这一份。
          */
         void removeFromCache(`${MIX_HITS_PREFIX}${key}`).catch(() => undefined);
+        void removeFromCache(`${LEGACY_MIX_HITS_PREFIX}${key}`).catch(() => undefined);
     })().catch((error) => {
         console.warn(`[DrumHits] ${key}: drum stem refinement failed`, error);
     });
@@ -770,7 +787,7 @@ const readStoredAnalysis = async (
     key: string,
 ): Promise<{ analysis: DrumAnalysis; fromStems: boolean } | null> => {
     const keys: Array<[string, boolean]> = usesMixBands()
-        ? [[`${DRUM_HITS_PREFIX}${key}`, true], [`${MIX_HITS_PREFIX}${key}`, false]]
+        ? [[stemHitsKey(key), true], [`${MIX_HITS_PREFIX}${key}`, false]]
         : [[`${DRUM_HITS_PREFIX}${key}`, true]];
     for (const [cacheKey, fromStems] of keys) {
         const stored = await getFromCache<DrumAnalysis>(cacheKey);
