@@ -1045,12 +1045,27 @@ class MusicGateway private constructor() {
          */
         @JvmStatic
         fun headersForPlaybackUrl(url: String?): Map<String, String> {
+            if (url != null) {
+                // 视频站的 CDN 有防盗链：不带宽带的 Referer 与 Origin 一律回 403。
+                // 播放器那边是 <video> / ExoPlayer，都不会自己带，所以按地址补上。
+                if (isVideoCdnUrl(url)) {
+                    val headers = HashMap<String, String>()
+                    headers["Referer"] = "https://www.bilibili.com/"
+                    headers["Origin"] = "https://www.bilibili.com"
+                    return headers
+                }
+            }
             val creds = feiniuCreds
             if (creds == null || url == null || !url.startsWith(creds.serverUrl)) {
                 return Collections.emptyMap()
             }
             return Collections.singletonMap("Cookie", feiniuCookieValue(creds))
         }
+
+        /** 这个地址是不是那个视频站的取流 CDN（防盗链只认 Referer，别的都不用带）。 */
+        private fun isVideoCdnUrl(url: String): Boolean =
+            url.contains("bilivideo.com") || url.contains("bilivideo.cn") ||
+                url.contains("akamaized.net") && url.contains("bilivideo")
 
         // ==================== 网易云（weapi 直连） ====================
 

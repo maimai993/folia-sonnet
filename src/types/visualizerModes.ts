@@ -13,7 +13,7 @@ import type { VisualizerBackgroundMode, VisualizerMode } from '../types';
 // 悄悄少两个。
 
 export const BUILTIN_VISUALIZER_MODES = [
-    'bilibili',
+    'blank',
     'cadenza',
     'cappella',
     'claddagh',
@@ -39,6 +39,7 @@ export const BUILTIN_VISUALIZER_BACKGROUND_MODES = [
     'common',
     'latent',
     'monet',
+    'mv',
     'nomand',
     'particles',
     'sonic',

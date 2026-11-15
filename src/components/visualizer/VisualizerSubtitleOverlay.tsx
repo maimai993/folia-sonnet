@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Line, SubtitleOverlayLayout, SubtitleOverlayRowSource, Theme } from '../../types';
 import { resolveThemeFontWeight, resolveThemeTranslationFontStack } from '../../utils/fontStacks';
 import { resolveLyricAlternateText } from '../../utils/lyrics/alternateText';
+import { stripInjectPrefix, useVideoLayerSettingsStore } from '../../stores/useVideoLayerSettingsStore';
 import {
     DEFAULT_SUBTITLE_OVERLAY_LAYOUT,
     getSubtitleOverlayRows,
@@ -126,7 +127,18 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
 }) => {
     // 底栏布局全部收在这个 hook 里：它自己判断当前是不是播放页那棵树，
     // 预览和 OBS 走默认值，不受播放页的偏移量和隐藏开关影响。
-    const subtitleBottomPx = usePlayerSubtitleBottomPx(Boolean(isPlayerChromeHidden));
+    const sharedSubtitleBottomPx = usePlayerSubtitleBottomPx(Boolean(isPlayerChromeHidden));
+    /*
+     * 视频（平台 MV 的「大荧幕」、用户自定义背景）在放的时候，字幕别跟到底栏抬升里去：
+     * 底栏基线一旦被拖高，字幕就跟着升进视频画面里 —— 用户看到的就是「字幕叠在荧幕中间」。
+     * 视频激活时把字幕钉在贴近底部的一条固定线上（64px），永远在画面之外；
+     * 视频层没开时一切照旧（跟基线、跟控制条出没）。
+     */
+    const injectedActive = useVideoLayerSettingsStore(state =>
+        Boolean(stripInjectPrefix(state.injectedUrl))
+        || Boolean(state.localFileUrl)
+        || (state.videoLayerEnabled && Boolean(state.videoLayerUrl)));
+    const subtitleBottomPx = injectedActive ? undefined : sharedSubtitleBottomPx;
     // 「界面收起时字幕一起收」（界面设置的开关，挂在「点击空白处隐藏界面」下面）。
     // 两个排除，都是同一件事「这不是用户在歌词页上主动收起的那一次」：
     // - 只在 App 播放页那棵树生效。预览、Theme Park 和 OBS 浏览器源渲染的是同一个组件，
@@ -182,7 +194,8 @@ const VisualizerSubtitleOverlay: React.FC<VisualizerSubtitleOverlayProps> = ({
                     }}
                     // bottom 由共享 MotionValue 直接驱动，跟着底部基线走。
                     // 不要改回 transform：这一层下面压着 blur 辉光，多一个合成层就会变色。
-                    style={{ bottom: subtitleBottomPx }}
+                    // 视频（MV / 自定义背景）激活时改钉固定线：不跟底栏基线抬升，永远在画面之外。
+                    style={{ bottom: injectedActive ? 64 : subtitleBottomPx }}
                     className="absolute left-0 right-0 text-center space-y-2 px-4 z-20 pointer-events-none"
                 >
                     {rows.length > 0 ? (

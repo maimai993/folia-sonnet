@@ -37,6 +37,7 @@ export const PLATFORM_NAMES = {
     fnmusic: /fnmusic|飞牛/i,
     feiniu: /feiniu/i,
     lxmusic: /lxmusic|洛雪/i,
+    bilibili: /bilibili|b 站|b站/i,
 } as const;
 
 export type CountedPlatform = keyof typeof PLATFORM_NAMES;

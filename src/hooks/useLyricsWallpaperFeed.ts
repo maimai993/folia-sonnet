@@ -322,7 +322,13 @@ export const useLyricsWallpaperFeed = ({
         }
     }, [theme]);
     const feedEnabled = useVisualizerSettingsStore(state => state.lyricsWallpaperFeed);
-    const backgroundMode = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    const backgroundModeRaw = useVisualizerSettingsStore(state => state.lyricsWallpaperBackground);
+    /*
+     * 「MV」不是壁纸原生会画的底：MV 的画面是播放页那一层（BilibiliMvLayer）的事，
+     * 壁纸端只认 cover/color/image/video。选了 MV 时壁纸用模糊封面打底，
+     * 播放页里 MV 层自己铺上去 —— 两边各画各的，谁也不挡谁。
+     */
+    const backgroundMode = backgroundModeRaw === 'mv' ? 'cover' : backgroundModeRaw;
     const backgroundImage = useVisualizerSettingsStore(state => state.lyricsWallpaperImage);
     const backgroundBlur = useVisualizerSettingsStore(state => state.lyricsWallpaperBlur);
     const showProgress = useVisualizerSettingsStore(state => state.lyricsWallpaperProgress);

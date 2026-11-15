@@ -46,6 +46,10 @@ const API_HOSTS = [
   // 走原生桥取回字节就没有同源问题了。
   'y.gtimg.cn',
   'kgimg.com',
+  // B 站的图床：封面按热点封来源，WebView 的 <img> 直连隔三差五 403（探索页、歌单、
+  // 番剧季的封面都在这主机上）。进桥接名单后 fetch 走原生 OkHttp（能带 B 站 Referer），
+  // coverCache 先把字节存进缓存，之后展示走本地 object URL，403 就见不到了。
+  'hdslb.com',
 ];
 
 type NativePlugin = {

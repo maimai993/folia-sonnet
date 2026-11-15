@@ -27,6 +27,9 @@ interface ControlsTabProps {
     onGenerateAITheme: () => void;
     isGeneratingTheme: boolean;
     canGenerateAITheme: boolean;
+    /** 「匹配 MV」：给当前这首歌重找一条 B 站画面，匹配后从头放。 */
+    onRematchMv: () => void;
+    isRematchingMv: boolean;
     theme: Theme;
     onThemeChange: (theme: Theme) => void;
     onBgModeChange: (mode: ThemeMode) => void;
@@ -57,6 +60,8 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
     onGenerateAITheme,
     isGeneratingTheme,
     canGenerateAITheme,
+    onRematchMv,
+    isRematchingMv,
     theme,
     onThemeChange,
     onBgModeChange,
@@ -116,6 +121,8 @@ const ControlsTab: React.FC<ControlsTabProps> = ({
                 onGenerateAITheme={onGenerateAITheme}
                 isGeneratingTheme={isGeneratingTheme}
                 canGenerateAITheme={canGenerateAITheme}
+                onRematchMv={onRematchMv}
+                isRematchingMv={isRematchingMv}
                 isDaylight={isDaylight}
                 onToggleDaylight={onToggleDaylight}
             />

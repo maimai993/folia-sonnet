@@ -33,6 +33,7 @@ import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { selectLibraryPlayerBackdrop, useLibraryPlayerOcclusionStore } from '../../stores/useLibraryPlayerOcclusionStore';
 import { resolveVisualizerShowText } from '../app/presentation/playerVisualizerBackdrop';
 import { useBackgroundLyricHoldStore } from '../app/backgroundThrottling/backgroundLyricHoldStore';
+import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
 
 // src/components/visualizer/useVisualizerRendererModel.ts
 //
@@ -162,6 +163,9 @@ export const useVisualizerRendererModel = ({
         songArtist,
         songAlbum,
         coverUrl: displayCoverUrl,
+        // 歌词一直画。曾经有个「MV 时只留视频」的开关会把它关掉，但那件事现在由
+        // 「强制 MV」这一款背景自己表达 —— 想要只有画面的视频，选那一款就行，
+        // 不必再单独记一个和背景打架的开关。
         showText: resolveVisualizerShowText({ currentView, isSettingsModalOpen, isPanelOpen, backdropLyrics }),
         seed,
         songHandoff,

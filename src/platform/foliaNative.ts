@@ -137,6 +137,13 @@ interface FoliaNativePlugin {
      */
     showToast(options: { text: string; long?: boolean }): Promise<void>;
     /**
+     * 用系统 intent 打开地址（给自有 schema 用）。
+     *
+     * 没装对应 App 且给了 `fallbackUrl` 时，原生侧改用浏览器打开那个地址，
+     * 并在返回值里带 `fellBack: true`。
+     */
+    openUrl(options: { url: string; fallbackUrl?: string }): Promise<{ opened: string; fellBack?: boolean }>;
+    /**
      * 弹一条**自己画**的悬浮提示条，样子照 Web 层那条提示，贴屏幕下边。
      *
      * 与 `showToast` 的区别：系统 Toast 从 Android 11 起后台只给纯文本，画不出我们想要
@@ -305,6 +312,28 @@ export const setSystemBarsAlwaysHidden = async (alwaysHidden: boolean): Promise<
         await FoliaNative.setSystemBarsPolicy({ alwaysHidden });
     } catch {
         // 桌面端 / 插件不可用：静默，系统栏怎么显不该影响其它功能。
+    }
+};
+
+/**
+ * 用系统 intent 打开地址，给自有 schema 用：WebView 的页面是 https://localhost，
+ * 直接跳非 http(s) 协议会被当成未知协议丢掉，点了没反应。
+ * `fallbackUrl` 是没装那个 App 时的去处。非 Android 返回 null。
+ */
+export const openNativeUrl = async (
+    url: string,
+    fallbackUrl?: string,
+): Promise<{ opened: string; fellBack: boolean } | null> => {
+    if (!isCapacitorAndroid() || !url) return null;
+    try {
+        const result = await FoliaNative.openUrl({
+            url,
+            ...(fallbackUrl ? { fallbackUrl } : {}),
+        }) as { opened?: string; fellBack?: boolean };
+        return { opened: result.opened ?? url, fellBack: Boolean(result.fellBack) };
+    } catch (error) {
+        console.warn('[FoliaNative] openUrl failed', error);
+        return null;
     }
 };
 
@@ -701,15 +730,31 @@ interface FoliaBilibiliPlugin {
     request(options: {
         url: string;
         headers?: Record<string, string>;
-    }): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }>;
+        /** 停在第一跳不跟随 3xx：扫码登录换 cookie 要读 302 自己的 Set-Cookie。 */
+        noRedirect?: boolean;
+        /** 写接口（改签名等）：表单编码的 POST。 */
+        method?: 'POST';
+        form?: Record<string, string>;
+    }): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }>;
     /** 当前登录态：有没有 SESSDATA、uid 是谁。不回 cookie 本身。 */
     authStatus(): Promise<{ signedIn: boolean; uid: string }>;
+    /**
+     * 把一条流挂到本机中转上，回一个可直接播放的地址。
+     *
+     * `urls` 是候选地址（主地址在前）：中转按顺序试，一台回 403 就换下一台。
+     */
+    proxyStream(options: {
+        urls: string[];
+        headers?: Record<string, string>;
+    }): Promise<{ url: string | null }>;
     /**
      * 把扫码登录拿到的 cookie 落进原生 CookieManager。
      *
      * 之后所有 request 都会自动带上 —— 插件自己不发登录请求，也不持有凭据。
      */
     setCookies(options: { cookie: string }): Promise<{ ok: boolean }>;
+    /** csrf（bili_jct）：写接口的表单字段，不是凭据。 */
+    csrfToken(): Promise<{ csrf: string }>;
     clearCookies(): Promise<{ ok: boolean }>;
 }
 
@@ -726,15 +771,43 @@ export const isBilibiliNativeAvailable = (): boolean => (
  * 回 `{ ok, status, bodyText }`：`ok` 只表示 HTTP 通不通，业务码（code）由调用方解析。
  * 这样「bilibili 说没有这条视频」和「网络断了」在 JS 那边分得开。
  */
+/**
+ * 把一条流挂到原生中转上，回本机地址（`http://127.0.0.1:<port>/stream/<token>`）。
+ *
+ * `urls` 是同一个流的候选地址，主地址在前：中转会按顺序试，一台回 403 就换下一台。
+ * 起不来就回空串，调用方退回直连。
+ */
+export const proxyBilibiliNative = async (
+    urls: string[],
+    headers?: Record<string, string>,
+): Promise<string> => {
+    if (!isBilibiliNativeAvailable()) return '';
+    try {
+        const result = await FoliaBilibili.proxyStream({ urls, headers });
+        return result?.url ?? '';
+    } catch {
+        return '';
+    }
+};
+
 export const requestBilibiliNative = async (
     url: string,
     headers?: Record<string, string>,
-): Promise<{ ok: boolean; status: number; bodyText: string; setCookies?: string[] }> => {
+    /** 停在第一跳不跟随 3xx：扫码登录那一步要读 302 自己的 Set-Cookie。 */
+    noRedirect?: boolean,
+    /** 写接口（改签名等）用的方法 / 表单。不传就是 GET。 */
+    write?: { method: 'POST'; form: Record<string, string> },
+): Promise<{ ok: boolean; status: number; bodyText: string; bodyBase64?: string; contentType?: string; setCookies?: string[] }> => {
     if (!isBilibiliNativeAvailable()) {
         return { ok: false, status: 0, bodyText: '' };
     }
     try {
-        const result = await FoliaBilibili.request({ url, headers });
+        const result = await FoliaBilibili.request({
+            url,
+            headers,
+            noRedirect: noRedirect === true,
+            ...(write ? { method: write.method, form: write.form } : {}),
+        });
         if (result && typeof result === 'object' && 'status' in result) return result;
         return { ok: false, status: 0, bodyText: '' };
     } catch (error) {
@@ -753,6 +826,18 @@ export const readBilibiliAuthNative = async (): Promise<{ signedIn: boolean; uid
     } catch (error) {
         console.warn('[FoliaBilibili] authStatus failed', error);
         return { signedIn: false, uid: '' };
+    }
+};
+
+/** csrf（bili_jct）：写接口（改签名等）的表单字段。没登录就是空串。 */
+export const readBilibiliCsrfNative = async (): Promise<string> => {
+    if (!isBilibiliNativeAvailable()) return '';
+    try {
+        const bridge = FoliaBilibili as unknown as { csrfToken?: () => Promise<{ csrf?: string }> };
+        const result = await bridge.csrfToken?.();
+        return result?.csrf ?? '';
+    } catch {
+        return '';
     }
 };
 

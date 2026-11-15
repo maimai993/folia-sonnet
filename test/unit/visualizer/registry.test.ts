@@ -24,7 +24,6 @@ describe('visualizer registry', () => {
             'lumiere',
             'hanabi',
             'machi',
-            'bilibili',
             'nebbia',
             'classic',
             'cadenza',
@@ -38,6 +37,10 @@ describe('visualizer registry', () => {
             'cappella',
             'diorama',
             'still',
+            // 「不要歌词」也是一个样式，order 900 排在最后。
+            // （以前它后面还跟着一个「只看画面 / MV」样式，order 901；那个样式已经删了 ——
+            //   MV 现在只是背景开关「mv」，见 BUILTIN_VISUALIZER_BACKGROUND_MODES。）
+            'blank',
         ]);
     });
 
