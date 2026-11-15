@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { Gift, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, Checkbox } from '../ui';
 import { useThemeSettingsStore } from '../../stores/useThemeSettingsStore';
 import { openNativeUrl } from '../../platform/foliaNative';
 import type { Theme } from '../../types';
@@ -76,6 +77,13 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
      * 关窗和勾选是两件事 —— 只关窗只是这一次不看了，下次进来（或重新打开）还会提醒。
      */
     const [dontRemind, setDontRemind] = useState(false);
+    /*
+     * 这次挂载里已经被关掉了。
+     *
+     * 没有它的话，每秒分钟那次 sync 会在关窗之后又把 isOpen 重新算成 true ——
+     * 用户点掉一个弹窗，一分钟后它自己又冒出来，这是最招人烦的那种 bug。
+     */
+    const closedThisMount = useRef(false);
 
     /*
      * 窗口按「每次挂载 + 每分钟」重算。
@@ -84,7 +92,9 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
      * 那一次挂载早就过去了。一分钟一次足够，也不是什么贵的东西。
      */
     useEffect(() => {
-        const sync = () => setIsOpen(isBilibiliVipPromoWindow() && !wasDismissed());
+        const sync = () => setIsOpen(
+            !closedThisMount.current && isBilibiliVipPromoWindow() && !wasDismissed(),
+        );
         sync();
         const timer = window.setInterval(sync, 60_000);
         return () => window.clearInterval(timer);
@@ -95,6 +105,7 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
      * 下次进 App（或这个组件重新挂出来）还会照常提醒。
      */
     const close = useCallback(() => {
+        closedThisMount.current = true;
         if (dontRemind) rememberDismissed();
         setIsOpen(false);
     }, [dontRemind]);
@@ -131,14 +142,13 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
                         }`}
                         onClick={event => event.stopPropagation()}
                     >
-                        <button
-                            type="button"
+                        <Button
                             onClick={close}
                             aria-label="关闭"
                             className="ml-auto flex h-8 w-8 items-center justify-center rounded-full opacity-50 transition-opacity hover:opacity-100"
                         >
                             <X size={16} aria-hidden="true" />
-                        </button>
+                        </Button>
 
                         <span
                             className="mx-auto -mt-2 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-current/5"
@@ -154,8 +164,7 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
                             恭喜 BLG 夺冠！限时赠送大会员，点下面的按钮去哔哩哔哩领取。
                         </p>
 
-                        <button
-                            type="button"
+                        <Button
                             data-testid="bilibili-vip-promo-open"
                             onClick={openApp}
                             className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white transition-transform active:scale-95"
@@ -163,7 +172,7 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
                         >
                             <Gift size={17} aria-hidden="true" />
                             免费 bili 大会员
-                        </button>
+                        </Button>
 
                         <div className="mt-4 flex items-center justify-between gap-3">
                             {/*
@@ -172,8 +181,7 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
                              * 用真的 checkbox（不是纯文字按钮），点标签也能切换。
                              */}
                             <label className="flex cursor-pointer items-center gap-2 text-xs opacity-60">
-                                <input
-                                    type="checkbox"
+                                <Checkbox
                                     data-testid="bilibili-vip-promo-dont-remind"
                                     checked={dontRemind}
                                     onChange={event => setDontRemind(event.target.checked)}
@@ -181,13 +189,12 @@ export const BilibiliVipPromoModal: React.FC<{ theme?: Theme | null }> = ({ them
                                 />
                                 不再提示
                             </label>
-                            <button
-                                type="button"
+                            <Button
                                 onClick={close}
                                 className="text-xs opacity-45 transition-opacity hover:opacity-70"
                             >
                                 以后再说
-                            </button>
+                            </Button>
                         </div>
                     </motion.div>
                 </motion.div>
