@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { MotionValue } from 'framer-motion';
 import type { AudioBands, Line, LyricRenderQuality, Theme } from '../../../types';
 import { getDrumHits, type DrumHits } from '../../../services/analysis/drumHits';
+import { readEffectTrack } from '../../../services/beatFx/effectTracks';
 import { BEAT_EFFECT_IDS, smartBeatActive } from '../../../services/beatFx/beatEffects';
 import {
     getBeatEffectStrength,
@@ -956,6 +957,16 @@ export class MachiRuntime {
         // 光斑的一跳只在干的地面上（湿的地面上是涟漪）。
         beat.thump = resolveMachiDrumRipples(hits, time, rippleStrength, this.kickRings) * (1 - machiRippleWetness(this.environment.wetness));
         resolveMachiScreenFlash(hits, time, flashStrength, beat);
+        /*
+         * 霓虹泛光：不吃拍点、只吃人声曲线 —— 这一套整个画面是霓虹招牌，唱到高处时
+         * 招牌本身更亮、雾里的灯晕更散，用的就是 frame 里本来就有的 bloom / neon 倍数。
+         */
+        const neonGlowStrength = idle ? 0 : getBeatEffectStrength(BEAT_EFFECT_IDS.machiNeonGlow);
+        if (neonGlowStrength > 0) {
+            const glow = Math.min(1, readEffectTrack(BEAT_EFFECT_IDS.machiNeonGlow) * 1.6) * 0.6 * neonGlowStrength;
+            beat.bloom += glow;
+            beat.neon += glow * 0.5;
+        }
         this.ground.setKicks(focus.x, focus.z, this.kickRings);
         return beat;
     }

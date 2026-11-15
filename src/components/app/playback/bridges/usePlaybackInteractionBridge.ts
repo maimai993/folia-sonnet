@@ -189,24 +189,31 @@ export function usePlaybackInteractionBridge({
             return;
         }
 
-        if (isTransitionAudible?.()) {
-            pausePlayback();
-            return;
-        }
-
-        // 原生播放（P1）：下面的 `audioRef.current.paused` 这时候恒为 true（元素是空的），
-        // 照它判就变成「按播放键只会一直开始播放，永远按不停」。
-        //
-        // 也不能只看 `playerState`：切歌后它有一小段是 IDLE / 还在追旧状态，而原生那边
-        // 已经接受播放意图、开始出声了（`nativePlaybackEngine.play()` 先记 playing，事件
-        // 晚一点才回）。那一小段里按暂停会被当成「开始播放」，也就是切歌后的前几秒双击
-        // 暂停没反应。两个都看：任一说在播，这一下就是暂停。
-        if (nativeTakesRef?.current) {
+        /*
+         * 原生播放（P1）：下面的 `audioRef.current.paused` 这时候恒为 true（元素是空的），
+         * 照它判就变成「按播放键只会一直开始播放，永远按不停」。
+         *
+         * 也不能只看 `playerState`：切歌后它有一小段是 IDLE / 还在追旧状态，而原生那边
+         * 已经接受播放意图、开始出声了（`nativePlaybackEngine.play()` 先记 playing，事件
+         * 晚一点才回）。那一小段里按暂停会被当成「开始播放」，也就是切歌后的前几秒双击
+         * 暂停没反应。两个都看：任一说在播，这一下就是暂停。
+         *
+         * 判据里加上 ownsPlayback()：通知栏 / 锁屏先把播放拉起来、或认领还没跑完时
+         * nativeTakesRef 仍是 false，此时按按钮会落到下面那块空 <audio> 上 —— 用户看到
+         * 的就是「暂停和播放按钮按了没反应」。这一段也必须排在 isTransitionAudible 之前：
+         * 原生路由下 automix 仍可能自认在一次过渡里，抢走这一下就只 pause 了 Web deck。
+         */
+        if (nativeTakesRef?.current || nativePlaybackEngine.ownsPlayback()) {
             if (shouldPauseNativePlayback(playerState, nativePlaybackEngine.isPlaying())) {
                 pausePlayback();
             } else {
                 startPlaybackFromInteraction();
             }
+            return;
+        }
+
+        if (isTransitionAudible?.()) {
+            pausePlayback();
             return;
         }
 

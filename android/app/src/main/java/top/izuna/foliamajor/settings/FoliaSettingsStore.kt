@@ -139,7 +139,8 @@ class FoliaSettingsStore private constructor(context: Context) {
             "eq.effects": "",
             "audioQuality": "high",
             "preventSleep": false,
-            "deviceType": "phone"
+            "deviceType": "phone",
+            "prebuildTracks": false
         }
         """.trimIndent()
 

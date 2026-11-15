@@ -5692,7 +5692,7 @@
       "count": 1
     },
     "@stylistic/indent": {
-      "count": 207
+      "count": 232
     },
     "@typescript-eslint/no-deprecated": {
       "count": 1
@@ -10634,7 +10634,7 @@
   },
   "src/services/prefetchService.ts": {
     "@stylistic/indent": {
-      "count": 7
+      "count": 9
     },
     "@typescript-eslint/consistent-type-imports": {
       "count": 1
@@ -10670,7 +10670,7 @@
   },
   "src/services/repositories/cacheUsage.ts": {
     "@stylistic/indent": {
-      "count": 50
+      "count": 55
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 2

@@ -303,7 +303,12 @@ describe('listModes', () => {
         expect(sonnet.tuning.showGuide).toEqual({ type: 'boolean', defaultValue: true });
         expect(sonnet.tuning).not.toHaveProperty('render');
         expect(sonnet.tuning).not.toHaveProperty('textureResolution');
-        expect(sonnet.beatEffects).toEqual([{ id: 'sonnet.lensTear', mode: 'sonnet', label: expect.any(String), source: 'beats', parts: [] }]);
+        // 商籁退回最开始：只有「镜头撕裂」这一条拍点效果，它走 beatImpact 原生推镜震动。
+        // 曾经本地加过的「镜头色调」(sonnet.lensTone，分轨曲线) 已随三样式一起退回，
+        // 不再往商籁上叠新的智能动感效果。
+        expect(sonnet.beatEffects).toEqual([
+            { id: 'sonnet.lensTear', mode: 'sonnet', label: expect.any(String), source: 'beats', parts: [] },
+        ]);
         const nebbia = modes.find((mode) => mode.id === 'nebbia')!;
         expect(nebbia.beatEffects[0]).toMatchObject({ id: 'nebbia.drizzleRide', source: 'stems', parts: [{ key: 'rain' }, { key: 'bump' }] });
         // A mode with no options of its own offers no keys; one with no beat effects none of those.

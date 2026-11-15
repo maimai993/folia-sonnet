@@ -5,6 +5,7 @@ import { cycleValue, QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { MonetSettingsPanel } from './MonetSettingsPanel';
 import { resolveMonetChromeVisibility } from './tuning';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const CHROME_VISIBILITY_LABEL_KEYS: Record<MonetChromeVisibility, string> = {
     auto: 'options.monetChromeVisibilityAuto',
@@ -18,6 +19,21 @@ const VisualizerMonet = React.lazy(() => import('./VisualizerMonet'));
 // Registers the Monet poster visualizer and its mode-owned settings panel.
 export default defineVisualizer({
     mode: 'monet',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.monetBrushBloom,
+            nameKey: 'options.beatEffect_monetBrushBloom',
+            descKey: 'options.beatEffect_monetBrushBloomDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.monetKeyGlow,
+            nameKey: 'options.beatEffect_monetKeyGlow',
+            descKey: 'options.beatEffect_monetKeyGlowDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 90,
     labelKey: 'ui.visualizerMonet',
     labelFallback: 'Monet',

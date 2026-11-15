@@ -9,6 +9,9 @@ const VisualizerPrompt = React.lazy(() => import('./VisualizerPrompt'));
 
 export default defineVisualizer({
     mode: 'prompt',
+    // 提示词是纯文字动画画面，按分组定稿①「完全不做智能动感」：不声明任何效果，
+    // 设置里不出现这一组，也不为它跑分析。运行时里两条按旧轨道读的 lift 保持代码
+    // 不动 —— 信号层对 prompt.* 恒 0，画面自然保持原样。
     order: 11,
     labelKey: 'ui.visualizerPrompt',
     labelFallback: '提示词',
