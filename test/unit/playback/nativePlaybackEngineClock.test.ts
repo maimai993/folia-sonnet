@@ -185,6 +185,36 @@ describe('nativePlaybackEngine clock', () => {
         expect(nativePlaybackEngine.getDurationSec()).toBe(90);
     });
 
+    it('invalidates an in-flight play when adopting a new snapshot', async () => {
+        let releasePlay: (() => void) | undefined;
+        harness.nativePlayer.play.mockImplementationOnce(() => new Promise<undefined>(resolve => {
+            releasePlay = () => resolve(undefined);
+        }));
+        const pendingPlay = nativePlaybackEngine.play();
+        await vi.waitFor(() => expect(releasePlay).toBeDefined());
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'B', url: 'https://example.invalid/B', positionMs: 0, durationMs: 90000, playing: false });
+        releasePlay?.();
+        await pendingPlay;
+        expect(nativePlaybackEngine.isPlaying()).toBe(false);
+    });
+
+    it('skips a queued source command after adopting its snapshot', async () => {
+        vi.clearAllMocks();
+        let releasePrepare: (() => void) | undefined;
+        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<undefined>(resolve => {
+            releasePrepare = () => resolve(undefined);
+        }));
+        const pendingSource = nativePlaybackEngine.setSource('https://example.invalid/C', { songKey: 'C' });
+        await vi.waitFor(() => expect(releasePrepare).toBeDefined());
+        const staleSource = nativePlaybackEngine.setSource('https://example.invalid/D', { songKey: 'D' });
+        nativePlaybackEngine.adoptSnapshot({ songKey: 'D', url: 'https://example.invalid/D', positionMs: 0, durationMs: 90000, playing: false });
+        releasePrepare?.();
+        await pendingSource;
+        await staleSource;
+        expect(harness.nativePlayer.prepare).toHaveBeenCalledTimes(1);
+        expect(nativePlaybackEngine.currentSongKey()).toBe('D');
+    });
+
     it('adopts paused zero position and discards delayed events for the old track', () => {
         nativePlaybackEngine.adoptSnapshot({ songKey: 'B', url: 'https://example.invalid/B', positionMs: 0, durationMs: 90000, playing: false });
         emit({ type: 'playing', songKey: 'A', positionMs: 70000, durationMs: 200000 });

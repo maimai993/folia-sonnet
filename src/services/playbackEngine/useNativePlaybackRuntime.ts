@@ -113,13 +113,23 @@ export const useNativePlaybackRuntime = ({
         shouldAutoPlayRef.current = false;
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
         const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
+        const sourceGeneration = nativePlaybackEngine.sourceGeneration();
+        const songKey = nativePlaybackEngine.currentSongKey();
         void nativePlaybackEngine.play().then(() => {
-            // 只让当前起播意图同步状态，避免迟到的结果覆盖暂停、换歌或 ABA 换源。
-            if (nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1) {
+            // 只让当前 source 的起播意图同步状态，避免迟到的结果覆盖恢复、换歌或 ABA 换源。
+            if (
+                nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
+                && nativePlaybackEngine.sourceGeneration() === sourceGeneration
+                && nativePlaybackEngine.currentSongKey() === songKey
+            ) {
                 setPlayerState(PlayerState.PLAYING);
             }
         }).catch(error => {
-            if (nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1) return;
+            if (
+                nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
+                || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
+                || nativePlaybackEngine.currentSongKey() !== songKey
+            ) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });

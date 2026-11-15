@@ -106,9 +106,15 @@ class NativePlaybackEngine {
     private currentUrl: string | null = null;
     private songKey: string | null = null;
 
-    /** 认领只重置本地时钟，绝不 prepare / seek / play 原生。 */
+    /**
+     * 认领是一个 transport epoch 边界：不向原生发送命令，但必须使认领前的
+     * 播放意图和排队命令失效，避免迟到的 Promise 污染新会话。
+     */
     adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
         this.ensureSubscription();
+        this.playIntentVersion++;
+        this.sourceGenerationVersion++;
+        this.sourceReadyPromise = Promise.resolve();
         this.currentUrl = snapshot.url;
         this.songKey = snapshot.songKey ?? null;
         this.hasSource = true;
@@ -185,8 +191,16 @@ class NativePlaybackEngine {
         return this.sourceGenerationVersion;
     }
 
-    private enqueueNativeCommand<T>(command: () => Promise<T>): Promise<T> {
-        const run = this.nativeCommandChain.then(command, command);
+    /** The current song identity used to reject same-URL stale completions. */
+    currentSongKey(): string | null {
+        return this.songKey;
+    }
+
+    private enqueueNativeCommand<T>(command: () => Promise<T>, isCurrent: () => boolean = () => true): Promise<T | undefined> {
+        const run = this.nativeCommandChain.then(
+            () => isCurrent() ? command() : undefined,
+            () => isCurrent() ? command() : undefined,
+        );
         this.nativeCommandChain = run.then(() => undefined, () => undefined);
         return run;
     }
@@ -207,16 +221,17 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
         if (typeof options.repeatMode === 'number') this.repeatMode = options.repeatMode;
+        const songKey = this.songKey;
         const sourceReady = this.enqueueNativeCommand(async () => {
             await nativePlayer.prepare({
                 url,
                 startPositionMs: options.startPositionMs ?? null,
                 repeatMode: this.repeatMode,
-                songKey: this.songKey,
+                songKey,
             });
             await nativePlayer.setVolume(this.volume);
-        });
-        this.sourceReadyPromise = sourceReady.then(() => undefined);
+        }, () => sourceGeneration === this.sourceGenerationVersion);
+        this.sourceReadyPromise = sourceReady.then(() => { });
         await sourceReady;
         if (sourceGeneration !== this.sourceGenerationVersion) return;
     }
@@ -226,7 +241,10 @@ class NativePlaybackEngine {
         const sourceGeneration = this.sourceGenerationVersion;
         await this.sourceReadyPromise;
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
-        await this.enqueueNativeCommand(() => nativePlayer.play());
+        await this.enqueueNativeCommand(
+            () => nativePlayer.play(),
+            () => intentGeneration === this.playIntentVersion && sourceGeneration === this.sourceGenerationVersion,
+        );
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
@@ -239,7 +257,10 @@ class NativePlaybackEngine {
     async pause(): Promise<void> {
         this.playIntentVersion++;
         const sourceGeneration = this.sourceGenerationVersion;
-        await this.enqueueNativeCommand(() => nativePlayer.pause());
+        await this.enqueueNativeCommand(
+            () => nativePlayer.pause(),
+            () => sourceGeneration === this.sourceGenerationVersion,
+        );
         if (sourceGeneration !== this.sourceGenerationVersion) return;
         // 冻在听众正看着的那一帧，别退回最后一次采样值。
         this.positionMs = this.getPositionSec() * 1000;
@@ -269,7 +290,10 @@ class NativePlaybackEngine {
         this.durationMs = 0;
         this.lastDeliveredMs = 0;
         this.currentUrl = null;
-        await this.enqueueNativeCommand(() => nativePlayer.stop());
+        await this.enqueueNativeCommand(
+            () => nativePlayer.stop(),
+            () => sourceGeneration === this.sourceGenerationVersion,
+        );
         if (sourceGeneration !== this.sourceGenerationVersion) return;
     }
 
