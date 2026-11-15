@@ -22,6 +22,8 @@ class ArtworkSamplingTest {
         assertEquals(2, ArtworkSampling.sampleSize(1024, 1024, 512))
         // 1023 / 2 = 511 < 512，再采会糊
         assertEquals(1, ArtworkSampling.sampleSize(1023, 1023, 512))
+        // 1025 / 2 = 512（整除取下）仍够
+        assertEquals(2, ArtworkSampling.sampleSize(1025, 1025, 512))
         assertEquals(4, ArtworkSampling.sampleSize(2048, 1500, 512))
         // 8000 / 16 = 500 < 512，会糊；8000 / 8 = 1000 才是最大的合法采样
         assertEquals(8, ArtworkSampling.sampleSize(8000, 8000, 512))
@@ -45,10 +47,26 @@ class ArtworkSamplingTest {
     }
 
     @Test
+    fun `极端边长不溢出 采样倍数仍是 2 的幂`() {
+        val s = ArtworkSampling.sampleSize(Int.MAX_VALUE, 1, 512)
+        assertTrue(s > 1)
+        assertEquals(0, s and (s - 1))
+        assertTrue(Int.MAX_VALUE / s >= 512)
+    }
+
+    @Test
     fun `缩放等比 最长边正好是目标`() {
         assertEquals(Pair(512, 256), ArtworkSampling.scaledSize(1024, 512, 512))
         assertEquals(Pair(256, 512), ArtworkSampling.scaledSize(512, 1024, 512))
         assertEquals(Pair(512, 512), ArtworkSampling.scaledSize(2048, 2048, 512))
+    }
+
+    @Test
+    fun `非方图的缩放按四舍五入 不会差一个像素以上`() {
+        // 1000x333 -> 512 x 170.5，四舍五入后是 170 或 171
+        val (w, h) = ArtworkSampling.scaledSize(1000, 333, 512)
+        assertEquals(512, w)
+        assertTrue(h == 170 || h == 171)
     }
 
     @Test
@@ -60,18 +78,39 @@ class ArtworkSamplingTest {
     }
 
     @Test
+    fun `没有尺寸时缩放原样返回`() {
+        assertEquals(Pair(0, 0), ArtworkSampling.scaledSize(0, 0, 512))
+    }
+
+    @Test
+    fun `像素上限的边界 正好等于上限可解 多一个像素不可解`() {
+        // 10000 x 10000 = 1 亿 = 上限
+        assertTrue(ArtworkSampling.isDecodable(10_000, 10_000))
+        assertFalse(ArtworkSampling.isDecodable(10_000, 10_001))
+        // 9000x9000 = 8100 万：真机验证过的大图仍然可解
+        assertTrue(ArtworkSampling.isDecodable(9_000, 9_000))
+    }
+
+    @Test
     fun `超大像素或未知尺寸不解码`() {
         assertTrue(ArtworkSampling.isDecodable(4000, 4000))
         assertFalse(ArtworkSampling.isDecodable(0, 0))
         assertFalse(ArtworkSampling.isDecodable(-1, 500))
-        // 20000 x 20000 = 4 亿像素 > 上限
+        // 20000 x 20000 = 4 亿像素 > 上限（渐进式 JPEG / 交错 PNG 在原生层要接近整图的内存）
         assertFalse(ArtworkSampling.isDecodable(20_000, 20_000))
-        // 乘法不能溢出 Int
+        // 乘法不能溢出
         assertFalse(ArtworkSampling.isDecodable(Int.MAX_VALUE, Int.MAX_VALUE))
     }
 
     @Test
-    fun `采样后的峰值内存远小于整图解码`() {
+    fun `字节上限给无损大图留余量 但不无限`() {
+        // 5000x5000 的无损 PNG 常 15~30MB：旧代码能解，不能被新上限变成无封面
+        assertTrue(ArtworkSampling.MAX_ARTWORK_BYTES >= 30 * 1024 * 1024)
+        assertTrue(ArtworkSampling.MAX_ARTWORK_BYTES <= 64 * 1024 * 1024)
+    }
+
+    @Test
+    fun `采样后的解码结果比整图小两个数量级`() {
         val w = 8000
         val h = 8000
         val full = w.toLong() * h * 4
