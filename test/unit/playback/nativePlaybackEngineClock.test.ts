@@ -201,8 +201,8 @@ describe('nativePlaybackEngine clock', () => {
     it('skips a queued source command after adopting its snapshot', async () => {
         vi.clearAllMocks();
         let releasePrepare: (() => void) | undefined;
-        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<undefined>(resolve => {
-            releasePrepare = () => resolve(undefined);
+        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<{ ok: boolean }>(resolve => {
+            releasePrepare = () => resolve({ ok: true });
         }));
         const pendingSource = nativePlaybackEngine.setSource('https://example.invalid/C', { songKey: 'C' });
         await vi.waitFor(() => expect(releasePrepare).toBeDefined());
