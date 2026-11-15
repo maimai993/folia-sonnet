@@ -476,7 +476,13 @@ const stopForLater = async (
  *
  * 桌面那条路（`drumHitsTask` + `runTrackStems`）原样保留。
  */
-const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix_`;
+/**
+ * 混音频带的缓存前缀。**频带边界（kick 0–150 / snare 150–4000 / hat 6000+ Hz）变了就要升版本**：
+ * `mix_` 是 Android hat 起点还写成 4000 Hz 时算出来的（#344，4–6 kHz 的军鼓高频被记成 hat），
+ * 那批缓存不能再命中，否则修了边界的用户听同一首歌，鼓面还是旧的偏弱偏碎。
+ * 升到 `mix2_`：旧条目仍以 `drum_hits_v1_` 开头，用量统计与「清除缓存」照常管得到，只是不再被读取。
+ */
+const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix2_`;
 /** 每读这么多秒，重挑一次 hits 交出去（见上面：第一个 10 秒半秒内就到手）。 */
 const MIX_CHUNK_SECONDS = 10;
 
