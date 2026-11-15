@@ -128,7 +128,8 @@ export const pollQrCode = async (qrcodeKey: string): Promise<BilibiliQrPoll> => 
 export const exchangeLogin = async (
     redirectUrl: string,
 ): Promise<{ cookie: string; uid: string }> => {
-    const response = await requestBilibiliUrl(redirectUrl, { method: 'GET' });
+    // 必须停在第一跳：SESSDATA 在 302 自己的 Set-Cookie 里，跟着跳就什么都没有了。
+    const response = await requestBilibiliUrl(redirectUrl, { method: 'GET', noRedirect: true });
     const headers = response.setCookies ?? [];
     if (headers.length === 0) {
         throw new BilibiliApiError(-1, 'no Set-Cookie in the login response');

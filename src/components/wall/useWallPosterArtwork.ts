@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { COVER_MAX_SIZE, COVER_SIZE_STEPS, getOriginalCoverUrl, getSizedCoverUrl, resolveCoverSizeStep } from '../../utils/coverUrl';
+import { isHdslbImageUrl, hdslbImageBlobUrl, hdslbImageBlobUrlSync } from '../../services/bilibili/hdslbImage';
 
 // src/components/wall/useWallPosterArtwork.ts
 // Picks which variant of a cover one poster paints. The wall draws the same list (the play queue,
@@ -57,14 +58,30 @@ const decodeVariant = (url: string): Promise<boolean> => {
     const pending = decodingVariants.get(url);
     if (pending) return pending;
 
+    // B 站图床的图不经 <img> 直连：i0.hdslb.com 按热点封来源，直连隔三差五 403。
+    // 这里换成原生代理取字节 → blob URL（带 B 站 Referer + 登录 cookie，风控认这个），
+    // 取回来的就是一张本地图，decode 走的完全是本地字节。取不到（null）就退回原地址
+    // 让它按老样子试。
     const image = new Image();
     image.decoding = 'async';
-    image.src = url;
-    const request = (typeof image.decode === 'function'
-        ? image.decode()
-        : new Promise<void>((resolve, reject) => {
-            image.onload = () => resolve();
-            image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+    const request = (isHdslbImageUrl(url)
+        ? hdslbImageBlobUrl(url).then(local => {
+            image.src = local ?? url;
+            return typeof image.decode === 'function'
+                ? image.decode()
+                : new Promise<void>((resolve, reject) => {
+                    image.onload = () => resolve();
+                    image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+                });
+        })
+        : Promise.resolve().then(() => {
+            image.src = url;
+            return typeof image.decode === 'function'
+                ? image.decode()
+                : new Promise<void>((resolve, reject) => {
+                    image.onload = () => resolve();
+                    image.onerror = () => reject(new Error(`Cover variant failed: ${url}`));
+                });
         }))
         .then(() => {
             remember(decodedVariants, url);
@@ -148,5 +165,15 @@ export const useWallPosterArtwork = (
         return () => { cancelled = true; };
     }, [current, source, targetStep, keepOriginal]);
 
-    return current.url;
+    // B 站图床的地址不能直接摆到 <img src> 上（403 见上文）：decode 已把字节经原生
+    // 代理换成本地 blob，这里渲染出口同样换 —— URL 还没换好时给空串，卡片按「图未到」
+    // 画占位，blob 一到下一次渲染就是它。
+    const display = useMemo(() => {
+        const url = current.url;
+        if (!url || !isHdslbImageUrl(url)) return url;
+        const local = hdslbImageBlobUrlSync(url);
+        return local ?? '';
+    }, [current.url]);
+
+    return display;
 };

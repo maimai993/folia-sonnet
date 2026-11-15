@@ -12,6 +12,11 @@ const KIND_LABEL_KEYS: Record<SearchKind, string> = {
     song: 'search.kindSong',
     album: 'search.kindAlbum',
     playlist: 'search.kindPlaylist',
+    // 视频站那几档。音乐平台不会声明它们，所以这几个词条平时看不到。
+    video: 'search.kindVideo',
+    bangumi: 'search.kindBangumi',
+    movie: 'search.kindMovie',
+    user: 'search.kindUser',
 };
 
 const MARK_SPRING = { type: 'spring', stiffness: 420, damping: 34 } as const;
@@ -23,6 +28,8 @@ export const useSearchSourceLabel = () => {
         if (source === 'local') return t('search.sourceLocal');
         if (source === 'cloud') return t('search.sourceCloudTheme');
         if (source === 'navidrome') return t('search.sourceNavidrome');
+        // B 站搜的是视频，点一条直接在播放页当背景放。
+        if (source === 'bilibili') return t('search.sourceBilibili');
         return omni.getProviderLabel(source);
     };
 };

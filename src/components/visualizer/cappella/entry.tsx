@@ -5,6 +5,7 @@ import { useVisualizerAssetStore } from '../../../stores/useVisualizerAssetStore
 import { cycleValue, QuickControlChip, QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { CappellaSettingsPanel } from '../settingsPanels';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerCappella = React.lazy(() => import('./VisualizerCappella'));
 
@@ -20,6 +21,21 @@ const AVATAR_SOURCE_LABEL_KEYS: Record<CappellaAvatarSource, string> = {
 
 export default defineVisualizer({
     mode: 'cappella',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.cappellaVoicePop,
+            nameKey: 'options.beatEffect_cappellaVoicePop',
+            descKey: 'options.beatEffect_cappellaVoicePopDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.cappellaBubbleSway,
+            nameKey: 'options.beatEffect_cappellaBubbleSway',
+            descKey: 'options.beatEffect_cappellaBubbleSwayDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 110,
     labelKey: 'ui.visualizerCappella',
     labelFallback: 'Cappella',

@@ -23,8 +23,41 @@ const normalize = (text: string): string => text
     // 全角转半角括号常见于中日文标题，统一掉，免得「（Official）」匹配不上「(official)」
     .replace(/[（]/g, '(')
     .replace(/[）]/g, ')')
+    /*
+     * 标点与符号一律换成空格再合并：歌名里带 `&`、`'`、`-`、`.`、`·` 的很多，
+     * 标题那边写法又各不相同（「Don't Stop」/「Dont Stop」/「Don’t Stop」）。
+     * 不去掉的话 `includes` 会因为一个弯引号就整条失配 —— 这就是以前「太严格」的主因。
+     */
+    .replace(/[\p{P}\p{S}]+/gu, ' ')
     .replace(/[\s\u3000]+/g, ' ')
     .trim();
+
+/** 分词：按空格切开，丢掉单个字符（「a」「的」这种不承担识别作用）。 */
+const tokenize = (text: string): string[] => text
+    .split(' ')
+    .map(token => token.trim())
+    .filter(token => token.length >= 2);
+
+/**
+ * 歌名是否算「命中了」这条标题。
+ *
+ * 以前是整串 `includes`：歌名一字不差地连着出现才算。实际标题里有「《歌名》」
+ * 「歌名 - 歌手」「【中字】歌名」这些写法，整串比对把很多明明就是同一首歌的结果挡在外面。
+ *
+ * 现在的规则：
+ * - 整串出现在标题里 —— 直接算命中（最可信）；
+ * - 否则按词比：歌名切成词后，**至少八成**的词在标题里出现。短歌名（一个词）
+ *   仍然要求整串，不然「The」「Cure」这种会到处误中。
+ */
+const titleMatches = (title: string, songTitle: string): boolean => {
+    if (!songTitle) return false;
+    if (title.includes(songTitle)) return true;
+    const songWords = tokenize(songTitle);
+    // 只有一个词（或切不出词）时不做放宽：单词到处都能撞上，放宽了全是噪音。
+    if (songWords.length < 2) return false;
+    const hitCount = songWords.filter(word => title.includes(word)).length;
+    return hitCount / songWords.length >= 0.8;
+};
 
 /** 命中一个词就给一次惩罚；同一类里只算一次，免得被同一个词反复扣。 */
 const countWordHits = (haystack: string, words: readonly string[]): number => {
@@ -68,10 +101,12 @@ export const scoreMvHit = (hit: BilibiliSearchHit, input: MvMatchInput): MvMatch
 
     let score = 0;
 
-    const titleHit = songTitle.length > 0 && title.includes(songTitle);
+    const titleHit = titleMatches(title, songTitle);
     if (titleHit) score += 60;
 
-    const artistHit = songArtist.length > 0 && (title.includes(songArtist) || author.includes(songArtist));
+    // 歌手名同样按分词比（「Lady Gaga」写成「LadyGaga」「Lady Gaga」都要能中）。
+    const artistHit = songArtist.length > 0
+        && (titleMatches(title, songArtist) || title.includes(songArtist) || author.includes(songArtist));
     if (artistHit) score += 30;
 
     // 时长：越接近越高分，超过两倍或不到一半就基本排除。

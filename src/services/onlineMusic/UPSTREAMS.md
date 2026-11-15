@@ -152,3 +152,14 @@
 - **上游变了怎么跟**：某家公开接口改版后，改 `lxPublicApi` 里对应平台的那一支；播放取不到地址时先看 `[LxMusic]` 前缀日志和 `lxDiagnostics` 记的尝试记录，再判断是公开接口失效还是导入的音源坏了。
 - **我们不改上游**：不内置、不分发任何第三方音源脚本，也不替用户去爬别家的会员内容；只跑用户自己导入的那份。
 
+## B 站（`bilibili`，仅安卓）
+
+- **它是什么**：一个**视频**平台，不是一个音乐平台。首页推荐一屏投稿，点开就放那条视频的画面和声音。之所以仍然注册成 Omni 的 provider，是因为播放、队列、进度、标题、封面这一整套设施都在 provider 之后；挂在它下面就不必再写一条平行的播放路径。
+- **上游**：B 站网页版公开接口，全部经 `android/app/src/main/java/top/izuna/foliamajor/FoliaBilibiliPlugin.kt` 用 OkHttp 代发（`services/bilibili/api.ts` 只拼地址）。搜索 `/x/web-interface/wbi/search/type`、详情 `/x/web-interface/view`、取流 `/x/player/wbi/playurl`、首页推荐 `/x/web-interface/wbi/index/top/feed/rcmd`。搜索、详情、取流这几个要 WBI 签名（`services/bilibili/wbi.ts`）。
+- **音画怎么同步**：B 站的 DASH 本来就把画面和声音拆成两条独立的流（`dash.video[]` / `dash.audio[]`）。这里**两条都取**：声音交给播放器当音源，画面注入到播放页已有的视频层（`visualizer/videoLayer`）当背景。两端同源，所以不需要「音画偏移」那种东西 —— 播放器的时钟就是画面跟着走的时钟。
+- **登录**：扫码，凭据落在原生 `CookieManager` 里，渲染层拿不到也不存。登录了推荐接口回的是这个人自己的推荐、取流拿到大会员画质；没登录回平台默认推荐、上限 480P。同一个接口，不在这里分叉。
+- **它不做什么**：没有歌词（`capabilities.lyrics: false`），没有收藏 / 歌单（`likes` / `playlistTrackMutations: false`）—— 界面上的歌词入口、红心读这些开关，所以会自动不出现。
+- **清晰度**：「音质」那三档（`standard` / `high` / `ultra`）在 B 站就是 480P / 720P / 1080P，界面上按平台换成清晰度的说法（`AccountTab` 的 `VIDEO_QUALITY_LABEL_KEYS`）。
+- **上游变了怎么跟**：先看 `[Bilibili]` 前缀日志；WBI 签名用到的两张混淆表会变，`wbi.ts` 里取 mixin key 的那一步要跟着网页版走。推荐接口的 `item[].goto` 会混进直播、番剧和广告位，只认 `av`。
+
+

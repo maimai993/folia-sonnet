@@ -57,6 +57,11 @@ const AUTH_MEMBERS: Record<string, string[]> = {
         'getLoginForm', 'getLoginMethods', 'getLoginStatus', 'getLoginTexts', 'getPasswordLoginDefaults',
         'loginWithPassword', 'logout', 'submitLoginForm',
     ],
+    // 视频平台：扫码登录，凭据落进原生 CookieManager。没有登录文案、没有诊断报告，
+    // 也不区分登录方式 —— 它只有「扫码」这一条路。
+    bilibili: [
+        'checkLogin', 'createQr', 'getLoginStatus', 'logout', 'startLogin',
+    ],
 };
 
 describe('the sign-in members of each built-in platform', () => {

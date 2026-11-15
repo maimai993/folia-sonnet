@@ -1,10 +1,14 @@
-import { isNativePlayerAvailable, nativePlayer, type NativeEqualizerSettings } from './nativePlayerPlugin';
+import {
+    addInstrumentalListener,
+    isNativePlayerAvailable,
+    nativePlayer,
+    type NativeEqualizerSettings,
+} from './nativePlayerPlugin';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useAudioConsoleStore } from '../../stores/useAudioConsoleStore';
 import { resolveHeardAudioEqualizerSettings } from '../../utils/audioEqualizerModCurve';
 import {
     AUDIO_CONSOLE_COMPRESSOR_BANDS,
-    AUDIO_CONSOLE_REVERB_PRESETS,
     type AudioConsoleReverbPreset,
 } from '../../utils/audioConsole';
 
@@ -93,7 +97,7 @@ const buildSettings = (): NativeEqualizerSettings => {
         },
         reverb: {
             enabled: console_.reverb.enabled,
-            preset: REVERB_PRESET_INDEX[console_.reverb.preset] ?? 0,
+            preset: REVERB_PRESET_INDEX[console_.reverb.preset],
             rt60: console_.reverb.rt60,
             roomLevelDb: console_.reverb.roomLevelDb,
             damping: console_.reverb.damping,
@@ -227,6 +231,97 @@ export const pushNativeEqualizer = async (force = false): Promise<void> => {
 };
 
 /**
+ * 把「关闭人声」开关对一次表。
+ *
+ * 这个开关不在调音台那份设置里（它是独立的一条 DSP 开关），所以不走
+ * pushNativeEqualizer，单独推一次。两个方向都要推：
+ *   · 原生那边落过盘、Web 这边是默认值（清过缓存 / 换过账号目录）→ 推 false 纠正；
+ *   · Web 这边开着、原生还是刚启动的默认值 → 推 true 生效。
+ * 失败不抛：开关状态 Web 侧已经存了，下次启动或下次拨动会再推。
+ */
+/**
+ * 启动时对一次表：把两个互斥开关里真正生效的那个推给原生。
+ *
+ * 不能两个都推：setVocalCancelEnabled(false) 不会动清唱的内存状态，
+ * 但顺序错了会把盘上刚恢复的清唱覆盖掉。这里只读一次 Web 状态，
+ * 选一边推一次；另一边的互斥由原生 setter 自己落盘。
+ */
+export const pushNativeVocalCancel = async (): Promise<void> => {
+    if (!isNativePlayerAvailable()) return;
+    const state = useAudioSettingsStore.getState();
+    // 启动时把「预先拆分音轨」总开关也对一次表：通知栏 / 锁屏先把播放拉起来时
+    // WebView 还没起来，原生装源那条路得自己知道要不要预拆。旧包没有这个方法，
+    // 失败不影响后面的人声开关对表。
+    try {
+        await nativePlayer.setPrebuildTracksEnabled(state.prebuildTracksEnabled);
+    } catch (error) {
+        console.warn('[NativeEQ] 推送预拆分开关失败，下次启动会再对一次表', error);
+    }
+    try {
+        if (state.vocalOnlyEnabled) {
+            await nativePlayer.setVocalOnlyEnabled(true);
+        } else {
+            await nativePlayer.setVocalCancelEnabled(state.vocalCancelEnabled);
+        }
+    } catch (error) {
+        console.warn('[NativeEQ] 推送人声模式失败，下次启动会再对一次表', error);
+    }
+};
+
+/**
+ * 问一次「关闭人声」此刻的真实状态：做到哪一步、进度、缓存用量。
+ *
+ * 为什么要「问」而不是只靠事件推：事件是单向的，丢了就是丢了 —— 界面会
+ * 永远停在「正在分离人声 0%」，哪怕原生那边已经分离完、甚至已经切过去了。
+ * 原生把这三样都放在 volatile 字段里，问一次就是读三个数，便宜到可以轮询。
+ *
+ * 只在两个时机问：那一页刚打开；以及分离进行中每 1.5 秒问一次（界面侧轮询）。
+ */
+export const refreshInstrumentalStatus = (): void => {
+    if (!isNativePlayerAvailable()) return;
+    void nativePlayer.getInstrumentalState()
+        .then(state => {
+            const store = useAudioSettingsStore.getState();
+            /*
+             * 状态必须属于「此刻正在播的这首歌」。
+             *
+             * 切歌后原生 Coordinator 可能还留着上一首的 building / ready，直接拿来
+             * 显示就会把上一首的进度、甚至「已就绪」当成新歌的 —— 用户看到的就是
+             * 「切下一首歌，用的却是上一首的数据」。不属于当前歌时把进度归零：
+             * 开关开着就诚实显示「正在为这首歌准备」，没开就回 idle。
+             * 旧 APK 没有 forCurrent 这个字段（undefined）时保持原行为，向下兼容。
+             */
+            const belongs = state.forCurrent ?? true;
+            const status = !belongs
+                ? (store.vocalCancelEnabled || store.vocalOnlyEnabled ? 'building' : 'idle')
+                : state.state === 'ready' || state.state === 'failed' || state.state === 'building'
+                    ? state.state
+                    : 'idle';
+            store.handleSetVocalCancelStatus(status, belongs ? state.percent : 0);
+            store.handleSetVocalCancelCache(state.usedCount, state.usedBytes, state.limitBytes);
+            store.handleSetVocalTrackMode(state.mode);
+            /*
+             * 意图（mode）与实际装着的轨（currentTrack）对不上时留一行日志。
+             *
+             * 换源是异步的，building 期间短暂不一致是正常的；若已经 ready 还不一致，
+             * 说明这一下真的没切过去 —— 「切了不生效 / 错位」在日志里就有据可查。
+             * 这里只报告，不反向改 store：用户刚按下的那一刻桥命令可能还在途，
+             * 自动回滚会让选中态来回跳。
+             */
+            const expected = state.mode === 'off' ? 'original' : state.mode;
+            if (state.currentTrack && state.currentTrack !== 'none'
+                && state.currentTrack !== expected && status !== 'building') {
+                console.warn(
+                    `[VocalTrack] mode=${state.mode} but player is on ${state.currentTrack} (state=${status})`,
+                );
+            }
+        })
+        .catch(() => {
+            // 桥还没就绪（冷启动早期）：下次再问，不必重试。
+        });
+};
+
+/**
  * 启动同步。在 useAppFoundation 里调用一次。
  *
  * 桥可能比 React 挂载晚一点就绪（冷启动），所以这里自己重试；成功之后订阅两条 store，
@@ -243,6 +338,21 @@ export const startNativeEqualizerSync = (): void => {
     started = true;
     // 启动时对一次表：WebView 上次退出前进原生可能没收到最后一条。
     void pushNativeEqualizer(true);
+    void pushNativeVocalCancel();
+    /*
+     * 关闭人声的进度：原生那边每 5% 发一次，界面照着显示。
+     *
+     * 订阅放在启动同步里（和 EQ 一条命），因为它跟着播放器走 ——
+     * 界面还没打开时代谢掉也没关系，store 里那三个字段本来就是给界面看的。
+     */
+    addInstrumentalListener(event => {
+        const status = event.state === 'ready' || event.state === 'failed' || event.state === 'building'
+            ? event.state
+            : 'idle';
+        useAudioSettingsStore.getState().handleSetVocalCancelStatus(status, event.percent);
+        // 刚生成完那一首：删过旧缓存、也多了新文件，用量一定变了。
+        if (status === 'ready') refreshInstrumentalStatus();
+    });
     useAudioSettingsStore.subscribe((state, previous) => {
         if (state.audioEqualizerSettings === previous.audioEqualizerSettings
             && state.audioEqualizerModCurve === previous.audioEqualizerModCurve
@@ -255,6 +365,24 @@ export const startNativeEqualizerSync = (): void => {
     useAudioConsoleStore.subscribe((state, previous) => {
         if (state.settings === previous.settings) return;
         schedulePush();
+    });
+    /*
+     * 三态切换之后主动问一次原生状态。
+     *
+     * 界面那一页的 useEffect 在 store 变化的同一拍就问，桥命令还在途，读回来的多半
+     * 是切换前的旧状态 —— 于是停在「正在准备 0%」，看起来像没生效；缓存明明命中
+     * 也一样（「分离过的歌重放还显示重新分析」）。延后一小会儿再问一次，把 ready /
+     * 用量 / 实际装着的轨补齐。
+     */
+    let vocalStatusTimer: ReturnType<typeof setTimeout> | null = null;
+    useAudioSettingsStore.subscribe((state, previous) => {
+        if (state.vocalCancelEnabled === previous.vocalCancelEnabled
+            && state.vocalOnlyEnabled === previous.vocalOnlyEnabled) return;
+        if (vocalStatusTimer !== null) clearTimeout(vocalStatusTimer);
+        vocalStatusTimer = setTimeout(() => {
+            vocalStatusTimer = null;
+            refreshInstrumentalStatus();
+        }, 300);
     });
 
     // 页面隐藏 / 卸载前不再等合并窗口：后台的定时器不可信（见 flushScheduledPush）。

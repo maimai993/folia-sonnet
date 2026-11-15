@@ -1,7 +1,7 @@
 ﻿import type { StoredCacheEntry } from '../appDatabase';
 import type { CacheCategory } from './cacheRepository';
 // Pure: the analysis key prefixes, with nothing but a type import behind them.
-import { isBeatGridKey, isDrumHitsKey, isVocalEnvelopeKey } from '../analysis/beatGridKeys';
+import { isBeatGridKey, isDrumHitsKey, isMusicEnvelopeKey, isVocalEnvelopeKey } from '../analysis/beatGridKeys';
 
 // src/services/repositories/cacheUsage.ts
 // How much of the cache each category holds, counted one row at a time. No imports at run time but
@@ -49,7 +49,11 @@ export const matchesCategory = (key: string, category: CacheCategory): boolean =
   // A track's Beat This! beats (services/analysis/beatGrid.ts) are the same kind of thing - a model
   // pass to rebuild, read by automix and by the beat FX - and are cleared with the profiles. So are
   // its drum hits off htdemucs (services/analysis/drumHits.ts).
-  if (category === 'analysis') return key.startsWith('automix_profile_') || isBeatGridKey(key) || isDrumHitsKey(key) || isVocalEnvelopeKey(key);
+  //
+  // 智能动感的整曲曲线（services/analysis/musicEnvelope.ts，`music_envelope_v1_`）也算分析数据：
+  // 它同样是「解码 + 算一遍才能重建」的产物，之前漏了这个前缀，结果是既不计入这一行的
+  // 用量、也删不掉 —— 存储页点「清除分析数据」后曲线仍在，切歌还会继续读上一首的旧数据。
+  if (category === 'analysis') return key.startsWith('automix_profile_') || isBeatGridKey(key) || isDrumHitsKey(key) || isMusicEnvelopeKey(key) || isVocalEnvelopeKey(key);
   // its drum hits off htdemucs (services/analysis/drumHits.ts), and the vocal envelope the same run reads
   // (services/analysis/vocalEnvelope.ts).
   // 智能平衡's own readings of each song (services/volumeBalance/balanceRecords.ts): a feature of its own,

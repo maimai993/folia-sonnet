@@ -21,16 +21,32 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ASSETS = join(HERE, '..', 'android', 'app', 'src', 'main', 'assets', 'models');
 
 /** 与 android/.../AutomixModels.kt 的 ENTRIES 一一对应。 */
+/*
+ * 2026-11 起只有两个：节拍（beat_this）和四轨分离（scnet）。
+ *
+ * htdemucs 已经整条链路删掉了（Kotlin 侧没有 Runner、Web 侧没有槽位），这里也必须一起删。
+ * 留着它的后果不是「多一个文件」：assets/models/ 下的文件会原样打进 APK，
+ * 那份 108MB 的旧权重会安安静静地躺在包里，谁也不报错，只是安装包大一倍。
+ */
 const MODELS = [
     {
         file: 'beat_this.onnx',
         bytes: 83077778,
         sha256: 'c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd',
+        from: 'mirror',
     },
     {
-        file: 'htdemucs-v2.onnx',
-        bytes: 107902864,
-        sha256: 'a8f542ef3a140d4879156c1b2b0bcad4b29254dcdbf0fd1ec578e3c9cdca925c',
+        /*
+         * 从 SCNet 官方权重（starrytong/SCNet, MIT）导出的 ONNX，int8 量化后 12.9MB。
+         *
+         * 它不在镜像上：导出要 torch + 量化校准，不是「下载一个文件」能得到的，
+         * 所以这里只校验、不下载。缺失时直接报出来源，比悄悄去镜像取一个同名的
+         * 别的文件安全 —— 分轨结果全错的 APK 比打不出来更难查。
+         */
+        file: 'scnet.int8.onnx',
+        bytes: 12900277,
+        sha256: '98228931494151762a1c4ab1ec7899a894b1f81fd4a509921a9d2f9bacc50845',
+        from: 'local',
     },
 ];
 
@@ -105,6 +121,16 @@ const main = async () => {
         if (await alreadyThere(target, model)) {
             console.log(`[android-models] ${model.file} already present and verified`);
             continue;
+        }
+        if (existsSync(target)) {
+            const info = await stat(target);
+            console.warn(`[android-models] ${model.file} 存在但校验不通过（${info.size} bytes），将重新获取`);
+        }
+        if (model.from === 'local') {
+            throw new Error(
+                `[android-models] 缺少 ${model.file}（${model.bytes} bytes, sha256 ${model.sha256.slice(0, 12)}）。`
+                + ' 这份权重需要从 SCNet 官方 checkpoint 自行导出并做 int8 量化，镜像上没有。',
+            );
         }
         console.log(`[android-models] fetching ${model.file} (${(model.bytes / 1e6).toFixed(0)}MB)`);
         const failures = [];

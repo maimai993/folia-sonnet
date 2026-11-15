@@ -12,6 +12,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -160,6 +161,20 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      */
     @Volatile
     private var lastMediaId: String? = null
+
+    /**
+     * 这一首的**原地址**（不是伴奏）。
+     *
+     * 「关闭人声」会把播放源换成离线生成好的伴奏文件（见 InstrumentalBuilder），
+     * 而 [lastUrl] 跟着换源一起变。要把开关关掉时切回来，就得单独记住原曲地址；
+     * 它也决定了这首歌的伴奏缓存键（配合 lastMediaId）。
+     */
+    @Volatile
+    private var originalUrl: String? = null
+
+    /** 当前放的是不是伴奏文件。中置相消要按它让位（见 VocalCancelProcessor）。 */
+    @Volatile
+    private var onInstrumental = false
     private var tickScheduled = false
 
     /*
@@ -261,6 +276,15 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private var cachedPlaying = false
     @Volatile
     private var cachedBuffering = false
+    /** 一拍位置采样：位置与时刻（elapsedRealtime）必须成对读写，所以装在一个不可变对象里。 */
+    private class TickSample(val positionMs: Long, val atMs: Long)
+    /**
+     * 最近一拍位置采样。只有 positionTick 写，整体发布（一次 volatile 写），读端不会拿到
+     * 「新位置 + 旧时刻」的混搭。缓存位置被 seek / 换源 / 暂停改写后与它不再相等，
+     * 显示位置就不外推（#320）。
+     */
+    @Volatile
+    private var tickSample: TickSample? = null
 
     private val positionTick = object : Runnable {
         override fun run() {
@@ -285,6 +309,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                     && position + 1_000L < lastTickPositionMs
             lastTickPositionMs = position
             cachedPositionMs = position
+            // 先写缓存位置、再整体发布采样：读端先读采样、后读缓存，读到这份采样时缓存一定已是 position 或更新的值（#320）。
+            tickSample = TickSample(position, android.os.SystemClock.elapsedRealtime())
             /*
              * 缓冲标记只靠事件清（playing / paused / ...），漏一次就一直挂着：
              * 显示锚点按「在缓冲」把 playing 写成 false，桌面歌词冻在原地，
@@ -345,6 +371,38 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         sourceToken: String? = null,
         keepEpoch: Boolean = false,
     ) {
+        prepareInternal(url, baseUrl = url, instrumental = false, startPositionMs, mediaId, completion, sourceToken, keepEpoch)
+    }
+
+    /**
+     * 直接装伴奏（缓存已经就绪时走这条）。
+     *
+     * 为什么不让调用方「先 prepare 原曲、再 swapSource」：那是两次 prepare，
+     * 中间会多一次解码器初始化与一次 ready 事件，听感上是启播时的一下顿。
+     * 一次装对，播放器只会认为自己装了这首歌的一个版本。
+     */
+    fun prepareInstrumental(
+        baseUrl: String,
+        path: String,
+        startPositionMs: Long,
+        mediaId: String?,
+        completion: NativeCommandCompletion? = null,
+        sourceToken: String? = null,
+        keepEpoch: Boolean = false,
+    ) {
+        prepareInternal(path, baseUrl = baseUrl, instrumental = true, startPositionMs, mediaId, completion, sourceToken, keepEpoch)
+    }
+
+    private fun prepareInternal(
+        url: String,
+        baseUrl: String,
+        instrumental: Boolean,
+        startPositionMs: Long,
+        mediaId: String?,
+        completion: NativeCommandCompletion?,
+        sourceToken: String?,
+        keepEpoch: Boolean,
+    ) {
         var token = sourceToken ?: ""
         // keepEpoch：过渡引擎的兜底 prepare 沿用接管时已分配的纪元（armTakeover 已递增过），
         // 不能再递增 —— 否则 Web 紧随其后提交的 play 会被判成旧 source 而丢掉。
@@ -359,7 +417,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 } else if (reuseTakeover) {
                     pollTakeover(url)
                 }
-                prepareCallerSide(url, startPositionMs, mediaId, token)
+                prepareCallerSide(url, baseUrl, instrumental, startPositionMs, mediaId, token)
             },
         ) {
             prepareOnPlayer(url, startPositionMs, mediaId, token)
@@ -367,7 +425,17 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     /** 调用线程上立刻做的那一半：身份与缓存位置（volatile，见下面的说明）。 */
-    private fun prepareCallerSide(url: String, startPositionMs: Long, mediaId: String?, token: String) {
+    private fun prepareCallerSide(
+        url: String,
+        baseUrl: String,
+        instrumental: Boolean,
+        startPositionMs: Long,
+        mediaId: String?,
+        token: String,
+    ) {
+        originalUrl = baseUrl
+        onInstrumental = instrumental
+        NativeEqualizerState.instrumentalActive = instrumental
         lastUrl = url
         lastMediaId = mediaId
         lastSourceToken = token
@@ -430,11 +498,67 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         action: () -> Unit,
     ) = scheduler.dispatch(kind, completion, bumpSource, bumpTransport, callerSide, action)
 
+    /** 这一首的原地址（关掉「关闭人声」时要切回来），不是伴奏。 */
+    fun baseUrl(): String? = originalUrl
+
+    /** 此刻放的是不是分离好的伴奏。 */
+    fun isOnInstrumental(): Boolean = onInstrumental
+
+    /**
+     * 换源到伴奏（[instrumental] = true）或换回原曲，**保留位置、播放状态与 songKey**。
+     *
+     * 为什么不用 [prepare]：prepare 会把 lastUrl 一起换掉，之后就没法切回来了；
+     * 而且它会把「这一首」的原始地址概念冲掉。这里只换背地里播的东西，
+     * MediaItem 的 mediaId 仍然是同一首歌 —— 通知栏、桌面歌词、镜像兜底都以为没换歌。
+     *
+     * 位置在播放器线程上现取（cachedPositionMs 是 250ms 一拍的，切源时最多会退回去小半拍）。
+     */
+    fun swapSource(url: String, instrumental: Boolean) {
+        onInstrumental = instrumental
+        NativeEqualizerState.instrumentalActive = instrumental
+        /*
+         * ⭐ lastUrl 在**调用线程**上立刻更新，不等 runOnPlayer。
+         *
+         * 换源判据（InstrumentalCoordinator.shouldSwapVocalTrack）读的就是它。
+         * 原来写在播放器线程的 lambda 里：连续拨「全部 / 人声 / 伴奏」时，第二次
+         * reconcile 拿到的仍是上一轨的地址，于是把同一轨又 prepare 一遍、或者把
+         * 刚下的换源意图覆盖掉 —— 用户看到的就是「切了不生效 / 切人声放的还是全部」。
+         * prepareInternal 早就是同步写的，这里补齐同一条纪律。
+         */
+        lastUrl = url
+        // 提交时的 source 纪元：换轨是同一首歌的事，不递增纪元；但排队期间要是已经换了别的歌
+        // （prepare / stop / 过渡接管），这次换轨属于旧 source，不能再把旧歌的轨装到新歌上。
+        val submittedSourceEpoch = scheduler.sourceEpoch
+        runOnPlayer {
+            if (scheduler.sourceEpoch != submittedSourceEpoch) return@runOnPlayer
+            val current = ensurePlayer()
+            val position = current.currentPosition
+            val playing = cachedPlaying
+            // 换源即收掉在途的交叉淡化（同 prepare，见那里的注释）。
+            cancelFade()
+            applySourceHeaders(url)
+            current.setMediaItem(mediaItemFor(url, lastMediaId))
+            current.setRepeatMode(requestedRepeatMode)
+            current.setVolume(requestedVolume)
+            current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            current.prepare()
+            if (position > 0) current.seekTo(position)
+            if (playing) current.setPlayWhenReady(true)
+            // lastUrl 已在调用线程同步写好（见方法开头），这里不再重复赋值。
+            cachedPositionMs = position
+            cachedDurationMs = 0L
+            nearEndFired = false
+            lastTickPositionMs = position
+            nearEndFloorMs = 0L
+        }
+    }
+
     fun play(completion: NativeCommandCompletion? = null) {
         dispatch(NativeCommandKind.PLAY, completion, bumpSource = false, bumpTransport = true) {
             val current = ensurePlayer()
             val resuming = !cachedPlaying
             current.setPlayWhenReady(true)
+
             if (pauseFadeEnabled && resuming) {
                 // 先从 0 滑上来；不这么做，「继续」是当场满音量。
                 current.setVolume(0f)
@@ -894,6 +1018,20 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         return Math.max(0L, cachedPositionMs)
     }
 
+    /**
+     * 给桌面歌词核对用的「此刻」位置：缓存值加上采样之后过去的时间（#320）。
+     * 与 [getPositionMs] 一样只读缓存，任何线程可调；规则见 extrapolatedDisplayPositionMs。
+     */
+    fun getDisplayPositionMs(audible: Boolean): Long {
+        // 顺序不能换：先取采样再读缓存。反过来可能拿到旧采样配新缓存——那只会判成不新鲜、不外推，
+        // 而这个顺序下「新鲜」一定意味着时刻就是这个位置被采到的时刻。
+        val sample = tickSample
+        val cached = cachedPositionMs
+        val sampleAt = if (sample != null && sample.positionMs == cached) sample.atMs else 0L
+        return Math.max(0L, extrapolatedDisplayPositionMs(cached, sampleAt,
+            android.os.SystemClock.elapsedRealtime(), audible, requestedSpeed))
+    }
+
     fun getDurationMs(): Long {
         return cachedDurationMs
     }
@@ -1229,7 +1367,18 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             // 线程」—— 也就是 Capacitor 的桥线程，而位置上报会跑到别的线程上去，
             // 于是每 250ms 跨线程碰一次播放器。
             .setLooper(playerLooper)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(factory))
+            .setMediaSourceFactory(
+                /*
+                 * 外面必须再包一层 DefaultDataSource.Factory。
+                 *
+                 * DefaultMediaSourceFactory 的单参构造**不会**自动补上 file:// / content://
+                 * 的分派，它把这个工厂原样当成「所有地址都走它」。只给 DefaultHttpDataSource
+                 * 的话，本地文件与伴奏缓存（file:// 指向 instrumental 目录下的 m4a）全都会
+                 * 「不支持的 scheme」—— 而 http 那一路的请求头照样由底下的 factory 带着，
+                 * 包一层不影响它。
+                 */
+                DefaultMediaSourceFactory(DefaultDataSource.Factory(context, factory)),
+            )
             /*
              * 耳机拔出 / 蓝牙断开：立刻暂停，不转外放。
              *

@@ -55,7 +55,7 @@ describe('coverCache', () => {
 
     it('reuses cached cover URLs without fetching', async () => {
         const blob = new Blob(['cached']);
-        getFromCacheMock.mockResolvedValueOnce(blob);
+        getFromCacheMock.mockResolvedValue(blob);
 
         await expect(loadCachedOrFetchCover('cover_2', 'https://img.test/cover.png')).resolves.toBe('blob:cached-cover');
         expect(globalThis.fetch).not.toHaveBeenCalled();
@@ -68,6 +68,7 @@ describe('coverCache', () => {
         writeCoverAssetMock.mockResolvedValue(descriptor);
         getFromCacheMock.mockResolvedValueOnce(null);
         const fetchMock = vi.fn().mockResolvedValue({
+            ok: true,
             blob: vi.fn().mockResolvedValue(blob)
         });
         globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -75,7 +76,7 @@ describe('coverCache', () => {
         await expect(loadCachedOrFetchCover('cover_3', 'https://img.test/fresh.png')).resolves.toBe('blob:cached-cover');
         expect(fetchMock).toHaveBeenCalledWith('https://img.test/fresh.png', { mode: 'cors' });
         expect(writeCoverAssetMock).toHaveBeenCalledWith('cover_3', blob);
-        expect(saveToCacheMock).toHaveBeenCalledWith('cover_3', descriptor);
+        expect(saveToCacheMock).toHaveBeenCalledWith('cover_3', { ...descriptor, sourceUrl: 'https://img.test/fresh.png' });
         expect(createObjectUrlSpy).toHaveBeenCalledWith(blob);
     });
 
@@ -97,7 +98,7 @@ describe('coverCache', () => {
         await expect(cacheLocalSongOnlineCover('song-id', 'https://img.test/matched.png')).resolves.toBe(true);
         expect(removeFromCacheMock).toHaveBeenCalledWith('cover_local_song-id');
         expect(removeCoverAssetMock).toHaveBeenCalledWith('cover_local_song-id');
-        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_song-id', descriptor);
+        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_song-id', { ...descriptor, sourceUrl: 'https://img.test/matched.png' });
     });
 
     it('fetches QQ cover blobs through the same-origin proxy in web builds', async () => {
@@ -113,7 +114,7 @@ describe('coverCache', () => {
             `/api/lyric-proxy?url=${encodeURIComponent(coverUrl)}`,
             { mode: 'cors' },
         );
-        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_qq-song', descriptor);
+        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_qq-song', { ...descriptor, sourceUrl: coverUrl });
     });
 
     it('fetches KuGou cover blobs through the same-origin proxy in web builds', async () => {
@@ -129,7 +130,7 @@ describe('coverCache', () => {
             `/api/lyric-proxy?url=${encodeURIComponent(coverUrl)}`,
             { mode: 'cors' },
         );
-        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_kugou-song', descriptor);
+        expect(saveToCacheMock).toHaveBeenCalledWith('cover_local_kugou-song', { ...descriptor, sourceUrl: coverUrl });
     });
 
     afterEach(() => {

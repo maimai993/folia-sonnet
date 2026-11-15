@@ -186,13 +186,13 @@ dependencies {
     // ⚠️ 版本改动要看 media3 的 release notes：1.x 之间 API 有移动。
     implementation "androidx.media3:media3-exoplayer:1.11.1"
     /*
-     * Automix 的两个分析模型（beat_this 节拍分析、htdemucs 四轨分离）跑在原生这一侧。
+     * Automix 的两个分析模型（beat_this 节拍分析、scnet 四轨分离）跑在原生这一侧。
      *
-     * 权重已经内置在 assets/models/ 里（约 182MB，构建时打包），所以这里只需要推理引擎，
+     * 权重已经内置在 assets/models/ 里（约 96MB，构建时打包），所以这里只需要推理引擎，
      * 不需要任何下载器 —— 用户装上就有，首次用到时把 assets 里的文件拷到私有目录即可。
      *
-     * 为什么在原生算而不是 WebView 里：htdemucs 一次推理的峰值内存接近 500MB，
-     * 而且时间以秒计。放在 WebView 里既会挤爆渲染进程的堆，也会卡住整个界面。
+     * 为什么在原生算而不是 WebView 里：一次前向的中间张量到几十 MB、时间以秒计
+     * （旧的 htdemucs 更是接近 500MB）。放在 WebView 里既会挤爆渲染进程的堆，也会卡住界面。
      * 用 onnxruntime-android 走 NNAPI/CPU，跑在后台线程，界面不受影响。
      */
     implementation "com.microsoft.onnxruntime:onnxruntime-android:1.31.1"
@@ -290,8 +290,8 @@ tasks.named('preBuild').configure { dependsOn 'ensureCapacitorPluginsJson' }
 /*
  * 内置分析权重必须真的在包里。
  *
- * Kotlin 侧的 AutomixModels 只认 assets/models/beat_this.onnx 与 htdemucs-v2.onnx
- * （合计约 182MB，.gitignore 里不进 git）。缺了它们 gradle 照样能打出 APK ——
+ * Kotlin 侧的 AutomixModels 只认 assets/models/beat_this.onnx 与 scnet.int8.onnx
+ * （合计约 96MB，.gitignore 里不进 git）。缺了它们 gradle 照样能打出 APK ——
  * 但那是「装上以后智能动感永远没效果、分轨永远失败」的包，而失败发生在用户手机上，
  * 构建日志里一个字都没有。所以在这里当硬错误：要么先跑 `npm run models:android`，
  * 要么显式 `-PskipAutomixModelsCheck=true` 跳过（只给明确不要这两项功能的构建用）。
@@ -305,7 +305,7 @@ tasks.register('verifyAutomixModels') {
         def dir = file('src/main/assets/models')
         def expected = [
             'beat_this.onnx'   : 83077778L,
-            'htdemucs-v2.onnx' : 107902864L,
+            'scnet.int8.onnx'  : 12900277L,
         ]
         def problems = []
         expected.each { name, bytes ->

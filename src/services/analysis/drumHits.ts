@@ -1,5 +1,5 @@
 import { melSpectrogramOffThread } from '../automix/analysisOffThread';
-import { getFromCache, saveToCache } from '../db';
+import { getFromCache, removeFromCache, saveToCache } from '../db';
 import { BEAT_THIS_FPS, BEAT_THIS_SAMPLE_RATE } from './beatThis';
 import {
     DRUM_HAT, DRUM_KICK, DRUM_SNARE, DRUMLESS_COVERAGE, drumBandTracks, drumCoverage, ENERGY_HOP, energyFrames, isDrumAnalysis,
@@ -16,7 +16,8 @@ import { HTDEMUCS_GPU_SEGMENT } from './beatThisGpu';
 import { modelCanRun } from './modelAvailability';
 import { decodeAtRate } from './trackAudio';
 import { decodeTrackAtRate } from './trackBytes';
-import { analyzeDrumBandsNativeFromUrl, isNativeModelsAvailable } from '../automix/nativeModels';
+import { analyzeDrumBandsNativeFromUrl, cancelNativeSeparation, isNativeModelsAvailable } from '../automix/nativeModels';
+import { joinStemRun } from './stemRun';
 import { waitForForeground } from '../../utils/foregroundYield';
 
 // src/services/analysis/drumHits.ts
@@ -246,7 +247,7 @@ const keep = (key: string, hits: DrumHits) => {
     notifyDrumHits();
 };
 
-const remember = (key: string, analysis: DrumAnalysis, note: string) => {
+const remember = (key: string, analysis: DrumAnalysis, note: string, complete = true) => {
     const coverage = drumCoverage(analysis.drumEnergy, analysis.mixEnergy);
     const counted = [0, 0, 0];
     analysis.hits.kinds.forEach((kind) => { counted[kind] += 1; });
@@ -257,6 +258,11 @@ const remember = (key: string, analysis: DrumAnalysis, note: string) => {
         hitLists.delete(key);
         notifyDrumHits();
     } else keep(key, analysis.hits);
+    /*
+     * 只有整曲算完才算「结算」：半份（`hits.until` 有值）只是先拿来用，
+     * 后面的块还会到 —— 把它记成结算，会把还在跑的分析当成已经结束。
+     */
+    if (!complete) return;
     settled.delete(key);
     settled.add(key);
     while (settled.size > MAX_SETTLED) {
@@ -474,6 +480,9 @@ const MIX_HITS_PREFIX = `${DRUM_HITS_PREFIX}mix_`;
 /** 每读这么多秒，重挑一次 hits 交出去（见上面：第一个 10 秒半秒内就到手）。 */
 const MIX_CHUNK_SECONDS = 10;
 
+/** 分块分析期间，每隔这么多秒把已挑出的鼓点落一次盘（见 `savedTo`）。 */
+const PARTIAL_SAVE_SECONDS = 30;
+
 /** 等这首歌的音频最多这么久（见 `readWithTimeout`）：在线直链失效时不再无限等。 */
 const READ_BYTES_TIMEOUT_MS = 90_000;
 
@@ -509,6 +518,8 @@ const loadMixDrumHits = async (
             };
             remember(key, analysis, `native bands in ${((performance.now() - started) / 1000).toFixed(1)}s (${native.seconds.toFixed(1)}s of audio)`);
             await saveToCache(`${MIX_HITS_PREFIX}${key}`, analysis);
+            // 混音这份已经能播了：后台把鼓轨分离出来，一块一块换成更准的。
+            void refineDrumHitsWithStem(key, nativeUrl);
             return analysis;
         }
         console.info(`[DrumHits] ${key}: native drum bands unavailable, falling back to the WebView decode`);
@@ -540,6 +551,14 @@ const loadMixDrumHits = async (
     const stream = createDrumBandStream(total, { resample: resampleStem, mel: melSpectrogramOffThread, bands: drumBandTracks });
     const step = MIX_CHUNK_SECONDS * STEM_RATE;
     let announced = false;
+    /*
+     * 上一次落盘的进度（秒）。
+     *
+     * 每 10 秒挑一次就写一次盘太频繁（四分钟的歌 24 次），而只在整曲结束时写又等于
+     * 中途切歌就白算 —— 所以每 30 秒（以及最后一块）存一次：下次播放先读这一份，
+     * 接着往后续，不必从第一个 10 秒重新挑。
+     */
+    let savedTo = 0;
     setDrumStage(key, 'pick');
     for (let at = 0; at < total; at += step) {
         /*
@@ -564,12 +583,17 @@ const loadMixDrumHits = async (
             const count = hits.times.findIndex(time => time >= until);
             return count < 0 ? hits.times.length : count;
         })();
-        keep(key, {
+        const chunk: DrumHits = {
             times: hits.times.slice(0, head),
             strengths: hits.strengths.slice(0, head),
             kinds: hits.kinds.slice(0, head),
             until,
-        });
+        };
+        keep(key, chunk);
+        if (head > 0 && (end || until - savedTo >= PARTIAL_SAVE_SECONDS)) {
+            savedTo = until;
+            void saveToCache(`${MIX_HITS_PREFIX}${key}`, { hits: chunk, drumEnergy: mixEnergy, mixEnergy } satisfies DrumAnalysis);
+        }
         if (!announced) {
             announced = true;
             console.info(`[DrumHits] ${key}: mix bands, first ${head} hits ${((performance.now() - started) / 1000).toFixed(1)}s in, to ${until.toFixed(1)}s of the track`);
@@ -587,6 +611,121 @@ const loadMixDrumHits = async (
     return analysis;
 };
 
+/** 正在跑的「用真鼓轨替换」：一首歌一次，切歌时停。 */
+const stemRefines = new Map<string, Promise<void>>();
+
+/**
+ * 混音那份先顶上，后台再用 htdemucs 的**鼓轨**把鼓点换准。
+ *
+ * 为什么要接这一桥：混音里贝斯、人声、钢琴的起音都落在 kick / snare 的频带里，
+ * 鼓面会被「不是鼓的东西」敲响；真鼓轨里只有鼓。代价是慢 —— 手机上一块 30 秒音频
+ * 要几十秒推理 —— 所以它永远不在首屏那条路上：混音一两秒交付，这一条慢慢补，
+ * 回来一块就替换一次，表只会更准。
+ *
+ * 不 await、不阻塞播放；`stemTrackWanted` 说不再要这首歌时立刻让原生停下。
+ * `startFrom` 是缓存里那份半成品已经覆盖到的位置，从那里接着分离。
+ */
+const refineDrumHitsWithStem = (key: string, url: string, startFrom = 0): Promise<void> => {
+    const running = stemRefines.get(key);
+    if (running) return running;
+
+    const run = (async () => {
+        /*
+         * 后台不跑。htdemucs 在手机上是满核几分钟的活，丢到后台等于把「听歌时发烫」
+         * 重新引回来 —— 而它是「越准越好」而不是「不跑就没声音」，完全可以等前台再补。
+         * 半成品留在缓存里，下次从那里接着分离。
+         */
+        if (typeof document !== 'undefined' && document.hidden) {
+            console.info(`[DrumHits] ${key}: drum stem left for the foreground`);
+            return;
+        }
+        // 让播放先稳下来：分离一起来就是满核，开头几秒留给解码与首屏。
+        await new Promise<void>((resolve) => { setTimeout(resolve, 3000); });
+        if (!stemTrackWanted(key)) return;
+
+        const fps = BEAT_THIS_FPS;
+        const offsetFrames = Math.max(0, Math.round(startFrom * fps));
+        let bands: DrumBands = [
+            new Float32Array(offsetFrames),
+            new Float32Array(offsetFrames),
+            new Float32Array(offsetFrames),
+        ];
+        let frames = offsetFrames;
+        let lastSaved = startFrom;
+        const started = performance.now();
+
+        /*
+         * 与四轨包络共用同一次分离（stemRun.ts）：同一首歌上，鼓点和智能动感的其他效果
+         * 各自跑一遍 htdemucs，就是把满核几分钟翻倍，而模型本来就一次吐四轨。
+         */
+        const outcome = await joinStemRun(key, url, {
+            // 切歌、或者退到后台：让原生在下一个窗口边界停下，下次从这块接着分离。
+            wanted: () => stemTrackWanted(key) && !(typeof document !== 'undefined' && document.hidden),
+            onBlock: (block) => {
+                // 只有包络的块（这首歌这一段没有鼓）：鼓点这边没有可接的东西。
+                if (block.frames <= 0) return;
+                /*
+                 * 只接「接着上一块末尾」的块。原生是按 fromSec 递增发的，正常不会断；
+                 * 真断了（切后台被别的分析插队、某一块解码失败）就在这里停下 ——
+                 * 已经接上的部分仍然可用，不必把整首歌作废。
+                 */
+                const expected = frames / block.fps;
+                if (block.fromSec - expected > 0.5 || expected - block.fromSec > 0.5) {
+                    console.info(`[DrumHits] ${key}: drum stem block at ${block.fromSec.toFixed(1)}s does not follow ${expected.toFixed(1)}s, stopping`);
+                    void cancelNativeSeparation();
+                    return;
+                }
+                const next: DrumBands = [
+                    new Float32Array(frames + block.frames),
+                    new Float32Array(frames + block.frames),
+                    new Float32Array(frames + block.frames),
+                ];
+                for (let kind = 0; kind < 3; kind += 1) {
+                    next[kind].set(bands[kind], 0);
+                    next[kind].set(block.bands[kind].subarray(0, block.frames), frames);
+                }
+                bands = next;
+                frames += block.frames;
+                const until = frames / fps;
+                const hits = pickBandHits(bands, frames);
+                keep(key, { ...hits, until });
+                // 每 30 秒落一次盘：切歌或退出之后，下次从这里接着分离。
+                if (until - lastSaved >= PARTIAL_SAVE_SECONDS) {
+                    lastSaved = until;
+                    void saveToCache(`${DRUM_HITS_PREFIX}${key}`, {
+                        hits: { ...hits, until },
+                        drumEnergy: Float32Array.of(1),
+                        mixEnergy: Float32Array.of(1),
+                    } satisfies DrumAnalysis);
+                }
+            },
+        }, startFrom);
+
+        if (!outcome || outcome.cancelled || frames <= offsetFrames) return;
+        const hits = pickBandHits(bands, frames);
+        const analysis: DrumAnalysis = {
+            hits,
+            drumEnergy: Float32Array.of(1),
+            mixEnergy: Float32Array.of(1),
+        };
+        remember(key, analysis, `separated drums in ${((performance.now() - started) / 1000).toFixed(1)}s`);
+        await saveToCache(`${DRUM_HITS_PREFIX}${key}`, analysis);
+        /*
+         * 真鼓轨那份已经完整，混音那份就是次好的了：删掉，免得下次先命中它。
+         * 删失败也无所谓 —— 读取时会先看真分轨这一份。
+         */
+        void removeFromCache(`${MIX_HITS_PREFIX}${key}`).catch(() => undefined);
+    })().catch((error) => {
+        console.warn(`[DrumHits] ${key}: drum stem refinement failed`, error);
+    });
+
+    stemRefines.set(key, run);
+    void run.finally(() => {
+        if (stemRefines.get(key) === run) stemRefines.delete(key);
+    });
+    return run;
+};
+
 /** 安卓上鼓点从混音频带取（见 `loadMixDrumHits`），缓存也分开存，免得和真分轨的结果混用。 */
 const usesMixBands = (): boolean => isNativeModelsAvailable();
 
@@ -597,11 +736,11 @@ const usesMixBands = (): boolean => isNativeModelsAvailable();
  */
 export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | null> => {
     try {
-        const cacheKey = usesMixBands() ? `${MIX_HITS_PREFIX}${key}` : `${DRUM_HITS_PREFIX}${key}`;
-        const stored = await getFromCache<DrumAnalysis>(cacheKey);
-        if (!isDrumAnalysis(stored)) return null;
-        remember(key, stored, 'from the cache');
-        return stored;
+        const stored = await readStoredAnalysis(key);
+        if (!stored) return null;
+        // 半份也先用：`cached` 模式不跑分析，能拿到多少是多少，但不把它记成整曲。
+        remember(key, stored.analysis, 'from the cache', stored.analysis.hits.until === undefined);
+        return stored.analysis;
     } catch (error) {
         console.warn(`[DrumHits] ${key}: cache read failed`, error);
         return null;
@@ -614,6 +753,113 @@ export const loadStoredDrumHits = async (key: string): Promise<DrumAnalysis | nu
  * hits. Null when none can be had now, which is not remembered: a later play may find the bytes.
  * Separates only while `key` is the wanted track (`setWantedDrumTrack`).
  */
+/**
+ * 一首歌的分析可能存了两份：htdemucs 真分轨的鼓（`DRUM_HITS_PREFIX`）和混音的频带
+ * （`MIX_HITS_PREFIX`）。真分轨那份干净得多，所以**先读它**；手上没有才退回混音。
+ *
+ * 这一条原来按平台二选一（安卓只读混音），结果是：分离过的歌再播一次，仍然要从混音
+ * 重新算一遍 —— 用户看到的就是「每次都要重新分析」。
+ */
+const readStoredAnalysis = async (
+    key: string,
+): Promise<{ analysis: DrumAnalysis; fromStems: boolean } | null> => {
+    const keys: Array<[string, boolean]> = usesMixBands()
+        ? [[`${DRUM_HITS_PREFIX}${key}`, true], [`${MIX_HITS_PREFIX}${key}`, false]]
+        : [[`${DRUM_HITS_PREFIX}${key}`, true]];
+    for (const [cacheKey, fromStems] of keys) {
+        const stored = await getFromCache<DrumAnalysis>(cacheKey);
+        if (isDrumAnalysis(stored)) return { analysis: stored, fromStems };
+    }
+    return null;
+};
+
+/** 从库里读一份；半份也交出来（记成未结算），`partial` 说明后面还有。 */
+const readCachedAnalysis = async (
+    key: string,
+): Promise<{ analysis: DrumAnalysis; partial: boolean; fromStems: boolean } | null> => {
+    try {
+        const stored = await readStoredAnalysis(key);
+        if (!stored) return null;
+        const partial = stored.analysis.hits.until !== undefined && !settled.has(key);
+        remember(
+            key,
+            stored.analysis,
+            partial ? `from ${stored.fromStems ? 'the drum stem' : 'the mix'}, to ${(stored.analysis.hits.until ?? 0).toFixed(0)}s` : 'from the cache',
+            !partial,
+        );
+        return { analysis: stored.analysis, partial, fromStems: stored.fromStems };
+    } catch (error) {
+        console.warn(`[DrumHits] ${key}: cache read failed`, error);
+        return null;
+    }
+};
+
+/** 跑一次分离，不读库：手机上是混音频带，桌面上是真分轨。 */
+const separate = async (
+    key: string,
+    readBytes: () => Promise<ArrayBuffer | null>,
+    nativeUrl: string | null,
+): Promise<DrumAnalysis | null> => {
+    if (!stemTrackWanted(key)) return null;
+    setDrumStage(key, 'bytes');
+    /*
+     * 取音频这一步也要有上限：在线曲目要先拿直链再整曲下载，直链失效或者网络卡住时
+     * 这里会**一直**不回来 —— 界面上就是「正在从混音里读鼓点…」永远不变。
+     * 90 秒还没到手就当作取不到，让界面说出「取不到这首歌的音频」而不是装作在忙。
+     */
+    const readWithTimeout = async (): Promise<ArrayBuffer | null> => {
+        const bytes = await Promise.race([
+            readBytes(),
+            new Promise<null>((resolve) => { setTimeout(() => resolve(null), READ_BYTES_TIMEOUT_MS); }),
+        ]);
+        if (!bytes) setDrumStage(key, 'no-bytes');
+        return bytes;
+    };
+    try {
+        /*
+         * 安卓走混音频带，桌边走真的 htdemucs 分轨（见 `loadMixDrumHits` 的头注释）：
+         * 手机上的 htdemucs 比播放慢，鼓点永远追不上播放头，鼓面就一动不动。
+         * 这条要在 `canRunDrumStem` 之前问：那个函数在安卓上回答 false。
+         */
+        if (usesMixBands()) {
+            const result = await loadMixDrumHits(key, readWithTimeout, nativeUrl);
+            setDrumStage(key, null);
+            return result;
+        }
+        if (!canRunDrumStem()) {
+            setDrumStage(key, null);
+            return null;
+        }
+        setDrumStage(key, 'pick');
+        // A separation stopped earlier: its hits play at once, while the track decodes again.
+        const resume = resumes.get(key) ?? null;
+        if (resume?.hits) keep(key, resume.hits);
+        let analysis: DrumAnalysis | null = null;
+        try {
+            analysis = await runTrackStems(key, readWithTimeout, drumHitsTask(key, resume));
+            setDrumStage(key, null);
+            return analysis;
+        } finally {
+            // Hits put back from a stop, or picked live, and no analysis came (no bytes, no decode, a
+            // separation left or failed part way): taken off again - a later play would read them as whole.
+            if (!analysis && getDrumHits(key)?.until !== undefined) hitLists.delete(key);
+        }
+    } catch (error) {
+        console.warn(`[DrumHits] ${key}: failed`, error);
+        setDrumStage(key, 'no-bytes');
+        return null;
+    }
+};
+
+/**
+ * A track's drum analysis: from the cache, joined from a run in flight, or a separation of
+ * `readBytes`' bytes now (only when `canRunDrumStem`). Once it is in, `getDrumHits(key)` answers its
+ * hits. Null when none can be had now, which is not remembered: a later play may find the bytes.
+ * Separates only while `key` is the wanted track (`setWantedDrumTrack`).
+ *
+ * A list stored part way through (the mix path saves every 30 s of audio) is answered at once and
+ * carried on in the background: the hits it has play now, and the rest arrives as it is picked.
+ */
 export const loadTrackDrumHits = (
     key: string,
     readBytes: () => Promise<ArrayBuffer | null>,
@@ -623,65 +869,51 @@ export const loadTrackDrumHits = (
     // Joined - but a run whose track was left and is wanted again before it reached its next segment
     // is stopping, and answers null: then one fresh run, rather than no hits for the rest of the play.
     // Only on null: a drumless track answers an analysis, and is not separated again.
-    if (existing) return existing.then(found => (found === null && stemTrackWanted(key) && !runs.has(key) ? loadTrackDrumHits(key, readBytes, nativeUrl) : found));
-    const run = (async (): Promise<DrumAnalysis | null> => {
-        const mixBands = usesMixBands();
-        const stored = await getFromCache<DrumAnalysis>(`${mixBands ? MIX_HITS_PREFIX : DRUM_HITS_PREFIX}${key}`);
-        if (isDrumAnalysis(stored)) {
-            remember(key, stored, 'from the cache');
-            return stored;
+    if (existing) {
+        return existing.then(found => (found === null && stemTrackWanted(key) && !runs.has(key)
+            ? loadTrackDrumHits(key, readBytes, nativeUrl)
+            : found));
+    }
+
+    /*
+     * 半份先交出去的那条路：`release` 一被调用，这一位调用方立刻拿到已有的那一段，
+     * 而完整的那一次继续在后台跑 —— 同一个 key 后来的调用加入它，不另起一份。
+     */
+    let release!: (value: DrumAnalysis | null) => void;
+    const half = new Promise<DrumAnalysis | null>((resolve) => { release = resolve; });
+
+    const job = (async (): Promise<DrumAnalysis | null> => {
+        const cached = await readCachedAnalysis(key);
+        if (cached) {
+            release(cached.analysis);
+            // 整份已经到了，不用再算；半份则把剩下的接着补上。
+            if (!cached.partial || !stemTrackWanted(key)) {
+                /*
+                 * 混音那份是完整的，但还没用真鼓轨分离过：这次播放（前台时）补上。
+                 * 分离失败或没跑完都不要紧，下次播放还会再来。
+                 */
+                if (!cached.fromStems && nativeUrl) void refineDrumHitsWithStem(key, nativeUrl);
+                return cached.analysis;
+            }
+            /*
+             * 真鼓轨的半份：接着分离，而不是退回混音重算一遍。
+             * 混音的半份则继续走下面的混音分析。
+             */
+            if (cached.fromStems && nativeUrl) {
+                void refineDrumHitsWithStem(key, nativeUrl, cached.analysis.hits.until ?? 0);
+                return cached.analysis;
+            }
         }
-        if (!stemTrackWanted(key)) return null;
-        setDrumStage(key, 'bytes');
-        /*
-         * 取音频这一步也要有上限：在线曲目要先拿直链再整曲下载，直链失效或者网络卡住时
-         * 这里会**一直**不回来 —— 界面上就是「正在从混音里读鼓点…」永远不变。
-         * 90 秒还没到手就当作取不到，让界面说出「取不到这首歌的音频」而不是装作在忙。
-         */
-        const readWithTimeout = async (): Promise<ArrayBuffer | null> => {
-            const bytes = await Promise.race([
-                readBytes(),
-                new Promise<null>((resolve) => { setTimeout(() => resolve(null), READ_BYTES_TIMEOUT_MS); }),
-            ]);
-            if (!bytes) setDrumStage(key, 'no-bytes');
-            return bytes;
-        };
-        /*
-         * 安卓走混音频带，桌边走真的 htdemucs 分轨（见 `loadMixDrumHits` 的头注释）：
-         * 手机上的 htdemucs 比播放慢，鼓点永远追不上播放头，鼓面就一动不动。
-         * 这条要在 `canRunDrumStem` 之前问：那个函数在安卓上回答 false。
-         */
-        if (mixBands) return loadMixDrumHits(key, readWithTimeout, nativeUrl);
-        if (!canRunDrumStem()) return null;
-        setDrumStage(key, 'pick');
-        // A separation stopped earlier: its hits play at once, while the track decodes again.
-        const resume = resumes.get(key) ?? null;
-        if (resume?.hits) keep(key, resume.hits);
-        let analysis: DrumAnalysis | null = null;
-        try {
-            analysis = await runTrackStems(key, readWithTimeout, drumHitsTask(key, resume));
-            return analysis;
-        } finally {
-            // Hits put back from a stop, or picked live, and no analysis came (no bytes, no decode, a
-            // separation left or failed part way): taken off again - a later play would read them as whole.
-            if (!analysis && getDrumHits(key)?.until !== undefined) hitLists.delete(key);
-        }
-    })().then(
-        (result): DrumAnalysis | null => {
-            // 分析结束（成功、无鼓、被放弃）都清掉阶段：界面上「在忙」的提示必须能停下来。
-            setDrumStage(key, null);
-            return result;
-        },
-        (error): DrumAnalysis | null => {
-            console.warn(`[DrumHits] ${key}: failed`, error);
-            setDrumStage(key, 'no-bytes');
-            return null;
-        },
-    );
-    runs.set(key, run);
+        const full = await separate(key, readBytes, nativeUrl);
+        release(full);
+        return full;
+    })();
+
+    runs.set(key, job);
     // Only the run in flight is kept: an answer lives on in `hitLists` and on disk, a null is retried.
-    void run.then(() => {
-        if (runs.get(key) === run) runs.delete(key);
+    void job.then(() => {
+        if (runs.get(key) === job) runs.delete(key);
     });
-    return run;
+    // 谁先到就用谁：存了半份就先交半份，整份到了再替换（播放端读到的表会跟着变长）。
+    return Promise.race([job, half]);
 };

@@ -55,17 +55,68 @@ let chain: Promise<unknown> = Promise.resolve();
 
 const cacheKey = (name: string, artist: string): string => `${name} ${artist}`;
 
+/** 繁体转简体：`周杰倫` 与 `周杰伦` 才对得上。opencc-js 是首屏不许静态带上的重型包，用到时才载。 */
+type ToSimplified = (value: string) => string;
+let toSimplifiedLoad: Promise<ToSimplified> | null = null;
+const loadToSimplified = (): Promise<ToSimplified> => {
+    toSimplifiedLoad ??= import('opencc-js')
+        .then(OpenCC => OpenCC.Converter({ from: 't', to: 'cn' }))
+        .catch((error: unknown) => {
+            console.warn('[CoverFallback] Traditional-to-simplified converter unavailable', error);
+            return (value: string) => value;
+        });
+    return toSimplifiedLoad;
+};
+
+/** 比较用的写法：繁转简、全半角统一、小写，去掉空白和标点。 */
+const normalizeForMatch = (value: string, toSimplified: ToSimplified): string => toSimplified(value.normalize('NFKC'))
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, '');
+
 /**
- * 搜到的结果是不是同一首歌。
- * 平台会给出一堆同名不同版本（live、翻唱、remix），所以互相包含就算 ——
- * 宁可借到一张近似封面，也不要整墙占位图。
+ * 歌名去掉版本后缀再比：`晴天 (Live)`、`晴天【伴奏】`、`晴天 - Remix`、`晴天 feat. B` 都算《晴天》。
+ * 书名号、引号不算后缀（`《晴天》` 就是歌名本身）；去完什么都不剩（`(Untitled)`）就按整个名字比。
  */
-const isSameSong = (candidate: string, target: string): boolean => {
-    const normalize = (value: string) => value.toLowerCase().replace(/\s+/g, '');
-    const left = normalize(candidate);
-    const right = normalize(target);
-    if (!left || !right) return false;
-    return left === right || left.includes(right) || right.includes(left);
+const baseTitleOf = (value: string, toSimplified: ToSimplified): string => {
+    const text = value.normalize('NFKC');
+    const base = normalizeForMatch(
+        text.replace(/[(（[【〔][^)）\]】〕]*[)）\]】〕]/g, ' ')
+            .replace(/\s+(?:feat\.?|ft\.|featuring)\s.*$/i, '')
+            .replace(/\s+-\s+.*$/, ''),
+        toSimplified,
+    );
+    return base || normalizeForMatch(text, toSimplified);
+};
+
+/** 「没有歌手」的几种写法：拿它比对等于没比。 */
+const UNKNOWN_ARTISTS = new Set(['', '未知歌手', '未知艺术家', 'unknown', 'unknownartist', 'various', 'variousartists']);
+
+/** 一个歌手栏位里可能写着好几位（`A/B`、`A & B`、`A、B`、`A feat. B`），拆开逐个比。 */
+const splitArtistNames = (value: string, toSimplified: ToSimplified): string[] => value
+    .split(/[/／,，、&;；]|\s+(?:featuring|feat\.?|ft\.?|x)\s+/i)
+    .map(name => normalizeForMatch(name, toSimplified))
+    .filter(name => !UNKNOWN_ARTISTS.has(name));
+
+type MatchTarget = { name: string; artist: string };
+type MatchCandidate = { name: string; artists: string[] };
+
+/** 歌名是不是同一首（去掉版本后缀后一致）。 */
+const isSameTitle = (candidate: MatchCandidate, target: MatchTarget, toSimplified: ToSimplified): boolean => {
+    const title = baseTitleOf(target.name, toSimplified);
+    return Boolean(title) && baseTitleOf(candidate.name, toSimplified) === title;
+};
+
+/**
+ * 歌手对不对得上（#324）。不知道歌手时只能凭歌名，算对得上。
+ *
+ * 原来歌名互相包含就算、对不上还拿第一条硬顶，于是同名不同歌手、甚至不相干的歌的封面被借了过来。
+ * 宁可占位，不要错图。
+ */
+const isSameArtist = (candidate: MatchCandidate, target: MatchTarget, toSimplified: ToSimplified): boolean => {
+    const wanted = splitArtistNames(target.artist, toSimplified);
+    if (wanted.length === 0) return true;
+    const offered = candidate.artists.flatMap(name => splitArtistNames(name, toSimplified));
+    return offered.some(name => wanted.includes(name));
 };
 
 const artistNameOf = (song: SongResult | null | undefined): string => (
@@ -234,26 +285,43 @@ function resolveByteFallbackCover(song: SongResult, coverUrl: string): string {
 }
 
 /**
- * 搜一次，取**匹配最高**的那条的封面。
+ * 搜一次，取**对得上的**那条里排最前的封面。
  *
- * 搜索结果本身已按相关性排过序，所以「第一条有封面的」就是匹配最高的那个；
- * 只有当它连名字都对不上时，才退而求其次再找一条同名的。
+ * 搜索结果已按相关性排过序，所以在「歌名一致、歌手对得上」的里面取第一条；一条都对不上就换下一个
+ * 平台 / 查询，全都对不上返回空串（占位），不再拿第一条硬顶（#324）。
+ *
+ * 返回 null 是「预算用完了、还没有结论」：调用方不缓存它，下次会话还能再搜。空串才是搜过、没有。
  */
-const searchBestCover = async (name: string, artist: string): Promise<string> => {
+const searchBestCover = async (name: string, artist: string): Promise<string | null> => {
     // 动态 import：omni → providerRegistry → 各 provider → 本文件，顶层 import 会绕成环。
-    const { omni } = await import('./omni');
-    // 先只按歌名搜（带上歌手容易一条都搜不到），没结果再带歌手补一次。
-    const queries = artist ? [name, `${name} ${artist}`] : [name];
-    for (const query of queries) {
+    const [{ omni }, toSimplified] = await Promise.all([import('./omni'), loadToSimplified()]);
+    const target = { name, artist };
+    // 知道歌手时先带上歌手搜：对得上的那条更可能排进前几；搜不到再只按歌名补一次。
+    const queries = artist ? [`${name} ${artist}`, name] : [name];
+    // 带歌手搜出了同名歌、只是歌手都对不上的平台：只按歌名再搜一次也只会多出别人的版本，省下这次预算。
+    const titleFoundOn = new Set<OmniProviderId>();
+    for (const [queryIndex, query] of queries.entries()) {
+        const titleOnly = queryIndex > 0;
         for (const providerId of FALLBACK_PROVIDERS) {
-            if (budget <= 0) return '';
+            if (titleOnly && titleFoundOn.has(providerId)) continue;
+            if (budget <= 0) return null;
             budget -= 1;
             try {
                 const page = await omni.searchProviderSongs(providerId, query, { limit: 8, offset: 0 });
-                const withCover = page.items.filter(item => typeof item?.album?.coverUrl === 'string' && item.album.coverUrl);
-                if (withCover.length === 0) continue;
-                const exact = withCover.find(item => isSameSong(String(item.name ?? ''), name));
-                return String((exact ?? withCover[0]).album?.coverUrl ?? '');
+                // 平台给的数据未必齐全：字段按可能缺着来读。
+                const candidates = page.items.flatMap(item => {
+                    const loose = item as { name?: unknown; artists?: unknown; album?: { coverUrl?: unknown } };
+                    const coverUrl = loose.album?.coverUrl;
+                    if (typeof coverUrl !== 'string' || !coverUrl) return [];
+                    const artists = Array.isArray(loose.artists)
+                        ? (loose.artists as Array<{ name?: unknown } | null>).map(entry => (typeof entry?.name === 'string' ? entry.name : ''))
+                        : [];
+                    const candidate = { name: typeof loose.name === 'string' ? loose.name : '', artists };
+                    return isSameTitle(candidate, target, toSimplified) ? [{ candidate, coverUrl }] : [];
+                });
+                const match = candidates.find(({ candidate }) => isSameArtist(candidate, target, toSimplified));
+                if (match) return match.coverUrl;
+                if (candidates.length > 0) titleFoundOn.add(providerId);
             } catch (error) {
                 // 这个平台没登录 / 搜不到，换下一个，不该影响出列表。
                 // 但要留一句话：借不到封面时，这是唯一能看出「卡在哪个平台」的线索。
@@ -261,6 +329,7 @@ const searchBestCover = async (name: string, artist: string): Promise<string> =>
             }
         }
     }
+    console.log('[CoverFallback] No search result matches the title and artist, kept the placeholder:', name);
     return '';
 };
 
@@ -281,6 +350,8 @@ export const searchCoverBySongName = async (name: string, artist: string): Promi
     if (cached !== undefined) return cached;
     if (budget <= 0) return '';
     const cover = await searchBestCover(song, who).catch(() => '');
+    // 预算用完的「没结论」不记：记下空串就整个会话都不再搜了。
+    if (cover === null) return '';
     coverCache.set(key, cover);
     return cover;
 };
@@ -312,6 +383,7 @@ export const requestSongCoverFallback = (song: SongResult | null | undefined): v
     const work = async () => {
         try {
             const cover = await searchBestCover(name, artist);
+            if (cover === null) return;
             coverCache.set(key, cover);
             if (!cover) return;
             if (song.album) song.album.coverUrl = cover;
@@ -367,10 +439,10 @@ export const backfillSongCovers = async <T extends UnifiedSong>(songs: T[], limi
             // 同步等头几首：异步那一路要等界面重画才看得到，而列表 / 墙面在拿到数据后
             // 未必会再重画一次 —— 只靠广播的话，用户看到的就是「刷新了还是一片占位」。
             // 有缓存之后（第二次进同一个歌单）这里一次网络请求都不发。
-            budget -= 1;
-            cover = await searchBestCover(name, artist).catch(() => '');
-            coverCache.set(key, cover);
-            if (cover) announceLocalCoverReady({ songId: String(song.id ?? ''), coverUrl: cover });
+            const found = await searchBestCover(name, artist).catch(() => '');
+            cover = found ?? undefined;
+            if (found !== null) coverCache.set(key, found);
+            if (found) announceLocalCoverReady({ songId: String(song.id ?? ''), coverUrl: found });
         }
         if (!cover) {
             // 这一轮没轮到（超出限量）或预算用尽：挂到异步那一路，翻到 / 下次再补。

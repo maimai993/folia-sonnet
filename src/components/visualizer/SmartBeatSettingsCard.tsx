@@ -35,7 +35,7 @@ const SmartBeatSettingsCard: React.FC<SmartBeatSettingsCardProps> = ({ t }) => {
      */
     const [, tick] = React.useState(0);
     React.useEffect(() => {
-        if (status.kind !== 'loading') return undefined;
+        if (status.kind !== 'loading' && status.kind !== 'stemsOnly') return undefined;
         const timer = setInterval(() => tick(value => value + 1), 1000);
         return () => clearInterval(timer);
     }, [status.kind]);
@@ -48,6 +48,28 @@ const SmartBeatSettingsCard: React.FC<SmartBeatSettingsCardProps> = ({ t }) => {
                 return t('options.smartBeatStatusNoTrack');
             case 'noEffect':
                 return t('options.smartBeatStatusNoEffect');
+            /*
+             * 只吃分轨曲线的画面：不跑 beat_this，但 htdemucs 在补整曲。说清「在补到第几秒」，
+             * 否则这一档和「没开效果」在界面上分不出来（这正是群唱等样式被误报「什么都没分析」的原因）。
+             */
+            case 'stemsOnly': {
+                const stems = status.stems;
+                if (stems?.complete) return t('options.smartBeatStatusStemsReady');
+                /*
+                 * 分轨那条路在本机跑不起来（模型加载失败 / 音频地址失效）。
+                 * 曲线仍然是整曲的频段版，画面照常动 —— 这说明白，比挂着「0%」强。
+                 */
+                if (stems?.refineFailed) return t('options.smartBeatStatusStemsBaseline');
+                /*
+                 * 曲线已经是整曲的了（基线一两秒就铺满），后台跑的只是「把某些段换成真分轨」。
+                 * 所以这里报的是**精度提升到多少**，不是「读到第几秒」——
+                 * 以前那个秒数会停在 30 不动，看起来和卡死一模一样。
+                 */
+                const percent = stems && stems.seconds > 0
+                    ? Math.max(0, Math.min(100, Math.round((stems.refined / stems.seconds) * 100)))
+                    : 0;
+                return `${t('options.smartBeatStatusStemsReading')}${percent > 0 ? ` · ${percent}%` : ''}`;
+            }
             case 'drumsOnly': {
                 /*
                  * 时计只吃鼓点：把「读到哪了」一并说出来，否则「没效果」和「在分析」在界面上一样。

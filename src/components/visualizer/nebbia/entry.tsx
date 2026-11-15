@@ -90,6 +90,12 @@ export default defineVisualizer({
                 { key: 'spot', nameKey: 'options.beatEffectPart_nebbiaSpot' },
             ],
         },
+            {
+            id: BEAT_EFFECT_IDS.nebbiaFogDensity,
+            nameKey: 'options.beatEffect_nebbiaFogDensity',
+            descKey: 'options.beatEffect_nebbiaFogDensityDesc',
+            source: 'envelopes',
+        },
     ],
     beatEffectOnScreen: nebbiaBeatEffectOnScreen,
     // Its shaders compile in the background (cold, about a second on D3D11): at once when it is the saved

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type React from 'react';
 import { PlayerState, type ActiveLocalLyricsSource, type LyricData, type PlaybackContext, type ReplayGainMode, type SongResult } from '../types';
 import { createCoverUrlResolver } from '../utils/coverUrlResolver';
+import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import type { AutomixTransitionEnd } from '../services/automix/automixSession';
 import type { PlaybackRoute } from '../types/hifi';
 
@@ -144,7 +145,15 @@ export const usePlaybackStore = create<PlaybackStoreState>((set, get) => ({
     transitionEnd: null,
     playbackRoute: 'web',
 
-    setCurrentSong: (next) => set({ currentSong: resolve(next, get().currentSong) }),
+    // 换成另一首歌的同一刻丢掉上一首的封面（#323）：`cachedCoverUrl` 不记它属于哪首歌，而解析封面
+    // 时它排在歌曲自己的封面前面 —— 哪条换歌路径漏清一次（原生点歌、本地歌开播等封面那段），新歌就
+    // 挂着上一首的图。同一首歌的改写（补歌词状态、补封面字段）key 不变，不动它。
+    setCurrentSong: (next) => {
+        const previous = get().currentSong;
+        const song = resolve(next, previous);
+        const changed = previous !== song && (!previous || !song || getPlaybackSongKey(previous) !== getPlaybackSongKey(song));
+        set(changed ? { currentSong: song, cachedCoverUrl: null } : { currentSong: song });
+    },
     setAudioSrc: (next) => set({ audioSrc: resolve(next, get().audioSrc) }),
     // Plain setter: the extension transform (Folium `lyrics.transform`) runs in the lyrics
     // pipeline (createLyricsSetter), so functional updates here never re-transform.

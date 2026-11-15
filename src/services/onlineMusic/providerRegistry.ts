@@ -17,6 +17,7 @@ import { spotifyProvider } from './spotify/spotifyProvider';
  */
 import { qishuiProvider } from './qishuiProvider';
 import { appleMusicProvider } from './appleMusic/appleMusicProvider';
+import { bilibiliProvider } from '../bilibili/bilibiliProvider';
 // 上游 fnmusic 那份没有 import：注册的是本 fork 的 feiniu，见文件末尾的说明。
 import { feiniuProvider } from './feiniuProvider';
 import { installLxAudioRouting, lxmusicProvider } from './lxmusic/lxmusicProvider';
@@ -131,6 +132,12 @@ registerOnlineMusicProvider(ytmProvider);
 registerOnlineMusicProvider(spotifyProvider);
 
 registerOnlineMusicProvider(qishuiProvider);
+
+// B 站是一个**视频**平台：推荐一屏投稿，点开就放那条视频。它和音乐平台的差别都在
+// capabilities 里说清了（没有歌词、没有收藏），所以这里和别的平台一样注册 ——
+// 界面上的红心、歌词这些入口会照 capabilities 自己消失。
+// 只在有原生代发的环境（安卓）真正可用，见它的 getAvailability。
+registerOnlineMusicProvider(bilibiliProvider);
 
 registerOnlineMusicProvider(appleMusicProvider);
 // 飞牛只注册本 fork 那一份。

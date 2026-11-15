@@ -387,7 +387,7 @@ object BeatThisRunner {
                 real[index] = sample * window[index]
                 imag[index] = 0f
             }
-            fft(real, imag)
+            Fft.forward(real, imag)
             for (bin in magnitude.indices) {
                 magnitude[bin] = sqrt(real[bin] * real[bin] + imag[bin] * imag[bin]) * scale
             }
@@ -402,56 +402,5 @@ object BeatThisRunner {
             }
         }
         return Mel(data, frames)
-    }
-
-    /**
-     * 原地基-2 快速傅里叶变换（长度必须是 2 的幂）。
-     *
-     * 自己写而不是用 JTransforms：只需要这一个 1024 点变换，
-     * 为它引一个第三方库不值得，而且这段代码是标准写法、容易核。
-     */
-    private fun fft(real: FloatArray, imag: FloatArray) {
-        val n = real.size
-        // 位反转置换
-        var j = 0
-        for (i in 1 until n) {
-            var bit = n shr 1
-            while (j and bit != 0) {
-                j = j xor bit
-                bit = bit shr 1
-            }
-            j = j or bit
-            if (i < j) {
-                val tr = real[i]; real[i] = real[j]; real[j] = tr
-                val ti = imag[i]; imag[i] = imag[j]; imag[j] = ti
-            }
-        }
-        // 蝶形运算
-        var length = 2
-        while (length <= n) {
-            val angle = -2.0 * Math.PI / length
-            val wReal = cos(angle).toFloat()
-            val wImag = kotlin.math.sin(angle).toFloat()
-            var i = 0
-            while (i < n) {
-                var curReal = 1.0f
-                var curImag = 0.0f
-                for (k in 0 until length / 2) {
-                    val a = i + k
-                    val b = a + length / 2
-                    val xr = real[b] * curReal - imag[b] * curImag
-                    val xi = real[b] * curImag + imag[b] * curReal
-                    real[b] = real[a] - xr
-                    imag[b] = imag[a] - xi
-                    real[a] += xr
-                    imag[a] += xi
-                    val nextReal = curReal * wReal - curImag * wImag
-                    curImag = curReal * wImag + curImag * wReal
-                    curReal = nextReal
-                }
-                i += length
-            }
-            length = length shl 1
-        }
     }
 }

@@ -62,24 +62,25 @@ class FoliaAudioSinkFactory(
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean,
     ): AudioSink {
-        // 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
-        // 否则换手时两路的 EQ 状态会互相干扰。
         /*
-         * 关闭人声暂时**不挂在链上**（2026-11-10）。
+         * 顺序：EQ → 关闭人声 → 过渡。
          *
-         * 它连续出了两版问题，都是「开不开都滋滋滋」：一次是字节序、一次是
-         * 透传分支的错位与相消后的削波。两次都在原生音频线程上，`logcat`
-         * 里没有任何异常 —— 因为它不是崩溃，只是把样本写坏了。
+         * 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
+         * 否则换手时两路的 EQ 状态会互相干扰。
          *
-         * 与其继续在生产链上试参数（每一次试错都是用户听一遍噪声），
-         * 不如先把它摘掉：不挂在链上就绝不可能影响任何一首歌的声音。
-         * 这个功能要恢复时，得先在设备上用真实的歌逐样本验证透传分支
-         * 与原信号完全一致，再谈相消效果。
+         * 关闭人声夹在两者中间：它要作用在「一首歌的最终混音」上（减的是左右声道
+         * 共有的中置分量，必须在两首歌被过渡链混到一起之前做），又不该影响
+         * EQ 定下来的音色。
+         *
+         * ⚠️ 它 2026-11-10 曾经被摘出过链外（连续两版「开不开都滋滋滋」）。
+         * 恢复的前提是 VocalCancelTest 那组单测：关闭时逐字节一致、打开时
+         * 居中内容被压下、侧向内容不削波。改这里之前先跑那组测试。
          *
          * 显式写出元素类型：toTypedArray 出来的是 Array<AudioProcessor>。
          */
         val chain = ArrayList<AudioProcessor>(3)
         chain.add(EqAudioProcessor(state))
+        chain.add(VocalCancelProcessor(state))
         if (transitionRoleProvider != null) {
             chain.add(TransitionDspProcessor(transitionRoleProvider))
         }

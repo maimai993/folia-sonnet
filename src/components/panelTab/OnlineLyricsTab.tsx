@@ -59,6 +59,7 @@ const OnlineLyricsTab: React.FC<OnlineLyricsTabProps> = ({
     return (
         <SourceTab
             key={song.id}
+            rawSong={song}
             lyricSources={availableSources}
             activeLyricSource={activeSource}
             onChangeLyricSource={onChangeLyricsSource}

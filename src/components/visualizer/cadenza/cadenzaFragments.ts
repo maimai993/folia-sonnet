@@ -181,7 +181,17 @@ export const buildLineFragments = (
             }];
         });
 
-        return { line, lineStart, lineEnd, fragments };
+        /*
+         * 这一行的**内容宽**，逐字累加得来。
+         *
+         * 不能用 `line.width`：CJK 换行是「填满才断」，除最后一行外每行的
+         * `line.width` 都贴着 maxWidth —— 于是所有行拿到同一个 `-maxWidth/2`，
+         * 多行歌词就成了**左对齐**，行首被推出屏幕左边（真机录像里整段字只剩右半）。
+         * 按各自内容宽算，行行才是居中的。
+         */
+        const lineWidth = widthBetweenOffsets(prepared, segmentMetas, lineStart, lineEnd);
+
+        return { line, lineStart, lineEnd, lineWidth, fragments };
     });
 
     const fragmentCountByWord = new Map<number, number>();

@@ -92,7 +92,9 @@ const AppearanceSection: React.FC<AppearanceSectionProps> = ({
 
     const visualizerOptions = useMemo(
         () => [
-            ...VISUALIZER_REGISTRY.map(entry => ({
+            // 「隐藏」的款式（mv：家搬进了壁纸背景模式）不摆出来当选项；
+            // 注册保留，存量设置若还指向它，渲染层照样认得。
+            ...VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).map(entry => ({
                 value: entry.mode,
                 label: getVisualizerModeLabel(entry.mode, t),
             })),

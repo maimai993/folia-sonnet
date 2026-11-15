@@ -47,7 +47,8 @@ export const useAppPlayerPanel = (model: Input) => {
         navigateToCollection, navigateToHome, navigateToLattice, onlineProviders, openLyricMatch,
         personalFmSelectionLabel, playQueue, playSong, queueScrollRef, removeQueueSong,
         saveCurrentQueueAsLocalPlaylist, setTheme, shouldHidePlayerRightPanelButton, shuffleQueue, theme,
-        themeSourceModel, toggleDaylightMode, toggleLoop, togglePlay, toggleTransparentModeWithHandoff
+        themeSourceModel, toggleDaylightMode, toggleLoop, togglePlay, toggleTransparentModeWithHandoff,
+        rematchCurrentSongMv, isRematchingMv
     } = model;
     const playerDisplayCatalogIndex = useMemo(() => buildLocalLibraryIndex(
         localLibraryCatalog.entities,
@@ -84,6 +85,8 @@ export const useAppPlayerPanel = (model: Input) => {
         generateAITheme: generateCurrentSongTheme,
         isGeneratingTheme,
         canGenerateAITheme,
+        rematchMv: rematchCurrentSongMv,
+        isRematchingMv,
         theme,
         setTheme,
         handleBgModeChange,
