@@ -4,6 +4,7 @@ import { startLatticeLyricSession } from './latticeLyricSession';
 import type { LatticeLyricInput, LatticeLyricRuntime } from './types';
 import { resolveThemeFontStack, resolveThemeTranslationFontStack, resolveThemeFontWeight } from '../../../../utils/fontStacks';
 import { useDevicePixelRatio } from '../../../../hooks/useMediaQuery';
+import { isBackgroundRenderSuspended, subscribeBackgroundRenderSuspended } from '../../../../utils/backgroundRenderGate';
 
 // src/components/app/lattice/lyrics/useLatticeLyricCanvas.ts
 // How long the content box must hold still before the renderer is rebuilt at the new size.
@@ -56,8 +57,17 @@ export function useLatticeLyricCanvas(hostRef: RefObject<HTMLDivElement | null>,
         let active = true, intersecting = false;
         box.current = { width: host.clientWidth, height: host.clientHeight };
         let pendingResize: ReturnType<typeof setTimeout> | null = null;
-        const visible = () => intersecting && !document.hidden;
+        /*
+         * 后台停止渲染走**显式订阅**，不只靠 rAF 总闸兜底。
+         *
+         * 总闸拦的是「再排一帧」，但歌词样式这块还有两处它管不到的：
+         * WebGL 上下文本身在后台仍占着显存与合成器的一格，而部分 ROM 的 WebView
+         * 在 Activity onStop 后并不上报 document.hidden，总闸根本不翻。
+         * 这里直接把运行时 setVisible(false)：帧循环停、绘制零次，回前台自动恢复。
+         */
+        const visible = () => intersecting && !document.hidden && !isBackgroundRenderSuspended();
         const onVisibility = () => runtimeRef.current?.setVisible(visible());
+        const removeGateListener = subscribeBackgroundRenderSuspended(onVisibility);
         const onFailure = (error: unknown) => {
             if (!active) return;
             console.warn('[Lattice lyrics] Falling back to the song title', error);
@@ -100,6 +110,7 @@ export function useLatticeLyricCanvas(hostRef: RefObject<HTMLDivElement | null>,
         return () => {
             active = false; resize.disconnect(); intersection.disconnect();
             if (pendingResize !== null) clearTimeout(pendingResize);
+            removeGateListener();
             document.removeEventListener('visibilitychange', onVisibility);
             host.removeEventListener('webglcontextlost', onContextLost, true);
             const released = session.release();

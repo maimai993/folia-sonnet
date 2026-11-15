@@ -8,17 +8,17 @@ import java.security.MessageDigest
 /**
  * Automix 两个分析模型的「本地化」与状态。
  *
- * 这两个权重内置在 APK 的 `assets/models/` 里（约 182MB，构建时打包，
+ * 这两个权重内置在 APK 的 `assets/models/` 里（约 96MB，构建时打包，
  * 见 app/build.gradle 里 aaptOptions.noCompress 的说明），所以这里没有任何下载逻辑 ——
  * 用户装上 App 就已经拥有它们。
  *
  * 但 ONNX Runtime 要的是一个**真实文件路径**，AssetManager 给不了可 mmap 的 fd
- * （`assets/models/htdemucs-v2.onnx` 在 APK 里是 zip 的一条记录）。
+ * （`assets/models/scnet.int8.onnx` 在 APK 里是 zip 的一条记录）。
  * 所以首次用到某个模型时，把它原样拷贝到应用私有的 `files/models/` 下，
  * 之后就一直用那份。因为没有压缩，这一步就是一次字节拷贝。
  *
  * 文件是否完好的判断只看大小：内置资产的完整性由 APK 签名保证
- * （签名覆盖整个 zip，包括 asset 记录），再算一次 100MB+ 的 SHA256
+ * （签名覆盖整个 zip，包括 asset 记录），再算一次几十 MB 的 SHA256
  * 只是让首次启动多等几秒。sha256 仍然保留在清单里，供调试与将来校验用。
  */
 object AutomixModels {
@@ -28,7 +28,16 @@ object AutomixModels {
 
     /** JS 侧看到的模型名，也是 assets 里的文件名前缀。 */
     const val BEAT_THIS = "beat_this"
-    const val HTDEMUCS = "htdemucs"
+
+    /**
+     * SCNet：四轨分离（13MB，MIT 权重）。
+     *
+     * 原来那一份是 htdemucs（108MB，权重 research-only）。换掉它有两个理由：体积差 8 倍，
+     * 四个指标还不比它低。htdemucs 的权重与 Runtime 入口已随这次改动一并删掉 —— 留着
+     * 「兜底」的后果是：SCNet 在真机上任何一处不成立，链路会**静默**退回去，看起来
+     * 「有数据但分得不对」，反而查不出问题。现在分轨只有这一条路，跑不起来就明确报错。
+     */
+    const val SCNET = "scnet"
 
     /**
      * 清单：名字 → （asset 文件名，字节数，sha256）。
@@ -44,10 +53,10 @@ object AutomixModels {
             bytes = 83077778L,
             sha256 = "c5c1466e08abdb03fdeb50668a06f244b787d564c212490482231a9cfbe9ccbd",
         ),
-        HTDEMUCS to Entry(
-            file = "htdemucs-v2.onnx",
-            bytes = 107902864L,
-            sha256 = "a8f542ef3a140d4879156c1b2b0bcad4b29254dcdbf0fd1ec578e3c9cdca925c",
+        SCNET to Entry(
+            file = "scnet.int8.onnx",
+            bytes = 12900277L,
+            sha256 = "98228931494151762a1c4ab1ec7899a894b1f81fd4a509921a9d2f9bacc50845",
         ),
     )
 

@@ -66,6 +66,15 @@ class NativePlaybackEngine {
     private durationMs = 0;
     private playing = false;
     private hasSource = false;
+    /**
+     * 原生那边此刻**真的**手上有一首歌。
+     *
+     * hasSource 只由 Web 自己的 setSource / adoptSnapshot 置位，认领失败或通知栏先把
+     * 播放拉起来时它是 false，可 ExoPlayer 明明在响 —— 这时 seek / play / pause 会
+     * 全部落到空的 <audio> 元素上，用户看到的就是「歌词跳了曲没跳」「按钮没反应」。
+     * 收到任何一条非 idle 的原生事件就说明那边有媒体，记在这里；idle（stop）清空。
+     */
+    private nativeMediaLive = false;
     private rate = 1;
     private updatedAtMs = 0;
     /**
@@ -106,6 +115,7 @@ class NativePlaybackEngine {
         this.currentUrl = snapshot.url;
         this.songKey = snapshot.songKey ?? null;
         this.hasSource = true;
+        this.nativeMediaLive = true;
         this.positionMs = Math.max(0, snapshot.positionMs);
         this.durationMs = Math.max(0, snapshot.durationMs);
         this.playing = snapshot.playing;
@@ -136,9 +146,9 @@ class NativePlaybackEngine {
         return this.hasSource ? this.currentUrl : null;
     }
 
-    /** 原生手上有没有歌（不论在不在播）。进度条与歌词看这个，不看 isPlaying。 */
+    /** 原生手上有没有歌（不论在不在播）。进度条、歌词与播放控制都看这个，不看 isPlaying。 */
     ownsPlayback(): boolean {
-        return this.hasSource;
+        return this.hasSource || this.nativeMediaLive;
     }
 
     isPlaying(): boolean {
@@ -154,7 +164,15 @@ class NativePlaybackEngine {
      * monotonic 时钟，一首歌的长度里漂移可以忽略。
      */
     getPositionSec(): number {
-        if (!this.hasSource) return 0;
+        /*
+         * 判据用 ownsPlayback() 而不是 hasSource。
+         *
+         * 通知栏 / 锁屏先把播放拉起来、而 Web 侧认领没成功的那几秒里，ExoPlayer 在响，
+         * hasSource 还是 false —— 用 hasSource 判会让这里一律返回 0：拖动进度条时
+         * 歌词时钟被改了、原生也真的跳了，可读回来的位置永远是 0，看起来就是
+         * 「曲没跳」；暂停后再播，进度条也停在 0。原生有媒体，positionMs 就是有效的。
+         */
+        if (!this.ownsPlayback()) return 0;
         const now = performance.now();
         const raw = this.playing && !this.stalled
             ? this.positionMs + Math.max(0, now - this.updatedAtMs) * this.rate
@@ -176,6 +194,7 @@ class NativePlaybackEngine {
         this.songKey = options.songKey ?? null;
         this.currentUrl = url;
         this.hasSource = true;
+        this.nativeMediaLive = true;
         this.playing = false;
         this.stalled = false;
         this.positionMs = options.startPositionMs ?? 0;
@@ -193,6 +212,8 @@ class NativePlaybackEngine {
     }
 
     async play(): Promise<void> {
+        // 同上：没有订阅就没有状态回执，按钮按下去界面只能靠乐观值猜。
+        this.ensureSubscription();
         await nativePlayer.play();
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
@@ -203,6 +224,7 @@ class NativePlaybackEngine {
     }
 
     async pause(): Promise<void> {
+        this.ensureSubscription();
         await nativePlayer.pause();
         // 冻在听众正看着的那一帧，别退回最后一次采样值。
         this.positionMs = this.getPositionSec() * 1000;
@@ -212,6 +234,12 @@ class NativePlaybackEngine {
     }
 
     async seek(seconds: number): Promise<void> {
+        /*
+         * 订阅先立起来：seek 之后要靠 `seeked` / `playing` 事件把真实位置带回来。
+         * 通知栏起播、认领未成功时这条订阅可能还没建 —— 不建就永远收不到回执，
+         * 时钟停在这次写下的意图值上，原生跳没跳没人知道。
+         */
+        this.ensureSubscription();
         const targetMs = Math.max(0, Math.round(seconds * 1000));
         this.positionMs = targetMs;
         this.updatedAtMs = performance.now();
@@ -223,6 +251,7 @@ class NativePlaybackEngine {
 
     async stop(): Promise<void> {
         this.hasSource = false;
+        this.nativeMediaLive = false;
         this.playing = false;
         this.stalled = false;
         this.positionMs = 0;
@@ -295,6 +324,14 @@ class NativePlaybackEngine {
         if (this.subscriptionStarted) return;
         this.subscriptionStarted = true;
         void nativePlayer.addListener(event => {
+            /*
+             * 认领期间不改状态机，但「原生手上真的有媒体」这件事必须记下来。
+             *
+             * 通知栏 / 锁屏先把播放拉起来、或认领还没跑完的那几秒里，ExoPlayer 已经在响，
+             * hasSource 却还是 false。不记这一下，用户此时按 seek / play / pause 会全部
+             * 落到空的 <audio> 上 —— 「拖进度条歌词变了曲没跳」「按钮按了没反应」。
+             */
+            this.nativeMediaLive = event.type !== 'idle';
             if (isNativePlaybackReconciling()) return;
             if (event.songKey && this.songKey && event.songKey !== this.songKey) return;
             this.apply(event);
@@ -366,6 +403,13 @@ class NativePlaybackEngine {
                 if (typeof event.playing === 'boolean') this.playing = event.playing;
                 if (typeof event.buffering === 'boolean') this.stalled = event.buffering;
                 this.lastDeliveredMs = this.positionMs;
+                break;
+            case 'position':
+                /*
+                 * 现在的状态边界里已经不带 position（插件侧每 250ms 那一拍只喂壁纸锚点，
+                 * 不过桥）；旧包仍可能推这一拍。位置在上面已统一写入，这里无需额外动作，
+                 * 但要显式列出：switch 的穷尽性检查认的是 enum，default 不算。
+                 */
                 break;
             default:
                 break;

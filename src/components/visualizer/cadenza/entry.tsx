@@ -2,6 +2,7 @@ import React from 'react';
 import { DEFAULT_CADENZA_TUNING } from '../../../types';
 import { defineVisualizer, type VisualizerSharedProps } from '../definition';
 import CadenzaSettingsPanel from './CadenzaSettingsPanel';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerCadenza = React.lazy(() => import('./VisualizerCadenza'));
 
@@ -24,6 +25,21 @@ const renderCadenza = ({
 
 export default defineVisualizer({
     mode: 'cadenza',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.cadenzaHaloBreath,
+            nameKey: 'options.beatEffect_cadenzaHaloBreath',
+            descKey: 'options.beatEffect_cadenzaHaloBreathDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.cadenzaScatterDrift,
+            nameKey: 'options.beatEffect_cadenzaScatterDrift',
+            descKey: 'options.beatEffect_cadenzaScatterDriftDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 40,
     labelKey: 'ui.visualizerCadenze',
     labelFallback: 'Mindscape',

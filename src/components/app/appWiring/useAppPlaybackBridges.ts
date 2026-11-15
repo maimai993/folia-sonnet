@@ -268,7 +268,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         // 通知栏那条进度条的位置来源。原生播放时必须直接问引擎：后台里 rAF 被停掉，
         // `currentTime` 那个 motion signal 会停在最后一次前台读数上 —— 于是通知栏
         // 显示 00、拖动改完又被下一拍推回 00。
-        getCurrentTime: () => (nativeTakesRef.current ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
+        getCurrentTime: () => (nativeTakesRef.current || nativePlaybackEngine.ownsPlayback() ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
         onSeek: (seconds) => seekMainAudioRef.current(seconds),
         isLiked: nativeSongLiked,
         canLike: nativeCanLikeSong,
@@ -352,7 +352,7 @@ export const useAppPlaybackBridges = (model: Input) => {
         // 原生播放时位置只在播放器手里：`currentTime` 那个 motion signal 由 rAF 写，
         // 后台一藏就被 Chromium 停掉，锚点会冻在最后一次前台读数上。桌面歌词（壁纸 /
         // 悬浮）靠的正是这个锚点，所以取数要原生优先。
-        getCurrentTime: () => (nativeTakesRef.current ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
+        getCurrentTime: () => (nativeTakesRef.current || nativePlaybackEngine.ownsPlayback() ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
         title: displaySong?.name ?? null,
         artist: displaySong ? getSongArtistLabel(displaySong) : null,
         coverUrl: displayCoverUrl ?? cachedCoverUrl,
@@ -380,7 +380,7 @@ export const useAppPlaybackBridges = (model: Input) => {
     // Android 专有：把当前歌曲与歌词推给状态栏歌词（Lyricon）。
     useLyriconFeed({
         lyrics,
-        getCurrentTime: () => (nativeTakesRef.current ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
+        getCurrentTime: () => (nativeTakesRef.current || nativePlaybackEngine.ownsPlayback() ? nativePlaybackEngine.getPositionSec() : currentTime.get()),
         title: displaySong?.name ?? null,
         artist: displaySong ? getSongArtistLabel(displaySong) : null,
         // id 在部分音源上是数字，Lyricon 只用它判断换没换歌，统一成字符串即可。

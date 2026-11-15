@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useTransform } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_CLASSIC_TUNING, AudioBands, type ClassicTuning } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
@@ -17,6 +17,9 @@ import { getGlowWordLineContainerMotion, resolveGlowWordRenderProfile } from '..
 import { buildGlowWordLayoutVariants, glowWordBodyVariants } from '../glowWordVariants';
 import { getGlowWordOverflow, getGlowWordPairGap, measureGlowWordWidth as measureWordWidth, type GlowWordPlacement } from '../glowWordOverlap';
 import { OVERLAP_FIT_LINE_ATTRIBUTE, useOverlapFit } from '../useOverlapFit';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 // This mode is the most straightforward lyric pipeline in the folder.
 // First we ask runtime which line is active right now, then read renderHints from that line,
@@ -105,6 +108,47 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
     const activeLineRenderProfile = activeLine ? resolveGlowWordRenderProfile(activeLine) : null;
     const activeWordRenderProfile = activeLineRenderProfile ?? (activeLine ? resolveGlowWordRenderProfile(activeLine) : null);
     const activeLineContainerMotion = getGlowWordLineContainerMotion(activeLineRenderProfile);
+
+    /*
+     * 智能动感（流光）：光晕是这一套本来就有的画面原子（GlowWord 的辉光层），人声与整体能量
+     * 各自把它推开一点 —— 是同一件事变强，不是另贴一层效果。
+     *   pulseGlow  —— 整体能量：整句唱起来时整行光晕轻微呼吸。
+     *   vocalShine —— 人声：唱到的那一句光晕随人声再亮一层。
+     * 只改辉光层的 scale（transform，走合成层），正文颜色、逐字 variants、布局都不参与。
+     */
+    const pulseGlowStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.classicPulseGlow);
+    const vocalShineStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.classicVocalShine);
+    /*
+     * 缩放 + 浓淡两条一起给。只缩放时文字只是变大一点，暗背景上读不出「光变强了」，
+     * 看起来就是画面在轻微抖 —— 真机反馈「有点素」。浓淡才是辉光本身的强度：
+     * 人声一进来整行亮起来，换气时暗下去。
+     */
+    /*
+     * 两条都走 `effectTracks` 的表：pulseGlow / vocalShine 只登记了人声轨，
+     * 所以这里的输入里没有鼓，也没有伴奏 —— 字再怎么动都不会被底鼓顶起来。
+     */
+    const pulseGlow = useEffectTrack(BEAT_EFFECT_IDS.classicPulseGlow);
+    const vocalShine = useEffectTrack(BEAT_EFFECT_IDS.classicVocalShine);
+    const glowScale = useTransform(
+        [pulseGlow, vocalShine],
+        ([body, vocal]: number[]) => 1
+            + Math.min(1, body * 1.25) * 0.24 * pulseGlowStrength
+            + Math.min(1, vocal * 1.6) * 0.2 * vocalShineStrength,
+    );
+    /*
+     * 辉光的浓淡，也就是「呼吸」本身。
+     *
+     * 底值原来是 0.6：安静时已经亮着六成，再往上只剩四成可用 —— 于是「呼吸」看起来
+     * 就是一直在亮，只是稍微更亮一点，真机上几乎看不出来。现在底值压到 0.28，
+     * 峰值仍是 1：安静时只有一层很淡的影，唱进来才亮起来，换气又暗下去。
+     */
+    const glowOpacity = useTransform(
+        [pulseGlow, vocalShine],
+        ([body, vocal]: number[]) => Math.min(1,
+            0.28
+            + Math.min(1, body * 1.25) * 0.62 * pulseGlowStrength
+            + Math.min(1, vocal * 1.6) * 0.52 * vocalShineStrength),
+    );
 
     const [viewportWidth, setViewportWidth] = useState(() => (
         typeof window === 'undefined' ? 1200 : window.innerWidth
@@ -398,6 +442,8 @@ const Visualizer: React.FC<VisualizerProps> = (props) => {
                                         isChorus={activeLine.isChorus}
                                         fontSize={mainFontSize}
                                         layoutStyle={{ marginInlineEnd: config.marginRight, alignSelf: config.alignSelf }}
+                                        glowScale={glowScale}
+                                        glowOpacity={glowOpacity}
                                     />
                                 );
                             })}

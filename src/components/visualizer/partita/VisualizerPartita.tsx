@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useMotionValueEvent } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValueEvent, useTransform } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_PARTITA_TUNING, Line } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
@@ -25,6 +25,9 @@ import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fo
 import { resolveLyricTextDirection } from '../../../utils/lyrics/textDirection';
 import { buildPartitaWordConfigs } from './partitaLayout';
 import { getPartitaOverlapSpacing, type PartitaRowSpacing } from './partitaOverlap';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 /** Words are measured at this size and divided back down to em. */
 const OVERLAP_MEASURE_PX = 100;
@@ -114,6 +117,41 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
     });
     const activeLineRenderProfile = activeLine ? resolveGlowWordRenderProfile(activeLine) : null;
     const activeLineContainerMotion = getGlowWordLineContainerMotion(activeLineRenderProfile);
+
+    /*
+     * 智能动感（组曲）：这一套的字是有光晕的（GlowWord 辉光层），阶梯排版本来就靠「层」来读。
+     *   stepTread —— 每一步踩在乐句上：去掉鼓之后的「其余乐器 + 人声」一推进，光晕往外扩一下。
+     *   tierRise  —— 整段人声托起来：唱到副歌时整列光晕抬一层。
+     * 只在辉光层的 scale 上做（transform / 合成层），chunk 的位置与引导线一律不动。
+     *
+     * ★ 原来这两条读的是 kick + energy。真机上的样子是：底鼓每敲一下，整行字连同光晕
+     *   一起「跳」一下 —— 用户的原话是「歌词会振动」。那不是这套排版的语义：组曲的阶梯
+     *   应当跟着**乐句**走，而不是跟着军鼓的瞬态走。
+     *   现在改成走 `effectTracks` 的表：这两条只登记了人声轨（vocalBody / vocalAir），
+     *   鼓与伴奏在数据层就进不来，不再是「扣掉鼓」，而是根本没接。
+     */
+    const stepTreadStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.partitaStepTread);
+    const tierRiseStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.partitaTierRise);
+    const stepTread = useEffectTrack(BEAT_EFFECT_IDS.partitaStepTread);
+    const tierRise = useEffectTrack(BEAT_EFFECT_IDS.partitaTierRise);
+    const glowScale = useTransform(
+        [stepTread, tierRise],
+        ([body, vocal]: number[]) => 1
+            + Math.min(1, body * 1.25) * 0.3 * stepTreadStrength
+            + Math.min(1, vocal * 1.6) * 0.19 * tierRiseStrength,
+    );
+    // 光晕的浓淡：乐句推过来那一下是「亮」，不只是「大」。
+    /*
+     * 底值 0.58 → 0.26：与 classic 同一个道理。辉光层平时只剩一层薄影，
+     * 乐句踩下来才是「亮」，副歌整列再抬一层 —— 这样才读得出呼吸，而不是一直亮着。
+     */
+    const glowOpacity = useTransform(
+        [stepTread, tierRise],
+        ([body, vocal]: number[]) => Math.min(1,
+            0.26
+            + Math.min(1, body * 1.25) * 0.64 * stepTreadStrength
+            + Math.min(1, vocal * 1.6) * 0.44 * tierRiseStrength),
+    );
 
     const sequentialLayout = useMemo(() => {
         if (!activeLine) {
@@ -257,6 +295,8 @@ const VisualizerPartita: React.FC<VisualizerPartitaProps> = (props) => {
                                                     showGuideLines={resolvedPartitaTuning.showGuideLines}
                                                     overlapSpacing={overlapSpacing?.get(config.id)}
                                                     fontSize={mainFontSize}
+                                                    glowScale={glowScale}
+                                                    glowOpacity={glowOpacity}
                                                 />
                                             ))}
                                         </div>
