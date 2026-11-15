@@ -294,8 +294,7 @@ jobs:
           git tag "${TAG}"
           git push origin "HEAD:refs/heads/${GITHUB_REF_NAME}"
           git push origin "refs/tags/${TAG}"
-          echo "已推送 ${TAG} —— 注意：GITHUB_TOKEN 推的标签不会再触发别的 workflow，"
-          echo "桌面端（electron-release.yml）需要自己去 Actions 里手动跑一次。"
+          echo "已推送 ${TAG}。"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
