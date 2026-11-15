@@ -238,14 +238,52 @@ const readTrackBytes = async (song: SongResult, key: string, representation: Pla
  * 已经缓存过就直接返回地址，几毫秒。本地曲目返回 null：它们的路径在 Web 层拿不到，
  * 仍旧走 WebView 那条解码路（fast enough for a file already on the phone's flash）。
  */
-const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> => {
+/**
+ * 给原生用的可解码地址（本地回环 / 媒体缓存 / 在线直链）。
+ *
+ * 提前分析也要走同一条路：预取到的 `audioUrl` 可能是 `CACHED_IN_DB` 哨兵，
+ * 直接塞给原生会解不出东西。导出它而不是复制一份，免得两条链以后又对不上。
+ */
+export const resolveNativeAudioUrl = async (song: SongResult): Promise<string | null> => {
     if (!isNativeModelsAvailable()) return null;
+    /*
+     * 本地曲目：原生那台 127.0.0.1 的音频服务按 ref 给回环地址。
+     *
+     * 这里原先只认在线曲目，本地歌直接返回 null —— 于是 `loadBeatFxTrackEnvelopes` 拿不到地址、
+     * 不登记补齐目标，整首补齐这条链在本地歌上从来没启动过，屏幕上那条曲线永远停在第 30 秒
+     * （真机反馈 2026-11-14：一直显示「正在补齐整曲的音轨分离 · 30s」）。
+     * 同一份地址 `nativeSourceUrl`（节拍分析那条路）早就在用，这里只是漏了。
+     */
+    const ref = (song as { nativeAudioRef?: string }).nativeAudioRef;
+    if (ref) {
+        const localUrl = await nativeAudioUrlForRef(ref);
+        if (localUrl) return localUrl;
+        console.warn('[BeatFx] native: local audio server has no port, cannot hand the track over by url');
+    }
+    /*
+     * 已经在原生媒体缓存里的，先问一句。
+     *
+     * 这是「装上 SCNet 也照样没效果」的真正断点（真机日志 2026-11-14）：
+     * prefetcher 对缓存过的曲子会把 audioUrl 报成 `CACHED_IN_DB` 哨兵，下面
+     * `resolveStreamUrl` 拿到它、`cacheNativeMediaFromUrl` 自然存不进去，于是这里
+     * 一路 return null —— 鼓轨分离和整曲包络都退回 WebView，而 WebView 那份是
+     * **整混音**的频带，鼓还在里面，字当然还在跟底鼓抖。
+     *
+     * 缓存里那份本来就有回环地址，直接给，一个字节都不过桥。
+     * 节拍分析（`nativeSourceUrl`）一直有这一段，所以它跑得通、画面却不跟它走；
+     * 两条路必须问同样的问题，否则「分析跑了」和「效果出来了」永远对不上。
+     */
+    const cacheKey = getSongResourceCacheKey('audio', song);
+    const cachedUrl = await readNativeMediaCacheUrl(cacheKey);
+    if (cachedUrl) return cachedUrl;
     if (getPlaybackSourceRef(song).kind !== 'online') return null;
-    const { url } = await resolveStreamUrl(song);
-    if (!url) return null;
+    const { url, why } = await resolveStreamUrl(song);
+    if (!url) {
+        console.warn(`[BeatFx] native: no audio source for this track (${why ?? 'no stream URL'})`);
+        return null;
+    }
     if (!(await hasNativeMediaCache())) return null;
     try {
-        const cacheKey = getSongResourceCacheKey('audio', song);
         const stored = await cacheNativeMediaFromUrl(cacheKey, url, MAX_STREAM_CACHE_BYTES, song.durationMs);
         if (!stored) return null;
         return await readNativeMediaCacheUrl(cacheKey);
@@ -535,12 +573,17 @@ export const loadBeatFxTrackEnvelopes = (
     const { key } = getPlaybackAnalysisTarget(song);
     const envelopes = (async (): Promise<MusicEnvelope | null> => {
         const stored = await loadStoredMusicEnvelope(key);
-        if (storedOnly || (stored && stored.until === undefined)) return stored;
+        // `cached` 只读不跑模型。其余（含旧 v1 缓存、半份）都交给 loadTrackMusicEnvelope：
+        // 它内部只对「明确 complete 的整曲」短路，其余登记补齐目标、把整首补上。
+        if (storedOnly) return stored;
         setWantedEnvelopeTrack(key);
         // 地址拿不到就没有可分离的东西：库里那份（如果有）照旧交出去。
         const url = await resolveNativeAudioUrl(song);
         if (!url) return stored;
-        return await loadTrackMusicEnvelope(key, url, { wanted: () => wantedEnvelopeKey === key }) ?? stored;
+        return await loadTrackMusicEnvelope(key, url, {
+            wanted: () => wantedEnvelopeKey === key,
+            durationSec: (song.durationMs || 0) / 1000,
+        }) ?? stored;
     })().catch((error) => {
         console.warn('[BeatFx] music envelopes failed', error);
         return null;

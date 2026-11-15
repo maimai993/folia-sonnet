@@ -3,6 +3,7 @@ import type { TiltColorScheme, TiltTuning } from '../../../types';
 import { cycleValue, QuickControlChip } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { TiltSettingsPanel } from '../settingsPanels';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerTilt = React.lazy(() => import('./VisualizerTilt'));
 
@@ -18,6 +19,21 @@ const COLOR_SCHEME_LABEL_KEYS: Record<TiltColorScheme, string> = {
 
 export default defineVisualizer({
     mode: 'tilt',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.tiltLeanSway,
+            nameKey: 'options.beatEffect_tiltLeanSway',
+            descKey: 'options.beatEffect_tiltLeanSwayDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.tiltMainReveal,
+            nameKey: 'options.beatEffect_tiltMainReveal',
+            descKey: 'options.beatEffect_tiltMainRevealDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 70,
     labelKey: 'ui.visualizerTilt',
     labelFallback: 'Tilt',

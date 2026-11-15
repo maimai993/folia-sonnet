@@ -70,6 +70,33 @@ export const BEAT_EFFECT_IDS = {
     temperaVocalGlow: 'tempera.vocalGlow',
     temperaEnergyDrift: 'tempera.energyDrift',
     temperaMelodyShift: 'tempera.melodyShift',
+    // 每个歌词样式各自的智能动感：共享同一次分离的曲线，画面各写各的（各样式在自己的
+    // 渲染组件里用 useMusicMotion 读一条曲线，绑到自己画面的一个属性上）。
+    // source 都是 'envelopes'，所以不会为了某个样式再单独跑一遍 Beat This! 或再做一次分离。
+    classicPulseGlow: 'classic.pulseGlow',
+    classicVocalShine: 'classic.vocalShine',
+    cadenzaHaloBreath: 'cadenza.haloBreath',
+    cadenzaScatterDrift: 'cadenza.scatterDrift',
+    cappellaVoicePop: 'cappella.voicePop',
+    cappellaBubbleSway: 'cappella.bubbleSway',
+    claddaghRingTilt: 'claddagh.ringTilt',
+    claddaghBeadHop: 'claddagh.beadHop',
+    partitaStepTread: 'partita.stepTread',
+    partitaTierRise: 'partita.tierRise',
+    tiltLeanSway: 'tilt.leanSway',
+    tiltMainReveal: 'tilt.mainReveal',
+    monetBrushBloom: 'monet.brushBloom',
+    monetKeyGlow: 'monet.keyGlow',
+    fumeInkWeight: 'fume.inkWeight',
+    fumeVeilCalm: 'fume.veilCalm',
+    lumiereBeamWidth: 'lumiere.beamWidth',
+    lumiereLineSpark: 'lumiere.lineSpark',
+    promptTypePace: 'prompt.typePace',
+    promptBoxFly: 'prompt.boxFly',
+    machiNeonGlow: 'machi.neonGlow',
+    nebbiaFogDensity: 'nebbia.fogDensity',
+    pendoloJewelGlow: 'pendolo.jewelGlow',
+    temperaSeamPulse: 'tempera.seamPulse',
 } as const;
 
 /**
@@ -112,6 +139,23 @@ export const ENVELOPE_BEAT_EFFECT_IDS: readonly string[] = [
     BEAT_EFFECT_IDS.temperaVocalGlow,
     BEAT_EFFECT_IDS.temperaEnergyDrift,
     BEAT_EFFECT_IDS.temperaMelodyShift,
+    // 每个歌词样式各自的智能动感。都读同一次分离的四/十条曲线，画面各写各的；
+    // 这个列表只用来判断「屏幕上现在有没有开着吃包络的效果」和它的总强度。
+    BEAT_EFFECT_IDS.classicPulseGlow, BEAT_EFFECT_IDS.classicVocalShine,
+    BEAT_EFFECT_IDS.cadenzaHaloBreath, BEAT_EFFECT_IDS.cadenzaScatterDrift,
+    BEAT_EFFECT_IDS.cappellaVoicePop, BEAT_EFFECT_IDS.cappellaBubbleSway,
+    BEAT_EFFECT_IDS.claddaghRingTilt, BEAT_EFFECT_IDS.claddaghBeadHop,
+    BEAT_EFFECT_IDS.partitaStepTread, BEAT_EFFECT_IDS.partitaTierRise,
+    BEAT_EFFECT_IDS.tiltLeanSway, BEAT_EFFECT_IDS.tiltMainReveal,
+    BEAT_EFFECT_IDS.monetBrushBloom, BEAT_EFFECT_IDS.monetKeyGlow,
+    BEAT_EFFECT_IDS.fumeInkWeight, BEAT_EFFECT_IDS.fumeVeilCalm,
+    BEAT_EFFECT_IDS.lumiereBeamWidth, BEAT_EFFECT_IDS.lumiereLineSpark,
+    // 提示词的两条按分组定稿①已从 registry 摘掉（纯文字动画画面不做智能动感）；
+    // 花火/商籁/镜台那三条新增的「呼吸」效果也随三样式一起退回上游、不再登记。
+    // 没声明的效果不该再参与「有没有开着吃包络的效果」的判断。
+    BEAT_EFFECT_IDS.machiNeonGlow, BEAT_EFFECT_IDS.nebbiaFogDensity,
+    BEAT_EFFECT_IDS.pendoloJewelGlow,
+    BEAT_EFFECT_IDS.temperaSeamPulse,
 ];
 
 /** Whether any envelope effect is switched on, whichever picture is on screen. */

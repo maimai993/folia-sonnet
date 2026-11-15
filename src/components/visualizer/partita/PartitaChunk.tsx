@@ -31,7 +31,10 @@ export const PartitaChunk: React.FC<{
     /** With avoidOverlap: the gaps this row's words and the row itself keep (partitaOverlap.ts). */
     overlapSpacing?: PartitaRowSpacing;
     fontSize: string;
-}> = ({ chunkWords, displayWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, baseColor, renderProfile, isChorus, showGuideLines, overlapSpacing, fontSize }) => {
+    /** 智能动感：辉光层的缩放（与 classic 共用 GlowWord 的那个通道）。 */
+    glowScale?: MotionValue<number>;
+    glowOpacity?: MotionValue<number>;
+}> = ({ chunkWords, displayWords, config, guideIndex, currentTime, theme, layoutVariants, bodyVariants, baseColor, renderProfile, isChorus, showGuideLines, overlapSpacing, fontSize, glowScale, glowOpacity }) => {
     const [chunkStatus, setChunkStatus] = useState<'waiting' | 'active' | 'passed'>('waiting');
 
     const chunkStartTime = chunkWords[0].startTime;
@@ -199,6 +202,8 @@ export const PartitaChunk: React.FC<{
                         isChorus={isChorus}
                         fontSize={fontSize}
                         layoutStyle={overlapSpacing?.words[idx] ?? PARTITA_WORD_LAYOUT_STYLE}
+                        glowScale={glowScale}
+                        glowOpacity={glowOpacity}
                     />
                 );
             })}

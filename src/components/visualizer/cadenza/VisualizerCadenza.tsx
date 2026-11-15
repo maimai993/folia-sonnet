@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useTransform } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_CADENZA_TUNING, Line } from '../../../types';
+import { DEFAULT_CADENZA_TUNING, type Line } from '../../../types';
 import { getLineRenderEndTime } from '../../../utils/lyrics/renderHints';
 import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
 import { colorWithAlpha, mixColors } from '../colorMix';
@@ -10,6 +10,10 @@ import { type VisualizerSharedProps } from '../definition';
 import VisualizerShell from '../VisualizerShell';
 import { useLyricRenderQuality } from '../renderQuality/useLyricRenderQuality';
 import VisualizerSubtitleOverlay from '../VisualizerSubtitleOverlay';
+import { musicSway } from '../../../stores/motionSignals';
+import { readEffectTrack, useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { resolveSubtitleFontSizes } from '../subtitleFontSizes';
 import type {
     AnimatedPlacementState,
@@ -292,8 +296,19 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             const isInstantWordReveal = wordRevealMode === 'instant';
             const lineSeed = Math.abs(Math.sin(activeLine.startTime * 997.1));
             const linePerspective = theme.animationIntensity === 'chaotic' ? 500 + Math.round(lineSeed * 500) : 1000;
-            const energy = clamp(audioPower.get() / 255, 0, 1);
-            const motionEnergy = energy * tuning.motionAmount;
+            /*
+             * 整行上下的浮动读这个效果自己登记的轨（散点漂移 = 人声），不读 audioPower。
+             *
+             * audioPower 是整混音的能量（鼓也在里面）：底鼓每敲一下 energy 跳一格，
+             * verticalLift 就跟着弹一下 —— 一行字看起来一直在抖。`effectTracks` 里
+             * scatterDrift 只登记了 vocalBody / vocalAir，鼓在数据层就进不来。
+             */
+            const energy = clamp(readEffectTrack(BEAT_EFFECT_IDS.cadenzaScatterDrift), 0, 1);
+            /*
+             * 段落门槛：字散在整幅画面上，安静段里它们还在四处轻漂，看起来就是「一直在晃」。
+             * 保留 0.18 的底 —— 全零会让整行像一张贴纸，反而不像「印象」。
+             */
+            const motionEnergy = energy * tuning.motionAmount * (0.18 + musicSway.get() * 0.82);
             const verticalLift = Math.sin(time * 2.3) * (3 + motionEnergy * 8);
             const focusY = height * 0.42 + verticalLift;
 
@@ -506,6 +521,25 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
         viewport.width,
     ]);
 
+    /*
+     * 智能动感（华彩）：这一套的画面是整块画布上的字与墨点，「光晕呼吸」就直接作用在
+     * 整层的浓淡上 —— 字亮度一起涨落，正是「halo」这件事本身，不额外叠滤镜。
+     * 散布则让它整体极轻微地放大，读起来像墨点往外散了一点。
+     */
+    const haloBreathStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.cadenzaHaloBreath);
+    const scatterDriftStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.cadenzaScatterDrift);
+    const haloBreath = useEffectTrack(BEAT_EFFECT_IDS.cadenzaHaloBreath);
+    const scatterDrift = useEffectTrack(BEAT_EFFECT_IDS.cadenzaScatterDrift);
+    const cadenzaGlow = useTransform(
+        [haloBreath, scatterDrift],
+        ([vocal, energy]: number[]) => Math.min(1,
+            0.8
+            + Math.min(1, vocal * 1.6) * 0.2 * haloBreathStrength
+            + Math.min(1, energy * 1.5) * 0.18 * scatterDriftStrength),
+    );
+    const cadenzaScale = useTransform(scatterDrift,
+        value => 1 + Math.min(1, value * 1.5) * 0.075 * scatterDriftStrength);
+
     return (
         <VisualizerShell
             ref={containerRef}
@@ -514,20 +548,27 @@ const VisualizerCadenza: React.FC<VisualizerProps> = (props) => {
             audioBands={audioBands}
             sharedProps={props}
         >
-            <div
-                ref={lineLayerRef}
+            <motion.div
                 className="absolute inset-0 z-10 pointer-events-none"
-                style={{
-                    opacity: 0,
-                    filter: 'none',
-                    transform: 'scale(1)',
-                    transformOrigin: '50% 42%',
-                    perspective: '1000px',
-                }}
+                style={(haloBreathStrength > 0 || scatterDriftStrength > 0)
+                    ? { opacity: cadenzaGlow, scale: cadenzaScale, transformOrigin: '50% 42%' }
+                    : undefined}
             >
-                <div ref={overlayRef} className="absolute inset-0 w-full h-full pointer-events-none select-none" />
-                <canvas ref={textCanvasRef} className="absolute inset-0 w-full h-full" />
-            </div>
+                <div
+                    ref={lineLayerRef}
+                    className="absolute inset-0 z-0 pointer-events-none"
+                    style={{
+                        opacity: 0,
+                        filter: 'none',
+                        transform: 'scale(1)',
+                        transformOrigin: '50% 42%',
+                        perspective: '1000px',
+                    }}
+                >
+                    <div ref={overlayRef} className="absolute inset-0 w-full h-full pointer-events-none select-none" />
+                    <canvas ref={textCanvasRef} className="absolute inset-0 w-full h-full" />
+                </div>
+            </motion.div>
 
             <div className="relative z-10 w-full h-[70vh] flex items-center justify-center p-8 pointer-events-none">
                 <AnimatePresence mode="wait">

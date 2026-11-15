@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getBrowserCacheUsageByCategory, putCacheEntry } from '@/services/repositories/cacheRepository';
+import { clearBrowserCacheByCategory, getBrowserCacheUsageByCategory, putCacheEntry, readCacheEntry } from '@/services/repositories/cacheRepository';
 import { appDatabase } from '@/services/appDatabase';
 import { countCacheUsageIn } from '@/workers/cacheUsage.worker';
 
@@ -37,5 +37,14 @@ describe('the cache count on a worker', () => {
     it('answers null for a database that is not there, without making one', async () => {
         expect(await countCacheUsageIn('NoSuchDatabase', TABLES)).toBeNull();
         expect((await indexedDB.databases()).map(database => database.name)).not.toContain('NoSuchDatabase');
+    });
+
+    // 「删除分析缓存」必须真的删掉智能动感的整曲曲线，且不动音频缓存。
+    it('clearing analysis removes the whole-track curves but keeps the audio', async () => {
+        await putCacheEntry('music_envelope_v1_42', { bass: [0.1, 0.2] });
+        expect((await getBrowserCacheUsageByCategory()).analysis).toBeGreaterThan(0);
+        await clearBrowserCacheByCategory('analysis');
+        expect(await readCacheEntry('music_envelope_v1_42')).toBeNull();
+        expect(await readCacheEntry('audio_42')).not.toBeNull();
     });
 });

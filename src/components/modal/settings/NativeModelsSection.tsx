@@ -3,7 +3,7 @@
 // Automix 分析模型的「原生」状态区块（安卓 App）。
 //
 // 与上游（Electron）那一版最大的不同：**没有下载**。
-// 两个权重打在 APK 的 assets 里（约 182MB），用户装上就已经拥有它们；
+// 两个权重打在 APK 的 assets 里（约 96MB），用户装上就已经拥有它们；
 // 首次用到某个模型时，原生侧把它从 assets 拷到应用私有目录
 // （ONNX Runtime 要真实文件路径），71ms 一次，之后一直用那份。
 //
@@ -22,6 +22,7 @@ import {
     onModelProgress,
     progressPercent,
     refreshModelAvailability,
+    STEM_MODEL,
     type AutomixModelInfo,
     type AutomixModelName,
     type AutomixModelProgress,
@@ -32,7 +33,7 @@ const megabytes = (bytes: number): string => `${Math.round(bytes / 1e6)} MB`;
 
 /** 一个模型能开什么功能。不是一对一（分轨同时开 automix 的分轨与动感模式的鼓点）。 */
 const scopesOf = (name: AutomixModelName): { key: string; fallback: string; Icon: typeof Sparkles }[] => (
-    name === 'htdemucs'
+    name === STEM_MODEL
         ? [
             { key: 'options.modelScopeStems', fallback: '四轨分离', Icon: Music2 },
             { key: 'options.modelScopePerformance', fallback: '智能过渡', Icon: Sparkles },
@@ -43,7 +44,7 @@ const scopesOf = (name: AutomixModelName): { key: string; fallback: string; Icon
 const titleOf = (name: AutomixModelName): { key: string; fallback: string } => (
     name === 'beat_this'
         ? { key: 'options.modelBeatThis', fallback: '节拍分析（Beat This!）' }
-        : { key: 'options.modelHtdemucs', fallback: '四轨分离（htdemucs）' }
+        : { key: 'options.modelScnet', fallback: '四轨分离（SCNet）' }
 );
 
 const NativeModelsSection: React.FC = () => {

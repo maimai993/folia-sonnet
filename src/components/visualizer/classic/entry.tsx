@@ -4,6 +4,7 @@ import type { ClassicTuning } from '../../../types';
 import { QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { ClassicSettingsPanel } from '../settingsPanels';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const Visualizer = React.lazy(() => import('./Visualizer'));
 
@@ -11,6 +12,21 @@ const Visualizer = React.lazy(() => import('./Visualizer'));
 // Registers the classic visualizer mode.
 export default defineVisualizer({
     mode: 'classic',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.classicPulseGlow,
+            nameKey: 'options.beatEffect_classicPulseGlow',
+            descKey: 'options.beatEffect_classicPulseGlowDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.classicVocalShine,
+            nameKey: 'options.beatEffect_classicVocalShine',
+            descKey: 'options.beatEffect_classicVocalShineDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 30,
     labelKey: 'ui.visualizerClassic',
     labelFallback: 'Luminous',

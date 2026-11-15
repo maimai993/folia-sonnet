@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { motion, useMotionValueEvent, type MotionValue } from 'framer-motion';
+import { motion, useMotionValueEvent, useTransform, type MotionValue } from 'framer-motion';
 import { type CappellaTuning, type Theme } from '../../../types';
 import { resolveThemeFontWeight } from '../../../utils/fontStacks';
 import { mixColors } from '../../../utils/visualizer/colorMix';
@@ -10,6 +10,10 @@ import { getBubbleTargetCharacterCount, getCharacterCountAtTime, getTimestampRea
 import { getBubbleColors, getTimedMessageState } from './cappellaMessageLayout';
 import { getOrBuildBubbleMetrics, measureBubbleText } from './cappellaBubbleMetrics';
 import { ActiveCappellaText, AnimatedBubbleFrame, CappellaAvatar, CappellaBubbleGlow, CappellaText, CappellaTimestamp } from './CappellaBubbleParts';
+import { musicLyricLift, musicSway } from '../../../stores/motionSignals';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 // src/components/visualizer/cappella/CappellaMessageRow.tsx
 // 单条聊天消息行：订阅播放时间算出当前字数与状态，组合头像、气泡与时间戳。
@@ -203,6 +207,36 @@ export const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessa
         }
     });
 
+    /*
+     * 智能动感（群唱）：两条曲线各接一个开关，都是「气泡」本来的动作，不是另一个样式的效果。
+     *   voicePop   —— 人声抬一下正在唱的气泡：随 vocals 短暂放大，像说话时胸腔的起伏。
+     *   bubbleSway —— 能量托一下气泡：整句能量高时轻轻上浮。
+     * 绑 MotionValue 由 framer 每帧写 transform，气泡里的逐字排版不参与重排；不是 active 的
+     * 气泡强度为 0，变换恒等于 1，等于没有这一层。
+     */
+    const voicePopStrength = isActiveMessage ? getBeatEffectStrength(BEAT_EFFECT_IDS.cappellaVoicePop) : 0;
+    const bubbleSwayStrength = isActiveMessage ? getBeatEffectStrength(BEAT_EFFECT_IDS.cappellaBubbleSway) : 0;
+    const voicePopLevel = useEffectTrack(BEAT_EFFECT_IDS.cappellaVoicePop);
+    const bubbleSwayLevel = useEffectTrack(BEAT_EFFECT_IDS.cappellaBubbleSway);
+    const bubbleScale = useTransform(voicePopLevel, value => 1 + Math.min(1, value * 1.6) * 0.12 * voicePopStrength);
+    /*
+     * 上浮再乘一道 `musicSway`：气泡「该不该浮」不只是此刻能量多高，还要看这一段是不是高潮。
+     * 前奏里也有 0.3 的能量，但那时气泡浮起来是错的 —— 它该安静地待着，等副歌再抬。
+     * 留 0.15 的底：完全归零会让气泡像被钉住，反而显出「卡」。
+     */
+    /*
+     * 再叠一层音高：唱到高音时气泡抬得更高，低音落下来。
+     *
+     * 这一层是「跟着旋律走」和「跟着响度走」的分界：响度只区分大小声，副歌的每一句
+     * 响度都一样；音高才让画面跟着旋律的走向起伏。`musicLyricLift` 已经乘过发声度，
+     * 所以间奏里它恒为 0，不会把气泡顶起来。
+     */
+    const bubbleLift = useTransform(
+        [bubbleSwayLevel, musicSway, musicLyricLift],
+        ([body, sway, lift]: number[]) => -Math.min(1, body * 1.5) * 12 * bubbleSwayStrength * (0.15 + sway * 0.85)
+            - lift * 6 * bubbleSwayStrength,
+    );
+
     return (
         <motion.div
             ref={ref}
@@ -305,6 +339,9 @@ export const CappellaMessageRow = React.forwardRef<HTMLDivElement, CappellaMessa
                                 />
                             ) : undefined}
                             targetSize={targetSize ?? undefined}
+                            motionStyle={voicePopStrength > 0 || bubbleSwayStrength > 0
+                                ? { scale: bubbleScale, y: bubbleLift }
+                                : undefined}
                             style={{
                                 backgroundColor: bubbleColors.backgroundColor,
                                 border: `1px solid ${bubbleColors.borderColor}`,

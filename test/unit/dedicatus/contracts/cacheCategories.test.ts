@@ -53,4 +53,12 @@ describe('D509 every song resource cache key has a table and a cleanup category'
             .filter(kind => CATEGORIES.some(category => matchesCategory(`${kind}_netease_123`, category)));
         expect(nowCategorized, 'D509：这些已经归好类了，从 KNOWN_UNCATEGORIZED 删掉').toEqual([]);
     });
+
+    // 智能动感的整曲曲线（musicEnvelope.ts）以前漏了归类：既不计进「分析数据」用量，
+    // 点清除也删不掉 —— 切歌时旧曲线一直留着，被当成新歌的数据。
+    it('puts the whole-track curves in the analysis category, and only there', () => {
+        const key = 'music_envelope_v1_netease_123';
+        expect(matchesCategory(key, 'analysis')).toBe(true);
+        expect(CATEGORIES.filter(category => matchesCategory(key, category))).toEqual(['analysis']);
+    });
 });

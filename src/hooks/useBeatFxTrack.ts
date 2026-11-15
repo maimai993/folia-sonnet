@@ -9,7 +9,7 @@ import { beginBeatFxTrack, getBeatFxHeard, setBeatFxEvents, setBeatFxIntensities
 import { loadBeatFxTrackBeats, loadBeatFxTrackDrums, loadBeatFxTrackEnvelopes, setWantedEnvelopeTrack } from '../services/beatFx/beatFxSource';
 import { getPlaybackAnalysisKey, getPlaybackAnalysisTarget } from '../services/playbackRecovery/representationRegistry';
 import { modelsPresent, subscribeModelAvailability } from '../services/analysis/modelAvailability';
-import { isNativeModelsAvailable, modelWillBeAvailable, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
+import { isNativeModelsAvailable, modelWillBeAvailable, STEM_MODEL, subscribeModelAvailability as subscribeNativeModels } from '../services/automix/nativeModels';
 import { drumHitsSettled, setWantedDrumTrack } from '../services/analysis/drumHits';
 import { setStemDrumsWanted } from '../services/analysis/stemRange';
 
@@ -79,7 +79,7 @@ export function useBeatFxTrack(): boolean {
      */
     const nativeDrumModel = useSyncExternalStore(
         subscribeNativeModels,
-        () => (isNativeModelsAvailable() ? modelWillBeAvailable('htdemucs') : false),
+        () => (isNativeModelsAvailable() ? modelWillBeAvailable(STEM_MODEL) : false),
         () => false,
     );
 

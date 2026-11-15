@@ -268,7 +268,13 @@ export function useAutomixDecks({
     useEffect(() => {
         void refreshModelAvailability().then((present) => {
             console.log(
-                `[Automix] models on disk at startup: beat_this ${present.beat_this ? 'yes' : 'no'},`
+                /*
+                 * 桌面宿主那两份权重（`services/analysis/modelAvailability.ts`）。
+                 * 安卓用的是另一套（`services/automix/nativeModels.ts`：beat_this + scnet），
+                 * 所以在手机上这三个永远是 no —— 原来那行不带前缀，真机日志里
+                 * 「htdemucs no, htdemucs_gpu no」读起来像「模型没装」，其实压根不是这套。
+                 */
+                `[Automix] desktop models on disk at startup: beat_this ${present.beat_this ? 'yes' : 'no'},`
                 + ` htdemucs ${present.htdemucs ? 'yes' : 'no'}, htdemucs_gpu ${present.htdemucs_gpu ? 'yes' : 'no'}`,
             );
         });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
-import { isNativeModelsAvailable, modelWillBeAvailable, refreshModelAvailability, subscribeModelAvailability } from '../../services/automix/nativeModels';
+import { isNativeModelsAvailable, modelWillBeAvailable, refreshModelAvailability, STEM_MODEL, subscribeModelAvailability } from '../../services/automix/nativeModels';
 import { modelsPresent as wgslModelsPresent, subscribeModelAvailability as subscribeWgslModels } from '../../services/analysis/modelAvailability';
 import { BEAT_EFFECT_STRENGTH_MAX, offeredBeatEffects, resolveBeatEffectPartStrength, resolveBeatEffectSetting, smartBeatActive, smartBeatMayAnalyse, type BeatEffectDef } from '../../services/beatFx/beatEffects';
 import { Button, Group, Row, type SettingsGroupDef } from '../modal/settings/kit';
@@ -48,7 +48,7 @@ const BeatEffectsGroup: React.FC<BeatEffectsGroupProps> = ({ t, effects, onSlide
      */
     const nativeDrumsReady = React.useSyncExternalStore(
         subscribeModelAvailability,
-        () => (isNativeModelsAvailable() ? modelWillBeAvailable('htdemucs') : false),
+        () => (isNativeModelsAvailable() ? modelWillBeAvailable(STEM_MODEL) : false),
         () => false,
     );
     const wgslDrumsReady = React.useSyncExternalStore(

@@ -5,6 +5,7 @@ import type { LumiereTuning } from '../../../types';
 import { QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import LumiereSettingsPanel from './LumiereSettingsPanel';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerLumiere = React.lazy(() => import('./VisualizerLumiere'));
 
@@ -12,6 +13,21 @@ const VisualizerLumiere = React.lazy(() => import('./VisualizerLumiere'));
 // Registers 绘光, the stage-lighting lyric director: volumetric light, fog, line art and lyrics lit by the beams.
 export default defineVisualizer({
     mode: 'lumiere',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.lumiereBeamWidth,
+            nameKey: 'options.beatEffect_lumiereBeamWidth',
+            descKey: 'options.beatEffect_lumiereBeamWidthDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.lumiereLineSpark,
+            nameKey: 'options.beatEffect_lumiereLineSpark',
+            descKey: 'options.beatEffect_lumiereLineSparkDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 25,
     labelKey: 'ui.visualizerLumiere',
     labelFallback: '绘光',

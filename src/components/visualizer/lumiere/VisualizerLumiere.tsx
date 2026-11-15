@@ -1,5 +1,9 @@
 // Copyright (c) 2026 chthollyphile
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useTransform } from 'framer-motion';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LUMIERE_TUNING } from '../../../types';
 import type { Line } from '../../../types';
@@ -192,6 +196,22 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
     // 片尾卡出来以后不再在字幕里重复最后一句。
     const creditsRecentCompletedLine = recentCompletedLine === finalLine ? null : recentCompletedLine;
 
+    /*
+     * 智能动感（光束）：光束随整体能量变宽一点，线条随亮度曲线泛起一点光 —— 「束宽」和「线的光」正是它自己画的东西。
+     */
+    const lumiereBeamWidthStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.lumiereBeamWidth);
+    const lumiereLineSparkStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.lumiereLineSpark);
+    /*
+     * 束宽跟伴奏的厚薄（harmony / pad / brightness），线光只跟亮度。
+     * brightness 这一条现在来自 other 轨（不是整混音），但束宽还需要和声的「厚」，
+     * 所以走效果表，读的是登记过的组合，不再直接抓一条曲线。
+     */
+    const beamWidth = useEffectTrack(BEAT_EFFECT_IDS.lumiereBeamWidth);
+    const lineSpark = useEffectTrack(BEAT_EFFECT_IDS.lumiereLineSpark);
+    const musicLayerScale = useTransform(beamWidth, value => 1 + Math.min(1, value * 2.4) * 0.15 * lumiereBeamWidthStrength);
+    const musicLayerGlow = useTransform(lineSpark, value => `brightness(${1 + Math.min(1, value * 2.5) * 0.42 * lumiereLineSparkStrength})`);
+    const musicLayerActive = lumiereBeamWidthStrength > 0 || lumiereLineSparkStrength > 0;
+
     return (
         <VisualizerShell
             theme={theme}
@@ -199,40 +219,47 @@ const VisualizerLumiere: React.FC<VisualizerSharedProps> = (props) => {
             audioBands={audioBands}
             sharedProps={props}
         >
-            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
-                <div ref={hostRef} className="absolute inset-0 z-10" aria-hidden="true" />
-                {runtimeFailed && (
-                    <div
-                        className="absolute inset-0 flex items-center justify-center px-10 text-center transition-opacity duration-300"
-                        style={{
-                            color: theme.primaryColor,
-                            fontFamily: fallbackFontFamily,
-                            fontWeight: fallbackFontWeight,
-                            fontSize: `clamp(2rem, ${5.4 * lyricsFontScale}vw, 5.6rem)`,
-                        }}
-                    >
-                        {showText && !committedSong.isInstrumental ? (activeLine?.fullText || t('ui.waitingForMusic')) : null}
-                    </div>
-                )}
-            </div>
 
-            <VisualizerSubtitleOverlay
-                showText={showText}
-                activeLine={activeLine}
-                recentCompletedLine={creditsRecentCompletedLine}
-                nextLines={nextLines}
-                theme={theme}
-                subtitleTheme={subtitleTheme}
-                translationFontSize={subtitleFontSizes.translationFontSize}
-                upcomingFontSize={subtitleFontSizes.upcomingFontSize}
-                subtitleFontScale={subtitleFontScale}
-                subtitleOverlayOpacity={subtitleOverlayOpacity}
-                subtitleOverlayBackground={subtitleOverlayBackground}
-                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
-                isPlayerChromeHidden={isPlayerChromeHidden}
-                hideTranslationSubtitle={hideTranslationSubtitle}
-                subtitleOverlayLayout={subtitleOverlayLayout}
-            />
+            {/* 横向呼吸与亮度只作用在画面层，字幕独立在外。 */}
+            <div className="pointer-events-none absolute inset-0">
+                <motion.div
+                    className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+                    style={musicLayerActive ? { scaleX: musicLayerScale, filter: musicLayerGlow, transformOrigin: '50% 50%' } : undefined}
+                >
+                    <div ref={hostRef} className="absolute inset-0 z-10" aria-hidden="true" />
+                    {runtimeFailed && (
+                        <div
+                            className="absolute inset-0 flex items-center justify-center px-10 text-center transition-opacity duration-300"
+                            style={{
+                                color: theme.primaryColor,
+                                fontFamily: fallbackFontFamily,
+                                fontWeight: fallbackFontWeight,
+                                fontSize: `clamp(2rem, ${5.4 * lyricsFontScale}vw, 5.6rem)`,
+                            }}
+                        >
+                            {showText && !committedSong.isInstrumental ? (activeLine?.fullText || t('ui.waitingForMusic')) : null}
+                        </div>
+                    )}
+                </motion.div>
+
+                <VisualizerSubtitleOverlay
+                    showText={showText}
+                    activeLine={activeLine}
+                    recentCompletedLine={creditsRecentCompletedLine}
+                    nextLines={nextLines}
+                    theme={theme}
+                    subtitleTheme={subtitleTheme}
+                    translationFontSize={subtitleFontSizes.translationFontSize}
+                    upcomingFontSize={subtitleFontSizes.upcomingFontSize}
+                    subtitleFontScale={subtitleFontScale}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
+                    subtitleOverlayBackground={subtitleOverlayBackground}
+                    subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                    isPlayerChromeHidden={isPlayerChromeHidden}
+                    hideTranslationSubtitle={hideTranslationSubtitle}
+                    subtitleOverlayLayout={subtitleOverlayLayout}
+                />
+            </div>
         </VisualizerShell>
     );
 };

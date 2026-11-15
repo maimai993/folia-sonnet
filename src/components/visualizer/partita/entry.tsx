@@ -4,6 +4,7 @@ import type { PartitaTuning } from '../../../types';
 import { QuickControlToggle } from '../../shared/QuickControlChip';
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { PartitaSettingsPanel } from '../settingsPanels';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerPartita = React.lazy(() => import('./VisualizerPartita'));
 
@@ -11,6 +12,21 @@ const VisualizerPartita = React.lazy(() => import('./VisualizerPartita'));
 // Registers Partita and its preview tuning panel.
 export default defineVisualizer({
     mode: 'partita',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.partitaStepTread,
+            nameKey: 'options.beatEffect_partitaStepTread',
+            descKey: 'options.beatEffect_partitaStepTreadDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.partitaTierRise,
+            nameKey: 'options.beatEffect_partitaTierRise',
+            descKey: 'options.beatEffect_partitaTierRiseDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 50,
     labelKey: 'ui.visualizerPartita',
     labelFallback: '云阶',

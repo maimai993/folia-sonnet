@@ -15,7 +15,13 @@ import { cancelNativeSeparation, separateDrumBandsNativeFromUrl, type NativeDrum
 // 已经收到的块留在内存里，等下一次 `joinStemRun` 接着用。
 
 /** 一次分离的结局：走了多远、是不是被叫停；`null` 表示整个任务没能开始。 */
-export type StemOutcome = { seconds: number; cancelled: boolean } | null;
+/**
+ * `done` 是原生说的「已经到了文件尾」。
+ *
+ * 不能用 `seconds > 0` 代替：一趟只跑了一块就停下（推理失败、没进展）也会带回一个
+ * 正数秒数，把它当「跑完整首」会让曲长被改短、整首判成补齐，然后就再也不补了。
+ */
+export type StemOutcome = { seconds: number; cancelled: boolean; done: boolean } | null;
 
 export interface StemBlockListener {
     /** 还要不要继续（切歌、退到后台、效果关掉）。 */
@@ -38,27 +44,33 @@ interface Run {
 
 const runs = new Map<string, Run>();
 
-/** 同时只跟这么多首歌：切歌来回切时，散落的块不至于一直占着内存。 */
-const MAX_RUNS = 3;
-
 const stopRun = (run: Run) => {
     if (run.finished) return;
     run.finished = true;
     if (run.cancelCheck) clearInterval(run.cancelCheck);
     run.cancelCheck = null;
-    runs.delete(run.key);
+    /*
+     * 不从表里删。
+     *
+     * 原先这里 `runs.delete(run.key)`，紧接着补齐泵看到「没有在跑」就又发一趟，
+     * 而原生那一趟其实还在单线程池里收尾（推理不响应中断，只在块边界停）。
+     * 两趟一排队，新的一趟要等旧的整整一块跑完，界面上就是「发起了，却一直不前进」。
+     * 留在表里，`stemRunReached` 仍然非 null，泵就不会重复发起；promise 落定后由
+     * 下面那段统一删除。
+     */
     void cancelNativeSeparation();
 };
 
 const pruneRuns = () => {
-    // 只丢已经结束的：还在跑的任务有人等着，丢掉了会为同一首歌再发起一次。
+    /*
+     * 只清「已经收尾、也没人再听」的记录。
+     *
+     * 还在跑的有人等着，丢掉会为同一首歌再发起一次；刚被叫停但原生还没返回的那条
+     * 更不能丢 —— 它在表里正是为了告诉补齐泵「别急着重开」，见 stopRun 的说明。
+     * 每一条都会在自己的 promise 落定时删掉，所以这里不需要按数量硬删。
+     */
     for (const [key, run] of runs) {
-        if (run.finished) runs.delete(key);
-    }
-    while (runs.size > MAX_RUNS) {
-        const oldest = runs.keys().next().value;
-        if (oldest === undefined) break;
-        runs.delete(oldest);
+        if (run.finished && run.listeners.size === 0) runs.delete(key);
     }
 };
 
@@ -75,11 +87,21 @@ export const joinStemRun = (
     startSeconds = 0,
 ): Promise<StemOutcome> => {
     const existing = runs.get(key);
-    if (existing && !existing.finished) {
-        existing.listeners.add(listener);
-        // 补上已经过去的块：曲中才打开效果时，曲线不必等到下一段分离完才有。
-        for (const block of existing.blocks) listener.onBlock(block);
-        return existing.promise;
+    if (existing) {
+        if (!existing.finished) {
+            existing.listeners.add(listener);
+            // 补上已经过去的块：曲中才打开效果时，曲线不必等到下一段分离完才有。
+            for (const block of existing.blocks) listener.onBlock(block);
+            return existing.promise;
+        }
+        /*
+         * 这一趟已经被叫停，但原生那边还在收尾（worker 是单线程，卡在推理里出不来）。
+         * 现在另起一趟只会排在它后面，等于什么都没发生。等它落定、表也清空了，再重来 ——
+         * 但只在听众还要的情况下：不要了就必须停在这里，否则会变成一秒一次的无限重开。
+         */
+        return existing.promise.then(() => (
+            listener.wanted() ? joinStemRun(key, url, listener, startSeconds) : null
+        ));
     }
 
     const run: Run = {
@@ -120,7 +142,22 @@ export const joinStemRun = (
             }
             run.blocks.push(block);
             for (const entry of run.listeners) entry.onBlock(block);
-        }, { startSeconds, envelopes: true });
+        }, {
+            startSeconds,
+            envelopes: true,
+            /*
+             * 一块 11 秒 —— 正好是 SCNet 一个窗口。
+             *
+             * 以前给 20 秒，模型照样按 11 秒切，第二块里 9 秒是真音频、2 秒是补零，
+             * 等于白算一次。11 秒一块：第一块更快到手、单块内存减半，总窗口数不变。
+             */
+            chunkSeconds: 11,
+            /*
+             * 让原生那块循环能看到「还有没有人要」：有人在每秒的 cancelCheck 里被剔除，
+             * 这里立刻在块边界停下，而不是把剩下几十块也跑完。
+             */
+            wanted: () => run.listeners.size > 0,
+        });
 
         run.finished = true;
         if (run.cancelCheck) clearInterval(run.cancelCheck);
