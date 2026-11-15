@@ -51,8 +51,8 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/CODEMAP.md
-          # PAT 推的 commit 会触发 push workflow：[skip ci] 挡住 canary-pre-release 的
-          # `push: branches: ['**']`，本 workflow 自己由 paths-ignore 挡住。
+          # PAT 推的 commit 会触发别的 push workflow：[skip ci] 挡住它们，
+          # 本 workflow 自己由 paths-ignore 挡住。
           git commit -m 'chore(dev): 同步代码地图 [skip ci]'
           git fetch origin main
           # 生成的这会儿 main 又前进了：这份地图已经旧了，新那次 push 会带起下一跑重生成。
