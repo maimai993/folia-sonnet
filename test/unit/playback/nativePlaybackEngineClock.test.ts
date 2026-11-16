@@ -193,6 +193,45 @@ describe('nativePlaybackEngine clock', () => {
         expect(nativePlaybackEngine.isPlaying()).toBe(false);
     });
 
+    it('retries the same source after prepare fails', async () => {
+        vi.clearAllMocks();
+        harness.nativePlayer.prepare
+            .mockRejectedValueOnce(new Error('temporary prepare failure'))
+            .mockResolvedValueOnce({ ok: true });
+
+        await expect(nativePlaybackEngine.setSource('https://example.invalid/retry.mp3')).rejects.toThrow('temporary prepare failure');
+        expect(nativePlaybackEngine.sourceReadyError()).toBeInstanceOf(Error);
+
+        await nativePlaybackEngine.play();
+        expect(harness.nativePlayer.prepare).toHaveBeenCalledTimes(2);
+        expect(harness.nativePlayer.play).toHaveBeenCalledTimes(1);
+        expect(nativePlaybackEngine.sourceReadyError()).toBeNull();
+    });
+
+    it('marks an asynchronous native error as retryable', async () => {
+        vi.clearAllMocks();
+        emit({ type: 'error', message: 'HTTP 403', songKey: 'song-key' });
+        expect(nativePlaybackEngine.sourceReadyError()).toBeInstanceOf(Error);
+
+        await nativePlaybackEngine.play();
+        expect(harness.nativePlayer.prepare).toHaveBeenCalledTimes(1);
+        expect(harness.nativePlayer.play).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not let a stopped source failure replace the idle state', async () => {
+        vi.clearAllMocks();
+        let rejectPrepare!: (error: Error) => void;
+        harness.nativePlayer.prepare.mockImplementationOnce(() => new Promise<{ ok: boolean }>((_, reject) => {
+            rejectPrepare = reject;
+        }));
+        const pending = nativePlaybackEngine.setSource('https://example.invalid/stopped.mp3');
+        await nativePlaybackEngine.stop();
+        rejectPrepare(new Error('late failure'));
+        await expect(pending).rejects.toThrow('late failure');
+        expect(nativePlaybackEngine.sourceReadyError()).toBeNull();
+        expect(nativePlaybackEngine.activeUrl()).toBeNull();
+    });
+
     it('resets to zero when the player loops the track', () => {
         emit({ type: 'playing', positionMs: 1000, durationMs: 200_000 });
         nowMs = 200_000;
