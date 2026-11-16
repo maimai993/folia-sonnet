@@ -111,6 +111,7 @@ class NativePlaybackEngine {
     private sourceReadyPromise: Promise<void> = Promise.resolve();
     private sourceReadyFailure: unknown = null;
     private sourceReadyGeneration = 0;
+    private sourceGenerationVersion = 0;
 
     /** Returns the current source preparation failure, if one has already been observed. */
     sourceReadyError(): unknown {
@@ -152,6 +153,14 @@ class NativePlaybackEngine {
     /** 当前是不是由原生在播（用来决定进度条走哪条时钟）。 */
     activeUrl(): string | null {
         return this.hasSource ? this.currentUrl : null;
+    }
+
+    currentSongKey(): string | null {
+        return this.songKey;
+    }
+
+    sourceGeneration(): number {
+        return this.sourceGenerationVersion;
     }
 
     /** 原生手上有没有歌（不论在不在播）。进度条、歌词与播放控制都看这个，不看 isPlaying。 */
@@ -205,6 +214,7 @@ class NativePlaybackEngine {
         ) return;
         this.ensureSubscription();
         this.songKey = options.songKey ?? null;
+        this.sourceGenerationVersion++;
         this.currentUrl = url;
         this.hasSource = true;
         this.nativeMediaLive = true;

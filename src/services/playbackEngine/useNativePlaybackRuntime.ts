@@ -78,10 +78,18 @@ export const useNativePlaybackRuntime = ({
          */
         const resumeAtSec = pendingResumeTimeRef.current;
         pendingResumeTimeRef.current = null;
+        const sourceGeneration = nativePlaybackEngine.sourceGeneration();
+        const expectedUrl = audioSrc;
+        const expectedSongKey = song ? getPlaybackSongKey(song) : null;
         void nativePlaybackEngine.setSource(audioSrc, {
-            songKey: song ? getPlaybackSongKey(song) : null,
+            songKey: expectedSongKey,
             startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
         }).catch(error => {
+            if (
+                nativePlaybackEngine.sourceGeneration() !== sourceGeneration + 1
+                || nativePlaybackEngine.activeUrl() !== expectedUrl
+                || nativePlaybackEngine.currentSongKey() !== expectedSongKey
+            ) return;
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
