@@ -1,98 +1,224 @@
-# Folia-Sonnet
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b5d0e863-48be-497b-b0e9-4bd8d8ce9bf0" alt="Folia" width="100%" />
+</p>
 
-将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.28**。
+<div align="center">
+<a href="https://trendshift.io/repositories/71740?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-71740" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/71740" alt="chthollyphile%2Ffolia-major | Trendshift" width="250" height="55"/></a>
 
-> [!IMPORTANT]  
-> **装上去就能用，不需要自建后端。**
->
-> 本版本已内置**本地登录**：网易云、QQ 音乐（QQ 扫码与微信扫码）、酷狗的接口代码都打进了包里，  
-> 由 Android 原生桥（OkHttp + 系统 Cookie 罐）直接代发请求。扫码登录后，搜索、歌单、歌词、封面、  
-> 播放地址全部由 App 自己向官方服务器取，**不经过任何第三方中转服务器**。
->
-> 源码本身不含任何内置的第三方后端地址。未配置可选的 AI 主题服务时，只有 AI 主题生成与少量歌词  
-> 代理不可用，听歌、歌词、封面、本地音乐等其余功能不受影响。
+# Folia
+
+Lyrics Reimagined // 辞曲新境
+
+简体中文 | [English](README.en.md)
+
+[![GitHub release](https://img.shields.io/github/v/release/chthollyphile/folia-major?label=release)](https://github.com/chthollyphile/folia-major/releases)
+[![License](https://img.shields.io/github/license/chthollyphile/folia-major)](https://github.com/chthollyphile/folia-major/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/chthollyphile/folia-major?style=social)](https://github.com/chthollyphile/folia-major/stargazers)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/chthollyphile/folia-major)
+[![Discord](https://img.shields.io/discord/1541051241822687232?logo=discord&logoColor=white&label=Join%20our%20Discord)](https://discord.gg/dMDBTHxeKd)
+<!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
+[![All Contributors](https://img.shields.io/badge/all_contributors-35-orange.svg?style=flat-square)](CONTRIBUTORS.md)
+<!-- ALL-CONTRIBUTORS-BADGE:END -->
+
+[获取方式](https://github.com/chthollyphile/folia-major#%E8%8E%B7%E5%8F%96%E6%96%B9%E5%BC%8F)
+·
+[Vercel 部署](https://vercel.com/new/clone?repository-url=https://github.com/chthollyphile/folia-major)
+·
+[使用指南](https://folia-site.cielaniska.top/guide/)
+·
+[技术说明](docs/technical.md)
+
+</div>
 
 ## 项目简介
 
-Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器，支持网易云、QQ 音乐、酷狗、汽水音乐、Navidrome  
-与本地音乐库，通过智能歌词匹配、AI 生成配色主题以及多种全屏歌词动画提供独特的听歌体验。
+Folia是一个以全屏沉浸式歌词播放为核心的在线音乐播放器，支持网易云、酷狗、QQ 音乐、Navidrome 和本地音乐库，桌面端还支持波点音乐、YouTube Music、Spotify 和汽水音乐，通过智能歌词匹配，AI生成配色主题，以及多种全屏歌词动画为用户提供独特的听歌体验。
 
-这个仓库做的是同一套 Web 代码的 Android 容器（Capacitor），并补齐移动 / 壁纸场景才需要的那部分：
+提供基于Electron的 windows/ macOS/ Linux 桌面端版本与基于 Node.js 的 Web 版本，支持多平台部署。
 
-| 模块        | 说明                                                                 |
-| --------- | ------------------------------------------------------------------ |
-| 本地登录      | 内置接口代码 + 原生桥，扫码登录三家平台，不依赖任何自建后端。                                   |
-| 动态歌词壁纸    | 可作为系统动态壁纸运行；「跟随」模式下壁纸画的就是播放页那套可视化。背景支持模糊封面 / 主题色 / 自选图片 / 自选视频。    |
-| 可视化叠层     | 壁纸之上的一层 WebView，跑的是播放页同一个渲染器，画面与播放页一致。                             |
-| 音乐锁屏      | 锁屏界面上也挂同一层叠层，与桌面叠层完全一致；底部控制条自上有退出（ˇ）/ 封面 / 歌名 / 进度条 / 上一首·播放暂停·下一首，也可设成「只在锁屏上出现」。 |
-| 原生锁屏歌词    | ColorOS 16+ 上把歌词写进 `MediaMetadata["lyricInfo"]`，交给系统锁屏 / AOD 原生渲染。 |
-| 手机适配      | 竖屏 / 横屏的紧凑布局，全部由 `<html data-folia-phone-fit>` 门控，关闭时桌面布局一字不变。     |
-| 刘海 / 挖孔适配 | 清掉系统垫给 decor 的 cutout padding，沉浸式下不再留黑边。                           |
-| 状态栏歌词     | 与 Lyricon 同步：换歌、播放暂停、拖动跳变、转屏等事件推送，段内推进归原生。                         |
-| 前台播放      | 前台服务 + 媒体通知，通知栏 / 锁屏 / 耳机按键的控制回到 App。                              |
-| 播放时保持常亮   | 可选开关：只在播放中钉住屏幕，暂停 / 退到后台立刻交还给系统。                                   |
-| 模组系统（Node 宿主） | 模组在手机上跑在 APK 内置的 Node.js 运行时里（`folia-node` assets + libnode），桌面版能装的 Folium 模组这里也能装。 |
-| 原生分析模型    | 智能动感模式的两个分析模型（拍点 `beat_this`、分轨 `htdemucs`）在原生侧跑 onnxruntime：熄屏、后台切歌都不断，分析的峰值负载也压得住。 |
+如果希望能够在移动设备上使用，或在浏览器上体验，可以选择[一键部署到 Vercel](https://folia-site.cielaniska.top/guide/deploy-vercel) 的 Web 版本，或自行部署到其他支持 Node.js 的平台。
 
-上游 Folia 本身具备的能力：
+## 快速下载
 
-| 模块             | 说明                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------ |
-| 在线搜索与播放        | 搜索歌曲、歌手或专辑后即可播放，并自动加载相关封面与歌词。                                                              |
-| 本地音乐支持         | 可导入本地音频文件，在本地保存索引信息，不上传文件内容。                                                               |
-| 智能歌词匹配         | 本地歌曲可自动匹配在线歌词与封面，也支持手动修正匹配结果。                                                              |
-| 本地歌词文件识别       | 自动加载同目录同名 `.lrc`、`.vtt`、`.ttml`、`.qrc`、`.yrc`、`.krc` 歌词文件，或内嵌 LRC 歌词；适配 LDDC 生成的增强型逐字歌词格式。 |
-| Now Playing 接入 | 通过本机 [Now Playing](https://github.com/Widdit/now-playing-service/) 服务接入外部播放器的歌曲、时间轴与歌词信息。  |
-| AI 主题生成        | 基于歌曲情绪与歌词内容生成沉浸式背景与视觉参数。                                                                   |
-| 多端体验           | 提供 Web 部署方式，同时支持桌面端打包分发。                                                                   |
-| 模组系统（实验性）      | 桌面版可通过 Folium 模组添加歌词动画、背景、播放页图层、命令等，详见 [模组开发与贡献指南](docs/folium/contributing.md)。           |
+> [!TIP]
+> - **GitHub**：[Latest Release](https://github.com/chthollyphile/folia-major/releases/latest)，提供 Windows / macOS / Linux 全平台安装包。
+> - **网盘**：[夸克网盘](https://pan.quark.cn/s/6e4c6fa3bc6f) · [百度云](https://pan.baidu.com/s/1f0x3g-8PMcNCO-TJ5z1rPw?pwd=flia)（提取码 `flia`），适合国内网络，仅提供 Windows 与 Apple silicon 的正式版安装包。
+>
+> 更多获取方式（Web 部署、Docker、AUR、Flatpak、移动端）见下方 [获取方式](#获取方式)。
 
-## 参考项目
+## 展示
 
-本仓库站在这些项目之上，按来源分别对应上游主线、Web 版本、原生歌词协议、移动端适配参考，以及 Android 上 YouTube Music 登录那一套的移植出处：
+![visualizer](./img/visualizer.png)
 
-| 项目                                                                                                | 关系                                                                              |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [chthollyphile/folia-major](https://github.com/chthollyphile/folia-major)                         | Folia 主线仓库。本仓库的 Web 代码跟随它演进，当前对应 **0.7.28**。                                    |
-| [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)                       | Folia 的 Web / 桌面版本，本仓库 fork 自它，Android 容器是在它的代码外面加的一层壳。                         |
-| [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)                   | 「汽水音乐」在线音源最先由它接入 Folia；**上游主线现已内置汽水**，本仓库跟随上游拿到这一音源（协议层、签名宿主与音频解密的原实现出自该项目）。 |
-| [Andrea-lyz/ColorOS-Live-Lyrics-Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) | ColorOS 原生锁屏歌词（「媒体与播放」歌词页）的桥接协议参考。原生锁屏歌词那部分按它的协议写 `MediaMetadata["lyricInfo"]`。 |
-| [RemnantCloudGodofWar/folia-android](https://github.com/RemnantCloudGodofWar/folia-android)       | 同为 Folia 的 Android 化尝试，手机适配（紧凑布局、竖屏 / 横屏）与 AI 主题等做法参考了它。                        |
-| [EasonLai96/folia-major](https://github.com/EasonLai96/folia-major)                               | Android 上 YouTube Music 的真账号登录整套来自它的 [`android-v23`](https://github.com/EasonLai96/folia-major/releases/tag/android-v23) 版本：原生登录 Activity、Android Keystore 加密的会话持久化、secure-only Cookie 的签名与 canonical Origin 修复，以及 BotGuard poToken 加整首下载的音频路线。 |
-| [LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)                                         | 莱茵生命终端界面的复刻（Three.js 三维档案阵列）。播放页的玻璃质感叠层、档案式排版与滚动数字 / 滚动标题等动效细节参考了它的设计与实现。 |
-| [maimai993/koishi-plugin-kkk](https://github.com/maimai993/koishi-plugin-kkk)                     | 同作者的多平台短视频 / 图文解析与动态推送插件。B 站内容解析（BV 号识别、视频信息、封面与作者字段）的取数思路参考了它。 |
-| [852wa/JIZURA](https://github.com/852wa/JIZURA)                                                   | 歌词 PV 自動構成ツール：逐字歌词动画的表达方式（拍点对齐、逐字入场 / 退场、滚动文字、按 seed 变化的自动排版）在歌词动效调优时参考。 |
-| [Timingyyds/Mineradio-Android](https://github.com/Timingyyds/Mineradio-Android)                   | 同类 Android 音乐客户端（横屏 H5 + Kotlin 壳 + Node.js 桥接 + Native C++）。把 Node.js 运行时打进 APK 的 assets 布局、H5 界面加密装载与原生桥的分层方式参考了它的结构。 |
+### 在线体验（社区版）
 
-## Android 上的 YouTube Music
+在浏览器里直接试用：[folia-ce.cn](https://folia-ce.cn/)
 
-桌面端那几家的登录在本机能做的事，手机上不一定成立；YouTube Music 这一家现在是手机上的独一份：
+> [!NOTE]
+> 这是社区部署的演示站，仅供体验，部署来源为 [folia-ce/folia-web](https://github.com/folia-ce/folia-web)。它包含社区作者自己的改动，与官方 Web 版并不完全一致；使用中遇到问题请反馈到该社区仓库。长期使用建议下载桌面版或自行部署。
 
-- 登录只能走 Google 的 cookie（YouTube 没给 YouTube Music 的 OAuth），所以由原生的一座登录 Activity（`android/app` 的 `YtmSignInActivity.java`）装自己的 WebView，登录完把 cookie 交回来。
-- **必须登录才可用**：我们不提供访客模式。会话验证过真账号才落盘，落盘由原生侧用 Android Keystore 的 AES-GCM 密钥加密（`YtmSessionStore.java`）；冷启动先读回来、问过 YouTube 确认还有效才放行。
-- 手机上行得通的：搜索、歌词、专辑、歌手、公开歌单与电台（`mix`）、播放（BotGuard 来源证明令牌 + 整首下载进缓存目录）。
-- 手机上**不支持**的：个人曲库、推荐 / 用户专辑、收藏与歌单增删、歌曲的红心。这些在界面上会直接说不支持，不返回一个空列表假装没有。
-- 已知限制：Google 可能拒绝「嵌在 App 里的浏览器」登录（页面会显示 Google 自己的提示），那种情况下没有别的退路。各处第三方协议来源记在 [`src/services/onlineMusic/UPSTREAMS.md`](src/services/onlineMusic/UPSTREAMS.md)。
+### 演示视频
 
-## 汽水音乐音源
+https://github.com/user-attachments/assets/af806cf1-f67f-4b88-b2e7-57db507e9e81
 
-「汽水音乐」在线音源最先由 [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui) 接入 Folia，**上游主线现已内置这一音源**，本仓库跟随上游获得它与网易云、QQ 音乐、酷狗、波点、YouTube Music 并列的完整能力：
+https://github.com/user-attachments/assets/fd27f4f0-64b9-4c57-8c3b-10df767f934b
 
-- 搜索、歌单、专辑、歌手、播放、歌词、扫码登录、我的喜欢、歌单收藏。
-- 封面右下角会显示汽水音乐 App 图标；「全部平台」合并视图也会把它算进去。
-- 桌面端通过 Electron 主进程内的隐藏窗口调用汽水官方签名组件（`bdms.node` / `metasecml.dll`）生成请求签名；加密音频由本机 `127.0.0.1` 随机端口代理解密后交给播放器。
-- **Android 端暂不可用**：汽水音乐的签名依赖 Windows 原生模块，Android 容器没有等效环境；在手机上选择「汽水音乐」会显示「需要桌面应用」。
+https://github.com/user-attachments/assets/704f195a-2194-434b-86e8-8f36290e5cc4
 
-> 注意：`electron/qishui/qishui-auth-v6/` 下的 `bdms.node` 与 `metasecml.dll` 来自汽水音乐官方客户端的 Web 安全组件，仅用于生成请求签名；它们随 folia-qishui 仓库以 AGPL-3.0 分发，版权归字节跳动与汽水音乐所有。
+### 部分主题预览
 
-## 范围与限制
+<table>
+  <tr>
+    <td width="50%">
+      <img src="./img/preview-fume.png" alt="Fume 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-lumi.png" alt="Lumi 主题预览" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>浮名</strong></td>
+    <td align="center"><strong>流光</strong></td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./img/preview-cad.png" alt="Cad 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-pat.png" alt="Pat 主题预览" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>心象</strong></td>
+    <td align="center"><strong>云阶</strong></td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="./img/preview-cappella.jpg" alt="群唱 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-tilt.png" alt="Tilt 主题预览" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>群唱</strong></td>
+    <td align="center"><strong>倾诉</strong></td>
+  </tr>
+    <tr>
+    <td width="50%">
+      <img src="./img/preview-diorama.png" alt="镜台 主题预览" />
+    </td>
+    <td width="50%">
+      <img src="./img/preview-pendolo.png" alt="时计 主题预览" />
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>镜台</strong></td>
+    <td align="center"><strong>时计</strong></td>
+  </tr>
+</table>
 
-- Android 容器基于 Capacitor。不承诺本地音乐扫描、Android Auto 或应用商店发布支持。
-- 音乐锁屏注册的是真正的锁屏页面（Activity），部分 ROM 会拦「后台弹出界面」，需要在系统设置里  
-  给本应用开「锁屏显示」；那种机型上该项无效。
-- 原生锁屏歌词只在 ColorOS 16+ 上生效，由 ROM 决定是否渲染，别的机型上是空操作。
-- 本仓库是非官方实验项目，不保证跟随 Folia-major 主仓库更新；请自行 fork、审计并维护你的副本。
-- 在线音乐、歌词、封面及其他第三方内容的版权归相应权利人所有。请遵守所在地法律及服务条款，并通过官方渠道支持正版内容。
+不同的歌词动画具有不同的排版氛围和可调参数，让全屏歌词拥有如同文字PV般的丰富视觉效果，同时又能兼顾响应式布局，自动适配不同窗口尺寸。
+
+## 核心能力
+
+| 模块 | 说明 |
+| --- | --- |
+| 在线搜索与播放 | 搜索歌曲、歌手或专辑后即可播放，并自动加载相关封面与歌词。 |
+| 本地音乐支持 | 可导入本地音频文件，在本地安全保存索引信息，不上传文件内容。详细用法见 [本地音乐库管理](docs/local-library-management.md)。 |
+| 智能歌词匹配 | 本地歌曲可自动匹配在线歌词与封面，也支持手动修正匹配结果。 |
+| 本地歌词文件识别 | 自动加载同目录同名 `.lrc`、`.vtt`、`.ttml`、`.qrc`、`.yrc`、`.krc` 歌词文件，或歌词文件内嵌 LRC 歌词。适配 LDDC 生成的增强型逐字歌词格式。 |
+| Now Playing 接入 | 支持通过本机 [Now Playing](https://github.com/Widdit/now-playing-service/) 服务接入外部播放器的歌曲、时间轴与歌词信息，并驱动 Folia 的舞台视图与全屏歌词渲染。 |
+| AI 主题生成 | 基于歌曲情绪与歌词内容生成沉浸式背景与视觉参数。 |
+| 多端体验 | 提供 Web 部署方式，同时支持桌面端打包分发。 |
+| 模组系统（实验性） | 桌面版可通过 Folium 模组添加歌词动画、背景、播放页图层、命令等，并从 [模组市场](https://folium-compound.cielaniska.top) 安装官方认证的模组。详见 [模组系统](#模组系统folium-v1x)。 |
+
+## 获取方式
+
+桌面版内置前后端运行环境，适合希望即装即用的用户。
+
+### 一键部署
+
+如果你希望快速上线 Web 版本，请阅读 [Vercel 一键部署指南](https://folia-site.cielaniska.top/guide/deploy-vercel) 来创建项目
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/chthollyphile/folia-major) 
+
+项目也支持一键部署到 Cloudflare，请参考 Vercel 的部署教程进行相应调整。
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/chthollyphile/folia-major)
+
+Vercel 与 Cloudflare 上的 QQ 音乐不再需要额外部署一个常驻 API 实例：把 `VITE_QQ_API_BASE` 填成 `/api/qq`，再配一个 `QQ_SESSION_SECRET`（服务端密钥，**不加 `VITE_` 前缀**）即可。这种形态支持微信扫码和手机 QQ 扫码登录（手机 QQ 扫码要 qq-music-api 3.3.3 或更高版本），且播放前必须先登录；Cloudflare 上可以再绑定一个 Durable Object，让 QQ 扫码改走长连接，并多一个 QQ 音乐 App 扫码。完整步骤、平台差异和排错方法见 [QQ 音乐部署指南](docs/qq-music-deployment.md)。
+
+自托管用户可以使用 [Docker Compose 全栈部署](deploy/docker/README.md)。本地音乐目录访问依赖可信 HTTPS 安全上下文，部署文档包含 NAS 反向代理和证书要求。
+
+### 直接下载
+
+- **Windows / macOS / Linux**: 最新版本的安装包请前往 [Releases 页面](https://github.com/chthollyphile/folia-major/releases/latest) 下载。
+- **Arch Linux**: 可通过 AUR 获取 [folia-major-bin](https://aur.archlinux.org/packages/folia-major-bin)。
+- **Flatpak**: 社区提供的第三方 flatpak，详情见 [Flatpark](https://flatpark.org/apps/top.izuna.foliamajor/)。
+- **Android**: 社区第三方移植版见下方 [移动端](#移动端)。
+
+> [!IMPORTANT]
+> 如果国内网络从 GitHub Releases 下载较慢，可以使用 [夸克网盘](https://pan.quark.cn/s/6e4c6fa3bc6f) 或 [百度云](https://pan.baidu.com/s/1f0x3g-8PMcNCO-TJ5z1rPw?pwd=flia) 下载。网盘链接仅提供 Windows 与 Apple silicon 的正式版安装包.
+
+Linux 包、Wayland / Hyprland 遥控窗和桌面端细节见 [技术与开发说明](docs/technical.md)。
+
+### 移动端
+
+| 方式 | 说明 |
+| --- | --- |
+| **PWA（推荐）** | 部署 Web 版本或自托管版本后，在 Chrome for Android / iOS Safari 中将网页添加到主屏幕，即可作为 PWA 应用使用。 |
+| **社区移植版（Android）** | [folia-ce/folia-sonnet](https://github.com/folia-ce/folia-sonnet) · [whycfawa/folia-android](https://github.com/whycfawa/folia-android) |
+| **自行打包（Android）** | 有一定技术基础的用户可以用 Capacitor 将 Web 版本打包为可安装的 APK，参考示范仓库 [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)。 |
+
+> [!NOTE]
+> 社区移植版均为第三方项目，由社区自发维护，功能会与官方 PC 版存在差异。使用中遇到问题请反馈到对应的社区仓库。
+
+## 文档与开发
+
+更完整的使用说明请访问 [Folia Guide](https://folia-site.cielaniska.top/guide/)。
+
+部署、环境变量、本地开发、Stage API、常用脚本和技术栈见 [技术与开发说明](docs/technical.md)。
+
+## 模组系统（Folium v1.x）
+
+> [!NOTE]
+> 模组系统是实验性功能，仅桌面版可用，默认关闭，需要在「设置 → 模组 → 模组系统」中开启。
+
+Folium 是 Folia 的模组平台。模组可以添加新的歌词动画模式和背景类型、在播放页上叠加内容、给进度条加按钮和标记、注册命令与设置分区、在歌词显示前改写歌词，也可以通过 Node 入口调用 ffmpeg 等本地能力。模组以可信代码运行，每个模组在启用前都要在原生窗口中确认，文件变化后需要重新确认。
+
+- **模组市场**：[folium-compound.cielaniska.top](https://folium-compound.cielaniska.top) 提供官方模组和经过审查的社区模组，下载 zip 后拖进模组面板即可安装。
+- **官方认证**：市场里的模组都带有 Folium 签名，安装后显示「官方认证」；只通过安全审查的先行测试模组显示「先行测试」；没有签名的第三方模组显示「未验证」，同样可以使用。
+- **开发与贡献**：[模组开发与贡献指南](docs/folium/contributing.md)，从写第一个模组、本地调试，到提交到模组市场、审查与签名、发布更新。
+- **API 参考**：[Folium API 参考](docs/folium/api.md)，由契约文件生成的完整接口文档，按注册表、上下文、事件、服务等分类查询。
+- **平台规范**：[Folium 规范](mods/README.md)，包括清单字段、权限、注册表语义、事件、安全模型与版本策略。
+- **示范模组**：仓库的 [`mods/`](mods/) 目录，覆盖歌词动画、调参、进度条、播放页图层与透明视频导出。
+
+## Sync Server
+
+Folia 提供了可选的官方同步服务端 `sync-server`，用于在多个设备之间同步外观设置与 AI 主题库。服务端由用户自行托管，适合希望跨设备同步配色主题的用户。
+
+支持以下部署方式：
+
+- **Cloudflare Workers / D1**：免服务器运维的 Serverless 部署，推荐使用。
+  [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/chthollyphile/folia-major/tree/main/sync-server)
+- **Docker**：镜像与 Compose 入口见 [Docker 部署目录](deploy/docker/README.md)。
+- **Node.js 自托管**：使用 SQLite，适合本地或不方便使用 Docker 的环境。
+
+详细的环境变量、Token 配置与部署步骤请参阅 [Sync-Server 部署指南](https://folia-site.cielaniska.top/guide/deploy-sync)。部署完成后，在 Folia 的「设置 → 连接与集成」中填写服务端地址和 `SYNC_TOKEN` 即可启用同步。
+
+## 本地音乐与匹配说明
+
+Folia 会读取音频文件元数据、同目录歌词和封面，并可通过网易云、QQ 音乐或酷狗音乐补全歌曲信息。自动匹配按网易云、QQ、酷狗依次回退；匹配不准确时，可以手动选择候选、恢复首次导入的本地信息，或进一步合并、拆分艺术家与专辑实体。
+
+完整的导入、重扫、匹配、实体编辑、歌单、缓存和故障排查说明见 [本地音乐库管理](docs/local-library-management.md)。
+
+## Community
+
+加入discord社群，共同交流，获得帮助
+
+[![Discord](https://img.shields.io/discord/1541051241822687232?logo=discord&logoColor=white&label=Join%20our%20Discord)](https://discord.gg/dMDBTHxeKd)
 
 ## 贡献者
 
@@ -104,10 +230,25 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 
 本项目在 AI 的广泛协助下开发，因此仍可能存在细微或不易察觉的问题。若给你带来不便，敬请理解。
 
-本项目主要用于展示播放动效、界面设计与相关工程实现。本仓库及其源代码仅供个人学习、技术交流与非营利测试使用，请勿将其用于商业盈利用途。
+本项目主要用于展示播放动效、界面设计与相关工程实现。应用中涉及的在线音乐流媒体、歌词、专辑封面及其他内容，其版权均归对应权利人所有。
+
+本仓库及其源代码仅供个人学习、技术交流与非营利测试使用。请勿将其用于商业盈利用途。若因对在线资源的传播、加工或再分发而引发版权纠纷或其他责任，均由使用者自行承担，项目开发者不承担相关责任。
 
 请始终尊重数字版权，并在条件允许时通过官方平台支持正版音乐。
 
+## 致谢
+
+特别感谢以下项目和资源：
+
+- [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC)
+- [NeteaseCloudMusicApiEnhanced](https://github.com/NeteaseCloudMusicApiEnhanced/api-enhanced)
+- [chenglou/pretext](https://github.com/chenglou/pretext)
+- [MakcRe/KuGouMusicApi](https://github.com/MakcRe/KuGouMusicApi)
+- [paper-design/shaders](https://github.com/paper-design/shaders)
+- [yakult-green-tea/qq-music-api](https://github.com/yakult-green-tea/qq-music-api)
+
+本项目接入了 [Apple Music-like Lyrics TTML 逐词歌词库](https://github.com/amll-dev/amll-ttml-db) 以提供高质量的歌词文件，感谢此歌词库的作者和贡献者们。
+
 ## 许可证
 
-本项目基于 [AGPL-3.0](LICENSE) 许可证开源。使用、修改或分发前请阅读许可证全文。
+本项目基于 `AGPL-3.0` 许可证开源。

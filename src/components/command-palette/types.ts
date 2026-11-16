@@ -13,7 +13,7 @@ import type { LibraryDirectorySurfaceHandle } from '../../library/core/directory
 import type { LibraryArtistSurfaceHandle } from '../../library/core/artist/artist.contract';
 import type { LibrarySuiteChromeHandle } from '../../library/core/suite/suiteChrome.contract';
 import { type SettingsModalInitialTab, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
-import type { SettingsAnchorId } from '../../utils/settingsAnchorModel';
+import type { SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
@@ -158,6 +158,8 @@ export type CommandPaletteSearchContext = {
         };
         returnView?: SearchReturnView;
     }) => Promise<boolean>;
+    /** 搜过的词，最近的在前（useSearchNavigationStore 的 searchHistory）；搜索命令把它们列在输入行下面。 */
+    searchHistory: () => readonly string[];
 };
 
 export type CommandPalettePlaybackContext = {
@@ -308,9 +310,6 @@ export type CommandPaletteSettingsContext = {
     /** bravais info strip always see-through (useLibraryWallLookStore.seamClear); read live. */
     libraryWallSeamClear: () => boolean;
     toggleLibraryWallSeamClear: () => void;
-    /** 液态玻璃的总开关（useGlassSurfaceSettingsStore.liquidGlassEnabled）；现读。 */
-    liquidGlassEnabled: () => boolean;
-    toggleLiquidGlass: () => void;
     /** bravais solid info strip preset (useLibraryWallLookStore.seamStyle); read live. Ignored while the strip is see-through. */
     libraryWallSeamStyle: () => LibraryWallSeamStyle;
     setLibraryWallSeamStyle: (style: LibraryWallSeamStyle) => void;
@@ -333,6 +332,10 @@ export type CommandPaletteSettingsContext = {
     /** A getter: the full-bleed toggle it gates on flips with nothing re-rendering the context. */
     canUseGridViewSquareCards: () => boolean;
     toggleLatticeVignette: () => void;
+    /** Lattice 的墙面形态在海报墙和电台墙之间切换（useLatticeSettingsStore.latticeWallForm；私人 FM 下总是电台墙）。 */
+    toggleLatticeWallForm: () => void;
+    /** 普通队列的电台墙上，接下来的歌显示为问号卡（useLatticeSettingsStore.latticeRadioHideUpcoming）：翻转存着的值。 */
+    toggleLatticeRadioHideUpcoming: () => void;
     /** Number only the playing song on the queue collage and the bravais wall (useLatticeSettingsStore.latticeBadgeCurrentOnly): flips the stored value. */
     toggleLatticeBadgeCurrentOnly: () => void;
     /** Motion reduction for the queue collage, the surface issue #370 was filed about. */
@@ -364,8 +367,7 @@ export type CommandPaletteSettingsContext = {
     togglePlaybackFade: () => void;
     /** Whether restricted songs and unknown failures count down to a skip, like taken-down ones. */
     toggleAutoSkipUnplayable: () => void;
-    /** Whether an unplayable song in the background is skipped without waiting for the foreground (Android). */
-    toggleBackgroundSilentSkip: () => void;
+    toggleShuffleRoundNoRepeat: () => void;
     /**
      * Whether this build can watch the imported local folders at all. A getter because the answer
      * is a runtime API check (FileSystemObserver) rather than a stored value, and the settings
@@ -399,6 +401,8 @@ export type CommandPaletteSettingsContext = {
     toggleRemoteControlExpandCover: () => void;
     /** Remote control window, transparent background: a soft dark shade under the idle type. */
     toggleRemoteControlTextShade: () => void;
+    /** Remote control window: one lyric pair, or two (the next line at the bottom right when idle). */
+    toggleRemoteLyricPairs: () => void;
     /** Turns remote control click-through off (the way back into a click-through window). */
     unlockRemoteControl: () => void;
     /** OBS browser source: keep the main window's heavy animation while an OBS client is connected. */
@@ -418,15 +422,6 @@ export type CommandPaletteSettingsContext = {
     sleepTimerMinutes: number;
     setSleepTimerMinutes: (minutes: number) => void;
     sleepTimerDeadlineMs: number | null;
-    /** 到点之后干什么。控制面板那一行现在能选，命令面板只按它显示提示语。 */
-    sleepTimerEndAction: 'pause' | 'quit';
-    /**
-     * 把定时方式挪回「分钟后」。
-     *
-     * 控制面板里可以把方式切成「小时」或「定时（几点）」，那时这两边的 hours / minutes
-     * 不再驱动倒计时；命令面板一改时长就把方式拉回来，最后一次改动为准，不会互相打架。
-     */
-    setSleepTimerMinutesMode: () => void;
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
@@ -509,6 +504,9 @@ export type CommandPaletteVisualizerContext = {
     /** Null means "no stored choice"; the picker resolves it against the registry default. */
     visualizerBackgroundMode: VisualizerBackgroundMode | null;
     setVisualizerMode: (mode: VisualizerMode) => void;
+    /** The visualizer picker stays open after a mode is chosen. */
+    visualizerPickerKeepOpen: boolean;
+    setVisualizerPickerKeepOpen: (enable: boolean) => void;
     toggleRandomVisualizerModePerSong: () => void;
     /** Lab > Fix lyric animation freeze on Linux: the Linux renderer fd leak workaround. */
     toggleGlowBlurQuantize: () => void;

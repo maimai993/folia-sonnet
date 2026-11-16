@@ -7,54 +7,44 @@ import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChrome
 import { openSettings } from '../../../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
-import { openAIEndpointOf } from '../../../../utils/openAIEndpoint';
-import { Button, FoldedGroup, Group, NumberField, Reveal, Row, Segmented, TextField, Toggle, Value, parseNumberText, type SettingsOptionDef } from '../kit';
-import { settingsAnchorSubview } from '../../../../utils/settingsAnchorModel';
-import { isCapacitorAndroid } from '../../../../platform/runtime';
-import { settingsCardClassFor } from '../settingsCardClasses';
-import AndroidForceLandscapeSetting from '../AndroidForceLandscapeSetting';
-import DeviceTypeSetting from '../DeviceTypeSetting';
-import LyricFlatSetting from '../LyricFlatSetting';
-import LyricsWallpaperSettingsSection from '../LyricsWallpaperSettingsSection';
-import { AI, LYRICS_WALLPAPER_OPTIONS, LYRICS, LYRICS_WALLPAPER, O, SONG_THEME, THEME, VIEW } from './appearance/options';
-import AiProviderSettings from '../AiProviderSettings';
-import { AiConnectionTestReply, useAiConnectionTest } from './AiConnectionTest';
-import { useSettingsPage, type AiApiKeyName } from './settingsPageContext';
+import { Button, Group, Reveal, Row, Segmented, Toggle, Value, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import { settingsAnchorSubview } from '../navigation/settingsAnchorModel';
+import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/AppearancePage.tsx
 // The 外观 page: which lyric animation the player uses, which scene (its window holds each scene's
-// settings and sound tracing), light or dark, the colour theme, how a
-// song's own theme is made and applied, and (desktop app) the AI provider that makes those themes.
+// settings and sound tracing), light or dark, the colour theme, and how a
+// song's own theme is made and applied. The AI provider those themes are generated with is not
+// here: it is one connection shared by every AI feature, on the AI service page (pages/AiServicePage).
 // The lyric animation workbench and the theme colour editor are the existing overlays; their rows
 // here only open them.
 
-/** What the search can find on this page: the rows declared above, plus the wallpaper section's. */
-export const OPTIONS: SettingsOptionDef[] = [...Object.values(O), ...LYRICS_WALLPAPER_OPTIONS];
+const LYRICS: SettingsGroupDef = { id: 'lyricsRenderer', titleKey: 'options.lyricsRenderer' };
+const THEME: SettingsGroupDef = { id: 'themePresets', titleKey: 'options.settingsHeadingTheme' };
+const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'options.settingsHeadingSongTheme' };
 
-/**
- * 歌词动态壁纸那一节（fork 独有，Android 专有）。
- *
- * 上游把外观页重画成 kit 的一排 Row，这一节还是老式的行 + 滑条，塞不进 kit 的 Row，
- * 所以整块挂在「歌词动画」那一组下面；组件内部非安卓直接返回 null，这里不用再判端。
- * 它整块落在这一组的 kit 卡片里，所以不自己画卡、不自己带边框；里面的开关、分段器、
- * 按钮都用 kit 的那几个，跟下面「主题」「歌曲主题」两组是同一副样子。
- *
- * 滑条不再从外面传长相了：那一串 `rangeInputClass` 是给原生 input 的
- * `::-webkit-slider-thumb` 伪元素写的，还写死了 `bg-white` / `bg-zinc-700` ——
- * 换成组件库的滑杆之后这些类既不起作用，又会和主题色打架，所以删掉。
- * 现在整节里的滑条和设置窗口别处是同一个控件、同一套配色。
- */
-const LyricsWallpaperSection: React.FC<{ isDaylight: boolean }> = ({ isDaylight }) => (
-    <LyricsWallpaperSettingsSection
-        isDaylight={isDaylight}
-    />
-);
+const O = {
+    lyricsAnimation: option(LYRICS, 'lyricsAnimationAdjust', 'options.lyricsAnimationAdjust'),
+    scene: option(LYRICS, 'scene', 'ui.scene'),
+    // Not a row of its own: it lives in the scene window, so a search for it lands on the group with the scene row.
+    soundTracing: option(LYRICS, 'soundTracing', 'ui.soundTracing'),
+    daylight: option(THEME, 'daylightMode', 'options.daylightMode'),
+    preset: option(THEME, 'themePreset', 'options.themePresets'),
+    themePark: option(THEME, 'openThemePark', 'options.openThemePark'),
+    autoSwitch: option(SONG_THEME, 'autoSwitchSongTheme', 'options.autoSwitchSongTheme'),
+    autoGenerate: option(SONG_THEME, 'autoGenerateSongTheme', 'options.autoGenerateSongTheme'),
+    source: option(SONG_THEME, 'themeGenerationSource', 'options.themeGenerationSource'),
+    preferCustom: option(SONG_THEME, 'preferCustomTheme', 'options.preferCustomTheme'),
+
+};
+
+export const OPTIONS: SettingsOptionDef[] = Object.values(O);
 
 type DaylightChoice = 'light' | 'dark' | 'system';
 
 const AppearancePage: React.FC = () => {
     const { t } = useTranslation();
-    const { isElectron, themeControls, onOpenVisPlayground, onOpenThemePark, onOpenSceneWindow } = useSettingsPage();
+    const { themeControls, onOpenVisPlayground, onOpenThemePark, onOpenSceneWindow } = useSettingsPage();
     const { isDaylight, followSystemTheme, setDaylightPreference, setFollowSystemTheme } = useThemeSettingsStore(useShallow(state => ({
         isDaylight: state.isDaylight,
         followSystemTheme: state.followSystemTheme,
@@ -63,8 +53,6 @@ const AppearancePage: React.FC = () => {
     })));
     const visualizerMode = useVisualizerSettingsStore(state => state.visualizerMode);
     const randomEnabled = useVisualizerSettingsStore(state => state.randomVisualizerModePerSong);
-    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
-    const handleSetKeywordColoringEnabled = useVisualizerSettingsStore(state => state.handleSetKeywordColoringEnabled);
     const nativeBlurEnabled = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
 
     return (
@@ -77,23 +65,6 @@ const AppearancePage: React.FC = () => {
                 <Row option={O.scene} tag={t('ui.sceneBeta')} onClick={onOpenSceneWindow}>
                     <Value><ChosenSceneName /></Value>
                 </Row>
-            </Group>
-
-            {/* 歌词动态壁纸单独一张卡：不再和上面「歌词动画样式」挤在同一张里。
-                整节只有安卓画（组件内部也判了一次），非安卓连空卡都别留。 */}
-            {isCapacitorAndroid() && (
-                <Group def={LYRICS_WALLPAPER}>
-                    <LyricsWallpaperSection isDaylight={isDaylight} />
-                </Group>
-            )}
-
-            {/* 显示那三项：排在歌词那组之后、主题之前；每行自带左右两栏的行式排布。
-                液态玻璃的开关与参数在「性能与动效」页那一组里（它同时是性能设置）。 */}
-            <Group def={VIEW}>
-                <LyricFlatSetting />
-                {/* 下面两项组件内部自行判断运行时：非安卓直接返回 null，这里不用再判端。 */}
-                <DeviceTypeSetting />
-                <AndroidForceLandscapeSetting />
             </Group>
 
             <Group def={THEME}>
@@ -161,13 +132,6 @@ const AppearancePage: React.FC = () => {
                         </Button>
                     </Row>
                 </Reveal>
-                {/*
-                    非桌面端（安卓 / 网页）没有主进程那套 AI 设置：凭据由用户自己填、存在本机，
-                    AI 主题生成因此才有第三条路（services/aiThemeClient.ts）。桌面端继续走主进程设置。
-                */}
-                {!isElectron && (
-                    <Row below={<AiProviderSettings settingsCardClass={settingsCardClassFor(isDaylight)} isDaylight={isDaylight} />} />
-                )}
                 <Row option={O.preferCustom} hint={t('options.preferCustomThemeDesc')}>
                     <Toggle
                         checked={themeControls.isCustomThemePreferred}
@@ -175,12 +139,7 @@ const AppearancePage: React.FC = () => {
                         disabled={!themeControls.hasCustomTheme}
                     />
                 </Row>
-                <Row option={O.keywordColoring} note={t('options.keywordColoringDesc')}>
-                    <Toggle checked={keywordColoringEnabled} onChange={handleSetKeywordColoringEnabled} />
-                </Row>
             </Group>
-
-            {isElectron && <AiProviderSettings settingsCardClass={settingsCardClassFor(isDaylight)} isDaylight={isDaylight} />}
         </>
     );
 };

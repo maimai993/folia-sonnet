@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SETTINGS_ANCHOR_DEFINITIONS } from '../../../src/utils/settingsAnchorModel';
+import { SETTINGS_ANCHOR_DEFINITIONS } from '../../../src/components/modal/settings/navigation/settingsAnchorModel';
 import { SETTINGS_NAV_GROUP_SPECS, buildSettingsNavGroups, findSettingsNavItem, flattenSettingsNavItems, type SettingsSectionId } from '../../../src/components/modal/settings/navigation/settingsNavModel';
 import en from '../../../src/i18n/locales/en';
 import zhCN from '../../../src/i18n/locales/zh-CN';
@@ -13,7 +13,7 @@ import id from '../../../src/i18n/locales/in';
 const echo = (key: string) => key;
 
 const ALL_SECTIONS: SettingsSectionId[] = [
-    'appearance', 'player', 'home', 'graphics', 'playback', 'lyrics', 'general', 'interaction', 'integration', 'storage', 'desktop', 'mods', 'developer',
+    'appearance', 'player', 'home', 'graphics', 'playback', 'lyrics', 'general', 'interaction', 'integration', 'ai', 'storage', 'desktop', 'remote', 'mods', 'developer',
 ];
 
 const lookup = (bundle: Record<string, unknown>, key: string): unknown => (
@@ -31,15 +31,15 @@ describe('settingsNavModel', () => {
     it('drops desktop-only sections on web without leaving an empty group', () => {
         const groups = buildSettingsNavGroups(echo, { isElectron: false });
         const ids = flattenSettingsNavItems(groups).map(item => item.id);
+        // 桌面专属的分组数不是写死的：每加一个 electronOnly 分类（AI 服务就是这样一个），
+        // 网页版就少一项，断言跟着模型走才不会被下一次新增弄成假失败。
+        const desktopOnlyCount = SETTINGS_NAV_GROUP_SPECS.flatMap(group => group.sections)
+            .filter(section => section.electronOnly).length;
 
         expect(ids).not.toContain('desktop');
-        /*
-         * 模组页不再是桌面专属：安卓 App 靠内置的 nodejs-mobile 运行时
-         * （android/.../mods/ 下的 NodeModHost）也能跑模组，所以这个分组
-         * 在 web / 安卓上都该出现。
-         */
-        expect(ids).toContain('mods');
-        expect(ids).toHaveLength(ALL_SECTIONS.length - 1);
+        expect(ids).not.toContain('mods');
+        expect(ids).not.toContain('ai');
+        expect(ids).toHaveLength(ALL_SECTIONS.length - desktopOnlyCount);
         expect(groups.every(group => group.items.length > 0)).toBe(true);
     });
 

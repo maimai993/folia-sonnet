@@ -11,9 +11,8 @@ import {
     type WallViewCenter,
 } from '../../../components/wall/wallView';
 import type { WallCameraRange } from '../../../components/wall/finiteWall';
-import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN, getBravaisScale } from './bravaisConstants';
+import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN } from './bravaisConstants';
 import { rubberBand } from './bravaisFiniteWall';
-import { useLatticeSettingsStore, WALL_ZOOM_MAX, WALL_ZOOM_MIN } from '../../../stores/useLatticeSettingsStore';
 import { computeBravaisFrame, getTiltReach } from './bravaisFrame';
 import type { BravaisFrameState } from './useBravaisFrame';
 import { seamBoundsOf } from './bravaisAnchor';
@@ -115,11 +114,6 @@ export const useBravaisCamera = ({
     // useWallPointerPan 读写的是 Lattice 形状的平移相机：每次移动都同步它。
     const cameraRef = useRef<LatticeCamera>({ x: 0, y: 0, scale: 1 });
     const viewportRef = useRef({ width: 1, height: 1 });
-    // 性能优先：补间途中只保留目的地那一屏（预留得越多，world 层被重画的面积越大）。
-    const performanceMode = useLatticeSettingsStore(state => state.latticePerformanceMode);
-    const reservedViewports = performanceMode ? 1 : MAX_RESERVED_VIEWPORTS;
-    // 用户的缩放倍率（双指捏合 / Ctrl+滚轮，与 Lattice 共用一份）。
-    const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
 
     const syncPointerCamera = useCallback(() => {
         const { view, center } = frameRef.current;
@@ -177,8 +171,7 @@ export const useBravaisCamera = ({
                     top: Math.min(current.top, destination.top),
                     bottom: Math.max(current.bottom, destination.bottom),
                 };
-                // 性能优先：飞行途中只保留目的地那一屏（预留得越多，world 层被重画的面积越大）。
-                return area(merged) > area(destination) * reservedViewports ? destination : merged;
+                return area(merged) > area(destination) * MAX_RESERVED_VIEWPORTS ? destination : merged;
             });
         }
         if (reducedMotion || duration <= 0) {
@@ -201,7 +194,7 @@ export const useBravaisCamera = ({
                 moveTo(target, true);
             },
         });
-    }, [frameRef, moveTo, reducedMotion, renderFrame, reservedViewports, stopCamera, syncPointerCamera]);
+    }, [frameRef, moveTo, reducedMotion, renderFrame, stopCamera, syncPointerCamera]);
 
     // B7 有限拼贴的相机范围：拖动中超出范围按阻尼走（弹性），惯性与滚轮硬钳制，松手后补间回范围里。
     const rangeRef = useRef<WallCameraRange | null>(null);
@@ -235,14 +228,10 @@ export const useBravaisCamera = ({
     }, [settle]);
 
     // 拖动与滚轮：wall 的 hook 交回平移相机，换算成视图中心再走同一条 moveTo。
-    // 缩放（捏合 / Ctrl+滚轮）：hook 交回来的 scale 先写进帧状态（真源是视图中心，缩放是 view 的一档），
-    // 再用它换算视图中心 —— 两边用同一个 scale，捏住的世界点才不会飘。
     const applyCamera = useCallback((next: LatticeCamera, updateBounds?: boolean) => {
         const view = frameRef.current.view;
         if (!view) return;
-        const scaled = Math.abs(next.scale - view.scale) > 1e-4 ? { ...view, scale: next.scale } : view;
-        if (scaled !== view) frameRef.current.view = scaled;
-        moveTo(constrain(viewCenterFromCamera(next, scaled)), Boolean(updateBounds));
+        moveTo(constrain(viewCenterFromCamera(next, view)), Boolean(updateBounds));
     }, [constrain, frameRef, moveTo]);
     const getWorldBounds = useCallback((camera: LatticeCamera) => {
         const view = frameRef.current.view;
@@ -260,16 +249,6 @@ export const useBravaisCamera = ({
         cameraRef,
         getWorldBounds,
         viewportRef,
-        zoom: {
-            // 基准档位只跟视口宽度走：帧状态里的 scale 已经含了倍率，不能拿它当基准。
-            baseScale: () => {
-                const view = frameRef.current.view;
-                return view ? getBravaisScale(view.width) : 1;
-            },
-            minFactor: WALL_ZOOM_MIN,
-            maxFactor: WALL_ZOOM_MAX,
-            onZoomEnd: factor => setWallZoom(factor),
-        },
     });
 
     useEffect(() => () => {

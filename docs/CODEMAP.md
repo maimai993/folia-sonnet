@@ -80,6 +80,7 @@
 | 32+ | `src/services/onlineMusic/providerRegistry.ts` |
 | 32+ | `src/services/onlineMusic/songMetadata.ts` |
 | 32+ | `src/stores/motionSignals.ts` |
+| 32+ | `src/stores/storagePrimitives.ts` |
 | 32+ | `src/stores/useCollectionNavigationStore.ts` |
 | 32+ | `src/stores/usePlayerChromeSettingsStore.ts` |
 | 32+ | `src/stores/useSettingsModalStore.ts` |
@@ -88,6 +89,7 @@
 | 32+ | `src/types/localLibrary.ts` |
 | 32+ | `src/types/navidrome.ts` |
 | 32+ | `src/utils/coverUrl.ts` |
+| 32+ | `src/utils/errorText.ts` |
 | 32+ | `src/utils/fontStacks.ts` |
 | 32+ | `src/utils/lyricRenderQuality.ts` |
 | 32+ | `src/utils/lyrics/graphemeTiming.ts` |
@@ -122,6 +124,7 @@
 - `dev/probes/lattice.probe.tsx`
 - `dev/probes/latticeExit.probe.tsx`
 - `dev/probes/latticePerformance.probe.tsx`
+- `dev/probes/latticeRadio.probe.tsx`
 - `dev/probes/latticeTitle.probe.tsx`
 - `dev/probes/latticeTitleExpansion.probe.tsx`
 - `dev/probes/libraryBehavior.probe.tsx`

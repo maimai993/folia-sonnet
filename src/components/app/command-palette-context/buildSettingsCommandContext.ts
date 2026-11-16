@@ -21,7 +21,6 @@ import { chooseLibrarySuite, getActiveLibrarySuiteId, listLibrarySuiteOptions } 
 import { isBravaisLibraryActive } from '../../../library/app/bravaisLibraryActive';
 import { isGridLibraryActive } from '../../../library/app/gridLibraryActive';
 import { useLibraryWallLookStore } from '../../../stores/useLibraryWallLookStore';
-import { useGlassSurfaceSettingsStore } from '../../../stores/useGlassSurfaceSettingsStore';
 import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -33,6 +32,7 @@ import { useThemeQuickEditorStore } from '../../../stores/useThemeQuickEditorSto
 import { usePlayerBottomBarLayoutStore } from '../../../stores/usePlayerBottomBarLayoutStore';
 import type { SongResult } from '../../../types';
 import { cycleSubtitleContentMode } from '../../../utils/lyrics/alternateText';
+import { withRemoteLyricPairs } from '../../../utils/remoteLyricLayout';
 
 // src/components/app/command-palette-context/buildSettingsCommandContext.ts
 // The `settings` namespace of the palette context.
@@ -113,12 +113,6 @@ export const buildSettingsCommandContext = (
             const wall = useLibraryWallLookStore.getState();
             wall.setSeamClear(!wall.seamClear);
         },
-        // 液态玻璃的总开关：现读 store，参数面板开着时也能跟上。
-        liquidGlassEnabled: () => useGlassSurfaceSettingsStore.getState().liquidGlassEnabled,
-        toggleLiquidGlass: () => {
-            const glass = useGlassSurfaceSettingsStore.getState();
-            glass.setLiquidGlassEnabled(!glass.liquidGlassEnabled);
-        },
         libraryWallSeamStyle: () => useLibraryWallLookStore.getState().seamStyle,
         setLibraryWallSeamStyle: style => useLibraryWallLookStore.getState().setSeamStyle(style),
         toggleLibraryWallBackdropLyrics: () => {
@@ -153,6 +147,12 @@ export const buildSettingsCommandContext = (
             !useGridViewSettingsStore.getState().gridViewSquareCards,
         ),
         canUseGridViewSquareCards: () => useGridViewSettingsStore.getState().gridViewFullBleedCover,
+        toggleLatticeRadioHideUpcoming: () => useLatticeSettingsStore.getState().handleToggleLatticeRadioHideUpcoming(
+            !useLatticeSettingsStore.getState().latticeRadioHideUpcoming,
+        ),
+        toggleLatticeWallForm: () => useLatticeSettingsStore.getState().handleSetLatticeWallForm(
+            useLatticeSettingsStore.getState().latticeWallForm === 'radio' ? 'poster' : 'radio',
+        ),
         toggleLatticeVignette: () => useLatticeSettingsStore.getState().handleToggleLatticeVignette(
             !useLatticeSettingsStore.getState().latticeVignette,
         ),
@@ -218,8 +218,8 @@ export const buildSettingsCommandContext = (
         toggleAutoSkipUnplayable: () => audio.handleToggleAutoSkipUnplayable(
             !useAudioSettingsStore.getState().autoSkipUnplayable,
         ),
-        toggleBackgroundSilentSkip: () => audio.handleToggleBackgroundSilentSkip(
-            !useAudioSettingsStore.getState().backgroundSilentSkip,
+        toggleShuffleRoundNoRepeat: () => audio.handleToggleShuffleRoundNoRepeat(
+            !useAudioSettingsStore.getState().shuffleRoundNoRepeat,
         ),
         canAutoScanLocalLibrary: isLocalLibraryAutoScanSupported,
         toggleLocalLibraryAutoScan: () => useLocalLibrarySettingsStore.getState().toggleAutoScan(),
@@ -261,6 +261,10 @@ export const buildSettingsCommandContext = (
         toggleRemoteControlTextShade: () => desktop.handleToggleRemoteControlTextShade(
             !useDesktopSettingsStore.getState().remoteControlTextShade,
         ),
+        toggleRemoteLyricPairs: () => {
+            const layout = useDesktopSettingsStore.getState().remoteControlLyricLayout;
+            desktop.handleSetRemoteControlLyricLayout(withRemoteLyricPairs(layout, layout.pairs === 2 ? 1 : 2));
+        },
         unlockRemoteControl: () => desktop.handleToggleRemoteControlClickThrough(false),
         toggleObsKeepMainWindowAnimation: () => useStageSettingsStore.getState().handleToggleObsKeepMainWindowAnimation(
             !useStageSettingsStore.getState().obsKeepMainWindowAnimation,
@@ -280,8 +284,6 @@ export const buildSettingsCommandContext = (
         sleepTimerMinutes: sleepTimer.sleepTimerMinutes,
         setSleepTimerMinutes: sleepTimer.handleSetSleepTimerMinutes,
         sleepTimerDeadlineMs: sleepTimer.sleepTimerDeadlineMs,
-        sleepTimerEndAction: sleepTimer.sleepTimerEndAction,
-        setSleepTimerMinutesMode: () => sleepTimer.handleSetSleepTimerMode('minutes'),
         canGenerateAITheme: deps.canGenerateAITheme,
         isGeneratingTheme: deps.isGeneratingTheme,
         generateAITheme: deps.generateAITheme,

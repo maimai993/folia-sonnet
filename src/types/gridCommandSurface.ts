@@ -10,6 +10,7 @@ import type { SongSortDirection, SongSortField } from '../utils/songSorting';
 
 export type GridSurfaceActionId =
     | 'play-filtered'
+    | 'shuffle-play-filtered'
     | 'enqueue-filtered'
     | 'sort-newest'
     | 'sort-oldest'
@@ -44,7 +45,7 @@ export type GridSurfaceState = {
      * stay written once, next to the buttons that already obey them.
      */
     availableActions: readonly GridSurfaceActionId[];
-    /** How many songs `play-filtered` / `enqueue-filtered` / `collect-filtered` would act on right now. */
+    /** How many songs `play-filtered` / `shuffle-play-filtered` / `enqueue-filtered` / `collect-filtered` would act on right now. */
     filteredTrackCount: number;
     isFilterActive: boolean;
     sortField: SongSortField;
