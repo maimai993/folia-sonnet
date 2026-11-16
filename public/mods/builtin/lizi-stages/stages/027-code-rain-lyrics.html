@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>代码雨</title>
+<style>
+  html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+        font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(120,255,170,.32);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '代码雨',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================================
+   027 · 代码雨 —— 雨不是背景，雨是**光栅写入器**
+   ----------------------------------------------------------------------------
+   核心机制：**柱状雨的"沉积/落定"**。
+   整屏切成一格格字符格，每一列是一条独立的雨柱（有自己的下落速度）。
+   每一帧检查：这一列的雨头是不是已经越过了某个"该有笔画的格子"——
+   越过了，那个格子就**当场沉积**（locked）：它不再是乱码，
+   而是被钉住、从灼白冷却成绿的那个字，并且**一直留在那里**。
+   所以整句话不是被"画"出来的，是被**雨水一格一格砸出来的**。
+
+   精修记录：① 沉积时刻接 YRC——每个格子记录所属字索引，雨头只负责"路过"，
+     格子必须等到它那个字的 chars[k].t 才允许沉积（唱前 0.12s 微提前）；
+     雨柱速度按"本列最顶格所属字的时刻"倒推，无 chars 按 t+dur*k/n 均分回退；
+   ② 长句折行——>16 字拆 2 排、>44 字拆 3 排的**多行网格掩膜**，整叠高度归一化，
+     修掉旧版"41 字压成一行、每字不到 2 格宽、笔画全碎"的问题；
+   ③ beat 相干波保留（亮度波自上而下扫过已沉积字 + 全场雨速一起提），另加
+     沉积闪光包络随 beat 略微延长（灼白冷却更慢，整场一起"烧"）。
+   分词说明：不用分词——本形态的机关是"格子被雨砸齐"，沉积本来就是逐格离散的，
+     时间闸门已经消掉机关枪感；按词团释放会让"雨写完一句"的过程断档。
+
+   性能：颜色全部预分档，逐格只往档位桶里塞下标，画的时候每档只设一次
+   fillStyle（绝不逐颗拼 rgba）；头部辉光用一条亮线代替 shadowBlur。
+   ========================================================================== */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+
+let W = 0, H = 0, DPR = 1;
+const CW = 20, CH = 26;                 // 格子尺寸（CSS 像素）
+let cols = 0, rows = 0, total = 0, ox = 0, oy = 0;
+let accent = [90, 235, 150];
+
+const CHURN = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎ0123456789ABCDEF#$%&*+=<>";
+const CN = CHURN.length;
+
+/* ---------- 逐格状态 ---------- */
+let st = null;            // 0 乱码 / 1 已沉积 / 2 坠落中
+let settle = null;        // 沉积时刻（ms）
+let cellCode = null;      // 该格锁住的字（UTF-16 码）
+let churn = null;         // 乱码用的是哪个符号
+let fy = null, fv = null; // 坠落偏移与速度
+let lockList = null, lockN = 0;
+let fallList = null, fallN = 0;
+let pend = null, pendN = 0;
+let fseed = null;         // 每格的坠落随机相位（用格号哈希，免得每帧 Math.random）
+
+/* ---------- 雨柱 ---------- */
+let head = null, spd = null, trail = null;
+
+/* ---------- 掩膜双缓冲：酝酿时渲染下一句，换句时才切 ---------- */
+const buf = [{ ink: null, code: null, chr: null, charT: null }, { ink: null, code: null, chr: null, charT: null }];
+let act = 0, nextReady = -1;
+let yrcFlag = false;                    // 当前句是否真的用了 YRC
+
+const chCache = new Map();
+function chOf(code) {
+  let s = chCache.get(code);
+  if (s === undefined) { s = String.fromCharCode(code); chCache.set(code, s); }
+  return s;
+}
+
+/* ---------- 颜色分档 ---------- */
+const NBT = 6, NBS = 6;
+const colT = new Array(NBT), colS = new Array(NBS);
+const bT = new Array(NBT), bTn = new Int32Array(NBT);
+const bS = new Array(NBS), bSn = new Int32Array(NBS);
+const bF = new Array(NBS), bFn = new Int32Array(NBS);
+let bHead = null, bHeadN = 0;
+const HEAD_COL = '#eafff2';
+
+function palette() {
+  const cl = (v) => v < 0 ? 0 : (v > 255 ? 255 : v | 0);
+  const ar = accent[0], ag = accent[1], ab = accent[2];
+  /* 雨体：绿为骨、封面色为肉 —— 封面偏红也不会变成红雨，只会偏暖 */
+  const R = cl(40 + ar * 0.20), G = cl(206 + ag * 0.16), B = cl(120 + ab * 0.40);
+  for (let i = 0; i < NBT; i++) {
+    const k = (i + 1) / NBT;
+    const a = 0.09 + 0.91 * k * k;
+    colT[i] = 'rgba(' + cl(R * k) + ',' + cl(G * k) + ',' + cl(B * k) + ',' + a.toFixed(3) + ')';
+  }
+  /* 沉积格：从刚砸下去的灼白，冷却到偏深的绿 */
+  for (let i = 0; i < NBS; i++) {
+    const k = i / (NBS - 1);
+    colS[i] = 'rgb(' + cl(58 + 190 * k) + ',' + cl(168 + 84 * k) + ',' + cl(112 + 122 * k) + ')';
+  }
+}
+
+/* ---------- 长句折行：>16 字 2 排、>44 字 3 排，尽量不从拉丁词中间断开 ---------- */
+function splitRows(text) {
+  const want = text.length > 44 ? 3 : (text.length > 16 ? 2 : 1);
+  if (want === 1) return [{ text: text, off: 0 }];
+  const LAT = /[A-Za-z0-9'’]/;
+  const parts = [];
+  let start = 0;
+  for (let p = 1; p <= want; p++) {
+    let cut = (p === want) ? text.length : Math.round(text.length * p / want);
+    if (p < want) {
+      if (LAT.test(text[cut - 1]) && text[cut] && LAT.test(text[cut])) {
+        let best = -1;
+        for (let d = 1; d <= 8 && best < 0; d++) {
+          if (cut - d > start + 3 && /\s/.test(text[cut - d])) best = cut - d;
+          else if (cut + d < text.length - 3 && /\s/.test(text[cut + d])) best = cut + d + 1;
+        }
+        if (best > 0) cut = best;
+      }
+    }
+    parts.push({ text: text.slice(start, cut), off: start });
+    start = cut;
+  }
+  return parts.filter((r) => r.text.length);
+}
+
+/* ---------- 掩膜：把整句渲染成"哪一格该有笔画 + 属于哪个字" ---------- */
+const S = 4;                            // 每格采 S×S 个点做覆盖率
+const mcv = document.createElement('canvas');
+const mctx = mcv.getContext('2d', { willReadFrequently: true });
+let mw = 0, mh = 0;
+
+function buildMask(line, bi) {
+  const B = buf[bi];
+  if (!B.ink) return;
+  B.ink.fill(0); B.code.fill(0);
+  if (B.chr) B.chr.fill(0);
+  B.charT = null;
+  const text = (line && line.text || '').replace(/\s+/g, ' ').trim();
+  if (!text || !line) return;
+
+  /* 逐字时间：chars 可信才用 YRC，否则均分回退——绝不能因缺 chars 报错 */
+  const raw = line.text || '';
+  const chars = line.chars && line.chars.length === raw.length ? line.chars : null;
+  yrcFlag = !!chars;
+  const dur = line.dur > 0 ? line.dur : 4;
+  /* 掩膜里的空白折叠会破坏索引对齐：不用 replace 后的串算时间，
+     直接按原串逐字时间，行内偏移按折叠后的下标映射回原串下标 */
+  const idxMap = [];
+  {
+    const s = text;
+    let j = 0;
+    for (let i = 0; i < raw.length && j < s.length; i++) {
+      if (raw[i] === s[j]) { idxMap.push(i); j++; }
+    }
+    while (idxMap.length < text.length) idxMap.push(idxMap.length ? idxMap[idxMap.length - 1] + 1 : 0);
+  }
+  const nT = raw.length;
+  const charT = new Float64Array(nT);
+  for (let k = 0; k < nT; k++) charT[k] = chars ? chars[k].t : line.t + dur * k / nT;
+  B.charT = charT;
+
+  mw = cols * S; mh = rows * S;
+  mcv.width = mw; mcv.height = mh;
+  mctx.clearRect(0, 0, mw, mh);
+  const FONT = (f) => '800 ' + f + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+
+  const rowsArr = splitRows(text);
+  const nR = rowsArr.length;
+  const F = Math.min(mh * (nR > 1 ? 0.40 : 0.52), 300);
+  mctx.font = FONT(F);
+  let maxRowW = 1;
+  for (const r of rowsArr) maxRowW = Math.max(maxRowW, mctx.measureText(r.text).width);
+  const maxW = mw * 0.90;
+  const lhK = 1.34, gapK = 0.36;
+  let fs = maxRowW > maxW ? F * (maxW / maxRowW) : F;
+  const totalH = nR * lhK * fs + (nR - 1) * gapK * fs;
+  if (totalH > mh * 0.82) fs *= mh * 0.82 / totalH;
+  fs = Math.max(9, fs);
+  const lh = fs * lhK, gap = fs * gapK;
+
+  mctx.font = FONT(fs);
+  mctx.textAlign = 'left'; mctx.textBaseline = 'middle';
+  mctx.fillStyle = '#fff';
+  /* 行几何：水平居中、纵向**居中**堆叠 */
+  const stackH = rowsArr.length * lh + (rowsArr.length - 1) * gap;
+  const rects = [];
+  let y = Math.max(0, (mh - stackH) * 0.5);
+  for (const r of rowsArr) {
+    const rw = mctx.measureText(r.text).width;
+    rects.push({ text: r.text, off: r.off, x0: (mw - rw) * 0.5, y0: y, h: lh });
+    mctx.fillText(r.text, (mw - rw) * 0.5, y + lh / 2);
+    y += lh + gap;
+  }
+
+  const d = mctx.getImageData(0, 0, mw, mh).data;
+  const ink = B.ink, code = B.code, chr = B.chr;
+  /* 多行小字号时笔画更细，覆盖率阈值放低一格，免得笔画断成点 */
+  /* 多行小字号时笔画更细，覆盖率阈值放低；但"一"这类单横笔画的字一格只有
+     1~2 行墨（4/16≈0.25），阈值必须低到能接住它，否则该字整个从掩膜里消失 */
+  const need = (nR > 1 ? 0.14 : 0.20) * S * S * 255;
+  for (let yy = 0; yy < rows; yy++) {
+    for (let xx = 0; xx < cols; xx++) {
+      let a = 0;
+      for (let sy = 0; sy < S; sy++) {
+        let p = ((yy * S + sy) * mw + xx * S) * 4 + 3;
+        for (let sx = 0; sx < S; sx++, p += 4) a += d[p];
+      }
+      if (a < need) continue;
+      ink[yy * cols + xx] = 1;
+    }
+  }
+  /* 每格的字索引与字符：按每排的逐字前缀宽度划分（一遍扫清） */
+  for (let ri = 0; ri < rects.length; ri++) {
+    const rc = rects[ri];
+    const bnd = [0];
+    for (let q = 1; q <= rc.text.length; q++) bnd.push(mctx.measureText(rc.text.substring(0, q)).width);
+    for (let yy = 0; yy < rows; yy++) {
+      const py = (yy + 0.5) * S;
+      if (py < rc.y0 || py >= rc.y0 + rc.h + gap * 0.5) continue;
+      for (let xx = 0; xx < cols; xx++) {
+        const ci = yy * cols + xx;
+        if (!ink[ci]) continue;
+        const px = (xx + 0.5) * S;
+        if (px < rc.x0 - S || px > rc.x0 + bnd[bnd.length - 1] + S) continue;
+        const lx = px - rc.x0;
+        let lo = 0, hi = rc.text.length - 1;
+        while (lo < hi) { const m = (lo + hi + 1) >> 1; if (bnd[m] <= lx) lo = m; else hi = m - 1; }
+        chr[ci] = Math.min(nT - 1, idxMap[rc.off + lo]);
+        code[ci] = rc.text.charCodeAt(lo);
+      }
+    }
+  }
+  /* 每个字的绘制几何（真实像素）：句子本体按"每字一次"画 —— 长句字号小于格距时，
+     逐格重画同一个字会糊成三重复读，所以格子只负责沉积闪光，字由这里一次画清 */
+  const XOFF = ox - CW * 0.5, YOFF = oy - CH * 0.5;
+  const geo = new Float32Array(nT * 4); geo.fill(-1);
+  for (const rc of rects) {
+    const bnd = [0];
+    for (let q = 1; q <= rc.text.length; q++) bnd.push(mctx.measureText(rc.text.substring(0, q)).width);
+    for (let q = 0; q < rc.text.length; q++) {
+      const k = idxMap[rc.off + q];
+      if (geo[k * 4] >= 0) continue;
+      geo[k * 4] = (rc.x0 + bnd[q]) * S + XOFF;
+      geo[k * 4 + 1] = (rc.y0 + rc.h * 0.60) * S + YOFF;
+      geo[k * 4 + 2] = fs * S;
+      geo[k * 4 + 3] = rc.text.charCodeAt(q);
+    }
+  }
+  B.geo = geo;
+  B.cnt = new Int32Array(nT);
+  B.lit = new Float64Array(nT);
+}
+
+/* ---------- 布局 ---------- */
+function layout() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cols = Math.max(8, Math.ceil(W / CW));
+  rows = Math.max(6, Math.ceil(H / CH));
+  total = cols * rows;
+  ox = (W - cols * CW) * 0.5 + CW * 0.5;
+  oy = (H - rows * CH) * 0.5 + CH * 0.5;
+
+  st = new Uint8Array(total);
+  settle = new Float64Array(total);
+  cellCode = new Uint16Array(total);
+  churn = new Uint8Array(total);
+  fy = new Float32Array(total);
+  fv = new Float32Array(total);
+  fseed = new Float32Array(total);
+  for (let i = 0; i < total; i++) fseed[i] = Math.random();
+  lockList = new Int32Array(total); lockN = 0;
+  fallList = new Int32Array(total); fallN = 0;
+  pend = new Int32Array(total); pendN = 0;
+  head = new Float32Array(cols);
+  spd = new Float32Array(cols);
+  trail = new Uint8Array(cols);
+  for (let i = 0; i < total; i++) churn[i] = (Math.random() * CN) | 0;
+  for (let b = 0; b < NBT; b++) bT[b] = new Int32Array(total);
+  for (let b = 0; b < NBS; b++) { bS[b] = new Int32Array(total); bF[b] = new Int32Array(total); }
+  bHead = new Int32Array(total);
+  buf[0].ink = new Uint8Array(total); buf[0].code = new Uint16Array(total); buf[0].chr = new Uint16Array(total);
+  buf[1].ink = new Uint8Array(total); buf[1].code = new Uint16Array(total); buf[1].chr = new Uint16Array(total);
+  act = 0; nextReady = -1;
+
+  ctx.fillStyle = '#05060a';
+  ctx.fillRect(0, 0, W, H);
+  ctx.font = '600 ' + (CH * 0.84).toFixed(1) + 'px ui-monospace,Consolas,"Courier New",monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  initCols(true);
+  if (curIdx >= 0 && lines[curIdx]) { buildMask(lines[curIdx], 1 - act); nextReady = curIdx; }
+  palette();
+}
+
+/** 雨柱装填（闲散态）：所有雨头退到屏幕上方随机高度，慢速落 */
+function initCols(calm) {
+  for (let c = 0; c < cols; c++) {
+    trail[c] = 7 + ((Math.random() * 9) | 0);
+    head[c] = calm ? -Math.random() * H * 1.1 : (-H * 0.08 - Math.random() * H * 0.5);
+    spd[c] = 110 + Math.random() * 230;
+  }
+}
+
+/** 雨柱重新装填：速度按"本列最底格所属字的 YRC 时刻"倒推 —— 雨头必须赶在
+    那个字唱完之前扫完整列；不到时刻的格子由 deposit() 的闸门拦住不沉积。 */
+function reloadRain(T) {
+  const ink = buf[act].ink, chr = buf[act].chr, charT = buf[act].charT;
+  for (let c = 0; c < cols; c++) {
+    trail[c] = 7 + ((Math.random() * 9) | 0);
+    const startY = -H * 0.08 - Math.random() * H * 0.5;
+    head[c] = startY;
+    let low = -1;
+    if (charT) for (let y = rows - 1; y >= 0; y--) if (ink[y * cols + c]) { low = y; break; }
+    if (low < 0) { spd[c] = 200 + Math.random() * 260; continue; }
+    const lowY = oy + (low + 0.5) * CH;
+    const target = charT[chr[low * cols + c]] + 0.30;
+    const wait = Math.max(0.30, target - T);
+    spd[c] = Math.min(2600, Math.max(140, (lowY - startY) / wait));
+  }
+}
+let writing = false, writeEnd = 0;
+
+/* ================= 节奏：1-10 的教训固化在这里 =================
+   ① 显示与酝酿分离 —— curIdx 只在句首切换，brewIdx 提前 lead 秒准备
+   ② 索引单调不回退 —— 时钟在 tick 之间外推、tick 一来会往回缩一点
+   ③ 提前量自适应 —— 快歌早开始，慢歌不提前太多
+   ④ 只有拖进度条（时间明显倒退）才允许重置
+   ================================================================ */
+let lines = [];
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+let curIdx = -1, brewIdx = -1, lastT = -1;
+const LEAD = 1.3;
+
+let flushAt = -1;                       // 解冻波
+let waveOn = false, waveY = -200, wave = 0, waveSpd = 1400, gust = 1;
+
+function clearAll() {
+  if (!st) return;
+  st.fill(0); lockN = 0; fallN = 0; pendN = 0;
+  for (let i = 0; i < total; i++) { fy[i] = 0; fv[i] = 0; churn[i] = (Math.random() * CN) | 0; }
+  flushAt = -1; waveOn = false; writing = false;
+  initCols(true);
+}
+function rebuildPend() {
+  const ink = buf[act].ink;
+  pendN = 0;
+  for (let i = 0; i < total; i++) if (ink[i]) pend[pendN++] = i;
+}
+
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) { curIdx = -1; brewIdx = -1; clearAll(); }
+  lastT = T;
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    brewIdx = -1;
+    if (ci >= 0) {
+      /* 显示切到第 ci 句：上一句开始解冻坠落（锁定格逐行归还给乱码池），
+         同时把酝酿好的掩膜切进来、雨柱按 YRC 重装填 */
+      flushAt = performance.now();
+      if (nextReady !== ci) { buildMask(lines[ci], 1 - act); nextReady = ci; }
+      act = 1 - act;
+      nextReady = -1;
+      rebuildPend();
+      reloadRain(T);
+      const ln = lines[ci];
+      const dur = ln.dur > 0 ? ln.dur : 2.4;
+      writing = true;
+      writeEnd = performance.now() + Math.max(0.95, dur + 0.4) * 1000;
+      hint.style.opacity = '0';
+    } else {
+      clearAll();
+    }
+  }
+  const nx = curIdx + 1;
+  if (nx < lines.length && brewIdx !== nx) {
+    const gap = lines[nx].t - (curIdx >= 0 ? lines[curIdx].t : lines[nx].t - 4);
+    const lead = Math.min(LEAD, Math.max(0.45, gap * 0.55));
+    if (T >= lines[nx].t - lead) {
+      brewIdx = nx;
+      /* 开始准备第 nx 句：离屏渲染 + 采样是这一台最实在的"体力活"，
+         换句那一刻只做一次指针交换 */
+      buildMask(lines[nx], 1 - act);
+      nextReady = nx;
+    }
+  }
+}
+
+/* ---------- 沉积 / 解冻 / 坠落 ---------- */
+function deposit(T) {
+  const ink = buf[act].ink, code = buf[act].code, chr = buf[act].chr, charT = buf[act].charT;
+  let w = 0;
+  for (let i = 0; i < pendN; i++) {
+    const ci = pend[i];
+    const x = ci % cols, y = (ci / cols) | 0;
+    /* 只跳过"已经锁好的"；正在坠落（上一句刚解冻）的格子允许被**当场接管**。
+       YRC 闸门：雨头路过还不够，必须等它所属字的时间到了（唱前 0.22s 提前）——
+       没有 chars 时 charT 是均分的，同样成立。 */
+    const due = charT ? charT[chr[ci]] - 0.22 : -1;
+    if (st[ci] !== 1 && head[x] > oy + y * CH && T >= due) {
+      st[ci] = 1;
+      settle[ci] = performance.now();
+      cellCode[ci] = code[ci];
+      lockList[lockN++] = ci;
+    } else {
+      pend[w++] = ci;
+    }
+  }
+  pendN = w;
+}
+function stepFlush(nowMs) {
+  if (flushAt < 0) return;
+  const p = (nowMs - flushAt) / 460;
+  let w = 0;
+  for (let i = 0; i < lockN; i++) {
+    const ci = lockList[i];
+    const row = (ci / cols) | 0;
+    if (row < p * rows) {
+      st[ci] = 2;
+      fy[ci] = 0;
+      fv[ci] = 150 + fseed[ci] * 420;
+      fallList[fallN++] = ci;
+    } else {
+      lockList[w++] = ci;
+    }
+  }
+  lockN = w;
+  if (p >= 1) flushAt = -1;
+}
+function stepFalls(dt) {
+  let w = 0;
+  for (let i = 0; i < fallN; i++) {
+    const ci = fallList[i];
+    if (st[ci] !== 2) continue;              // 已经被新的一句接管了：直接摘掉
+    fy[ci] += fv[ci] * dt;
+    fv[ci] += 950 * dt;
+    const row = (ci / cols) | 0;
+    if (oy + row * CH + fy[ci] > H + CH * 2) { st[ci] = 0; continue; }
+    fallList[w++] = ci;
+  }
+  fallN = w;
+}
+
+/* ---------- 绘制 ---------- */
+function draw(nowMs, dt, T) {
+  ctx.fillStyle = 'rgba(5,6,10,0.20)';
+  ctx.fillRect(0, 0, W, H);
+
+  /* 乱码：每帧随机翻新一小撮，密度低所以看不出规律 */
+  for (let k = 0; k < 40; k++) {
+    const i = (Math.random() * total) | 0;
+    if (st[i] === 0) churn[i] = (Math.random() * CN) | 0;
+  }
+
+  bTn.fill(0); bSn.fill(0); bFn.fill(0); bHeadN = 0;
+
+  /* ① 雨：头部亮线 + 拖尾。逐格只写下标，画的时候按档合批 */
+  for (let c = 0; c < cols; c++) {
+    const hv = head[c];
+    if (hv < -CH * 3) continue;
+    const t = trail[c];
+    const x = ox + c * CW;
+    const hr = Math.floor(hv / CH);
+    for (let k = 0; k < t; k++) {
+      const row = hr - k;
+      if (row < 0 || row >= rows) continue;
+      const a = 1 - k / t;
+      if (a < 0.10) continue;
+      let b = ((a * NBT) | 0);
+      if (b < 0) b = 0; else if (b >= NBT) b = NBT - 1;
+      const ci = row * cols + c;
+      if (st[ci] !== 0) continue;              // 已经沉积/正在坠落的格子：雨从字上让开
+      if (k === 0) { bHead[bHeadN++] = ci; }
+      else bT[b][bTn[b]++] = ci;
+    }
+    /* 头部过一段落就换一身乱码，看起来才像"在跑" */
+    if (hr >= 0 && hr < rows) {
+      const ci = hr * cols + c;
+      if (st[ci] === 0 && Math.random() < 0.22) churn[ci] = (Math.random() * CN) | 0;
+    }
+    if (hv > H + CH * (t + 2)) { head[c] = -Math.random() * H * 0.6 - 60; spd[c] = 115 + Math.random() * 235; }
+  }
+  for (let b = 0; b < NBT; b++) {
+    const arr = bT[b], n = bTn[b];
+    if (!n) continue;
+    ctx.fillStyle = colT[b];
+    for (let i = 0; i < n; i++) {
+      const ci = arr[i];
+      ctx.fillText(CHURN.charAt(churn[ci]), ox + (ci % cols) * CW, oy + ((ci / cols) | 0) * CH);
+    }
+  }
+  /* 头字符：白 + 一条亮线代替 shadowBlur（软件渲染里 shadowBlur 很贵） */
+  if (bHeadN) {
+    ctx.fillStyle = HEAD_COL;
+    for (let i = 0; i < bHeadN; i++) {
+      const ci = bHead[i];
+      const x = ox + (ci % cols) * CW, y = oy + ((ci / cols) | 0) * CH;
+      ctx.fillText(CHURN.charAt(churn[ci]), x, y);
+    }
+    ctx.fillStyle = 'rgba(190,255,215,.34)';
+    for (let i = 0; i < bHeadN; i++) {
+      const ci = bHead[i];
+      ctx.fillRect(ox + (ci % cols) * CW - CW * 0.42, oy + ((ci / cols) | 0) * CH + CH * 0.42, CW * 0.84, 1.4);
+    }
+  }
+
+  /* ② 句子本体：按"每字一次"画。出现条件 = 该字 YRC 时刻已到（无 chars 均分）
+     且它名下至少有一个格子已被雨头砸中（雨真的写到那里了）。
+     点亮热度 = 该字最近一次沉积的时间包络（灼白→绿冷却），beat 波整场加热。 */
+  const B = buf[act];
+  if (B.geo && B.charT) {
+    const geo = B.geo, cnt = B.cnt, lit = B.lit, chr = B.chr;
+    /* 该字名下"已锁 + 待沉积"的格子数：任一非零说明雨真的写到这个字了。
+       只数 pend 会漏掉已经沉积完的字（它们恰好是完全写好的那批）。 */
+    for (let i = 0; i < pendN; i++) { const c = pend[i]; cnt[chr[c]]++; }
+    for (let i = 0; i < lockN; i++) { const c = lockList[i]; cnt[chr[c]]++; }
+    for (let k = 0; k < B.charT.length; k++) {
+      if (T < B.charT[k] - 0.10 || cnt[k] === 0) { lit[k] = -1; continue; }
+      lit[k] = 1;      // 可见标记；热度在下面按沉积时刻算
+    }
+    /* 热度：每字取名下最新一次沉积的 settle（灼白→绿冷却） */
+    const newest = B.newest || (B.newest = new Float64Array(B.charT.length));
+    newest.fill(0);
+    for (let i = 0; i < lockN; i++) {
+      const ci = lockList[i];
+      const k = chr[ci];
+      if (lit[k] < 0) continue;
+      if (settle[ci] > newest[k]) newest[k] = settle[ci];
+    }
+    /* beat 亮度波：扫过沉积字的 y 时整片一起亮 */
+    const cool = 460 * (1 + wave * 0.9);
+    ctx.textAlign = 'left';
+    for (let k = 0; k < B.charT.length; k++) {
+      if (lit[k] <= 0 || geo[k * 4] < 0) continue;
+      let heat = Math.exp(-(nowMs - newest[k]) / cool);
+      if (waveOn) {
+        const d = Math.abs(geo[k * 4 + 1] - waveY);
+        if (d < 130) heat += (1 - d / 130) * wave;
+      }
+      let b = (heat * NBS) | 0;
+      if (b < 0) b = 0; else if (b >= NBS) b = NBS - 1;
+      ctx.fillStyle = colS[b];
+      ctx.font = '700 ' + geo[k * 4 + 2].toFixed(1) + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+      ctx.fillText(chOf(geo[k * 4 + 3]), geo[k * 4], geo[k * 4 + 1]);
+    }
+    ctx.textAlign = 'center';
+    ctx.font = '600 ' + (CH * 0.84).toFixed(1) + 'px ui-monospace,Consolas,"Courier New",monospace';
+    for (let i = 0; i < pendN; i++) { const c = pend[i]; cnt[chr[c]] = 0; }
+  }
+
+  /* ②' 沉积格火花：只在沉积后 0.2s 内画格子级的白闪（短，不遮字） */
+  for (let i = 0; i < lockN; i++) {
+    const ci = lockList[i];
+    const age = nowMs - settle[ci];
+    if (age > 210) continue;
+    const heat = 1 - age / 210;
+    ctx.fillStyle = 'rgba(234,255,242,' + (heat * 0.85).toFixed(2) + ')';
+    ctx.fillRect(ox + (ci % cols) * CW - CW * 0.42, oy + ((ci / cols) | 0) * CH + CH * 0.40, CW * 0.84, 1.6);
+  }
+
+  /* ③ 坠落格：解冻出来的字带着速度掉下去（过场动画，短暂不糊字） */
+  for (let i = 0; i < fallN; i++) {
+    const ci = fallList[i];
+    let heat = 1 - fy[ci] / (H * 0.8);
+    if (heat < 0.05) continue;
+    let b = (heat * NBS) | 0;
+    if (b < 0) b = 0; else if (b >= NBS) b = NBS - 1;
+    bF[b][bFn[b]++] = ci;
+  }
+  for (let b = NBS - 1; b >= 0; b--) {
+    const arr = bF[b], n = bFn[b];
+    if (!n) continue;
+    ctx.fillStyle = colS[b];
+    for (let i = 0; i < n; i++) {
+      const ci = arr[i];
+      ctx.fillText(chOf(cellCode[ci]), ox + (ci % cols) * CW, oy + ((ci / cols) | 0) * CH + fy[ci]);
+    }
+  }
+}
+
+let last = performance.now();
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs;
+  const T = now();
+
+  if (lines.length) timing(T);
+  if (!st) { requestAnimationFrame(frame); return; }
+
+  if (gust > 1) { gust = Math.max(1, gust - dt * 1.6); }
+  for (let c = 0; c < cols; c++) head[c] += spd[c] * gust * dt;
+  /* 写完的判定：超时**且**没有格子还在等沉积 —— 有 pending 就让写人模式继续
+     （雨柱保持高速），否则最后一个字的格子会被闲散雨拖到句末才落定（空洞） */
+  if (writing && nowMs > writeEnd && !pendN) {
+    writing = false;
+    for (let c = 0; c < cols; c++) spd[c] = 110 + Math.random() * 230;
+  } else if (writing && nowMs > writeEnd && pendN) {
+    writeEnd = nowMs + 400;                       // 还有格子没落定：再给 0.4s
+  }
+  if (waveOn) {
+    waveY += waveSpd * dt;
+    wave *= Math.exp(-dt * 2.2);
+    if (waveY > H + 160 || wave < 0.03) waveOn = false;
+  }
+
+  if (pendN) deposit(T);
+  if (flushAt >= 0) stepFlush(nowMs);
+  if (fallN) stepFalls(dt);
+
+  draw(nowMs, dt, T);
+  requestAnimationFrame(frame);
+}
+
+let rzTimer = 0;
+addEventListener('resize', () => {
+  clearTimeout(rzTimer);
+  rzTimer = setTimeout(() => { layout(); if (curIdx >= 0) { rebuildPend(); reloadRain(now()); } }, 150);
+});
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    if (p.accent && p.accent.length === 3) accent = p.accent;
+    curIdx = -1; brewIdx = -1; lastT = -1;
+    clockT = 0; clockAt = performance.now();
+    layout();
+    clearAll();
+    for (let b = 0; b < 2; b++) { buf[b].ink.fill(0); buf[b].code.fill(0); }
+    nextReady = -1;
+    palette();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 踩拍：相干 —— 一道亮度波从上往下扫过所有已沉积的字 + 全场雨速一起提一下，
+       绝不逐颗乱踢方向 */
+    const lv = d.payload.level || 0;
+    waveOn = true; waveY = -140; wave = 0.45 + lv * 0.55; waveSpd = 1250 + lv * 800;
+    /* 震动关闭：不再给雨速加冲量（亮度波保留，它不是位移） */
+    if (window.__liziShake !== false) gust = 1 + 0.35 + lv * 0.5;
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+layout();
+requestAnimationFrame(frame);
+window.__stage = () => ({ lines: lines.length, curIdx, brewIdx, T: +now().toFixed(2),
+  cols, rows, locked: lockN, falling: fallN, pending: pendN, act, yrc: yrcFlag });
+</script>
+</body>
+</html>

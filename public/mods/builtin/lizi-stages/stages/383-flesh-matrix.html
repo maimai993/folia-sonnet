@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>裂肉矩阵</title>
+<style>
+  :root{--hot:#ff3131;--acid:#7dff3a;--bone:#eefff2}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#04060a;color:var(--bone);
+    font-family:"Noto Sans SC","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif}
+  #view{position:fixed;inset:0;display:block;width:100%;height:100%}
+  .hud{position:fixed;z-index:3;pointer-events:none;font:600 10px/1.7 ui-monospace,Consolas,monospace;
+    letter-spacing:.18em;color:var(--acid);opacity:.5;text-transform:uppercase;white-space:pre-line}
+  #hudLeft{left:3.2vw;top:3.4vh}
+  #hudRight{right:3.2vw;top:3.4vh;text-align:right}
+  .screenlines{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:.5;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0 2px,rgba(0,0,0,.55) 2px 3px)}
+  #lyric{position:fixed;left:0;right:0;bottom:7vh;z-index:4;padding:0 6vw;text-align:center;
+    pointer-events:none;text-shadow:0 0 24px rgba(0,0,0,.9)}
+  #lineWrap{position:relative}
+  #lineNow{font-size:clamp(21px,4.2vw,54px);font-weight:800;line-height:1.3;letter-spacing:.045em;
+    will-change:transform;text-shadow:0 2px 28px rgba(0,0,0,.9),0 0 2px rgba(255,49,49,.35);
+    word-break:break-word;overflow-wrap:break-word}
+  #lineNow.preview{opacity:.42}
+  #lineWrap.long #lineNow,#lineWrap.long #lineGhost{font-size:clamp(16px,2.9vw,34px);
+    line-height:1.38;letter-spacing:.015em}
+  #lineGhost{position:absolute;inset:0;font-size:clamp(21px,4.2vw,54px);font-weight:800;
+    line-height:1.3;letter-spacing:.045em;color:rgba(255,49,49,.85);mix-blend-mode:screen;opacity:0;
+    clip-path:inset(0 0 0 0);will-change:transform,opacity}
+  #empty{position:fixed;left:0;right:0;bottom:9vh;z-index:4;text-align:center;pointer-events:none;
+    white-space:pre-line;font:600 11px/2.1 ui-monospace,Consolas,monospace;letter-spacing:.34em;
+    color:var(--acid);opacity:0;transition:opacity .35s linear}
+  .ch{color:rgba(158,190,170,.46)}
+  .ch.on{color:var(--bone)}
+  @media (max-aspect-ratio:4/5){
+    #lyric{bottom:9vh;padding:0 7vw}
+    #lineNow,#lineGhost{font-size:clamp(20px,7.2vw,34px);line-height:1.34}
+    .hud{font-size:9px;letter-spacing:.14em}
+  }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="screenlines"></div>
+<div class="hud" id="hudLeft">383 / FLESH_MESH</div>
+<div class="hud" id="hudRight">BPM 000</div>
+<div id="empty"></div>
+<div id="lyric"><div id="lineWrap"><div id="lineNow"></div><div id="lineGhost"></div></div></div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '裂肉矩阵',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+window.__stage = function () {
+  return { lines: STAGE.lines.length, idx: STAGE.idx, t: STAGE.t, playing: STAGE.playing,
+    frames: STAGE.frames, js: STAGE.js, err: "", text: STAGE.text, gl: false, rm: STAGE.rm };
+};
+
+var STAGE = { lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, text: "", rm: false,
+  accent: [255, 49, 49], W: 1440, H: 900, dpr: 1, beatLevel: 0, beatPulse: 0, delta: 0.016,
+  live: { level: 0, bass: 0, mid: 0, treble: 0 }, bpm: 0, duration: 0, songName: "" };
+
+var view = document.getElementById("view");
+var ctx = view.getContext("2d", { alpha: false });
+var lineNow = document.getElementById("lineNow");
+var lineGhost = document.getElementById("lineGhost");
+var lineWrap = document.getElementById("lineWrap");
+var emptyBox = document.getElementById("empty");
+var hudLeft = document.getElementById("hudLeft");
+var hudRight = document.getElementById("hudRight");
+var charSpans = [], charTimes = [], litCount = 0;
+var LINE_LIMIT = 160;
+var lastErrorAt = 0;
+
+function reportError(where, error) {
+  var now = performance.now();
+  if (now - lastErrorAt < 1000) { return; }
+  lastErrorAt = now;
+  console.error("[383 flesh-matrix] " + where + ": " + (error && error.message ? error.message : error));
+}
+
+function clampByte(value) {
+  if (!Number.isFinite(value)) { return 0; }
+  return Math.round(Math.min(255, Math.max(0, value)));
+}
+
+function rgbText(red, green, blue, alpha) {
+  if (alpha === undefined) { return "rgb(" + clampByte(red) + "," + clampByte(green) + "," + clampByte(blue) + ")"; }
+  return "rgba(" + clampByte(red) + "," + clampByte(green) + "," + clampByte(blue) + "," + alpha + ")";
+}
+
+function isDrawableSource(source) {
+  return !!source && typeof source.getContext === "function" &&
+    Number.isFinite(source.width) && Number.isFinite(source.height) &&
+    source.width > 0 && source.height > 0;
+}
+
+function resizeCanvas() {
+  var width = window.innerWidth, height = window.innerHeight;
+  if (!Number.isFinite(width) || width <= 0) { width = 1440; }
+  if (!Number.isFinite(height) || height <= 0) { height = 900; }
+  var ratio = Math.min(window.devicePixelRatio || 1, 2);
+  STAGE.W = width; STAGE.H = height; STAGE.dpr = ratio;
+  view.width = Math.max(1, Math.round(width * ratio));
+  view.height = Math.max(1, Math.round(height * ratio));
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  rebuildGradients();
+  resetRain();
+}
+
+function pickAccent(raw) {
+  var result = [255, 49, 49];
+  if (Array.isArray(raw) && raw.length >= 3) {
+    if (Number.isFinite(raw[0]) && Number.isFinite(raw[1]) && Number.isFinite(raw[2])) {
+      result = [raw[0], raw[1], raw[2]];
+    }
+  }
+  return result;
+}
+
+function buildLineSpans(text) {
+  var source = text ? String(text) : "";
+  var limit = Math.min(source.length, LINE_LIMIT);
+  lineNow.textContent = "";
+  lineGhost.textContent = source.slice(0, limit);
+  lineWrap.className = limit > 24 ? "long" : "";
+  charSpans = []; charTimes = []; litCount = 0;
+  for (var index = 0; index < limit; index += 1) {
+    var span = document.createElement("span");
+    span.className = "ch";
+    span.textContent = source.charAt(index);
+    lineNow.appendChild(span);
+    charSpans.push(span);
+  }
+}
+
+var TAU = Math.PI * 2;
+var PROFILE = [
+  [0.00, 0.035], [0.04, 0.170], [0.09, 0.262], [0.16, 0.298], [0.23, 0.288],
+  [0.29, 0.140], [0.35, 0.132], [0.42, 0.330], [0.48, 0.505], [0.56, 0.470],
+  [0.64, 0.360], [0.72, 0.340], [0.81, 0.435], [0.91, 0.450], [1.00, 0.290]
+];
+var MESH = { built: false, rings: 15, around: 11, base: [], seed: [], faces: [], screen: [], depth: [], order: [], handles: [] };
+
+function sampleProfile(u) {
+  var clamped = Math.min(1, Math.max(0, u));
+  for (var index = 1; index < PROFILE.length; index += 1) {
+    if (clamped <= PROFILE[index][0]) {
+      var previous = PROFILE[index - 1], current = PROFILE[index];
+      var span = current[0] - previous[0];
+      var mix = span > 0.0001 ? (clamped - previous[0]) / span : 0;
+      return previous[1] + (current[1] - previous[1]) * mix;
+    }
+  }
+  return PROFILE[PROFILE.length - 1][1];
+}
+
+function hashNoise(seed) {
+  var value = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function buildMesh() {
+  var rings = MESH.rings, around = MESH.around;
+  MESH.base = []; MESH.seed = []; MESH.faces = [];
+  for (var row = 0; row < rings; row += 1) {
+    var u = row / (rings - 1);
+    var radius = sampleProfile(u);
+    var height = 0.98 - u * 1.96;
+    for (var column = 0; column < around; column += 1) {
+      var angle = (column / around) * TAU;
+      var squash = 1 + 0.14 * Math.cos(angle * 2.0);
+      var depthBias = 0.78 + 0.22 * Math.cos(angle * 3.0);
+      var wobble = 0.05 * Math.sin(u * 9.1 + angle * 2.0);
+      MESH.base.push(radius * Math.cos(angle) * squash + wobble,
+        height,
+        radius * Math.sin(angle) * depthBias);
+      MESH.seed.push(hashNoise(row * 31.7 + column * 7.3));
+    }
+  }
+  for (var ringIndex = 0; ringIndex < rings - 1; ringIndex += 1) {
+    for (var seg = 0; seg < around; seg += 1) {
+      var nextSeg = (seg + 1) % around;
+      var a = ringIndex * around + seg;
+      var b = ringIndex * around + nextSeg;
+      var c = (ringIndex + 1) * around + nextSeg;
+      var d = (ringIndex + 1) * around + seg;
+      MESH.faces.push([a, b, c, ringIndex * around + seg]);
+      MESH.faces.push([a, c, d, ringIndex * around + seg]);
+    }
+  }
+  MESH.screen = new Float64Array(MESH.base.length / 3 * 4);
+  MESH.depth = new Float64Array(MESH.base.length / 3);
+  MESH.order = new Array(MESH.faces.length);
+  MESH.handles = [];
+  MESH.built = true;
+}
+
+function beginPathSafe(target) {
+  if (target && typeof target.beginPath === "function") { target.beginPath(); }
+}
+
+var tintCache = [];
+
+function fleshTintCached(level, acid) {
+  var warmBucket = Math.min(16, Math.max(0, Math.round(level * 16)));
+  var acidBucket = Math.min(4, Math.max(0, Math.round(acid * 4)));
+  var slot = warmBucket * 5 + acidBucket;
+  var cached = tintCache[slot];
+  if (!cached) {
+    cached = fleshTint(warmBucket / 16, acidBucket / 4);
+    tintCache[slot] = cached;
+  }
+  return cached;
+}
+
+function fleshTint(level, acid) {
+  var warm = Math.min(1, Math.max(0, level));
+  var sick = Math.min(1, Math.max(0, acid));
+  var red = 9 + 196 * warm + 34 * sick * warm;
+  var green = 6 + 26 * warm + 132 * sick * (0.30 + 0.70 * warm);
+  var blue = 8 + 34 * warm + 40 * sick * warm;
+  return rgbText(red, green, blue);
+}
+
+function deformAndProject(time, energy) {
+  var base = MESH.base, seeds = MESH.seed, screen = MESH.screen, depth = MESH.depth;
+  var width = STAGE.W, height = STAGE.H;
+  var unit = Math.min(width * 0.66, height * 0.54) / 1.96;
+  var camZ = 3.1;
+  var focal = camZ * unit;
+  var centerX = width * 0.5;
+  var centerY = height * 0.44;
+  var yaw = Math.sin(time * 0.21) * 0.24 + time * 0.10;
+  var pitch = Math.sin(time * 0.33) * 0.09 - 0.05;
+  var cosYaw = Math.cos(yaw), sinYaw = Math.sin(yaw);
+  var cosPitch = Math.cos(pitch), sinPitch = Math.sin(pitch);
+  var grabX = 0.36, grabY = 0.16, grabZ = 0.20;
+  var pullX = (0.52 * Math.sin(time * 0.61) + 0.22 * Math.sin(time * 2.13)) * (0.55 + energy);
+  var pullY = 0.34 * Math.sin(time * 1.07 + 1.2) * (0.5 + energy);
+  var pullZ = 0.30 * Math.sin(time * 0.87 + 2.1) * (0.5 + energy);
+  var count = base.length / 3;
+  for (var index = 0; index < count; index += 1) {
+    var stride = index * 3;
+    var bx = base[stride], by = base[stride + 1], bz = base[stride + 2];
+    var seed = seeds[index];
+    var wave = Math.sin(by * 3.4 + time * 1.9 + seed * 6.28) * 0.5 +
+      Math.sin(bx * 4.9 - time * 1.27 + seed * 3.14) * 0.5;
+    var tear = (0.018 + energy * 0.085) * wave;
+    var shotX = bx - grabX, shotY = by - grabY, shotZ = bz - grabZ;
+    var distance = Math.sqrt(shotX * shotX + shotY * shotY + shotZ * shotZ);
+    var weight = Math.max(0, 1 - distance / 0.62);
+    weight = weight * weight * (3 - 2 * weight);
+    var spike = energy * 0.055;
+    var px = bx + tear * 0.7 + weight * pullX + Math.sin(seed * 53.1 + time * 9.0) * spike;
+    var py = by + tear * 1.1 + weight * pullY + Math.sin(seed * 17.7 + time * 7.0) * spike;
+    var pz = bz + tear * 0.7 + weight * pullZ * 0.85;
+    var rotX = px * cosYaw - pz * sinYaw;
+    var rotZ = px * sinYaw + pz * cosYaw;
+    var rotY = py * cosPitch - rotZ * sinPitch;
+    var viewZ = py * sinPitch + rotZ * cosPitch;
+    var near = Math.max(0.4, camZ - viewZ);
+    var scale = focal / near;
+    var slot = index * 4;
+    screen[slot] = centerX + rotX * scale;
+    screen[slot + 1] = centerY - rotY * scale;
+    screen[slot + 2] = scale;
+    screen[slot + 3] = weight;
+    depth[index] = near;
+  }
+  return { grabX: grabX, grabY: grabY, grabZ: grabZ,
+    pullX: pullX, pullY: pullY, pullZ: pullZ,
+    cosYaw: cosYaw, sinYaw: sinYaw, cosPitch: cosPitch, sinPitch: sinPitch,
+    centerX: centerX, centerY: centerY, focal: focal, camZ: camZ };
+}
+
+function drawMesh(time, energy) {
+  if (!MESH.built) { buildMesh(); }
+  var camera = deformAndProject(time, energy);
+  updateHandles(camera);
+  var screen = MESH.screen, depth = MESH.depth, faces = MESH.faces, order = MESH.order;
+  var visible = [];
+  for (var faceIndex = 0; faceIndex < faces.length; faceIndex += 1) {
+    var face = faces[faceIndex];
+    var slotA = face[0] * 4, slotB = face[1] * 4, slotC = face[2] * 4;
+    var area = (screen[slotB] - screen[slotA]) * (screen[slotC + 1] - screen[slotA + 1]) -
+      (screen[slotB + 1] - screen[slotA + 1]) * (screen[slotC] - screen[slotA]);
+    if (area >= 0) { continue; }
+    visible.push(faceIndex);
+  }
+  visible.sort(function (left, right) {
+    var leftFace = faces[left], rightFace = faces[right];
+    var leftDepth = depth[leftFace[0]] + depth[leftFace[1]] + depth[leftFace[2]];
+    var rightDepth = depth[rightFace[0]] + depth[rightFace[1]] + depth[rightFace[2]];
+    return rightDepth - leftDepth;
+  });
+  return { camera: camera, visible: visible };
+}
+
+var GLYPHS = "0123456789ABCDEF#%$&@+=*/<>?!|".split("");
+var RAIN = { atlas: null, cell: 18, columns: 18, drops: [], last: 0 };
+var SAW = { sprite: null, map: [
+  "..............................",
+  "................########......",
+  "...............##########.....",
+  "....######################....",
+  "...#oooooooooooooooooooooo##..",
+  "....######################....",
+  "....o.o.o.o.o.o.o.o.o.o.o.....",
+  "..............................",
+  "..........#####...............",
+  "..........#xxx#...............",
+  "..........#####..............."
+] };
+
+function buildGlyphAtlas() {
+  if (RAIN.atlas) { return; }
+  var cell = 16;
+  var canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, cell * GLYPHS.length);
+  canvas.height = cell;
+  var paint = canvas.getContext("2d");
+  if (!paint) { return; }
+  paint.fillStyle = "#8cff4a";
+  paint.font = "600 13px ui-monospace, Consolas, monospace";
+  paint.textAlign = "center";
+  paint.textBaseline = "middle";
+  for (var index = 0; index < GLYPHS.length; index += 1) {
+    paint.fillText(GLYPHS[index], index * cell + cell * 0.5, cell * 0.55);
+  }
+  RAIN.atlas = canvas;
+}
+
+function buildSawSprite() {
+  if (SAW.sprite) { return; }
+  var scale = 6;
+  var rows = SAW.map.length;
+  var columns = 0;
+  for (var index = 0; index < rows; index += 1) { columns = Math.max(columns, SAW.map[index].length); }
+  var canvas = document.createElement("canvas");
+  canvas.width = columns * scale;
+  canvas.height = rows * scale;
+  var paint = canvas.getContext("2d");
+  if (!paint) { return; }
+  var accent = STAGE.accent;
+  var palette = { "#": "#1a0e12", "+": "#c2cec4", "o": rgbText(accent[0], accent[1], accent[2]), "x": "#4a4038" };
+  for (var row = 0; row < rows; row += 1) {
+    var line = SAW.map[row];
+    for (var column = 0; column < line.length; column += 1) {
+      var paintColor = palette[line.charAt(column)];
+      if (!paintColor) { continue; }
+      paint.fillStyle = paintColor;
+      paint.fillRect(column * scale, row * scale, scale, scale);
+    }
+  }
+  SAW.sprite = canvas;
+}
+
+function resetRain() {
+  var width = STAGE.W, height = STAGE.H;
+  var cell = Math.max(12, Math.min(24, Math.round(width * 0.017)));
+  var columns = Math.max(8, Math.min(20, Math.floor(width / (cell * 3.4))));
+  RAIN.cell = cell;
+  RAIN.columns = columns;
+  RAIN.drops = [];
+  for (var index = 0; index < columns; index += 1) {
+    var seed = hashNoise(index * 3.7 + 1.3);
+    RAIN.drops.push({ x: (index + 0.5) * cell * 3.4 - cell,
+      y: seed * height,
+      speed: height * (0.055 + seed * 0.10),
+      length: 6 + Math.floor(seed * 9),
+      seed: seed });
+  }
+}
+
+function drawRain(energy, delta) {
+  buildGlyphAtlas();
+  if (!isDrawableSource(RAIN.atlas)) { return; }
+  var cell = RAIN.cell;
+  var height = STAGE.H;
+  var time = performance.now() * 0.001;
+  var speedScale = 1 + energy * 1.6;
+  ctx.globalAlpha = 0.34;
+  for (var index = 0; index < RAIN.drops.length; index += 1) {
+    var drop = RAIN.drops[index];
+    drop.y += drop.speed * delta * speedScale;
+    if (drop.y - drop.length * cell > height) {
+      drop.y = -cell * (2 + Math.floor(hashNoise(time * 7.1 + index) * 12));
+    }
+    for (var step = 0; step < drop.length; step += 1) {
+      var fade = 1 - step / drop.length;
+      var glyphIndex = Math.floor(hashNoise(drop.seed * 91.7 + step * 13.1 + Math.floor(time * 6) * 0.37) * GLYPHS.length);
+      glyphIndex = Math.min(GLYPHS.length - 1, Math.max(0, glyphIndex));
+      var y = drop.y - step * cell;
+      if (y < -cell || y > height) { continue; }
+      ctx.globalAlpha = (step === 0 ? 0.85 : 0.10 + fade * 0.30);
+      ctx.drawImage(RAIN.atlas, glyphIndex * 16, 0, 16, 16, drop.x, y, cell, cell);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawChainsaw(time, energy) {
+  buildSawSprite();
+  if (!isDrawableSource(SAW.sprite)) { return; }
+  var width = STAGE.W, height = STAGE.H;
+  var target = Math.min(width * 0.17, height * 0.12);
+  var ratio = SAW.sprite.width / Math.max(1, SAW.sprite.height);
+  var drawWidth = target;
+  var drawHeight = target / Math.max(0.2, ratio);
+  var baseX = width - drawWidth * 0.62;
+  var baseY = height - drawHeight * 1.05 - height * 0.012;
+  var angle = -0.16 + Math.sin(time * 0.7) * 0.05;
+  ctx.save();
+  ctx.translate(baseX, baseY);
+  ctx.rotate(angle);
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(SAW.sprite, -drawWidth * 0.5, -drawHeight * 0.5, drawWidth, drawHeight);
+  if (energy > 0.22) {
+    var shift = 2 + energy * 5;
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.45;
+    ctx.drawImage(SAW.sprite, -drawWidth * 0.5 - shift, -drawHeight * 0.5, drawWidth, drawHeight);
+    ctx.drawImage(SAW.sprite, -drawWidth * 0.5 + shift, -drawHeight * 0.5, drawWidth, drawHeight);
+    ctx.globalCompositeOperation = "source-over";
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+var gradientGlow = null, gradientFade = null;
+
+function drawMeters(width, height, energy) {
+  var accent = STAGE.accent;
+  var barWidth = Math.max(24, Math.min(90, width * 0.07));
+  var barHeight = Math.max(3, Math.round(height * 0.004));
+  var originX = width - barWidth - width * 0.032;
+  var originY = height * 0.075;
+  var signals = [STAGE.live.bass, STAGE.live.mid, STAGE.live.treble];
+  for (var index = 0; index < signals.length; index += 1) {
+    var level = Math.min(1, Math.max(0, signals[index]));
+    ctx.fillStyle = "rgba(255,255,255,0.10)";
+    ctx.fillRect(originX, originY + index * (barHeight + 4), barWidth, barHeight);
+    ctx.fillStyle = rgbText(accent[0], accent[1], accent[2], 0.55 + energy * 0.3);
+    ctx.fillRect(originX, originY + index * (barHeight + 4), Math.max(1, barWidth * level), barHeight);
+  }
+}
+
+
+
+function rebuildGradients() {
+  var width = STAGE.W, height = STAGE.H;
+  var accent = STAGE.accent;
+  try {
+    gradientGlow = ctx.createRadialGradient(width * 0.5, height * 0.40, Math.max(8, width * 0.01),
+      width * 0.5, height * 0.40, Math.max(width, height) * 0.66);
+    gradientGlow.addColorStop(0, rgbText(accent[0] * 0.34, accent[1] * 0.16, accent[2] * 0.20, 0.85));
+    gradientGlow.addColorStop(0.55, "rgba(6,4,8,0.0)");
+    gradientGlow.addColorStop(1, "rgba(0,0,0,0)");
+    gradientFade = ctx.createLinearGradient(0, height * 0.55, 0, height * 0.90);
+    gradientFade.addColorStop(0, "rgba(4,6,10,0)");
+    gradientFade.addColorStop(0.55, "rgba(4,6,10,0.72)");
+    gradientFade.addColorStop(1, "rgba(4,6,10,1)");
+  } catch (error) { reportError("gradients", error); }
+}
+
+var grainPattern = null, grainTile = null;
+
+function buildGrainPattern() {
+  if (grainPattern) { return; }
+  grainTile = document.createElement("canvas");
+  grainTile.width = 4;
+  grainTile.height = 4;
+  var paint = grainTile.getContext("2d");
+  if (!paint) { return; }
+  var points = [[0, 1], [2, 0], [1, 3], [3, 2], [2, 2], [0, 3]];
+  paint.fillStyle = "rgba(255,255,255,0.55)";
+  for (var index = 0; index < points.length; index += 1) {
+    paint.fillRect(points[index][0], points[index][1], 1, 1);
+  }
+  try { grainPattern = ctx.createPattern(grainTile, "repeat"); }
+  catch (error) { reportError("grain", error); grainPattern = null; }
+}
+
+function drawGrain(width, height) {
+  buildGrainPattern();
+  if (!grainPattern) { return; }
+  ctx.globalAlpha = 0.12;
+  ctx.fillStyle = grainPattern;
+  ctx.fillRect(0, 0, width, height * 0.62);
+  ctx.globalAlpha = 1;
+}
+
+function drawEdgeLabels(energy) {
+  var width = STAGE.W, height = STAGE.H;
+  ctx.save();
+  ctx.translate(Math.round(width * 0.024), height * 0.52);
+  ctx.rotate(-Math.PI * 0.5);
+  ctx.font = "600 10px ui-monospace, Consolas, monospace";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = rgbText(123, 255, 58, 0.16 + energy * 0.24);
+  ctx.fillText("FLESH//MESH  ·  RIP 300BPM  ·  DO NOT RESUSCITATE", 0, 0);
+  ctx.restore();
+}
+
+function drawScene(now) {
+  var width = STAGE.W, height = STAGE.H;
+  var accent = STAGE.accent;
+  STAGE.beatPulse *= 0.90;
+  var energy = (window.__liziShake === false) ? 0 : Math.min(1, STAGE.beatPulse * 0.9 + STAGE.live.treble * 0.5 + STAGE.beatLevel * 0.25);
+  if (STAGE.rm) { energy *= 0.35; }
+  var time = now * 0.001 * (STAGE.rm ? 0.35 : 1);
+
+  ctx.fillStyle = "#04060a";
+  ctx.fillRect(0, 0, width, height);
+  drawRain(energy, STAGE.delta);
+  if (gradientGlow) { ctx.fillStyle = gradientGlow; ctx.fillRect(0, 0, width, height); }
+
+  var view3d = drawMesh(time, energy);
+  var screen = MESH.screen, faces = MESH.faces, visible = view3d.visible;
+  var teaseSeed = Math.floor(time * 6.5);
+  var tearing = energy > 0.30;
+
+  for (var pass = 0; pass < visible.length; pass += 1) {
+    var face = faces[visible[pass]];
+    if (tearing) {
+      var roll = hashNoise(face[3] * 12.7 + teaseSeed * 31.3);
+      if (roll < 0.055 + energy * 0.06) { continue; }
+    }
+    var slotA = face[0] * 4, slotB = face[1] * 4, slotC = face[2] * 4;
+    var ax = screen[slotA], ay = screen[slotA + 1];
+    var bx = screen[slotB], by = screen[slotB + 1];
+    var cx = screen[slotC], cy = screen[slotC + 1];
+    var cross = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    var shade = Math.min(1, Math.abs(cross) / 90);
+    var lightDot = (-(ax - bx) * 0.45 - (ay - by) * 0.62) / Math.max(1, Math.abs(cross));
+    var level = Math.min(1, Math.max(0, 0.26 + shade * 0.52 + lightDot * 0.55 + energy * 0.22));
+    ctx.fillStyle = fleshTintCached(level, energy * 0.9);
+    beginPathSafe(ctx);
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(cx, cy);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  drawMeshWire(energy);
+  drawGrabGizmo(energy);
+  drawEdgeLabels(energy);
+  drawChainsaw(time, energy);
+  drawMeters(width, height, energy);
+  drawGrain(width, height);
+  if (gradientFade) {
+    ctx.fillStyle = gradientFade;
+    ctx.fillRect(0, height * 0.55, width, height * 0.35);
+  }
+  drawTimeline(width, height, energy);
+  if (STAGE.beatPulse > 0.82 && !STAGE.rm) {
+    ctx.fillStyle = rgbText(123, 255, 58, 0.055 * STAGE.beatPulse);
+    ctx.fillRect(0, 0, width, height * 0.62);
+  }
+  tearFrame(energy, time);
+}
+
+var tearBuffer = null, tearCtx = null;
+
+function ensureTearBuffer() {
+  if (!tearBuffer) {
+    tearBuffer = document.createElement("canvas");
+    tearCtx = tearBuffer.getContext("2d");
+  }
+  var width = Math.max(1, view.width);
+  var height = Math.max(1, Math.min(view.height, Math.round(260 * STAGE.dpr)));
+  if (tearBuffer.width !== width || tearBuffer.height !== height) {
+    tearBuffer.width = width;
+    tearBuffer.height = height;
+  }
+}
+
+function tearFrame(energy, time) {
+  if (STAGE.rm || energy < 0.16) { return; }
+  if (!isDrawableSource(view)) { return; }
+  ensureTearBuffer();
+  if (!isDrawableSource(tearBuffer) || !tearCtx) { return; }
+  var ratio = STAGE.dpr;
+  var bands = Math.min(4, 1 + Math.floor(energy * 3.2));
+  for (var index = 0; index < bands; index += 1) {
+    var y = Math.floor(hashNoise(time * 3.1 + index * 7.7) * STAGE.H);
+    var bandHeight = Math.max(4, Math.floor(STAGE.H * (0.008 + hashNoise(time * 5.3 + index) * 0.045)));
+    if (y + bandHeight <= 0 || y >= STAGE.H) { continue; }
+    var shift = Math.round((hashNoise(time * 9.1 + index * 3.3) - 0.5) * STAGE.W * 0.13 * (0.35 + energy));
+    var sourceY = Math.max(0, y) * ratio;
+    var sourceHeight = Math.min(bandHeight, STAGE.H - y) * ratio;
+    if (sourceHeight < 1) { continue; }
+    if (tearBuffer.height < sourceHeight) { continue; }
+    tearCtx.setTransform(1, 0, 0, 1, 0, 0);
+    tearCtx.clearRect(0, 0, tearBuffer.width, tearBuffer.height);
+    tearCtx.drawImage(view, 0, sourceY, view.width, sourceHeight, 0, 0, tearBuffer.width, sourceHeight);
+    ctx.drawImage(tearBuffer, 0, 0, tearBuffer.width, sourceHeight,
+      shift, Math.max(0, y), STAGE.W, Math.min(bandHeight, STAGE.H - y));
+  }
+}
+
+function drawTimeline(width, height, energy) {
+  var accent = STAGE.accent;
+  var lineY = Math.round(height * 0.617);
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
+  ctx.fillRect(0, lineY, width, Math.max(1, Math.round(height * 0.0014)));
+  var total = STAGE.duration > 0 ? STAGE.duration : 0;
+  if (total > 0) {
+    var progress = Math.min(1, Math.max(0, STAGE.t / total));
+    ctx.fillStyle = rgbText(accent[0], accent[1], accent[2], 0.55);
+    ctx.fillRect(0, lineY, Math.max(1, width * progress), Math.max(1, Math.round(height * 0.0014)));
+    ctx.fillStyle = rgbText(accent[0], accent[1], accent[2], 0.9);
+    ctx.fillRect(width * progress - 1, lineY - 3, 2, Math.max(3, Math.round(height * 0.005)));
+  }
+  var ticks = Math.min(28, Math.max(8, Math.round(width / 90)));
+  ctx.fillStyle = rgbText(123, 255, 58, 0.20 + energy * 0.25);
+  for (var index = 1; index < ticks; index += 1) {
+    var x = Math.round((index / ticks) * width);
+    var tickHeight = index % 4 === 0 ? Math.round(height * 0.008) : Math.round(height * 0.004);
+    ctx.fillRect(x, lineY + 3, 1, tickHeight);
+  }
+}
+
+
+
+function drawMeshWire(energy) {
+  var screen = MESH.screen, rings = MESH.rings, around = MESH.around;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = rgbText(123, 255, 58, 0.10 + energy * 0.16);
+  for (var row = 0; row < rings; row += 1) {
+    beginPathSafe(ctx);
+    for (var column = 0; column <= around; column += 1) {
+      var slot = (row * around + (column % around)) * 4;
+      if (column === 0) { ctx.moveTo(screen[slot], screen[slot + 1]); }
+      else { ctx.lineTo(screen[slot], screen[slot + 1]); }
+    }
+    ctx.stroke();
+  }
+}
+
+function projectPoint(camera, x, y, z) {
+  var rotX = x * camera.cosYaw - z * camera.sinYaw;
+  var rotZ = x * camera.sinYaw + z * camera.cosYaw;
+  var rotY = y * camera.cosPitch - rotZ * camera.sinPitch;
+  var viewZ = y * camera.sinPitch + rotZ * camera.cosPitch;
+  var near = Math.max(0.4, camera.camZ - viewZ);
+  var scale = camera.focal / near;
+  return { x: camera.centerX + rotX * scale, y: camera.centerY - rotY * scale, scale: scale };
+}
+
+function drawGrabGizmo(energy) {
+  if (MESH.handles.length === 0) { return; }
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = rgbText(255, 235, 120, 0.16 + energy * 0.30);
+  beginPathSafe(ctx);
+  ctx.moveTo(MESH.handles[0].x, MESH.handles[0].y);
+  ctx.lineTo(MESH.handles[1].x, MESH.handles[1].y);
+  ctx.stroke();
+  for (var index = 0; index < MESH.handles.length; index += 1) {
+    var handle = MESH.handles[index];
+    ctx.fillStyle = rgbText(255, 236, 132, index === 0 ? 0.9 : 0.35 + energy * 0.55);
+    var size = index === 0 ? 5 : 3;
+    ctx.fillRect(handle.x - size * 0.5, handle.y - size * 0.5, size, size);
+  }
+}
+
+function updateHandles(camera) {
+  var origin = projectPoint(camera, camera.grabX, camera.grabY, camera.grabZ);
+  var tip = projectPoint(camera, camera.grabX + camera.pullX,
+    camera.grabY + camera.pullY, camera.grabZ + camera.pullZ);
+  MESH.handles[0] = origin;
+  MESH.handles[1] = tip;
+  MESH.handles.length = 2;
+  var screen = MESH.screen;
+  var count = screen.length / 4;
+  for (var index = 0; index < count && MESH.handles.length < 26; index += 1) {
+    var slot = index * 4;
+    if (screen[slot + 3] < 0.55) { continue; }
+    MESH.handles.push({ x: screen[slot], y: screen[slot + 1] });
+  }
+}
+
+var readySent = false;
+function sendReady() {
+  if (readySent) { return; }
+  readySent = true;
+  try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); }
+  catch (error) { reportError("ready", error); }
+}
+
+function updateLyricCursor() {
+  var time = STAGE.t;
+  var target = -1;
+  for (var index = 0; index < STAGE.lines.length; index += 1) {
+    if (STAGE.lines[index].t <= time) { target = index; } else { break; }
+  }
+  if (target !== STAGE.idx) {
+    STAGE.idx = target;
+    var line = null;
+    if (target >= 0) { line = STAGE.lines[target]; }
+    else if (STAGE.lines.length > 0) { line = STAGE.lines[0]; }
+    STAGE.text = line && line.text ? String(line.text) : "";
+    buildLineSpans(STAGE.text);
+    STAGE.charTimes = buildCharTimes(line);
+    lineNow.classList.toggle("preview", target < 0);
+  }
+}
+
+var lastGhostAt = 0, ghostShift = 0;
+function syncLyricVisuals(stamp) {
+  var time = STAGE.t;
+  var times = STAGE.charTimes;
+  var reached = 0;
+  for (var index = 0; index < times.length; index += 1) {
+    if (times[index] <= time) { reached = index + 1; } else { break; }
+  }
+  var upper = Math.min(reached, charSpans.length);
+  if (upper < litCount) {
+    for (var clear = 0; clear < charSpans.length; clear += 1) { charSpans[clear].className = "ch"; }
+    litCount = 0;
+  }
+  for (var light = litCount; light < upper; light += 1) { charSpans[light].className = "ch on"; }
+  litCount = upper;
+
+  var energy = Math.min(1, STAGE.beatPulse * 0.9 + STAGE.live.treble * 0.5);
+  if (energy > 0.16 && !STAGE.rm) {
+    if (stamp - lastGhostAt > 70) {
+      lastGhostAt = stamp;
+      ghostShift = Math.round((hashNoise(stamp * 0.031) - 0.5) * 14);
+      var top = Math.round(hashNoise(stamp * 0.017) * 62);
+      var bottom = Math.round(hashNoise(stamp * 0.023) * 30);
+      lineGhost.style.clipPath = "inset(" + top + "% 0 " + bottom + "% 0)";
+      lineGhost.style.transform = "translateX(" + ghostShift + "px)";
+    }
+    lineGhost.style.opacity = String(Math.min(0.85, 0.25 + energy * 0.7));
+    lineWrap.style.transform = "translateX(" + Math.round(ghostShift * 0.35) + "px)";
+  } else if (lineGhost.style.opacity !== "0") {
+    lineGhost.style.opacity = "0";
+    lineWrap.style.transform = "translateX(0px)";
+  }
+}
+
+function buildCharTimes(line) {
+  var times = [];
+  if (!line) { return times; }
+  var text = line.text ? String(line.text) : "";
+  var limit = Math.min(text.length, LINE_LIMIT);
+  if (Array.isArray(line.chars) && line.chars.length > 0) {
+    for (var index = 0; index < limit; index += 1) {
+      var entry = line.chars[index];
+      var stamp = entry && Number.isFinite(entry.t) ? entry.t : line.t;
+      times.push(stamp);
+    }
+    return times;
+  }
+  var span = Number.isFinite(line.dur) && line.dur > 0 ? line.dur : 2.4;
+  for (var slot = 0; slot < limit; slot += 1) {
+    times.push(line.t + (span * slot) / Math.max(1, limit));
+  }
+  return times;
+}
+
+function handleInit(payload) {
+  var safe = payload && typeof payload === "object" ? payload : {};
+  var song = safe.song && typeof safe.song === "object" ? safe.song : {};
+  STAGE.accent = pickAccent(safe.accent);
+  rebuildGradients();
+  SAW.sprite = null;
+  hudRight.textContent = "BPM " + String(Math.round(STAGE.bpm)).padStart(3, "0");
+  STAGE.duration = Number.isFinite(safe.duration) ? safe.duration : 0;
+  STAGE.songName = song.name ? String(song.name) : "";
+  STAGE.playing = safe.playing === undefined ? true : !!safe.playing;
+  var rawLines = Array.isArray(safe.lines) ? safe.lines : [];
+  var lines = [];
+  for (var index = 0; index < Math.min(rawLines.length, 400); index += 1) {
+    var raw = rawLines[index];
+    if (!raw || typeof raw !== "object") { continue; }
+    var text = raw.text ? String(raw.text).slice(0, 120) : "";
+    if (!text) { continue; }
+    lines.push({ t: Number.isFinite(raw.t) ? raw.t : 0,
+      dur: Number.isFinite(raw.dur) ? raw.dur : 0, text: text,
+      chars: Array.isArray(raw.chars) ? raw.chars : null });
+  }
+  STAGE.lines = lines.sort(function (left, right) { return left.t - right.t; });
+  STAGE.idx = -99;
+  updateLyricCursor();
+
+  var artistText = "";
+  if (Array.isArray(song.artists)) {
+    var names = [];
+    for (var nameIndex = 0; nameIndex < Math.min(song.artists.length, 4); nameIndex += 1) {
+      if (song.artists[nameIndex]) { names.push(String(song.artists[nameIndex]).slice(0, 24)); }
+    }
+    artistText = names.join(" / ");
+  } else if (song.artists) {
+    artistText = String(song.artists).slice(0, 48);
+  }
+  var vertices = MESH.rings * MESH.around;
+  var triangles = (MESH.rings - 1) * MESH.around * 2;
+  hudLeft.textContent = "383 / FLESH_MESH\nVTX " + vertices + " · TRI " + triangles + "\n" +
+    (STAGE.songName ? STAGE.songName.slice(0, 26) : "UNTITLED") +
+    (artistText ? "\n" + artistText : "");
+
+  emptyBox.style.opacity = lines.length === 0 ? "0.8" : "0";
+  emptyBox.textContent = lines.length === 0 ? "// NO LYRIC SIGNAL\n只有鼓机" : "";
+  if (lines.length === 0) {
+    lineNow.textContent = "";
+    lineGhost.textContent = "";
+    charSpans = []; charTimes = []; litCount = 0;
+  }
+  try { drawScene(performance.now()); } catch (error) { reportError("init-draw", error); }
+}
+
+function handleMessage(event) {
+  var data = event.data;
+  if (!data || data.__c100 !== 1) { return; }
+  try {
+    if (data.type === "init") { handleInit(data.payload); }
+    else if (data.type === "tick") {
+      var payload = data.payload || {};
+      if (Number.isFinite(payload.time)) { STAGE.t = payload.time; }
+      if (payload.playing !== undefined) { STAGE.playing = !!payload.playing; }
+      updateLyricCursor();
+    } else if (data.type === "beat") {
+      var beat = data.payload || {};
+      STAGE.beatLevel = Number.isFinite(beat.level) ? Math.min(1, Math.max(0, beat.level)) : 0.5;
+      STAGE.beatPulse = 1;
+    } else if (data.type === "live") {
+      var live = data.payload || {};
+      STAGE.bpm = Number.isFinite(live.bpm) ? live.bpm : STAGE.bpm;
+      STAGE.live.level = Number.isFinite(live.level) ? live.level : 0;
+      STAGE.live.bass = Number.isFinite(live.bass) ? live.bass : 0;
+      STAGE.live.mid = Number.isFinite(live.mid) ? live.mid : 0;
+      STAGE.live.treble = Number.isFinite(live.treble) ? live.treble : 0;
+      hudRight.textContent = "BPM " + String(Math.round(STAGE.bpm)).padStart(3, "0");
+    }
+  } catch (error) { reportError("message", error); }
+}
+
+var lastFrameAt = 0;
+function frameLoop(stamp) {
+  STAGE.frames += 1;
+  var nowStamp = Number.isFinite(stamp) ? stamp : performance.now();
+  var delta = lastFrameAt > 0 ? (nowStamp - lastFrameAt) * 0.001 : 0.016;
+  if (!Number.isFinite(delta) || delta <= 0) { delta = 0.016; }
+  STAGE.delta = Math.min(0.05, Math.max(0.004, delta));
+  lastFrameAt = nowStamp;
+  var startedAt = performance.now();
+  try { drawScene(nowStamp); } catch (error) { reportError("draw", error); }
+  try { syncLyricVisuals(nowStamp); } catch (error) { reportError("lyric", error); }
+  STAGE.js = performance.now() - startedAt;
+  requestAnimationFrame(frameLoop);
+}
+
+function detectReducedMotion() {
+  try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  catch (error) { reportError("matchMedia", error); return false; }
+}
+
+STAGE.rm = detectReducedMotion();
+try { resizeCanvas(); } catch (error) { reportError("boot-resize", error); }
+window.addEventListener("resize", function () { try { resizeCanvas(); } catch (error) { reportError("resize", error); } });
+window.addEventListener("message", handleMessage);
+requestAnimationFrame(function firstFrame() { sendReady(); requestAnimationFrame(frameLoop); });
+setTimeout(sendReady, 900);
+</script>
+</body>
+</html>

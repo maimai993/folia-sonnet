@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LIZI 68 舞台画廊</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23000'/><circle cx='16' cy='16' r='6' fill='%23fff'/></svg>">
+<style>
+:root{
+  --ink:#0b0c0e; --line:rgba(255,255,255,.12); --dim:rgba(255,255,255,.56);
+  --fg:#f2f3f5; --accent:#7c8cff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;color:var(--fg);
+  font-family:"PingFang SC","Noto Sans SC",system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-font-smoothing:antialiased;overflow:hidden}
+#stage{position:fixed;inset:0;border:0;width:100%;height:100%;background:#000;display:block}
+
+/* top readout */
+.hud{position:fixed;left:0;right:0;top:0;padding:10px 14px calc(10px + env(safe-area-inset-top));
+  display:flex;align-items:center;gap:10px;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.62),rgba(0,0,0,0));z-index:3}
+.hud .idx{font-size:12px;letter-spacing:.14em;color:var(--dim);font-variant-numeric:tabular-nums}
+.hud .nm{flex:1;min-width:0;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud button{pointer-events:auto}
+
+/* picker */
+.picker{position:fixed;left:0;right:0;bottom:0;z-index:4;
+  padding:8px 0 calc(8px + env(safe-area-inset-bottom));
+  background:linear-gradient(0deg,rgba(0,0,0,.78),rgba(0,0,0,.28) 78%,rgba(0,0,0,0));
+  transition:transform .28s ease,opacity .28s ease}
+.picker.hide{transform:translateY(102%);opacity:0;pointer-events:none}
+.rail{display:flex;gap:8px;overflow-x:auto;padding:0 12px 2px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.chip{flex:0 0 auto;display:flex;flex-direction:column;justify-content:center;
+  min-width:74px;padding:8px 11px;border:1px solid var(--line);border-radius:12px;
+  background:rgba(255,255,255,.06);color:var(--fg);cursor:pointer;text-align:left;
+  transition:background .15s,border-color .15s,transform .15s}
+.chip:active{transform:scale(.97)}
+.chip[aria-current="true"]{background:rgba(124,140,255,.22);border-color:rgba(124,140,255,.7)}
+.chip b{font-size:11px;font-weight:500;color:var(--dim);font-variant-numeric:tabular-nums;letter-spacing:.06em}
+.chip span{font-size:13px;font-weight:600;margin-top:2px;white-space:nowrap}
+
+/* controls */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;gap:10px;align-items:center;
+  padding:0 14px calc(6px + env(safe-area-inset-bottom))}
+.bar{display:none}
+.btn{border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--fg);
+  height:38px;padding:0 16px;border-radius:19px;font-size:13px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;backdrop-filter:blur(6px)}
+.btn:active{transform:scale(.97)}
+.btn.ghost{background:transparent}
+.prog{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.16);position:relative;overflow:hidden}
+.prog i{position:absolute;inset:0 auto 0 0;width:0;background:var(--accent);border-radius:2px}
+
+.note{position:fixed;left:14px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:3;
+  font-size:11px;line-height:1.6;color:var(--dim);max-width:min(78vw,360px);
+  transition:opacity .3s}
+.note.hide{opacity:0}
+</style>
+</head>
+<body>
+<iframe id="stage" title="舞台预览" scrolling="no" allow="autoplay"></iframe>
+
+<div class="hud">
+  <span class="idx" id="idx">001</span>
+  <span class="nm" id="nm">粒子歌词</span>
+  <button class="btn ghost" id="toggle" aria-label="收起/展开列表">列表</button>
+</div>
+
+<div class="note" id="note">下面横滑挑形态；点一下即刻切换。这里是纯预览，Folia 里跟着真实歌词与频谱走。</div>
+
+<div class="picker" id="picker">
+  <div class="rail" id="rail"></div>
+</div>
+
+<script type="module">
+import { STAGES } from './data.mjs';
+
+const LYRICS = [
+  '夜色落在窗台',
+  '风把旧信吹开',
+  '你说的那句晚安',
+  '还停在耳畔',
+  '我把时间折成船',
+  '顺着光的方向漂',
+  '每一句都发烫',
+  '像未寄出的信',
+];
+
+const frame = document.getElementById('stage');
+const rail = document.getElementById('rail');
+const idxEl = document.getElementById('idx');
+const nmEl = document.getElementById('nm');
+const picker = document.getElementById('picker');
+const note = document.getElementById('note');
+let current = STAGES[0];
+let clockTimer = 0;
+let t = 0;
+let playing = true;
+
+function payload() {
+  const lines = LYRICS.map((text, i) => {
+    const glyphs = Array.from(text);
+    return {
+      t: +(0.6 + i * 3).toFixed(3),
+      dur: 3,
+      text,
+      chars: glyphs.map((c, k) => ({ c, t: +(0.6 + i * 3 + k * (3 / glyphs.length)).toFixed(3) })).filter((x) => !/\s/u.test(x.c)),
+    };
+  });
+  return {
+    song: { id: 'preview', name: '夜色落在窗台', album: '预览', artists: 'LIZI 舞台', cover: '' },
+    accent: [140, 156, 255],
+    lines,
+    duration: 30,
+  };
+}
+
+function post(type, data) {
+  try {
+    frame.contentWindow.postMessage({ __c100: 1, type, payload: data }, '*');
+  } catch { /* loading */ }
+}
+
+window.addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'ready') {
+    post('init', payload());
+  }
+});
+
+function startClock() {
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    if (!playing) return;
+    t = (t + 0.0666) % 32;
+    post('tick', { time: t, playing: true });
+    const lvl = 0.5 + 0.4 * Math.sin(t * 2.2);
+    if (Math.floor(t * 2) % 3 === 0) {
+      post('live', { bpm: 96, level: lvl, bass: 0.45 + lvl * 0.3, mid: 0.35, treble: 0.28, playing: true });
+      post('beat', { index: Math.floor(t * 2), level: Math.max(0, lvl) });
+    }
+  }, 66);
+}
+
+function select(id) {
+  const entry = STAGES.find((s) => s.id === id) || STAGES[0];
+  current = entry;
+  idxEl.textContent = entry.id;
+  nmEl.textContent = entry.name;
+  for (const chip of rail.children) chip.setAttribute('aria-current', String(chip.dataset.id === entry.id));
+  const chip = rail.querySelector(`[data-id="${entry.id}"]`);
+  if (chip) chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  t = 0;
+  frame.src = './stages/' + entry.file;
+  note.classList.add('hide');
+}
+
+for (const s of STAGES) {
+  const b = document.createElement('button');
+  b.className = 'chip';
+  b.dataset.id = s.id;
+  b.setAttribute('aria-current', 'false');
+  b.innerHTML = `<b>${s.id}</b><span>${s.name}</span>`;
+  b.title = s.desc || s.name;
+  b.addEventListener('click', () => select(s.id));
+  rail.appendChild(b);
+}
+
+document.getElementById('toggle').addEventListener('click', () => {
+  const hidden = picker.classList.toggle('hide');
+  document.getElementById('toggle').textContent = hidden ? '列表' : '收起';
+});
+
+frame.addEventListener('load', () => {
+  setTimeout(() => post('init', payload()), 120);
+});
+
+// keyboard: ← → cycles
+addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const at = STAGES.findIndex((s) => s.id === current.id);
+  const to = Math.min(STAGES.length - 1, Math.max(0, at + (e.key === 'ArrowRight' ? 1 : -1)));
+  select(STAGES[to].id);
+});
+
+select(STAGES[0].id);
+startClock();
+setTimeout(() => note.classList.add('hide'), 6000);
+</script>
+</body>
+</html>

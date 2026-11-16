@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>粒子歌词</title>
+<style>
+  html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(200,210,255,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+
+  #dot{position:fixed;right:12px;bottom:12px;width:26px;height:26px;border-radius:50%;
+       background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);cursor:pointer;z-index:20;
+       display:grid;place-items:center;font:600 12px/1 ui-monospace,monospace;color:rgba(200,210,255,.6);
+       transition:background .15s,color .15s}
+  #dot:hover{background:rgba(255,255,255,.16);color:#fff}
+  #panel{position:fixed;right:12px;bottom:48px;width:308px;z-index:21;
+         background:rgba(10,12,20,.90);border:1px solid rgba(255,255,255,.13);border-radius:12px;
+         backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+         color:#dfe4f5;font:500 11px/1.4 ui-monospace,Consolas,monospace;
+         box-shadow:0 18px 50px rgba(0,0,0,.55);overflow:hidden}
+  #panel[hidden]{display:none}
+  #panel h4{margin:0;padding:9px 12px;font-size:11px;letter-spacing:.06em;
+            border-bottom:1px solid rgba(255,255,255,.09);display:flex;align-items:center;gap:8px}
+  #panel h4 b{font-weight:600;color:#fff}
+  #panel h4 span{margin-left:auto;color:rgba(200,210,255,.45);font-weight:400}
+  .rows{max-height:54vh;overflow-y:auto;padding:8px 12px 10px}
+  .row{display:grid;grid-template-columns:1fr 50px;gap:6px;align-items:center;padding:3px 0}
+  .row label{grid-column:1/3;color:rgba(200,210,255,.62);font-size:10.5px;letter-spacing:.02em}
+  .row input[type=range]{width:100%;height:16px;-webkit-appearance:none;background:none;margin:0}
+  .row input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:rgba(255,255,255,.16)}
+  .row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+       background:#eaf0ff;margin-top:-4.5px;cursor:pointer;box-shadow:0 0 6px rgba(150,180,255,.5)}
+  .row .val{text-align:right;color:#fff;font-variant-numeric:tabular-nums;font-size:10.5px}
+  .row.on .val{color:#8ef2b8}
+  #panel footer{padding:8px 12px;border-top:1px solid rgba(255,255,255,.09);
+                display:flex;align-items:center;gap:8px;color:rgba(200,210,255,.5);font-size:10px}
+  #panel footer button{margin-left:auto;padding:4px 10px;border-radius:6px;cursor:pointer;
+       background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#dfe4f5;font:inherit}
+  #panel footer button:hover{background:rgba(255,255,255,.16)}
+  #pstat{padding:6px 12px;color:rgba(160,200,255,.75);font-size:10px;border-top:1px solid rgba(255,255,255,.06);
+         white-space:pre;line-height:1.5}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<div id="dot" title="调参面板（F5）">⚙</div>
+<div id="panel" hidden>
+  <h4><b>调参 · 粒子歌词</b><span>F5 开关</span></h4>
+  <div class="rows" id="rows"></div>
+  <div id="pstat"></div>
+  <footer><span>实时生效 · 自动保存</span><button id="preset">重置</button></footer>
+</div>
+<script>
+"use strict";
+/* ============================================================================
+   001 · 粒子歌词 —— 流场背景 + 粒子聚字
+   支持**逐字成形**：每个字有自己的起始时刻，唱到哪个字哪个字才聚起来。
+   有 YRC 就用真实的逐字时间；只有 LRC 就按句长均分。
+   ========================================================================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1;
+
+/* ---------------- 可调参数 ---------------- */
+const DEFAULTS = {
+  byChar: 1,      // 逐字成形（0 整句一起）
+  firstLead: 0,   // 首字先出（整句模式下只让首字按 lead 提前，其余等句首）
+  charLead: 0.35, // 每个字提前多久开始聚
+  lead: 1.4,      // 整句提前量（第一个字用）
+  formT: 0.5,
+  fly: 2600,
+  camK: 1.0,
+  trail: 0.085,
+  bg: 1.0,
+  textN: 3800,
+  size: 84,
+  spread: 0.34,
+  burst: 170,
+  // 字形采样用的 font-family。放在 DEFAULTS 里是为了让内置面板「重置」也回到这套字
+  font: '"PingFang SC","Microsoft YaHei",system-ui,sans-serif',
+};
+const SLIDERS = [
+  ['byChar', '逐字成形（0 关 / 1 开）',           0, 1, 1, '开关'],
+  ['charLead', '每字提前量（秒）',                0, 1.2, 0.05],
+  ['lead',   '酝酿提前量（秒）· 下一句提前多久开始组', 0.3, 3.5, 0.05],
+  ['formT',  '组字时长（秒）· 酝酿好之后转正',      0.1, 2.0, 0.05],
+  ['fly',    '组字飞行速度 px/s',                 600, 4000, 50],
+  ['camK',   '镜头速度倍率',                      0.3, 4.0, 0.1],
+  ['burst',  '散开力度',                          0, 400, 10],
+  ['trail',  '拖尾 · 越小拖越长',                 0.02, 0.30, 0.005],
+  ['bg',     '背景流场亮度',                      0.1, 2.0, 0.05],
+  ['textN',  '组字粒子数',                        800, 6000, 100],
+  ['size',   '字号',                              48, 120, 2],
+  ['spread', '落点散布',                          0.10, 0.60, 0.01],
+];
+
+/* ---------------- 宿主设置面板 ----------------
+   宿主在形态 ready 后会直接读 contentWindow.__stagePanel，所以必须放在最外层、
+   无条件执行（不能塞进 DOMContentLoaded 或异步回调里）。
+   这里的 def 必须和 DEFAULTS 对得上，否则用户一进来看到的选项和实际画面不一致。 */
+const FONT_STACKS = {
+  pingfang: '"PingFang SC","Microsoft YaHei",system-ui,sans-serif',
+  yahei:    '"Microsoft YaHei","PingFang SC",system-ui,sans-serif',
+  songti:   '"Source Han Serif SC","Noto Serif CJK SC","Songti SC","SimSun",serif',
+  mono:     'ui-monospace,Consolas,"Courier New",monospace',
+};
+window.__stagePanel = {
+  title: '粒子歌词',
+  hint: '字体、拖尾、速度下一帧生效；改成形方式后这一句会按新时序立即重排。',
+  items: [
+    { key: 'font', label: '字体', type: 'select', def: DEFAULTS.font, options: [
+      { v: FONT_STACKS.pingfang, t: '苹方 / 系统' },
+      { v: FONT_STACKS.yahei,    t: '微软雅黑' },
+      { v: FONT_STACKS.songti,   t: '思源宋体' },
+      { v: FONT_STACKS.mono,     t: '等宽' },
+    ] },
+    // 内部 P.trail 是每帧清屏的透明度，越小残影留得越久 —— 标签里把方向说清楚
+    { key: 'trail', label: '拖尾长度（越小拖尾越长）', type: 'range', min: 0.02, max: 0.30, step: 0.005, def: DEFAULTS.trail },
+    // 速度直接复用现有的粒子飞行速度参数，不另外造一套物理
+    { key: 'fly', label: '聚字速度（px/s）', type: 'range', min: 600, max: 4000, step: 50, def: DEFAULTS.fly },
+    // 成形方式是 byChar 的扩展：line=整句一起，char=逐字，first=首字先出
+    { key: 'form', label: '成形方式', type: 'segment', def: 'char', options: [
+      { v: 'line',  t: '整句一起' },
+      { v: 'char',  t: '逐字成形' },
+      { v: 'first', t: '首字先出' },
+    ] },
+  ],
+};
+
+/* ---- 统一「震动」开关：宿主在 ready 后同步读取 ---- */
+window.__liziShake = true;
+if (!window.__stagePanel.items.some(function (it) { return it.key === 'shake'; })) {
+  window.__stagePanel.items.push({ key: 'shake', label: '震动', type: 'switch', def: true });
+}
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+const KEY = 'stage001.params';
+const P = Object.assign({}, DEFAULTS);
+try { Object.assign(P, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (_) {}
+const saveP = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (_) {} };
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+addEventListener('resize', () => { resize(); buildAnchors(); });
+
+/* ---------------- 粒子 ---------------- */
+const N = 12000;
+const px = new Float32Array(N), py = new Float32Array(N);
+const vx = new Float32Array(N), vy = new Float32Array(N);
+const mode = new Uint8Array(N);
+const tx = new Float32Array(N), ty = new Float32Array(N);
+const startAt = new Float32Array(N);     // 这颗粒子该在什么时刻开始飞向目标
+const bucket = new Uint8Array(N);
+for (let i = 0; i < N; i++) {
+  px[i] = (Math.random() - 0.5) * 2400;
+  py[i] = (Math.random() - 0.5) * 1600;
+  bucket[i] = (Math.random() * 5) | 0;
+}
+
+function flowAngle(x, y, t) {
+  return (Math.sin(x * 0.0015 + t * 0.20) * 1.5 +
+          Math.cos(y * 0.0018 - t * 0.15) * 1.5 +
+          Math.sin((x + y) * 0.0010 + t * 0.11) * 1.1 +
+          Math.sin((x - y) * 0.0022 - t * 0.07) * 0.7);
+}
+
+const cam = { x: 0, y: 0, z: 1, tx: 0, ty: 0, tz: 1 };
+const w2sX = (wx) => (wx - cam.x) * cam.z + W / 2;
+const w2sY = (wy) => (wy - cam.y) * cam.z + H / 2;
+
+const anchors = [];
+function buildAnchors() {
+  anchors.length = 0;
+  for (let i = 0; i < 96; i++) {
+    const g = i * 2.399963;
+    const rr = 0.35 + 0.65 * (((i * 37) % 97) / 97);
+    // 存**归一化**坐标（-1~1），实际落点等知道这句字多宽之后再映射 ——
+    // 直接存像素坐标的话，字宽一变就会跑到屏幕外或者全挤在一起。
+    anchors.push({
+      nx: Math.cos(g) * rr,
+      ny: Math.sin(g) * rr * 0.75,
+      z: 0.9 + 0.4 * (((i * 53) % 89) / 89),
+    });
+  }
+}
+buildAnchors();
+
+let lines = [];
+let curIdx = -1;
+let brewIdx = -1;
+let phase = 'idle';
+let phaseT = 0;
+let accent = [140, 150, 255];
+
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+/* ---------------- 字形采样（带逐字归属） ---------------- */
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+
+/** 返回 { pts, owner, n }：pts 是点集，owner[k] 是第 k 个点属于第几个字 */
+function glyphPoints(text) {
+  const chars = Array.from(text);
+  const n = chars.length || 1;
+  const F = P.size;
+  const maxW = Math.min(W * 0.66, 1180);
+  // 每次都从 P.font 取字体：改设置后下一次采样就会用新字体（这个形态没有跨句字形缓存）
+  const font = P.font || DEFAULTS.font;
+  octx.font = `800 ${F}px ${font}`;
+  let w = Math.ceil(octx.measureText(text).width) + 8;
+  const fs = w > maxW ? F * (maxW / w) : F;
+  octx.font = `800 ${fs}px ${font}`;
+  w = Math.ceil(octx.measureText(text).width) + 8;
+  const h = Math.ceil(fs * 1.35);
+  off.width = w; off.height = h;
+  octx.clearRect(0, 0, w, h);
+  octx.font = `800 ${fs}px ${font}`;
+  octx.textAlign = 'left'; octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+  const pad = 4;
+  octx.fillText(text, pad, h / 2);
+
+  // 每个字的 x 边界（用来把点归到具体的字）
+  const bx = [];
+  for (let i = 0; i <= n; i++) bx.push(pad + octx.measureText(chars.slice(0, i).join('')).width);
+  const mid = w / 2;
+
+  const d = octx.getImageData(0, 0, w, h).data;
+  const pts = [];
+  const owner = [];
+  const step = 2;
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      if (d[(y * w + x) * 4 + 3] <= 128) continue;
+      // 归到所属的字
+      let c = 0;
+      while (c < n - 1 && x >= bx[c + 1]) c++;
+      pts.push(x - mid, y - h / 2);
+      owner.push(c);
+    }
+  }
+  return { pts, owner, n };
+}
+
+const order = new Int32Array(N);
+const dist = new Float32Array(N);
+
+/**
+ * 派活。逐字成形时每个字有自己的起始时刻：
+ *   有 YRC 就用真实逐字时间，否则按句长在句内均分。
+ *   第一个字用整句提前量 lead，后面的字用 charLead。
+ */
+function assignText(text, a, chars, lineT, lineDur, targetMode) {
+  const TM = targetMode || 1;
+  const { pts, owner, n } = glyphPoints(text);
+  const pc = pts.length / 2;
+  if (!pc) return;
+
+  /* 把落点夹回屏幕内。
+     锚点是按黄金角散布的，可能落在很靠边的地方；而一行字上千像素宽，
+     以那个点为中心就有一半在屏幕外 —— 看到的就是"字只剩半个"。
+     先量出字形包围盒，再把锚点推回能完整容纳它的范围里。 */
+  let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+  for (let k = 0; k < pts.length; k += 2) {
+    if (pts[k] < bx0) bx0 = pts[k];
+    if (pts[k] > bx1) bx1 = pts[k];
+    if (pts[k + 1] < by0) by0 = pts[k + 1];
+    if (pts[k + 1] > by1) by1 = pts[k + 1];
+  }
+  const M = 56;
+  const hw = (bx1 - bx0) / 2, hh = (by1 - by0) / 2;
+  const gcx = (bx0 + bx1) / 2, gcy = (by0 + by1) / 2;
+
+  /* 相机 z 会把字整体放大（渲染是 (世界坐标 - 相机) * cam.z）。
+     所以先按字形尺寸把 z 压到"放大之后仍然放得下"，
+     否则字会超出边距，上下被拦腰截断。 */
+  a.z = Math.min(a.z, (W / 2 - M) / Math.max(1, hw), (H / 2 - M) / Math.max(1, hh));
+
+  if (TM === 2) {
+    /* 酝酿中的下一句：要放在**当前镜头能完整看到**的范围里。
+       如果按它自己的锚点摆，而镜头还指着上一句，两句位置差得远时
+       整句就会被画面边缘截断 —— 看到的就是"只剩半截的字"。 */
+    const rw = Math.max(24, (W / 2 - M) / cam.z - hw);
+    const rh = Math.max(24, (H / 2 - M) / cam.z - hh);
+    a.x = cam.x + a.nx * rw - gcx;
+    a.y = cam.y + a.ny * rh - gcy;
+  } else {
+    /* 当前句：镜头会飞到它上面，所以按归一化坐标铺满合法区间。
+       不能用夹取（Math.max/min）—— 那会把超出范围的锚点全压到边界上，
+       散布塌掉，每行字就挤到一起了。 */
+    const hwz = hw * a.z, hhz = hh * a.z;
+    const x0 = M + hwz - gcx * a.z, x1 = W - M - hwz - gcx * a.z;
+    const y0 = M + hhz - gcy * a.z, y1 = H - M - hhz - gcy * a.z;
+    a.x = x1 > x0 ? x0 + (a.nx * 0.5 + 0.5) * (x1 - x0) : W / 2 - gcx * a.z;
+    a.y = y1 > y0 ? y0 + (a.ny * 0.5 + 0.5) * (y1 - y0) : H / 2 - gcy * a.z;
+  }
+
+  // 每个字的起始时刻
+  const start = new Array(n);
+  for (let c = 0; c < n; c++) {
+    let onset;
+    if (P.byChar && chars && chars[c] && typeof chars[c].t === 'number') onset = chars[c].t;      // YRC 真实时间
+    else if (P.byChar) onset = lineT + (c / n) * lineDur * 0.85;                                   // 均分
+    else onset = lineT;                                                                            // 整句一起
+    start[c] = onset - (c === 0 ? P.lead : P.charLead);
+  }
+  /* 首字先出：整句模式下只让首字按 lead 提前飞，其余字压到句首时刻。
+     逐字模式本身每个字已有自己的 onset，再叠一层会把两种时序搅乱，所以只在整句模式生效。 */
+  if (P.firstLead && !P.byChar) {
+    for (let c = 1; c < n; c++) start[c] = lineT;
+  }
+
+  // 每个字占多少点
+  const byChar = Array.from({ length: n }, () => []);
+  for (let k = 0; k < pc; k++) byChar[owner[k]].push(k);
+
+  // 挑离落点最近的粒子。
+  // 酝酿（TM=2）时**只能从自由粒子里挑**，否则会把正在显示那一句的粒子抢走，
+  // 当前句会突然缺一块。
+  for (let i = 0; i < N; i++) {
+    if (TM === 2 && mode[i] !== 0) { dist[i] = Infinity; order[i] = i; continue; }
+    const dx = px[i] - a.x, dy = py[i] - a.y;
+    dist[i] = dx * dx + dy * dy;
+    order[i] = i;
+  }
+  const arr = Array.from(order).sort((i, j) => dist[i] - dist[j]);
+
+  const K = Math.min(P.textN, N);
+  // 只清掉自己这一组，别把另一组（正在显示 / 正在酝酿）也清了
+  for (let i = 0; i < N; i++) if (mode[i] === TM) mode[i] = 0;
+
+  // 按每个字的点数比例分配粒子
+  let k = 0;
+  for (let c = 0; c < n && k < K; c++) {
+    const list = byChar[c];
+    if (!list.length) continue;
+    const want = Math.max(1, Math.round(K * list.length / pc));
+    for (let j = 0; j < want && k < K; j++, k++) {
+      const i = arr[k];
+      const pi = list[(j * list.length / want) | 0];
+      tx[i] = a.x + pts[pi * 2] + (Math.random() - 0.5) * 1.6;
+      ty[i] = a.y + pts[pi * 2 + 1] + (Math.random() - 0.5) * 1.6;
+      startAt[i] = start[c];
+      mode[i] = TM;
+    }
+  }
+}
+
+/**
+ * 参数里影响字形/落点的那几个改了以后要重排一次。
+ * brewToo=true 时连正在酝酿的下一句一起重排 —— 改字体/成形时序时，
+ * 那一句可能已经在别处组字了，只重排当前句的话它会一直用旧字形/旧时序。
+ * 这个形态没有跨句字形点集缓存，glyphPoints 每次都会重新采样，所以重排即重采。
+ */
+function reflow(brewToo) {
+  if (curIdx >= 0 && lines[curIdx]) {
+    const L = lines[curIdx];
+    const a = anchors[curIdx % anchors.length];
+    assignText(L.text, a, L.chars, L.t, L.dur || 4);
+    cam.tx = a.x; cam.ty = a.y; cam.tz = a.z;
+  }
+  if (brewToo && brewIdx >= 0 && brewIdx !== curIdx && lines[brewIdx]) {
+    const L = lines[brewIdx];
+    const a = anchors[brewIdx % anchors.length];
+    assignText(L.text, a, L.chars, L.t, L.dur || 4, 2);
+  }
+}
+
+const shocks = [];
+const shock = (x, y, p) => shocks.push({ x, y, p, t: 0 });
+
+const hint = document.getElementById('hint');
+let last = performance.now();
+let t0 = 0;
+let lastT = -1;
+let statAt = 0;
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+
+  /* ================= 节奏 =================
+     这里必须分成两件事，混在一起就会"没念完就切"：
+       · curIdx  —— 屏幕上**显示**哪一句。只在 lines[i].t 这一刻切换，
+                    绝不提前，否则上一句会被提前顶掉。
+       · brewIdx —— 在别处**酝酿**哪一句。提前 lead 秒开始，粒子飞过去组字。
+     两句同时在场：你看到上一句还在，下一句已经在旁边慢慢聚起来了。
+     到点镜头"啪"地切过去，那边字已经立好。 */
+  if (lines.length) {
+    if (T < lastT - 0.6) { curIdx = -1; brewIdx = -1; phase = 'idle'; }
+    lastT = T;
+
+    // 显示切换：正好在句首
+    let ci = curIdx;
+    while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+    if (ci !== curIdx) {
+      // 上一句：散开
+      if (curIdx >= 0) {
+        for (let i = 0; i < N; i++) {
+          if (mode[i] !== 1) continue;
+          const dx = px[i] - cam.x, dy = py[i] - cam.y;
+          const l = Math.hypot(dx, dy) || 1;
+          const sp = P.burst * (0.6 + Math.random() * 1.2);
+          vx[i] += (dx / l) * sp; vy[i] += (dy / l) * sp;
+          mode[i] = 0;
+        }
+      }
+      curIdx = ci;
+      // 已经酝酿好的那一组直接转正
+      let promoted = 0;
+      for (let i = 0; i < N; i++) if (mode[i] === 2) { mode[i] = 1; promoted++; }
+      brewIdx = -1;
+      // 没酝酿过（拖了进度条直接跳过来）就当场分配，别让这一句空着
+      if (promoted === 0 && lines[curIdx]) {
+        const L0 = lines[curIdx];
+        assignText(L0.text, anchors[curIdx % anchors.length], L0.chars, L0.t, L0.dur || 4, 1);
+      }
+      const L = lines[curIdx];
+      if (L) {
+        const a = anchors[curIdx % anchors.length];
+        cam.tx = a.x; cam.ty = a.y; cam.tz = a.z;   // 镜头啪地切过去
+        phase = 'form'; phaseT = 0;
+      }
+    }
+
+    // 酝酿：提前 lead 秒把下一句组起来（两句同时在场）
+    const next = curIdx + 1;
+    if (next < lines.length && brewIdx !== next) {
+      const gap = lines[next].t - (lines[curIdx] ? lines[curIdx].t : 0);
+      const lead = Math.min(P.lead, Math.max(0.4, gap * 0.55));
+      if (T >= lines[next].t - lead) {
+        const L = lines[next];
+        const a = anchors[next % anchors.length];
+        assignText(L.text, a, L.chars, L.t, L.dur || 4, 2);
+        brewIdx = next;
+      }
+    }
+    const cur = lines[curIdx];
+    if (cur && phase === 'form') {
+      phaseT += dt;
+      if (phaseT > P.formT) phase = 'hold';
+    }
+    hint.style.opacity = lines.length ? (curIdx >= 0 ? '0' : '1') : '0.5';
+  }
+
+  const ce = 1 - Math.pow(0.0004, dt * P.camK);
+  cam.x += (cam.tx - cam.x) * ce * 0.85;
+  cam.y += (cam.ty - cam.y) * ce * 0.85;
+  cam.z += (cam.tz - cam.z) * ce * 0.6;
+
+  for (const s of shocks) s.t += dt;
+  for (let k = shocks.length - 1; k >= 0; k--) if (shocks[k].t > 0.8) shocks.splice(k, 1);
+
+  /* ---- 物理：没轮到的粒子照旧在流场里飘 ---- */
+  for (let i = 0; i < N; i++) {
+    const on = mode[i] !== 0 && T >= startAt[i];
+    if (on) {
+      const dx = tx[i] - px[i], dy = ty[i] - py[i];
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 0.01) {
+        // 远就全速冲、近就自然减速（d*9 就是减速段）。
+        // 不能按 phase 判断速度：酝酿发生在上一句的 hold 期间，
+        // 那样酝酿中的粒子只会用 340px/s 慢慢爬，开唱时根本到不了位。
+        const want = Math.min(P.fly, d * 9);
+        vx[i] = (dx / d) * want; vy[i] = (dy / d) * want;
+      } else { vx[i] = 0; vy[i] = 0; }
+    } else {
+      const a = flowAngle(px[i], py[i], t0);
+      vx[i] += Math.cos(a) * 34 * dt;
+      vy[i] += Math.sin(a) * 34 * dt;
+      vx[i] *= 0.972; vy[i] *= 0.972;
+    }
+    for (const s of shocks) {
+      const dx = px[i] - s.x, dy = py[i] - s.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 460 * 460 && d2 > 1) {
+        const d = Math.sqrt(d2);
+        const f = s.p * (1 - d / 460) * (1 - s.t / 0.8) * 1100 / d;
+        vx[i] += dx * f * dt; vy[i] += dy * f * dt;
+      }
+    }
+    px[i] += vx[i] * dt; py[i] += vy[i] * dt;
+    if (px[i] - cam.x > 1250) px[i] -= 2500;
+    if (px[i] - cam.x < -1250) px[i] += 2500;
+    if (py[i] - cam.y > 850) py[i] -= 1700;
+    if (py[i] - cam.y < -850) py[i] += 1700;
+  }
+
+  /* ================= 绘制 ================= */
+  ctx.fillStyle = `rgba(5,6,10,${P.trail})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+  const [ar, ag, ab] = accent;
+
+  // 背景流场（含"还没轮到"的组字粒子）
+  for (let b = 0; b < 5; b++) {
+    const al = Math.min(1, (0.34 + 0.16 * b) * P.bg);
+    ctx.strokeStyle = `rgba(${ar},${ag},${ab},${al.toFixed(3)})`;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      if (mode[i] !== 0 && T >= startAt[i]) continue;
+      if (bucket[i] !== b) continue;
+      const sx = w2sX(px[i]), sy = w2sY(py[i]);
+      if (sx < -30 || sx > W + 30 || sy < -30 || sy > H + 30) continue;
+      ctx.moveTo(w2sX(px[i] - vx[i] * 0.085), w2sY(py[i] - vy[i] * 0.085));
+      ctx.lineTo(sx, sy);
+    }
+    ctx.stroke();
+  }
+
+  // 已经轮到的组字粒子
+  const tsz = Math.max(2.3, 3.1 * cam.z);
+  // 当前句
+  ctx.fillStyle = `rgba(${Math.min(255, ar + 130)},${Math.min(255, ag + 125)},${Math.min(255, ab + 90)},0.97)`;
+  for (let i = 0; i < N; i++) {
+    if (mode[i] !== 1 || T < startAt[i]) continue;
+    const sx = w2sX(px[i]), sy = w2sY(py[i]);
+    if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
+    ctx.fillRect(sx - tsz / 2, sy - tsz / 2, tsz, tsz);
+  }
+  // 酝酿中的下一句：暗一档，读得出是"还没轮到"
+  ctx.fillStyle = `rgba(${Math.min(255, ar + 80)},${Math.min(255, ag + 78)},${Math.min(255, ab + 55)},0.52)`;
+  for (let i = 0; i < N; i++) {
+    if (mode[i] !== 2 || T < startAt[i]) continue;
+    const sx = w2sX(px[i]), sy = w2sY(py[i]);
+    if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
+    ctx.fillRect(sx - tsz / 2, sy - tsz / 2, tsz, tsz);
+  }
+  ctx.strokeStyle = `rgba(${Math.min(255, ar + 115)},${Math.min(255, ag + 110)},${Math.min(255, ab + 80)},0.55)`;
+  ctx.lineWidth = 1.7;
+  ctx.beginPath();
+  let trail = false;
+  for (let i = 0; i < N; i++) {
+    if (mode[i] === 0 || T < startAt[i]) continue;
+    if (vx[i] * vx[i] + vy[i] * vy[i] <= 16000) continue;
+    const sx = w2sX(px[i]), sy = w2sY(py[i]);
+    if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
+    ctx.moveTo(w2sX(px[i] - vx[i] * 0.014), w2sY(py[i] - vy[i] * 0.014));
+    ctx.lineTo(sx, sy);
+    trail = true;
+  }
+  if (trail) ctx.stroke();
+
+  ctx.globalCompositeOperation = 'source-over';
+
+  /* ---- 状态栏 ---- */
+  if (!panel.hidden && nowMs - statAt > 240) {
+    statAt = nowMs;
+    const cur = lines[curIdx];
+    const nxt = lines[curIdx + 1];
+    const pct = cur && nxt ? Math.round((T - cur.t) / Math.max(0.01, nxt.t - cur.t) * 100) : 0;
+    pstat.textContent =
+      `现在 ${T.toFixed(2)}s   第 ${curIdx + 1}/${lines.length} 句   ${phase}   逐字=${P.byChar ? '开' : '关'}\n` +
+      (cur ? `本句开唱 ${cur.t.toFixed(2)}s${cur.chars ? '（YRC 逐字）' : '（LRC 均分）'}` : '') +
+      (nxt ? `   下一句 ${nxt.t.toFixed(2)}s（还有 ${(nxt.t - T).toFixed(2)}s）\n` +
+             `本句进度 ${pct}%` : '');
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------------- 调参面板 ---------------- */
+const panel = document.getElementById('panel');
+const rows = document.getElementById('rows');
+const pstat = document.getElementById('pstat');
+
+function fmt(v, step, kind) {
+  if (kind === '开关') return v >= 0.5 ? '开' : '关';
+  const dec = step < 0.01 ? 3 : step < 1 ? (step < 0.1 ? 2 : 1) : 0;
+  return Number(v).toFixed(dec);
+}
+for (const [key, label, min, max, step, kind] of SLIDERS) {
+  const row = document.createElement('div');
+  row.className = 'row' + (kind === '开关' && P[key] >= 0.5 ? ' on' : '');
+  row.innerHTML = `<label>${label}</label>
+    <input type="range" min="${min}" max="${max}" step="${step}" value="${P[key]}">
+    <span class="val">${fmt(P[key], step, kind)}</span>`;
+  const input = row.querySelector('input');
+  const val = row.querySelector('.val');
+  input.addEventListener('input', () => {
+    P[key] = parseFloat(input.value);
+    val.textContent = fmt(P[key], step, kind);
+    row.classList.toggle('on', kind === '开关' && P[key] >= 0.5);
+    saveP();
+    if (key === 'spread') { buildAnchors(); reflow(); }
+    else if (key === 'size' || key === 'textN' || key === 'byChar' || key === 'lead' || key === 'charLead') reflow();
+  });
+  rows.appendChild(row);
+}
+
+function togglePanel() {
+  panel.hidden = !panel.hidden;
+  document.getElementById('dot').style.opacity = panel.hidden ? '' : '0';
+}
+document.getElementById('dot').addEventListener('click', togglePanel);
+document.getElementById('preset').addEventListener('click', () => {
+  Object.assign(P, DEFAULTS);
+  saveP();
+  rows.querySelectorAll('input').forEach((inp, i) => {
+    const [key, , , , step, kind] = SLIDERS[i];
+    inp.value = P[key];
+    const val = inp.parentElement.querySelector('.val');
+    val.textContent = fmt(P[key], step, kind);
+    inp.parentElement.classList.toggle('on', kind === '开关' && P[key] >= 0.5);
+  });
+  // 重置也会把 font/firstLead 带回默认，所以连酝酿句一起重排，别留一句旧字体
+  buildAnchors(); reflow(true);
+});
+
+addEventListener('keydown', (e) => {
+  if (e.key === 'F5' || e.code === 'F5') { e.preventDefault(); togglePanel(); }
+  // 空格暂停/播放。焦点在 iframe 里时父页面收不到键盘事件，只能由舞台转发过去
+  // （和 F5 是同一个道理）。面板打开时也让空格照常工作。
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+/* ---------------- 宿主设置 → 内部参数 ----------------
+   宿主只负责把 {key,value} 推过来，形态这边自己收敛范围并挑正确的内部变量。
+   value 可能来自 localStorage，类型不一定干净，所以数值一律 Number + 夹取。 */
+function applySetting(p) {
+  if (!p || !p.key) return;
+  const key = p.key, value = p.value;
+  if (key === 'font') {
+    P.font = String(value || DEFAULTS.font);
+    reflow(true);            // 字形变了：当前句 + 酝酿句立即重采样，不等重载
+  } else if (key === 'trail') {
+    const n = Number(value);
+    if (isFinite(n)) P.trail = Math.min(0.30, Math.max(0.02, n));   // 下一帧清屏就生效
+  } else if (key === 'fly') {
+    const n = Number(value);
+    if (isFinite(n)) P.fly = Math.min(4000, Math.max(600, n));      // 下一帧物理就生效
+  } else if (key === 'form') {
+    const mode = String(value);
+    if (mode === 'line') { P.byChar = 0; P.firstLead = 0; }         // 整句一起
+    else if (mode === 'first') { P.byChar = 0; P.firstLead = 1; }   // 首字先出
+    else { P.byChar = 1; P.firstLead = 0; }                         // 逐字成形（默认）
+    reflow(true);            // 时序变了要把 startAt 重算，否则这一句还按旧时序飞
+  }
+  saveP();
+}
+
+/* ---------------- 与播放器通信 ---------------- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; brewIdx = -1; phase = 'idle'; lastT = -1;
+    for (let i = 0; i < N; i++) mode[i] = 0;
+    if (p.accent) accent = p.accent;
+    buildAnchors();
+    clockT = 0; clockAt = performance.now();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 震动关闭：踩拍不再打冲击波（粒子流场与镜头飞行不受影响） */
+    if (window.__liziShake !== false) {
+      const a = anchors[Math.max(0, curIdx) % anchors.length];
+      shock(Number.isFinite(a.x) ? a.x : cam.x, Number.isFinite(a.y) ? a.y : cam.y, 0.30 + (d.payload.level || 0) * 0.45);
+    }
+  } else if (d.type === 'panel') {
+    togglePanel();
+  } else if (d.type === 'setting') {
+    applySetting(d.payload);
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+window.__stage = () => {
+  let cur = 0, brew = 0;
+  for (let i = 0; i < N; i++) {
+    if (mode[i] === 1 && now() >= startAt[i]) cur++;
+    else if (mode[i] === 2 && now() >= startAt[i]) brew++;
+  }
+  return { lines: lines.length, curIdx, brewIdx, phase, cur, brew, P, t: +now().toFixed(2) };
+};
+</script>
+</body>
+</html>
