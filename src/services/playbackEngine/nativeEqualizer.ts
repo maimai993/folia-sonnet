@@ -150,6 +150,26 @@ const buildSettings = (): NativeEqualizerSettings => {
             ceilingDb: console_.limiter.ceilingDb,
             releaseMs: console_.limiter.releaseMs,
         },
+        // 母带块整份发过去：损失补偿 + 九项修复/塑造/增强全在里面，原生对缺席字段按中性兜底。
+        mastering: {
+            compensation: { ...console_.mastering.compensation },
+            noiseGate: { ...console_.mastering.noiseGate },
+            deEsser: { ...console_.mastering.deEsser },
+            dePlosive: { ...console_.mastering.dePlosive },
+            bassBoost: { ...console_.mastering.bassBoost },
+            exciter: { ...console_.mastering.exciter },
+            transient: { ...console_.mastering.transient },
+            tone: { ...console_.mastering.tone },
+            loudness: { ...console_.mastering.loudness },
+            balance: { ...console_.mastering.balance },
+            // 工作室块：四大方向整份发过去，原生对缺席字段按中性兜底。
+            studio: {
+                normalize: { ...console_.mastering.studio.normalize },
+                restore: { ...console_.mastering.studio.restore },
+                advanced: { ...console_.mastering.studio.advanced },
+                scene: { ...console_.mastering.studio.scene },
+            },
+        },
         glideMs: isModCurve ? MOD_GLIDE_MS : USER_GLIDE_MS,
     };
 };

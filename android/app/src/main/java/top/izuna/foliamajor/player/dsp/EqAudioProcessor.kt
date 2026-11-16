@@ -76,6 +76,8 @@ class EqAudioProcessor(
     private val saturation = SaturationStage()
     private val stereo = StereoStage()
     private val reverb = ReverbStage()
+    private val mastering = MasteringStage()
+    private val studio = StudioStage()
     private val spectrum = SpectrumAnalyzer()
     private val limiter = LookaheadLimiter()
     private val pcm = Pcm16Codec()
@@ -123,6 +125,8 @@ class EqAudioProcessor(
         saturation.configure(sampleRate)
         stereo.configure(sampleRate)
         reverb.configure(sampleRate, channels)
+        mastering.configure(sampleRate, channels)
+        studio.configure(sampleRate, channels)
         spectrum.configure(sampleRate)
         dynamics.configure(sampleRate, DSP_BLOCK_FRAMES)
         limiter.configure(sampleRate, channels)
@@ -172,9 +176,12 @@ class EqAudioProcessor(
 
         val sampleCount = frames * channels
 
+        // A/B 对比：工作室里的 compare 打开时，整条链旁通，直接听原声（频谱照常显示）。
+        // 这样用户能在「调音后」与「原声」间无缝切换，判断调音到底有没有变好听。
+        val abCompare = settings.mastering.studio.scene.compare
         // 关掉、或打开但全平且没有音效：按字节直通，输出与输入逐字节相同。
         // 频谱是「看」不是「听」，直通时照样取样 —— 否则关了效果就看不到曲线，很奇怪。
-        if (!settings.enabled || settings.isFlat()) {
+        if (!settings.enabled || abCompare || settings.isFlat()) {
             AudioPipelineTelemetry.noteDspPassthroughFrames(frames)
             if (state.spectrumEnabled) {
                 ensureScratch(sampleCount)
@@ -258,6 +265,8 @@ class EqAudioProcessor(
         saturation.reset()
         stereo.reset()
         reverb.reset()
+        mastering.reset()
+        studio.reset()
         spectrum.reset()
         limiter.reset()
         carrySize = 0
@@ -324,6 +333,14 @@ class EqAudioProcessor(
 
         // ⑧ 混响：新参数优先，没开时退回 Web 的 space
         reverb.process(scratch, offset, blockFrames, channels, settings.space, settings.reverb)
+
+        // ⑧.5 母带台：混响之后、限幅之前。修复/塑造/增强十项，其中损失补偿按最终
+        //      输出电平把响度补回 —— 必须在这里（限幅之前），补完再由限幅兜住峰值。
+        mastering.process(scratch, offset, blockFrames, channels, settings.mastering)
+
+        // ⑧.6 工作室台：母带之后、限幅之前。响度标准化 / 修复 / 进阶效果 / 智能场景。
+        //      标准化把整曲推向目标响度，同样在限幅前，补完由限幅兜峰值。
+        studio.process(scratch, offset, blockFrames, channels, settings.mastering.studio)
 
         // ⑨ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
         limiter.process(scratch, offset, blockFrames, channels)

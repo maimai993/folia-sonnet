@@ -26,6 +26,8 @@ import CompressorPane from './console/CompressorPane';
 import ReverbPane from './console/ReverbPane';
 import PostEqPane from './console/PostEqPane';
 import SaturationPane from './console/SaturationPane';
+import MasteringPane from './console/MasteringPane';
+import StudioPane from './console/StudioPane';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useAudioProfilesStore } from '../../stores/useAudioProfilesStore';
 
@@ -47,7 +49,7 @@ type AudioEqualizerDialogProps = {
     isDaylight: boolean;
 };
 
-type ConsoleTabId = 'equalizer' | 'compressor' | 'reverb' | 'postEq' | 'saturation';
+type ConsoleTabId = 'equalizer' | 'compressor' | 'reverb' | 'postEq' | 'saturation' | 'mastering' | 'studio';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
 
@@ -241,6 +243,8 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                             { value: 'reverb', label: t('ui.consoleTabReverb') },
                             { value: 'postEq', label: t('ui.consoleTabPostEq') },
                             { value: 'saturation', label: t('ui.consoleTabSaturation') },
+                            { value: 'mastering', label: t('ui.consoleTabMastering') },
+                            { value: 'studio', label: t('ui.consoleTabStudio') },
                         ]}
                         onTabChange={value => setTab(value as typeof tab)}
                     />
@@ -274,6 +278,8 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     {tab === 'reverb' && <ReverbPane />}
                     {tab === 'postEq' && <PostEqPane />}
                     {tab === 'saturation' && <SaturationPane />}
+                    {tab === 'mastering' && <MasteringPane />}
+                    {tab === 'studio' && <StudioPane />}
                 </div>
             </div>
         </Sheet>

@@ -154,6 +154,206 @@ export type AudioConsolePostEq = {
     globalGainDb: number;
 };
 
+/**
+ * 损失补偿（Opening-tuning loss compensation）。
+ *
+ * 开启调音链后，多段压缩、后置 EQ 的负增益、饱和的出口衰减、声场折中等处理会让整体
+ * 响度比「关掉调音」时低一截 —— 用户的主观感受是「一开调音声音就变小、变闷」。
+ *
+ * 这一块在链末（限幅之前）做慢速自动增益：持续测量输出电平，把损失掉的响度补回去，
+ * 同时按 amount 只补一部分（保留处理本身的动态），并用 maxGainDb 封顶，避免把底噪一起放大。
+ */
+export type AudioConsoleLossCompensation = {
+    enabled: boolean;
+    /** 补偿强度 0 ~ 1：1 表示把测得的损失全额补回，0.7 左右最自然。 */
+    amount: number;
+    /** 最大补偿增益 0 ~ 12 dB：再吵也不放超过它，防止噪声被顶起来。 */
+    maxGainDb: number;
+    /** AGC 响应时间 50 ~ 800 ms：越小跟得越紧，太大跟不上，太小会「喘」。 */
+    responseMs: number;
+};
+
+/** 噪声门：把低于阈值的底噪/嘶声压下去，只让乐器与人的声音通过。 */
+export type AudioConsoleNoiseGate = {
+    enabled: boolean;
+    /** 门限 -80 ~ -20 dBFS：低于它的信号被衰减。 */
+    thresholdDb: number;
+    /** 启动 0.5 ~ 50 ms：信号越过门限后门打开的速度。 */
+    attackMs: number;
+    /** 释放 20 ~ 600 ms：信号跌回门限后门关闭的速度，太短会「掐字」。 */
+    releaseMs: number;
+    /** 门关时的衰减量 -60 ~ -6 dB：不是完全静音，留一点底噪更自然。 */
+    reductionDb: number;
+};
+
+/** 去齿音：对 4 ~ 10 kHz 的「嘶 / 呲」做动态压缩，让人声更顺耳。 */
+export type AudioConsoleDeEsser = {
+    enabled: boolean;
+    /** 检测中心频率 4000 ~ 10000 Hz。 */
+    frequencyHz: number;
+    /** 阈值 -48 ~ 0 dB：齿音超过它才开始压。 */
+    thresholdDb: number;
+    /** 压缩比 1 ~ 10。 */
+    ratio: number;
+};
+
+/** 低频增强：只抬 40 ~ 250 Hz 的一段，给薄声音补回量感，不碰中频。 */
+export type AudioConsoleBassBoost = {
+    enabled: boolean;
+    /** 提升量 0 ~ 12 dB。 */
+    gainDb: number;
+    /** 中心频率 40 ~ 250 Hz。 */
+    frequencyHz: number;
+};
+
+/** 声道平衡：-1 全左、0 居中、1 全右。 */
+export type AudioConsoleBalance = {
+    enabled: boolean;
+    /** -1 ~ 1。 */
+    value: number;
+};
+
+/**
+ * 音色塑造：四个「一个旋钮调一种听感」的音色滑杆。
+ *
+ * 名字借自母带处理（都是行业里的常用说法），但每个都只是 0 ~ 6 dB 的一根推杆，
+ * 不用懂中心频率与 Q 也能用 —— 想要「更通透」就推空气感，想要「人声更靠前」就推临场感。
+ * 内部映射到固定的滤波器（见原生 MasteringStage），用户看不到这些细节。
+ */
+export type AudioConsoleToneShaping = {
+    /** 空气感：9 kHz 高频搁架，越大越通透开扬。 */
+    air: number;
+    /** 临场感：3 kHz 钟形，越大人声与乐器越靠前、越清晰。 */
+    presence: number;
+    /** 温暖度：220 Hz 钟形，越大越厚、越有模拟味。 */
+    warmth: number;
+    /** 清晰度：削 350 Hz 附近的浑浊，越大人声越干净（内部是负增益）。 */
+    clarity: number;
+};
+
+/**
+ * 谐波激励（Exciter）：给高频补一点「泛音的亮度」，让声音听起来更贵、更清晰。
+ *
+ * 和音色塑造里的「空气感」不同：空气感只是抬高 9 kHz 的既有频率，激励是**生成**原本
+ * 没有的谐波（对高频做轻微饱和），所以即使源文件本身高频不多，也能听出"开了窗"的感觉。
+ * 只有一个 amount 旋钮，内部固定激励频率与驱动量，用户不必懂谐波是什么。
+ */
+export type AudioConsoleExciter = {
+    enabled: boolean;
+    /** 激励强度 0 ~ 1：越大泛音越多。 */
+    amount: number;
+    /** 干湿比 0 ~ 1：激励信号混回多少。 */
+    mix: number;
+};
+
+/**
+ * 瞬态塑形（Transient）：单独调「起音的冲击力」，不动延音。
+ *
+ * 往上推，鼓点和拨弦更有力量（咬字更清楚）；往下压，声音更柔、更平顺。
+ * 只有一根 -1 ~ 1 的推杆，正数是增强、负数是柔化，内部用包络的上升沿做增益。
+ */
+export type AudioConsoleTransient = {
+    enabled: boolean;
+    /** -1 全柔化 ~ 0 不动 ~ 1 全增强。 */
+    amount: number;
+};
+
+/**
+ * 等响度（Loudness）：小音量时人耳听不到高低两头，这一项把它们补回来。
+ *
+ * 这是 Fletcher-Munson 曲线的实际用途：夜里把音量拧小，低音消失、细节也没了 ——
+ * 打开它，低频与高频按曲线抬起，小声听也还丰满。一个 amount 旋钮。
+ */
+export type AudioConsoleLoudness = {
+    enabled: boolean;
+    /** 补偿强度 0 ~ 1。 */
+    amount: number;
+};
+
+/**
+ * 去喷麦（De-plosive）：压掉人声里「扑 / 噗」这种低频气流冲击。
+ *
+ * 去齿音管 4 ~ 10 kHz 的「嘶」，它管的是 200 Hz 以下的「噗」——两种最常见的录音瑕疵，
+ * 各管一段。只有一个 reduction 旋钮，内部固定检测频段与阈值。
+ */
+export type AudioConsoleDePlosive = {
+    enabled: boolean;
+    /** 衰减量 -24 ~ 0 dB：负得越多压得越狠。 */
+    reductionDb: number;
+};
+
+/**
+ * 工作室 · 响度标准化：整曲电平缓慢推向目标响度。
+ * targetLufs 是感知目标（-20 轻 ~ -9 响），truePeak 留 1dB 余量防解码削波。
+ */
+export type AudioConsoleNormalize = {
+    enabled: boolean;
+    /** -20 ~ -9 LUFS（用 RMS 近似）。 */
+    targetLufs: number;
+    /** 真峰值保护。 */
+    truePeak: boolean;
+};
+
+/** 工作室 · 音频修复：去咔嗒 / 去嗡声 / 降噪，三类瑕疵各自独立。 */
+export type AudioConsoleRestore = {
+    declick: boolean;
+    hum: boolean;
+    denoise: boolean;
+    /** 修复强度 0 ~ 1。 */
+    amount: number;
+};
+
+/** 工作室 · 进阶效果：动态 EQ / M/S 声场 / 展宽 / 人声增强。 */
+export type AudioConsoleAdvanced = {
+    dynamicEq: boolean;
+    /** 动态 EQ 中心频率 80 ~ 400 Hz。 */
+    dynamicEqFreq: number;
+    /** 衰减量 0 ~ 12 dB。 */
+    dynamicEqAmount: number;
+    /** M/S 宽度 -1 ~ 1。 */
+    msWidth: number;
+    /** 声场展宽 0 ~ 1。 */
+    widen: number;
+    /** 人声增强 0 ~ 1。 */
+    vocalBoost: number;
+};
+
+/** 工作室 · 智能场景：曲风预设 / A/B 对比 / 耳机校准。 */
+export type AudioConsoleScene = {
+    /** flat/pop/rock/jazz/classical/electronic/vocal。 */
+    genre: 'flat' | 'pop' | 'rock' | 'jazz' | 'classical' | 'electronic' | 'vocal';
+    /** A/B：打开时整条链旁通，直接听原声。 */
+    compare: boolean;
+    /** flat/airpods/sony/sennheiser。 */
+    headphone: 'flat' | 'airpods' | 'sony' | 'sennheiser';
+    /** 场景微调强度 0 ~ 1。 */
+    amount: number;
+};
+
+/** 工作室块：四大方向 12 项，可缺省。 */
+export type AudioConsoleStudio = {
+    normalize: AudioConsoleNormalize;
+    restore: AudioConsoleRestore;
+    advanced: AudioConsoleAdvanced;
+    scene: AudioConsoleScene;
+};
+
+/** 母带处理块：损失补偿 + 九项修复/塑造/增强效果，作为一个可缺省的扩展块推给原生。 */
+export type AudioConsoleMastering = {
+    compensation: AudioConsoleLossCompensation;
+    noiseGate: AudioConsoleNoiseGate;
+    deEsser: AudioConsoleDeEsser;
+    dePlosive: AudioConsoleDePlosive;
+    bassBoost: AudioConsoleBassBoost;
+    exciter: AudioConsoleExciter;
+    transient: AudioConsoleTransient;
+    tone: AudioConsoleToneShaping;
+    loudness: AudioConsoleLoudness;
+    balance: AudioConsoleBalance;
+    /** 工作室块：四大方向 12 项，可缺省。 */
+    studio: AudioConsoleStudio;
+};
+
 export type AudioConsoleSettings = {
     reverb: AudioConsoleReverb;
     compressor: AudioConsoleCompressor;
@@ -162,6 +362,8 @@ export type AudioConsoleSettings = {
     stereo: AudioConsoleStereo;
     saturation: AudioConsoleSaturation;
     limiter: AudioConsoleLimiter;
+    /** 可缺省：老存档没有这一块时按中性补齐（全部关闭）。 */
+    mastering: AudioConsoleMastering;
 };
 
 /**
@@ -222,6 +424,74 @@ export const AUDIO_CONSOLE_LIMITER_CEILING_MAX = 0;
 export const AUDIO_CONSOLE_LIMITER_RELEASE_MIN = 40;
 export const AUDIO_CONSOLE_LIMITER_RELEASE_MAX = 500;
 
+// —— 母带块：损失补偿与四个新增效果的取值范围 ——
+export const AUDIO_CONSOLE_COMP_AMOUNT_MIN = 0;
+export const AUDIO_CONSOLE_COMP_AMOUNT_MAX = 1;
+export const AUDIO_CONSOLE_COMP_MAX_GAIN_MIN = 0;
+export const AUDIO_CONSOLE_COMP_MAX_GAIN_MAX = 12;
+export const AUDIO_CONSOLE_COMP_RESPONSE_MIN = 50;
+export const AUDIO_CONSOLE_COMP_RESPONSE_MAX = 800;
+
+export const AUDIO_CONSOLE_GATE_THRESHOLD_MIN = -80;
+export const AUDIO_CONSOLE_GATE_THRESHOLD_MAX = -20;
+export const AUDIO_CONSOLE_GATE_ATTACK_MIN = 0.5;
+export const AUDIO_CONSOLE_GATE_ATTACK_MAX = 50;
+export const AUDIO_CONSOLE_GATE_RELEASE_MIN = 20;
+export const AUDIO_CONSOLE_GATE_RELEASE_MAX = 600;
+export const AUDIO_CONSOLE_GATE_REDUCTION_MIN = -60;
+export const AUDIO_CONSOLE_GATE_REDUCTION_MAX = -6;
+
+export const AUDIO_CONSOLE_DEESS_FREQ_MIN = 4000;
+export const AUDIO_CONSOLE_DEESS_FREQ_MAX = 10000;
+export const AUDIO_CONSOLE_DEESS_THRESHOLD_MIN = -48;
+export const AUDIO_CONSOLE_DEESS_THRESHOLD_MAX = 0;
+export const AUDIO_CONSOLE_DEESS_RATIO_MIN = 1;
+export const AUDIO_CONSOLE_DEESS_RATIO_MAX = 10;
+
+export const AUDIO_CONSOLE_BASS_GAIN_MIN = 0;
+export const AUDIO_CONSOLE_BASS_GAIN_MAX = 12;
+export const AUDIO_CONSOLE_BASS_FREQ_MIN = 40;
+export const AUDIO_CONSOLE_BASS_FREQ_MAX = 250;
+
+export const AUDIO_CONSOLE_TONE_MIN = 0;
+export const AUDIO_CONSOLE_TONE_MAX = 6;
+
+export const AUDIO_CONSOLE_EXCITER_AMOUNT_MIN = 0;
+export const AUDIO_CONSOLE_EXCITER_AMOUNT_MAX = 1;
+
+export const AUDIO_CONSOLE_TRANSIENT_MIN = -1;
+export const AUDIO_CONSOLE_TRANSIENT_MAX = 1;
+
+export const AUDIO_CONSOLE_LOUDNESS_MIN = 0;
+export const AUDIO_CONSOLE_LOUDNESS_MAX = 1;
+
+export const AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MIN = -24;
+export const AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MAX = 0;
+
+export const AUDIO_CONSOLE_BALANCE_MIN = -1;
+export const AUDIO_CONSOLE_BALANCE_MAX = 1;
+
+// —— 工作室块取值范围 ——
+export const AUDIO_CONSOLE_TARGET_LUFS_MIN = -20;
+export const AUDIO_CONSOLE_TARGET_LUFS_MAX = -9;
+export const AUDIO_CONSOLE_RESTORE_AMOUNT_MIN = 0;
+export const AUDIO_CONSOLE_RESTORE_AMOUNT_MAX = 1;
+export const AUDIO_CONSOLE_DYNEQ_FREQ_MIN = 80;
+export const AUDIO_CONSOLE_DYNEQ_FREQ_MAX = 400;
+export const AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN = 0;
+export const AUDIO_CONSOLE_DYNEQ_AMOUNT_MAX = 12;
+export const AUDIO_CONSOLE_MSWIDTH_MIN = -1;
+export const AUDIO_CONSOLE_MSWIDTH_MAX = 1;
+export const AUDIO_CONSOLE_WIDEN_MIN = 0;
+export const AUDIO_CONSOLE_WIDEN_MAX = 1;
+export const AUDIO_CONSOLE_VOCAL_MIN = 0;
+export const AUDIO_CONSOLE_VOCAL_MAX = 1;
+export const AUDIO_CONSOLE_SCENE_AMOUNT_MIN = 0;
+export const AUDIO_CONSOLE_SCENE_AMOUNT_MAX = 1;
+
+export const AUDIO_CONSOLE_GENRES = ['flat', 'pop', 'rock', 'jazz', 'classical', 'electronic', 'vocal'] as const;
+export const AUDIO_CONSOLE_HEADPHONES = ['flat', 'airpods', 'sony', 'sennheiser'] as const;
+
 /** 出厂值的每段压缩参数：低频慢一点，空气段快一点 —— 和耳朵对各频段瞬态的容忍度一致。 */
 const BAND_DEFAULTS: Record<AudioConsoleCompressorBandId, AudioConsoleCompressorBand> = {
     low: { enabled: true, thresholdDb: -16, ratio: 1.5, attackMs: 5, releaseMs: 60, makeupDb: 0, kneeDb: 6, mix: 1 },
@@ -275,6 +545,86 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
     limiter: {
         ceilingDb: -0.3,
         releaseMs: 120,
+    },
+    mastering: {
+        compensation: {
+            enabled: false,
+            amount: 0.7,
+            maxGainDb: 6,
+            responseMs: 300,
+        },
+        noiseGate: {
+            enabled: false,
+            thresholdDb: -50,
+            attackMs: 5,
+            releaseMs: 120,
+            reductionDb: -24,
+        },
+        deEsser: {
+            enabled: false,
+            frequencyHz: 6500,
+            thresholdDb: -24,
+            ratio: 4,
+        },
+        dePlosive: {
+            enabled: false,
+            reductionDb: -12,
+        },
+        bassBoost: {
+            enabled: false,
+            gainDb: 4,
+            frequencyHz: 90,
+        },
+        exciter: {
+            enabled: false,
+            amount: 0.4,
+            mix: 0.35,
+        },
+        transient: {
+            enabled: false,
+            amount: 0.5,
+        },
+        tone: {
+            air: 0,
+            presence: 0,
+            warmth: 0,
+            clarity: 0,
+        },
+        loudness: {
+            enabled: false,
+            amount: 0.5,
+        },
+        balance: {
+            enabled: false,
+            value: 0,
+        },
+        studio: {
+            normalize: {
+                enabled: false,
+                targetLufs: -14,
+                truePeak: true,
+            },
+            restore: {
+                declick: false,
+                hum: false,
+                denoise: false,
+                amount: 0.5,
+            },
+            advanced: {
+                dynamicEq: false,
+                dynamicEqFreq: 180,
+                dynamicEqAmount: 4,
+                msWidth: 0,
+                widen: 0,
+                vocalBoost: 0,
+            },
+            scene: {
+                genre: 'flat',
+                compare: false,
+                headphone: 'flat',
+                amount: 0.6,
+            },
+        },
     },
 };
 
@@ -351,6 +701,116 @@ const readGains = (value: unknown): number[] => {
     return Array.from({ length: 10 }, (_, index) => clamp(value[index], -12, 12, 0));
 };
 
+/**
+ * 母带块的归一化：老存档没有 mastering 时整块按出厂值补齐。
+ *
+ * 与其余几块一样，第一件事永远是「确认它是个对象」——被手改过的存档可能把它写成数组或数字，
+ * 直接读字段会抛异常，让整个调音台打不开。
+ */
+const normalizeMastering = (value: unknown): AudioConsoleMastering => {
+    const root = asRecord(value);
+    const compensation = asRecord(root.compensation);
+    const noiseGate = asRecord(root.noiseGate);
+    const deEsser = asRecord(root.deEsser);
+    const dePlosive = asRecord(root.dePlosive);
+    const bassBoost = asRecord(root.bassBoost);
+    const exciter = asRecord(root.exciter);
+    const transient = asRecord(root.transient);
+    const tone = asRecord(root.tone);
+    const loudness = asRecord(root.loudness);
+    const balance = asRecord(root.balance);
+    const studio = asRecord(root.studio);
+    const normalize = asRecord(studio.normalize);
+    const restore = asRecord(studio.restore);
+    const advanced = asRecord(studio.advanced);
+    const scene = asRecord(studio.scene);
+    const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS.mastering;
+    return {
+        compensation: {
+            enabled: readBoolean(compensation.enabled, defaults.compensation.enabled),
+            amount: clamp(compensation.amount, AUDIO_CONSOLE_COMP_AMOUNT_MIN, AUDIO_CONSOLE_COMP_AMOUNT_MAX, defaults.compensation.amount),
+            maxGainDb: clamp(compensation.maxGainDb, AUDIO_CONSOLE_COMP_MAX_GAIN_MIN, AUDIO_CONSOLE_COMP_MAX_GAIN_MAX, defaults.compensation.maxGainDb),
+            responseMs: clamp(compensation.responseMs, AUDIO_CONSOLE_COMP_RESPONSE_MIN, AUDIO_CONSOLE_COMP_RESPONSE_MAX, defaults.compensation.responseMs),
+        },
+        noiseGate: {
+            enabled: readBoolean(noiseGate.enabled, defaults.noiseGate.enabled),
+            thresholdDb: clamp(noiseGate.thresholdDb, AUDIO_CONSOLE_GATE_THRESHOLD_MIN, AUDIO_CONSOLE_GATE_THRESHOLD_MAX, defaults.noiseGate.thresholdDb),
+            attackMs: clamp(noiseGate.attackMs, AUDIO_CONSOLE_GATE_ATTACK_MIN, AUDIO_CONSOLE_GATE_ATTACK_MAX, defaults.noiseGate.attackMs),
+            releaseMs: clamp(noiseGate.releaseMs, AUDIO_CONSOLE_GATE_RELEASE_MIN, AUDIO_CONSOLE_GATE_RELEASE_MAX, defaults.noiseGate.releaseMs),
+            reductionDb: clamp(noiseGate.reductionDb, AUDIO_CONSOLE_GATE_REDUCTION_MIN, AUDIO_CONSOLE_GATE_REDUCTION_MAX, defaults.noiseGate.reductionDb),
+        },
+        deEsser: {
+            enabled: readBoolean(deEsser.enabled, defaults.deEsser.enabled),
+            frequencyHz: clamp(deEsser.frequencyHz, AUDIO_CONSOLE_DEESS_FREQ_MIN, AUDIO_CONSOLE_DEESS_FREQ_MAX, defaults.deEsser.frequencyHz),
+            thresholdDb: clamp(deEsser.thresholdDb, AUDIO_CONSOLE_DEESS_THRESHOLD_MIN, AUDIO_CONSOLE_DEESS_THRESHOLD_MAX, defaults.deEsser.thresholdDb),
+            ratio: clamp(deEsser.ratio, AUDIO_CONSOLE_DEESS_RATIO_MIN, AUDIO_CONSOLE_DEESS_RATIO_MAX, defaults.deEsser.ratio),
+        },
+        dePlosive: {
+            enabled: readBoolean(dePlosive.enabled, defaults.dePlosive.enabled),
+            reductionDb: clamp(dePlosive.reductionDb, AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MIN, AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MAX, defaults.dePlosive.reductionDb),
+        },
+        bassBoost: {
+            enabled: readBoolean(bassBoost.enabled, defaults.bassBoost.enabled),
+            gainDb: clamp(bassBoost.gainDb, AUDIO_CONSOLE_BASS_GAIN_MIN, AUDIO_CONSOLE_BASS_GAIN_MAX, defaults.bassBoost.gainDb),
+            frequencyHz: clamp(bassBoost.frequencyHz, AUDIO_CONSOLE_BASS_FREQ_MIN, AUDIO_CONSOLE_BASS_FREQ_MAX, defaults.bassBoost.frequencyHz),
+        },
+        exciter: {
+            enabled: readBoolean(exciter.enabled, defaults.exciter.enabled),
+            amount: clamp(exciter.amount, AUDIO_CONSOLE_EXCITER_AMOUNT_MIN, AUDIO_CONSOLE_EXCITER_AMOUNT_MAX, defaults.exciter.amount),
+            mix: clamp(exciter.mix, 0, 1, defaults.exciter.mix),
+        },
+        transient: {
+            enabled: readBoolean(transient.enabled, defaults.transient.enabled),
+            amount: clamp(transient.amount, AUDIO_CONSOLE_TRANSIENT_MIN, AUDIO_CONSOLE_TRANSIENT_MAX, defaults.transient.amount),
+        },
+        tone: {
+            air: clamp(tone.air, AUDIO_CONSOLE_TONE_MIN, AUDIO_CONSOLE_TONE_MAX, defaults.tone.air),
+            presence: clamp(tone.presence, AUDIO_CONSOLE_TONE_MIN, AUDIO_CONSOLE_TONE_MAX, defaults.tone.presence),
+            warmth: clamp(tone.warmth, AUDIO_CONSOLE_TONE_MIN, AUDIO_CONSOLE_TONE_MAX, defaults.tone.warmth),
+            clarity: clamp(tone.clarity, AUDIO_CONSOLE_TONE_MIN, AUDIO_CONSOLE_TONE_MAX, defaults.tone.clarity),
+        },
+        loudness: {
+            enabled: readBoolean(loudness.enabled, defaults.loudness.enabled),
+            amount: clamp(loudness.amount, AUDIO_CONSOLE_LOUDNESS_MIN, AUDIO_CONSOLE_LOUDNESS_MAX, defaults.loudness.amount),
+        },
+        balance: {
+            enabled: readBoolean(balance.enabled, defaults.balance.enabled),
+            value: clamp(balance.value, AUDIO_CONSOLE_BALANCE_MIN, AUDIO_CONSOLE_BALANCE_MAX, defaults.balance.value),
+        },
+        studio: {
+            normalize: {
+                enabled: readBoolean(normalize.enabled, defaults.studio.normalize.enabled),
+                targetLufs: clamp(normalize.targetLufs, AUDIO_CONSOLE_TARGET_LUFS_MIN, AUDIO_CONSOLE_TARGET_LUFS_MAX, defaults.studio.normalize.targetLufs),
+                truePeak: readBoolean(normalize.truePeak, defaults.studio.normalize.truePeak),
+            },
+            restore: {
+                declick: readBoolean(restore.declick, defaults.studio.restore.declick),
+                hum: readBoolean(restore.hum, defaults.studio.restore.hum),
+                denoise: readBoolean(restore.denoise, defaults.studio.restore.denoise),
+                amount: clamp(restore.amount, AUDIO_CONSOLE_RESTORE_AMOUNT_MIN, AUDIO_CONSOLE_RESTORE_AMOUNT_MAX, defaults.studio.restore.amount),
+            },
+            advanced: {
+                dynamicEq: readBoolean(advanced.dynamicEq, defaults.studio.advanced.dynamicEq),
+                dynamicEqFreq: clamp(advanced.dynamicEqFreq, AUDIO_CONSOLE_DYNEQ_FREQ_MIN, AUDIO_CONSOLE_DYNEQ_FREQ_MAX, defaults.studio.advanced.dynamicEqFreq),
+                dynamicEqAmount: clamp(advanced.dynamicEqAmount, AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN, AUDIO_CONSOLE_DYNEQ_AMOUNT_MAX, defaults.studio.advanced.dynamicEqAmount),
+                msWidth: clamp(advanced.msWidth, AUDIO_CONSOLE_MSWIDTH_MIN, AUDIO_CONSOLE_MSWIDTH_MAX, defaults.studio.advanced.msWidth),
+                widen: clamp(advanced.widen, AUDIO_CONSOLE_WIDEN_MIN, AUDIO_CONSOLE_WIDEN_MAX, defaults.studio.advanced.widen),
+                vocalBoost: clamp(advanced.vocalBoost, AUDIO_CONSOLE_VOCAL_MIN, AUDIO_CONSOLE_VOCAL_MAX, defaults.studio.advanced.vocalBoost),
+            },
+            scene: {
+                genre: AUDIO_CONSOLE_GENRES.includes(scene.genre as typeof AUDIO_CONSOLE_GENRES[number])
+                    ? scene.genre as typeof AUDIO_CONSOLE_GENRES[number]
+                    : defaults.studio.scene.genre,
+                compare: readBoolean(scene.compare, defaults.studio.scene.compare),
+                headphone: AUDIO_CONSOLE_HEADPHONES.includes(scene.headphone as typeof AUDIO_CONSOLE_HEADPHONES[number])
+                    ? scene.headphone as typeof AUDIO_CONSOLE_HEADPHONES[number]
+                    : defaults.studio.scene.headphone,
+                amount: clamp(scene.amount, AUDIO_CONSOLE_SCENE_AMOUNT_MIN, AUDIO_CONSOLE_SCENE_AMOUNT_MAX, defaults.studio.scene.amount),
+            },
+        },
+    };
+};
+
 /** 把存档里读到的（可能是旧版本、可能是手改过的）设置整理成一份完整合法的设置。 */
 export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSettings => {
     const root = asRecord(value);
@@ -363,6 +823,8 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
     const limiter = asRecord(root.limiter);
     const bands = asRecord(compressor.bands);
     const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS;
+    // 老存档没有 mastering 时整块按出厂值补齐；新存档则逐字段夹紧，防止手改的数值越界。
+    const mastering = normalizeMastering(root.mastering);
     // 阻尼与预延迟缺席时按预设兜底：旧存档里这两个字段还不存在，而不同预设的
     // 「应该有」的数值不一样，用统一默认值会让大教堂听起来像出厂。
     const preset = readPreset(reverb.preset);
@@ -419,6 +881,7 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             ceilingDb: clamp(limiter.ceilingDb, AUDIO_CONSOLE_LIMITER_CEILING_MIN, AUDIO_CONSOLE_LIMITER_CEILING_MAX, defaults.limiter.ceilingDb),
             releaseMs: clamp(limiter.releaseMs, AUDIO_CONSOLE_LIMITER_RELEASE_MIN, AUDIO_CONSOLE_LIMITER_RELEASE_MAX, defaults.limiter.releaseMs),
         },
+        mastering,
     };
 };
 
