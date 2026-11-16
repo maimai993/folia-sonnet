@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>353 · ACID LIME</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #8ACE00; color: #0a0a0a;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+                 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+  :root { --acid: #8ACE00; --ink: #0a0a0a; }
+
+  #wrap {
+    position: fixed; inset: 0; overflow: hidden; background: var(--acid);
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto; isolation: isolate;
+  }
+  #bg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+  .grain {
+    position: absolute; inset: -2%; width: 104%; height: 104%; z-index: 1;
+    object-fit: cover; pointer-events: none; opacity: 0.34;
+    mix-blend-mode: multiply; image-rendering: pixelated;
+  }
+
+  .bar {
+    position: relative; z-index: 6; display: flex; align-items: stretch;
+    border-bottom: 3px solid var(--ink); background: var(--acid);
+    font-size: clamp(9px, 0.82vw, 12px); letter-spacing: 0.14em;
+    text-transform: uppercase; font-weight: 700;
+  }
+  .bar > * {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 14px; border-right: 2px solid var(--ink); min-width: 0;
+  }
+  .bar .badge { background: var(--ink); color: var(--acid); letter-spacing: 0.2em; white-space: nowrap; }
+  .bar .stamp { line-height: 1.2; letter-spacing: 0.1em; white-space: nowrap; }
+  .bar .song {
+    flex: 1; gap: 10px; text-transform: none; letter-spacing: 0.01em;
+    font-weight: 600; font-size: clamp(11px, 1.15vw, 17px);
+  }
+  .bar .song b, .bar .song em {
+    font-style: normal; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bar .song b { font-weight: 800; }
+  .bar .song em { opacity: 0.55; font-weight: 500; }
+  .bar .now { margin-left: auto; border-right: 0; border-left: 2px solid var(--ink); gap: 10px; white-space: nowrap; }
+  .dot { width: 9px; height: 9px; background: var(--ink); border-radius: 50%; flex: none; }
+  body.paused .dot { background: transparent; box-shadow: inset 0 0 0 2px var(--ink); }
+
+  main {
+    position: relative; z-index: 4; min-height: 0;
+    display: grid; grid-template-columns: minmax(0, 1fr) clamp(190px, 26vw, 360px);
+    gap: clamp(16px, 3.4vw, 60px); align-items: center;
+    padding: clamp(16px, 4vh, 56px) clamp(16px, 5vw, 84px) clamp(14px, 3.4vh, 44px);
+  }
+
+  #lyric {
+    position: relative; min-width: 0; min-height: 0; max-height: 100%;
+    display: flex; flex-direction: column;
+    justify-content: center; gap: clamp(8px, 1.8vh, 22px);
+  }
+  #line {
+    font-size: clamp(26px, 5vw, 86px); line-height: 1.18; font-weight: 800;
+    letter-spacing: -0.02em; overflow-wrap: anywhere; white-space: pre-wrap; text-wrap: balance;
+    max-height: 54vh; overflow: hidden;
+  }
+  .ch { color: rgba(10, 10, 10, 0.38); }
+  @supports (-webkit-text-stroke: 1px #000) {
+    .ch { color: rgba(10, 10, 10, 0.05); -webkit-text-stroke: 1.4px rgba(10, 10, 10, 0.7); }
+  }
+  .ch.on { color: var(--ink); -webkit-text-stroke-width: 0; }
+  .ch.space { white-space: pre; }
+  .prev, .next {
+    font-size: clamp(11px, 1.45vw, 21px); line-height: 1.35; font-weight: 600;
+    color: rgba(10, 10, 10, 0.52); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .prev::before { content: "\2191  "; }
+  .next::before { content: "\2193  "; }
+  .meta {
+    display: flex; gap: 18px; align-items: center; margin-top: clamp(6px, 1.6vh, 18px);
+    border-top: 2px solid var(--ink); padding-top: 8px;
+    font-size: clamp(9px, 0.9vw, 12px); letter-spacing: 0.16em;
+    text-transform: uppercase; font-weight: 700;
+  }
+  #empty { display: none; }
+  body.cond #empty {
+    display: block; font-size: clamp(15px, 2.1vw, 30px); font-weight: 800; line-height: 1.35;
+  }
+  body.cond #empty span { display: block; margin-top: 0.5em; font-size: 0.62em; font-weight: 600; letter-spacing: 0.02em; }
+  body.cond #line, body.cond .prev, body.cond .next, body.cond .meta { display: none; }
+
+  .rail { display: flex; flex-direction: column; gap: clamp(9px, 1.6vh, 16px); min-height: 0; justify-content: center; }
+  .coverBox { border: 3px solid var(--ink); padding: 7px; background: var(--acid); transform: rotate(-1.1deg); }
+  #cover {
+    display: block; width: 100%; height: auto; aspect-ratio: 1 / 1;
+    background: var(--ink); image-rendering: pixelated;
+    filter: contrast(1.25) saturate(1.1);
+  }
+  .cap {
+    font-size: clamp(7px, 0.62vw, 10px); letter-spacing: 0.14em; text-transform: uppercase;
+    line-height: 1.35; font-weight: 700; margin-top: 6px;
+  }
+  .stickers { position: relative; height: clamp(64px, 11vh, 116px); }
+  .sticker {
+    position: absolute; display: block; padding: 5px 9px; border: 3px solid var(--ink);
+    font-weight: 800; font-size: clamp(10px, 1.35vw, 19px); line-height: 1;
+    text-transform: uppercase; letter-spacing: 0.02em; white-space: nowrap;
+  }
+  .s1 { left: 0; top: 2%; background: var(--ink); color: var(--acid); transform: rotate(-7deg); }
+  .s2 { right: 2%; top: 36%; background: var(--acid); color: var(--ink); transform: rotate(5deg); }
+  .s3 {
+    left: 8%; bottom: 0; background: transparent; color: var(--ink);
+    border-style: dashed; transform: rotate(-2deg); font-size: clamp(9px, 1.1vw, 16px);
+  }
+  .meter {
+    display: flex; align-items: flex-end; gap: 2px; padding: 4px;
+    height: clamp(44px, 7.5vh, 84px); border: 3px solid var(--ink);
+  }
+  .meter i { flex: 1; background: var(--ink); height: 6%; min-height: 2px; }
+
+  .ticker {
+    position: relative; z-index: 6; overflow: hidden; display: flex; align-items: center;
+    height: clamp(30px, 4.4vh, 50px); background: var(--ink); color: var(--acid);
+    border-top: 3px solid var(--ink);
+  }
+  .tk {
+    flex: none; display: inline-flex; white-space: nowrap; font-weight: 800;
+    font-size: clamp(10px, 1.05vw, 14px); letter-spacing: 0.18em;
+    text-transform: uppercase; animation: marq 30s linear infinite; will-change: transform;
+  }
+  .tk span { padding: 0 1.4em; }
+  .tk b { color: var(--acid); }
+  @keyframes marq { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+  body.paused .tk { animation-play-state: paused; }
+
+  @media (max-width: 900px) {
+    main {
+      grid-template-columns: minmax(0, 1fr); gap: 0;
+      padding: clamp(14px, 4vh, 40px) clamp(16px, 6vw, 40px);
+    }
+    .rail { display: none; }
+    .bar .stamp { display: none; }
+    #line { font-size: clamp(26px, 7.4vw, 64px); }
+  }
+  @media (max-height: 540px) {
+    .bar .stamp, .bar .now { display: none; }
+    .prev, .next { display: none; }
+    #line { font-size: clamp(20px, 5.2vh, 46px); }
+    .meta { margin-top: 6px; padding-top: 5px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tk { animation: none; }
+    .coverBox, .sticker { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="bg" aria-hidden="true"></canvas>
+  <img class="grain" id="grain" src="assets/353-grain.png" alt="" onerror="this.style.display='none'">
+
+  <header class="bar">
+    <span class="badge">STAGE 353</span>
+    <span class="stamp">ANTI-DESIGN<br>DIGITAL BRUTALISM</span>
+    <span class="song"><b id="songName">—</b><em id="songArt"></em></span>
+    <span class="now"><span class="dot"></span><span id="state">PLAYING</span></span>
+  </header>
+
+  <main>
+    <section id="lyric">
+      <div class="prev" id="prevLine"></div>
+      <div id="line"></div>
+      <div id="empty">NO LYRICS AVAILABLE<br><span>这首歌没有歌词 / 只有节拍。</span></div>
+      <div class="next" id="nextLine"></div>
+      <div class="meta"><span id="counter">00 / 00</span><span id="clock">00:00 / 00:00</span><span id="fmt">—</span></div>
+    </section>
+
+    <aside class="rail">
+      <div class="coverBox">
+        <canvas id="cover" width="24" height="24"></canvas>
+        <div class="cap">COVER · 24×24 SOURCE<br>STRETCHED ×14 · JPEG SOUP</div>
+      </div>
+      <div class="stickers">
+        <span class="sticker s1">GAP MOE</span>
+        <span class="sticker s2">反设计</span>
+        <span class="sticker s3">#8ACE00</span>
+      </div>
+      <div class="meter" id="meter"></div>
+      <div class="cap">LIVE SPECTRUM · 28 BANDS<br>SYSTEM DEFAULT FONT ONLY</div>
+    </aside>
+  </main>
+
+  <footer class="ticker"><div class="tk" id="ticker"></div></footer>
+</div>
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '酸柠反设计',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+(function () {
+  'use strict';
+
+  var S = {
+    lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: '',
+    duration: 0, accent: [138, 206, 0],
+    song: { id: '', name: '', artists: '', cover: '' },
+    ready: false, reduce: false, started: false, beatLevel: 0,
+    live: { bpm: 0, level: 0, bass: 0, mid: 0, treble: 0 }
+  };
+  try { S.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { S.reduce = false; }
+
+  var W = 1440, H = 900, dpr = 1;
+  var bg = document.getElementById('bg');
+  var ctx = bg.getContext('2d');
+  var lineEl = document.getElementById('line');
+  var prevEl = document.getElementById('prevLine');
+  var nextEl = document.getElementById('nextLine');
+  var counterEl = document.getElementById('counter');
+  var clockEl = document.getElementById('clock');
+  var fmtEl = document.getElementById('fmt');
+  var nameEl = document.getElementById('songName');
+  var artEl = document.getElementById('songArt');
+  var stateEl = document.getElementById('state');
+  var tickerEl = document.getElementById('ticker');
+  var meterEl = document.getElementById('meter');
+  var coverEl = document.getElementById('cover');
+  var coverCtx = coverEl.getContext('2d');
+
+  var ACID = '#8ACE00', INK = '#0a0a0a';
+  var FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif';
+  var BANDS = 28;
+  var bars = [], meterBars = [], low, lctx, mid, mctx, scanPat = null;
+  var cur = { chars: [], cts: [], on: [], text: '' };
+  var coverImg = null, coverOk = false, coverUrl = '';
+  var beatVis = 0, heroText = '';
+  var lastClock = '', lastIdx = -99, lastPlaying = null, lastDur = -1;
+  var lastMeterFrame = 0, condOn = false;
+
+  (function initDom() {
+    var i, b;
+    for (i = 0; i < BANDS; i++) bars.push(0.08);
+    for (i = 0; i < BANDS; i++) {
+      b = document.createElement('i');
+      meterEl.appendChild(b);
+      meterBars.push(b);
+    }
+    low = document.createElement('canvas');
+    low.width = 200;
+    low.height = 120;
+    lctx = low.getContext('2d');
+    mid = document.createElement('canvas');
+    mid.width = 92;
+    mid.height = 56;
+    mctx = mid.getContext('2d');
+  })();
+
+  function rnd(i) {
+    var x = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function sendReady() {
+    if (S.ready) return;
+    S.ready = true;
+    try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (e) {}
+  }
+
+  function num(v, d) { v = Number(v); return isFinite(v) ? v : d; }
+  function clamp255(v, d) { v = Math.round(Number(v)); return isFinite(v) ? Math.max(0, Math.min(255, v)) : d; }
+  function pad2(n) { n = Math.max(0, Math.floor(num(n, 0))); return (n < 10 ? '0' : '') + n; }
+  function fmt(s) {
+    s = Math.max(0, num(s, 0));
+    var m = Math.floor(s / 60), sec = Math.floor(s % 60);
+    if (m > 99) m = 99;
+    return pad2(m) + ':' + pad2(sec);
+  }
+
+  function resize() {
+    var w = 0, h = 0;
+    try {
+      var r = document.getElementById('wrap').getBoundingClientRect();
+      w = r.width; h = r.height;
+    } catch (e) {}
+    if (!(w > 0) || !isFinite(w)) w = window.innerWidth;
+    if (!(h > 0) || !isFinite(h)) h = window.innerHeight;
+    if (!(w > 0) || !isFinite(w)) w = 1440;
+    if (!(h > 0) || !isFinite(h)) h = 900;
+    W = Math.round(w); H = Math.round(h);
+    dpr = Math.min(2, Math.max(1, num(window.devicePixelRatio, 1)));
+    bg.width = Math.max(1, Math.round(W * dpr));
+    bg.height = Math.max(1, Math.round(H * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    var lw = 200;
+    var lh = Math.max(60, Math.min(320, Math.round(lw * H / Math.max(1, W))));
+    low.width = lw; low.height = lh;
+    mid.width = Math.max(24, Math.round(lw * 0.46));
+    mid.height = Math.max(16, Math.round(lh * 0.46));
+
+    // scanline tile, built once per resize
+    var sc = document.createElement('canvas');
+    sc.width = 4; sc.height = 3;
+    var sctx = sc.getContext('2d');
+    sctx.fillStyle = 'rgba(10,10,10,0.10)';
+    sctx.fillRect(0, 0, 4, 1);
+    try { scanPat = ctx.createPattern(sc, 'repeat'); } catch (e) { scanPat = null; }
+
+    fitLine();
+    paint(performance.now());
+  }
+
+  function normalizeLines(raw) {
+    var out = [], i, l, t, txt, tone, chars, list, j, c, ct;
+    if (!Array.isArray(raw)) return out;
+    for (i = 0; i < raw.length; i++) {
+      l = raw[i];
+      if (!l || typeof l !== 'object') continue;
+      list = Array.isArray(l.chars) ? l.chars : null;
+      chars = null;
+      if (list && list.length) {
+        chars = [];
+        for (j = 0; j < list.length && j < 800; j++) {
+          c = list[j] || {};
+          ct = num(c.t, NaN);
+          chars.push({ c: c.c === undefined || c.c === null ? '' : String(c.c), t: isFinite(ct) ? ct : null });
+        }
+      }
+      tone = chars ? chars.map(function (x) { return x.c; }).join('') : '';
+      txt = (l.text === null || l.text === undefined) ? '' : String(l.text);
+      if (!txt) txt = tone;
+      t = num(l.t, NaN);
+      if (!isFinite(t) && chars && chars.length && isFinite(chars[0].t)) t = chars[0].t;
+      if (!isFinite(t)) continue;
+      out.push({ t: t, dur: Math.max(0, num(l.dur, 0)), text: txt, chars: chars });
+    }
+    out.sort(function (a, b) { return a.t - b.t; });
+    return out;
+  }
+
+  function findIdx(t) {
+    var lo = 0, hi = S.lines.length - 1, ans = -1, md;
+    while (lo <= hi) {
+      md = (lo + hi) >> 1;
+      if (S.lines[md].t <= t + 0.0001) { ans = md; lo = md + 1; }
+      else { hi = md - 1; }
+    }
+    return ans;
+  }
+
+  function applyInit(p) {
+    if (!p || typeof p !== 'object') return;
+    var song = p.song && typeof p.song === 'object' ? p.song : {};
+    var artists = song.artists;
+    if (Array.isArray(artists)) artists = artists.filter(function (x) { return x; }).join(' / ');
+    var accent = Array.isArray(p.accent) && p.accent.length >= 3
+      ? [clamp255(p.accent[0], 138), clamp255(p.accent[1], 206), clamp255(p.accent[2], 0)]
+      : [138, 206, 0];
+    var newId = song.id === undefined || song.id === null ? '' : String(song.id);
+    if (S.song.id !== newId) { S.t = 0; S.idx = -1; }
+    S.song = {
+      id: newId,
+      name: song.name ? String(song.name) : '',
+      artists: artists ? String(artists) : '',
+      cover: song.cover ? String(song.cover) : ''
+    };
+    S.accent = accent;
+    S.duration = Math.max(0, num(p.duration, 0));
+    S.playing = true;
+    S.started = true;
+    S.lines = normalizeLines(p.lines);
+    if (S.idx >= S.lines.length) S.idx = -1;
+
+    nameEl.textContent = S.song.name || '—';
+    artEl.textContent = S.song.artists ? '— ' + S.song.artists : '';
+    buildTicker();
+    setCover(S.song.cover);
+
+    syncLyric(true);
+  }
+
+  function applyTick(p) {
+    if (!p || typeof p !== 'object') return;
+    var tt = Number(p.time);
+    if (isFinite(tt)) S.t = Math.max(0, tt);
+    S.playing = p.playing !== false;
+  }
+
+  function drawLow(t) {
+    var lw = low.width, lh = low.height;
+    lctx.clearRect(0, 0, lw, lh);
+    var jitter = (S.reduce || window.__liziShake === false) ? 0 : (Math.sin(t * 1.7) * lw * 0.006 + beatVis * lw * 0.012);
+
+    // the lyric itself, huge, horizontally stretched and slowly drifting
+    var txt = heroText || S.song.name || 'ACID LIME';
+    var stretch = 2.3;
+    lctx.save();
+    lctx.setTransform(stretch, 0, 0, 1, 0, 0);
+    lctx.fillStyle = 'rgba(10,10,10,0.92)';
+    lctx.font = '900 ' + Math.max(12, Math.round(lh * 0.86)) + 'px ' + FONT;
+    lctx.textBaseline = 'alphabetic';
+    var mw = 0;
+    try { mw = (lctx.measureText(txt).width || 0) * stretch; } catch (e) { mw = lw; }
+    if (mw > 0 && mw < lw * 0.92) {
+      // short line: stamp it across the whole width, like a repeated poster
+      var times = Math.max(1, Math.min(4, Math.floor(lw / (mw + lw * 0.12))));
+      var gap = (lw - times * mw) / (times + 1);
+      for (var q = 0; q < times; q++) {
+        lctx.fillText(txt, (gap + q * (mw + gap)) / stretch, lh * 0.84);
+      }
+    } else {
+      var travel = Math.max(0, mw - lw * 0.5);
+      var off = S.reduce ? travel * 0.45 : travel * (0.5 + 0.5 * Math.sin(t * 0.13));
+      lctx.fillText(txt, (-off + jitter) / stretch, lh * 0.84);
+    }
+    lctx.restore();
+
+    // repeated song credit strip along the top, also low-res
+    var nm = (S.song.name || '') + '  ///  ' + (S.song.artists || '');
+    if (S.song.name) {
+      lctx.save();
+      lctx.fillStyle = 'rgba(10,10,10,0.5)';
+      lctx.font = '800 ' + Math.max(6, Math.round(lh * 0.16)) + 'px ' + FONT;
+      var unit = nm + '  ///  ';
+      var uw = 1;
+      try { uw = Math.max(1, lctx.measureText(unit).width || 1); } catch (e) { uw = 1; }
+      var drift = S.reduce ? 0 : (t * 11) % uw;
+      for (var i = 0; i < 10; i++) {
+        var x = i * uw - drift;
+        if (x > lw) break;
+        lctx.fillText(unit, x, lh * 0.19);
+      }
+      lctx.restore();
+    }
+
+    // horizontal tears / smears in the source pixels
+    var seed = Math.floor(t * 5);
+    lctx.save();
+    lctx.fillStyle = INK;
+    for (var k = 0; k < 16; k++) {
+      var y = Math.floor(rnd(seed * 31 + k * 7) * lh);
+      var hh = 1 + Math.floor(rnd(k * 13 + seed) * 2.5);
+      var x0 = Math.floor(rnd(k * 91 + 5) * lw * 0.55);
+      var ww = Math.floor(lw * (0.18 + rnd(k * 17 + 3) * 0.95));
+      lctx.globalAlpha = 0.05 + rnd(k + seed * 3) * 0.11;
+      lctx.fillRect(x0, y, ww, hh);
+    }
+    lctx.restore();
+
+    // carve two hard paper-cut bands out of the smear
+    lctx.save();
+    lctx.globalAlpha = 0.9;
+    lctx.fillStyle = ACID;
+    lctx.fillRect(0, Math.round(lh * 0.46), lw, Math.max(1, Math.round(lh * 0.035)));
+    lctx.globalAlpha = 0.55;
+    lctx.fillRect(0, Math.round(lh * 0.71), lw, Math.max(1, Math.round(lh * 0.02)));
+    lctx.restore();
+  }
+
+  function drawBars() {
+    var n = bars.length;
+    var stripW = Math.max(10, W * 0.03);
+    var top = H * 0.18, span = H * 0.56;
+    var gap = span / n;
+    ctx.save();
+    ctx.fillStyle = INK;
+    for (var i = 0; i < n; i++) {
+      var hgt = Math.max(1, bars[i] * stripW);
+      ctx.fillRect(W * 0.012, top + i * gap, hgt, Math.max(1, gap * 0.6));
+    }
+    ctx.restore();
+  }
+
+  function paint(now) {
+    var t = now / 1000;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ACID;
+    ctx.fillRect(0, 0, W, H);
+
+    drawLow(t);
+
+    // downscale the same frame into a tiny canvas, then blow it back up: cheap blur
+    mctx.clearRect(0, 0, mid.width, mid.height);
+    mctx.imageSmoothingEnabled = true;
+    mctx.drawImage(low, 0, 0, mid.width, mid.height);
+
+    var jx = S.reduce ? 0 : Math.sin(t * 0.9) * 2.5 + beatVis * W * 0.006;
+
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.drawImage(low, -W * 0.06 + jx, -H * 0.02, W * 1.12, H * 1.04);
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.drawImage(mid, -W * 0.16 + jx * 2, -H * 0.12, W * 1.32, H * 1.24);
+    ctx.restore();
+
+    // stretched slice: one horizontal band smeared to look like a bad JPEG
+    ctx.save();
+    ctx.globalAlpha = 0.13;
+    ctx.drawImage(
+      low, 0, Math.round(low.height * 0.34), low.width, Math.max(2, Math.round(low.height * 0.3)),
+      -W * 0.08, H * 0.3, W * 1.16, H * 0.16
+    );
+    ctx.restore();
+
+    // album accent as a thin misregistered edge stripe
+    ctx.save();
+    ctx.fillStyle = 'rgb(' + S.accent[0] + ',' + S.accent[1] + ',' + S.accent[2] + ')';
+    ctx.fillRect(0, 0, Math.max(3, Math.round(W * 0.005)), H);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, 0, Math.max(1, Math.round(W * 0.0015)), H);
+    ctx.restore();
+
+    if (scanPat) {
+      ctx.save();
+      ctx.fillStyle = scanPat;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+
+    // jpeg macroblocks hugging the edges
+    var seed = Math.floor(t * 2);
+    ctx.save();
+    ctx.fillStyle = INK;
+    for (var i = 0; i < 12; i++) {
+      var r1 = rnd(seed * 7 + i * 13);
+      var r2 = rnd(seed * 3 + i * 29);
+      var bw = 8 * (1 + Math.floor(r1 * 7));
+      var bh = 8 * (1 + Math.floor(r2 * 3));
+      var bx = r1 > 0.5 ? 0 : W - bw;
+      var by = Math.floor(r2 * H);
+      ctx.globalAlpha = 0.04 + rnd(i + seed) * 0.05;
+      ctx.fillRect(bx, by, bw, bh);
+    }
+    ctx.restore();
+
+    drawBars();
+
+    // beat flash lives in the canvas, not in a separate composited DOM layer
+    if (beatVis > 0.01) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,10,10,' + (beatVis * (S.reduce ? 0.07 : 0.15)).toFixed(3) + ')';
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+  }
+
+  function fitLine() {
+    var maxH = Math.max(80, H * 0.5);
+    var base = Math.min(W * (W < 760 ? 0.075 : 0.054), H * 0.105, 86);
+    if (!(base > 0)) base = 40;
+    base = Math.max(20, base);
+    lineEl.style.fontSize = base.toFixed(1) + 'px';
+    var size = base;
+    for (var g = 0; g < 12; g++) {
+      if (size <= 19) break;
+      if (lineEl.scrollHeight <= maxH) break;
+      size = size * 0.9;
+      lineEl.style.fontSize = size.toFixed(1) + 'px';
+    }
+  }
+
+  function updateChars(t) {
+    var n = 0, len = cur.cts.length;
+    for (var i = 0; i < len; i++) {
+      var on = cur.cts[i] <= t + 0.0001;
+      if (on) n++;
+      if (on !== cur.on[i]) {
+        cur.on[i] = on;
+        if (on) cur.chars[i].classList.add('on');
+        else cur.chars[i].classList.remove('on');
+      }
+    }
+    cur.onCount = n;
+  }
+
+  function rebuildChars() {
+    var line = S.idx >= 0 && S.lines[S.idx] ? S.lines[S.idx] : null;
+    cur = { chars: [], cts: [], on: [], onCount: 0, text: line ? line.text : '' };
+    lineEl.textContent = '';
+    if (!line) { heroText = ''; fitLine(); return; }
+    var arr = Array.from(line.text);
+    var dur = line.dur > 0 ? line.dur : Math.max(1.2, arr.length * 0.14);
+    var yrc = line.chars && line.chars.length ? line.chars : null;
+    var frag = document.createDocumentFragment();
+    var i, sp, ct;
+    for (i = 0; i < arr.length; i++) {
+      var ch = arr[i];
+      sp = document.createElement('span');
+      sp.className = (ch === ' ' || ch === '\t' || ch === '\u3000') ? 'ch space' : 'ch';
+      sp.textContent = ch;
+      if (yrc && i < yrc.length && yrc[i].t !== null && isFinite(yrc[i].t)) ct = yrc[i].t;
+      else ct = line.t + dur * (i / Math.max(1, arr.length));
+      cur.chars.push(sp);
+      cur.cts.push(ct);
+      cur.on.push(false);
+      frag.appendChild(sp);
+    }
+    lineEl.appendChild(frag);
+    heroText = line.text;
+    fitLine();
+    updateChars(S.t);
+    updateChrome(true);
+  }
+
+  function syncLyric(force) {
+    var idx = findIdx(S.t);
+    var empty = S.started && S.lines.length === 0;
+    if (condOn !== empty) {
+      condOn = empty;
+      document.body.classList.toggle('cond', empty);
+    }
+    if (!force && idx === S.idx) return;
+    S.idx = idx;
+    rebuildChars();
+  }
+
+  function updateChrome(force) {
+    if (force || S.idx !== lastIdx) {
+      lastIdx = S.idx;
+      var line = S.idx >= 0 && S.lines[S.idx] ? S.lines[S.idx] : null;
+      var prevTxt = S.idx > 0 ? S.lines[S.idx - 1].text : '';
+      var nextTxt = S.idx >= 0
+        ? (S.idx + 1 < S.lines.length ? S.lines[S.idx + 1].text : '')
+        : (S.lines.length ? S.lines[0].text : '');
+      prevEl.textContent = prevTxt;
+      nextEl.textContent = nextTxt;
+      prevEl.style.visibility = prevTxt ? 'visible' : 'hidden';
+      nextEl.style.visibility = nextTxt ? 'visible' : 'hidden';
+      counterEl.textContent = pad2(S.idx + 1) + ' / ' + pad2(S.lines.length);
+      fmtEl.textContent = line ? (line.chars ? 'YRC / 逐字' : 'LRC / 整句') : '—';
+      heroText = line ? line.text : '';
+    }
+    var total = S.duration > 0 ? fmt(S.duration) : '--:--';
+    var now = fmt(S.t);
+    if (now !== lastClock) {
+      lastClock = now;
+      clockEl.textContent = now + ' / ' + total;
+    }
+    if (total !== lastDur) {
+      lastDur = total;
+      clockEl.textContent = now + ' / ' + total;
+    }
+    if (force || S.playing !== lastPlaying) {
+      lastPlaying = S.playing;
+      stateEl.textContent = S.playing ? 'PLAYING' : 'PAUSED';
+      document.body.classList.toggle('paused', !S.playing);
+      document.body.classList.toggle('live', !!S.playing);
+    }
+  }
+
+  function updateBars() {
+    var lv = S.live;
+    var seed = S.reduce ? 0 : S.frames * 0.09;
+    var i, f, band, wob, target;
+    for (i = 0; i < BANDS; i++) {
+      f = i / (BANDS - 1);
+      band = lv.bass * Math.max(0, 1 - f * 2.4)
+           + lv.mid * Math.max(0, 1 - Math.abs(f - 0.45) * 2.6)
+           + lv.treble * Math.max(0, f * 1.6 - 0.5);
+      wob = 0.55 + 0.45 * Math.abs(Math.sin(seed + i * 0.7));
+      target = Math.max(0.05, Math.min(1, (0.16 + band * 0.95) * wob));
+      bars[i] += (target - bars[i]) * 0.28;
+    }
+    if (S.frames - lastMeterFrame > 4) {
+      lastMeterFrame = S.frames;
+      for (i = 0; i < BANDS; i++) meterBars[i].style.height = (6 + bars[i] * 94).toFixed(1) + '%';
+    }
+  }
+
+  function drawCover() {
+    var cw = coverEl.width, chh = coverEl.height, x, y, v;
+    coverCtx.clearRect(0, 0, cw, chh);
+    coverCtx.fillStyle = INK;
+    coverCtx.fillRect(0, 0, cw, chh);
+    if (coverOk && coverImg && coverImg.naturalWidth > 0) {
+      var s = Math.min(coverImg.naturalWidth, coverImg.naturalHeight);
+      var sx = (coverImg.naturalWidth - s) / 2, sy = (coverImg.naturalHeight - s) / 2;
+      coverCtx.imageSmoothingEnabled = true;
+      try { coverCtx.drawImage(coverImg, sx, sy, s, s, 0, 0, cw, chh); } catch (e) {}
+    } else {
+      // procedural "broken jpeg" fallback using the extracted accent
+      var a = S.accent;
+      for (y = 0; y < chh; y++) {
+        for (x = 0; x < cw; x++) {
+          v = rnd(x * 7 + y * 13 + 3);
+          if (v > 0.74) {
+            coverCtx.fillStyle = 'rgba(' + a[0] + ',' + a[1] + ',' + a[2] + ',0.9)';
+            coverCtx.fillRect(x, y, 1, 1);
+          } else if (v > 0.52) {
+            coverCtx.fillStyle = 'rgba(138,206,0,0.5)';
+            coverCtx.fillRect(x, y, 1, 1);
+          }
+        }
+      }
+      coverCtx.fillStyle = ACID;
+      coverCtx.fillRect(2, 11, cw - 4, 2);
+      coverCtx.fillRect(11, 2, 2, chh - 4);
+    }
+    // damage pass
+    coverCtx.fillStyle = 'rgba(10,10,10,0.55)';
+    coverCtx.fillRect(0, Math.round(chh * 0.62), cw, 2);
+    coverCtx.fillRect(Math.round(cw * 0.3), 0, 1, chh);
+  }
+
+  function setCover(url) {
+    url = url || '';
+    if (url === coverUrl && (coverOk || coverImg)) return;
+    coverUrl = url;
+    coverOk = false;
+    coverImg = null;
+    if (!url) { drawCover(); return; }
+    var img = new Image();
+    img.decoding = 'async';
+    img.onload = function () { if (img === coverImg) { coverOk = true; drawCover(); } };
+    img.onerror = function () { if (img === coverImg) { coverOk = false; drawCover(); } };
+    coverImg = img;
+    try { img.src = url; } catch (e) { coverOk = false; }
+    drawCover();
+  }
+
+  function buildTicker() {
+    var unit = '\u2605 ' + (S.song.name || 'UNTITLED') + '  ///  ' +
+      (S.song.artists || 'UNKNOWN ARTIST') + '  ///  VISITOR #000353  ///  ' +
+      'STAGE 353 · ACID LIME  ///  ANTI-DESIGN / GAP MOE  ///  #8ACE00  ///  ';
+    var long = unit + unit + unit;
+    tickerEl.textContent = '';
+    for (var i = 0; i < 2; i++) {
+      var sp = document.createElement('span');
+      sp.textContent = long;
+      tickerEl.appendChild(sp);
+    }
+  }
+
+  function frame(now) {
+    S.frames++;
+    var t0 = performance.now();
+    try {
+      beatVis *= 0.9;
+      if (beatVis < 0.003) beatVis = 0;
+      S.beatLevel *= 0.9;
+      updateBars();
+      paint(now);
+      syncLyric(false);
+      updateChars(S.t);
+      updateChrome(false);
+    } catch (e) {
+      S.err = String(e && e.message || e);
+    }
+    S.js = performance.now() - t0;
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('message', function (ev) {
+    var d = ev && ev.data;
+    if (!d || d.__c100 !== 1) return;
+    try {
+      if (d.type === 'init') applyInit(d.payload);
+      else if (d.type === 'tick') applyTick(d.payload);
+      else if (d.type === 'beat') {
+        var bl = Math.max(0, Math.min(1, num(d.payload && d.payload.level, 0)));
+        S.beatLevel = bl;
+        beatVis = Math.max(beatVis, bl);
+      } else if (d.type === 'live') {
+        var lp = d.payload || {};
+        S.live = {
+          bpm: num(lp.bpm, 0), level: Math.max(0, Math.min(1, num(lp.level, 0))),
+          bass: Math.max(0, Math.min(1, num(lp.bass, 0))),
+          mid: Math.max(0, Math.min(1, num(lp.mid, 0))),
+          treble: Math.max(0, Math.min(1, num(lp.treble, 0)))
+        };
+      }
+    } catch (e) { S.err = String(e && e.message || e); }
+  });
+
+  window.addEventListener('resize', resize);
+
+  window.__stage = function () {
+    return {
+      lines: S.lines.length,
+      idx: S.idx,
+      t: S.t,
+      playing: !!S.playing,
+      frames: S.frames,
+      js: Math.round(S.js * 100) / 100,
+      err: S.err || '',
+      text: S.idx >= 0 && S.lines[S.idx] ? S.lines[S.idx].text : '',
+      gl: false,
+      rm: !!S.reduce
+    };
+  };
+
+  try { resize(); } catch (e) { S.err = String(e && e.message || e); }
+  requestAnimationFrame(function (now) { sendReady(); frame(now); });
+  setTimeout(sendReady, 500);
+  setTimeout(sendReady, 1200);
+})();
+</script>
+</body>
+</html>

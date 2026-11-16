@@ -1,0 +1,1225 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>音生晶簇</title>
+<style>
+  :root { --accent: 138, 190, 255; --ink: 236, 241, 255; --fit: 1; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; color: rgb(var(--ink)); }
+  body {
+    font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body::before {
+    content: ""; position: fixed; inset: -12%; z-index: 0;
+    background:
+      radial-gradient(46% 52% at 50% 36%, rgba(var(--accent), 0.15), rgba(0, 0, 0, 0) 72%),
+      radial-gradient(82% 88% at 50% 112%, rgba(var(--accent), 0.08), rgba(0, 0, 0, 0) 74%),
+      #05060a;
+  }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 1; }
+  #meta {
+    position: fixed; z-index: 3; top: clamp(18px, 3.2vh, 36px); left: clamp(20px, 3.4vw, 48px);
+    pointer-events: none; max-width: 62vw;
+  }
+  #metaTitle {
+    font-size: clamp(11px, 0.95vw, 14px); letter-spacing: 0.2em; color: rgba(var(--ink), 0.8);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #metaSub {
+    margin-top: 7px; font-size: clamp(9px, 0.78vw, 11px); letter-spacing: 0.28em;
+    text-transform: uppercase; color: rgba(var(--ink), 0.34);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #signal {
+    position: fixed; z-index: 3; top: clamp(20px, 3.4vh, 38px); right: clamp(20px, 3.4vw, 48px);
+    display: flex; align-items: flex-end; gap: 5px; height: 20px; pointer-events: none;
+  }
+  #signal i {
+    display: block; width: 2px; height: 20px; border-radius: 1px;
+    background: rgba(var(--accent), 0.9); opacity: 0.55;
+    transform: scaleY(0.12); transform-origin: bottom;
+    transition: transform 0.12s linear, opacity 0.2s linear;
+  }
+  #lyrics {
+    position: fixed; left: 0; right: 0; bottom: clamp(42px, 10vh, 118px); z-index: 4;
+    padding: 0 5vw; display: flex; flex-direction: column; align-items: center;
+    justify-content: flex-end; gap: clamp(9px, 1.9vh, 22px); pointer-events: none;
+  }
+  #lyrics::before {
+    content: ""; position: absolute; z-index: -1; left: 50%; bottom: -6vh;
+    width: min(140vw, 1500px); height: 60vh; transform: translateX(-50%);
+    background: radial-gradient(50% 60% at 50% 70%, rgba(5, 6, 10, 0.72), rgba(5, 6, 10, 0) 72%);
+  }
+  .slot {
+    max-width: min(92vw, 1140px); text-align: center; line-height: 1.46;
+    white-space: pre-wrap; overflow-wrap: break-word;
+  }
+  .slot.prev, .slot.next {
+    font-size: clamp(13px, 1.28vw, 19px); letter-spacing: 0.09em;
+    color: rgba(var(--ink), 0.2); transition: opacity 0.5s ease; min-height: 1.3em;
+  }
+  .slot.now {
+    font-size: calc(clamp(23px, 4vw, 55px) * var(--fit, 1));
+    font-weight: 500; letter-spacing: 0.045em; color: rgb(var(--ink));
+    text-shadow: 0 0 34px rgba(var(--accent), 0.3);
+  }
+  .ch { color: rgba(var(--ink), 0.33); transition: color 0.16s linear; }
+  .ch.on { color: rgba(var(--ink), 0.98); text-shadow: 0 0 18px rgba(var(--accent), 0.6); }
+  #nowBar {
+    display: block; width: min(44vw, 330px); height: 1px; margin: clamp(10px, 1.5vh, 18px) auto 0;
+    background: rgba(var(--ink), 0.1); border-radius: 1px; overflow: hidden;
+  }
+  #nowBar span {
+    display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left center;
+    background: linear-gradient(90deg, rgba(var(--accent), 0.15), rgba(var(--accent), 0.95));
+  }
+  .empty {
+    display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2vh, 20px);
+    font-size: clamp(12px, 1.05vw, 15px); letter-spacing: 0.46em;
+    color: rgba(var(--ink), 0.36); padding-left: 0.46em;
+  }
+  .empty .rule {
+    display: block; width: min(26vw, 148px); height: 1px;
+    background: linear-gradient(90deg, rgba(var(--accent), 0), rgba(var(--accent), 0.6), rgba(var(--accent), 0));
+  }
+  .hidden { display: none !important; }
+  @media (max-width: 640px) {
+    #signal { display: none; }
+    .slot.now { letter-spacing: 0.02em; }
+    #lyrics { bottom: clamp(34px, 8vh, 70px); padding: 0 6vw; }
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="meta">
+  <div id="metaTitle"></div>
+  <div id="metaSub"></div>
+</div>
+
+<div id="signal"><i></i><i></i><i></i></div>
+
+<div id="lyrics">
+  <div class="slot prev" id="slotPrev"></div>
+  <div class="slot now" id="slotNow"><span id="nowText"></span><span id="nowBar"><span></span></span></div>
+  <div class="slot next" id="slotNext"></div>
+  <div class="empty hidden" id="emptyState"><span class="rule"></span><span id="emptyLabel">纯音乐 · 无歌词</span></div>
+</div>
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '音生晶簇',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+(function () {
+  'use strict';
+
+  /* 1. 最外层无条件暴露自检口（不依赖任何初始化，第一段） */
+  window.__stage = function () {
+    return {
+      lines: stageState.lines,
+      idx: stageState.idx,
+      t: stageState.t,
+      playing: stageState.playing,
+      frames: stageState.frames,
+      js: stageState.js,
+      err: stageState.err,
+      text: stageState.text,
+      gl: stageState.gl,
+      rm: stageState.rm
+    };
+  };
+
+  /* 2. 舞台状态（自检口只读，初始化必须晚于 __stage 赋值） */
+  var FALLBACK_ACCENT = [138, 190, 255];
+  var stageState = {
+    lines: 0, idx: -1, t: 0, playing: true, frames: 0, js: 0,
+    err: '', text: '', gl: false, rm: false,
+    linesRaw: [], duration: 0, song: null, started: false,
+    accent: FALLBACK_ACCENT.slice(), spans: null, charTimes: null, litCount: 0,
+    lineStart: 0, lineDuration: 3, barRatio: -1
+  };
+
+  /* 3. 错误限流：每秒最多一条，不静默 */
+  var lastErrorAt = -1000;
+  function reportError(scopeName, error) {
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (now - lastErrorAt < 1000) { return; }
+    lastErrorAt = now;
+    console.error('[408 audio-crystal-bloom] ' + scopeName, error);
+  }
+
+  /* 3. ready：第一帧无条件发，定时兜底，只发一次 */
+  var readySent = false;
+  function sendReady() {
+    if (readySent) { return; }
+    readySent = true;
+    try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); }
+    catch (error) { reportError('ready', error); }
+  }
+  requestAnimationFrame(sendReady);
+  setTimeout(sendReady, 700);
+
+  /* 4. 环境判定 */
+  try {
+    stageState.rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (error) { reportError('matchMedia', error); }
+
+  var dom = {
+    canvas: document.getElementById('gl'),
+    metaTitle: document.getElementById('metaTitle'),
+    metaSub: document.getElementById('metaSub'),
+    slotPrev: document.getElementById('slotPrev'),
+    slotNow: document.getElementById('slotNow'),
+    slotNext: document.getElementById('slotNext'),
+    nowText: document.getElementById('nowText'),
+    nowBar: document.getElementById('nowBar'),
+    emptyState: document.getElementById('emptyState'),
+    emptyLabel: document.getElementById('emptyLabel'),
+    signalBars: document.querySelectorAll('#signal i')
+  };
+
+  var accentRgb = FALLBACK_ACCENT.slice();
+  var accentAltRgb = [96, 150, 255];
+
+  function clampNumber(value, low, high) {
+    if (!Number.isFinite(value)) { return low; }
+    if (value < low) { return low; }
+    if (value > high) { return high; }
+    return value;
+  }
+
+  function textOf(value) {
+    if (value === null || value === undefined) { return ''; }
+    return String(value);
+  }
+
+  function splitGraphemes(text) {
+    try { return Array.from(text); }
+    catch (error) { reportError('splitGraphemes', error); return text.split(''); }
+  }
+
+  function findLineIndex(lines, time) {
+    var index = -1;
+    for (var i = 0; i < lines.length; i += 1) {
+      if (lines[i].t <= time + 0.001) { index = i; } else { break; }
+    }
+    return index;
+  }
+
+  function sanitizeAccent(value) {
+    if (!Array.isArray(value) || value.length < 3) { return FALLBACK_ACCENT.slice(); }
+    var result = [];
+    for (var i = 0; i < 3; i += 1) {
+      result.push(Math.round(clampNumber(Number(value[i]), 0, 255)));
+    }
+    if (result[0] + result[1] + result[2] < 30) { return FALLBACK_ACCENT.slice(); }
+    return result;
+  }
+
+  function hueToChannel(base, span, offset) {
+    var position = offset;
+    if (position < 0) { position += 1; }
+    if (position > 1) { position -= 1; }
+    if (position < 1 / 6) { return base + (span - base) * 6 * position; }
+    if (position < 1 / 2) { return span; }
+    if (position < 2 / 3) { return base + (span - base) * (2 / 3 - position) * 6; }
+    return base;
+  }
+
+  function shiftHue(rgb, degrees, saturationBoost) {
+    var red = clampNumber(rgb[0], 0, 255) / 255;
+    var green = clampNumber(rgb[1], 0, 255) / 255;
+    var blue = clampNumber(rgb[2], 0, 255) / 255;
+    var max = Math.max(red, green, blue);
+    var min = Math.min(red, green, blue);
+    var light = (max + min) / 2;
+    var delta = max - min;
+    var hue = 0;
+    var saturation = 0;
+    if (delta > 0.00001) {
+      saturation = light > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+      if (max === red) { hue = ((green - blue) / delta + (green < blue ? 6 : 0)) / 6; }
+      else if (max === green) { hue = ((blue - red) / delta + 2) / 6; }
+      else { hue = ((red - green) / delta + 4) / 6; }
+    }
+    hue = (hue + degrees / 360 + 1) % 1;
+    saturation = clampNumber(saturation + saturationBoost, 0.05, 1);
+    light = clampNumber(light, 0.12, 0.82);
+    var high = light < 0.5 ? light * (1 + saturation) : light + saturation - light * saturation;
+    var low = 2 * light - high;
+    return [
+      Math.round(clampNumber(hueToChannel(low, high, hue + 1 / 3) * 255, 0, 255)),
+      Math.round(clampNumber(hueToChannel(low, high, hue) * 255, 0, 255)),
+      Math.round(clampNumber(hueToChannel(low, high, hue - 1 / 3) * 255, 0, 255))
+    ];
+  }
+
+  function applyAccent(value) {
+    try {
+      var safe = sanitizeAccent(value);
+      accentRgb = safe;
+      accentAltRgb = shiftHue(safe, 34, 0.06);
+      stageState.accent = safe;
+      document.documentElement.style.setProperty('--accent', safe[0] + ', ' + safe[1] + ', ' + safe[2]);
+      /* 2D 兜底路径的预烘焙光晕要跟着主色换 */
+      if (canvasState) { canvasState.glowCanvas = buildGlowCanvas(); }
+    } catch (error) { reportError('applyAccent', error); }
+  }
+
+  function artistsText(artists) {
+    if (Array.isArray(artists)) {
+      var names = [];
+      for (var i = 0; i < artists.length && i < 6; i += 1) {
+        var one = textOf(artists[i]).trim();
+        if (one) { names.push(one); }
+      }
+      return names.join(' · ');
+    }
+    return textOf(artists).trim();
+  }
+
+  function setMeta(song) {
+    try {
+      var safe = song && typeof song === 'object' ? song : {};
+      var name = textOf(safe.name).trim();
+      var artists = artistsText(safe.artists);
+      dom.metaTitle.textContent = name || '无题';
+      dom.metaSub.textContent = artists || '未知艺术家';
+    } catch (error) { reportError('setMeta', error); }
+  }
+
+  function fitScaleFor(count) {
+    if (count <= 12) { return 1; }
+    if (count <= 18) { return 0.88; }
+    if (count <= 26) { return 0.76; }
+    if (count <= 36) { return 0.65; }
+    if (count <= 52) { return 0.54; }
+    return 0.46;
+  }
+
+  function updateReveal(time) {
+    var spans = stageState.spans;
+    var times = stageState.charTimes;
+    if (!spans || !times || spans.length === 0) { return; }
+    var lit = 0;
+    for (var i = 0; i < times.length; i += 1) {
+      if (times[i] <= time + 0.02) { lit = i + 1; }
+    }
+    if (lit === stageState.litCount) { return; }
+    var from = Math.min(lit, stageState.litCount);
+    var to = Math.max(lit, stageState.litCount);
+    for (var j = from; j < to && j < spans.length; j += 1) {
+      spans[j].classList.toggle('on', j < lit);
+    }
+    stageState.litCount = lit;
+  }
+
+  function paintActiveLine(line, time) {
+    dom.slotNow.style.setProperty('--fit', String(fitScaleFor(line.text.length)));
+    var glyphs = splitGraphemes(line.text);
+    var fragment = document.createDocumentFragment();
+    var spans = [];
+    var times = [];
+    var perChar = Array.isArray(line.chars) && line.chars.length === glyphs.length;
+    var fallbackSpan = line.dur > 0 ? line.dur : 3.0;
+    var drawSpans = glyphs.length <= 120;
+    for (var i = 0; i < glyphs.length; i += 1) {
+      var moment = perChar ? Number(line.chars[i] && line.chars[i].t) : NaN;
+      if (!Number.isFinite(moment)) {
+        moment = line.t + fallbackSpan * (i / Math.max(1, glyphs.length));
+      }
+      times.push(moment);
+      if (drawSpans) {
+        var element = document.createElement('span');
+        element.className = 'ch';
+        element.textContent = glyphs[i];
+        fragment.appendChild(element);
+        spans.push(element);
+      }
+    }
+    dom.nowText.textContent = '';
+    if (drawSpans) {
+      dom.nowText.appendChild(fragment);
+    } else {
+      dom.nowText.textContent = line.text;
+    }
+    stageState.spans = spans;
+    stageState.charTimes = times;
+    stageState.litCount = 0;
+    updateReveal(time);
+  }
+
+  function renderLyric() {
+    try {
+      var lines = stageState.linesRaw;
+      var index = stageState.idx;
+      var current = index >= 0 ? lines[index] : null;
+      dom.slotPrev.textContent = index > 0 ? lines[index - 1].text : '';
+      var nextIndex = index >= 0 ? index + 1 : 0;
+      dom.slotNext.textContent = nextIndex < lines.length ? lines[nextIndex].text : '';
+      if (!current) {
+        dom.nowText.textContent = '';
+        dom.slotNow.style.setProperty('--fit', '1');
+        dom.nowBar.classList.add('hidden');
+        stageState.spans = null;
+        stageState.charTimes = null;
+        stageState.litCount = 0;
+        stageState.text = '';
+        return;
+      }
+      dom.nowBar.classList.remove('hidden');
+      stageState.lineStart = current.t;
+      stageState.lineDuration = current.dur > 0 ? current.dur : 3.0;
+      stageState.barRatio = -1;
+      paintActiveLine(current, stageState.t);
+      stageState.text = current.text;
+      updateProgressBar(stageState.t);
+    } catch (error) { reportError('renderLyric', error); }
+  }
+
+  function updateProgressBar(time) {
+    if (stageState.idx < 0 || !dom.nowBar.firstElementChild) { return; }
+    var span = stageState.lineDuration > 0 ? stageState.lineDuration : 3.0;
+    var ratio = clampNumber((time - stageState.lineStart) / span, 0, 1);
+    if (Math.abs(ratio - stageState.barRatio) < 0.004) { return; }
+    stageState.barRatio = ratio;
+    dom.nowBar.firstElementChild.style.transform = 'scaleX(' + ratio.toFixed(3) + ')';
+  }
+
+  function resetLyrics() {
+    dom.slotPrev.textContent = '';
+    dom.slotNext.textContent = '';
+    dom.nowText.textContent = '';
+    dom.slotNow.style.setProperty('--fit', '1');
+    dom.nowBar.classList.add('hidden');
+    stageState.spans = null;
+    stageState.charTimes = null;
+    stageState.litCount = 0;
+    stageState.text = '';
+    stageState.idx = -1;
+  }
+
+  function handleInit(payload) {
+    try {
+      var safe = payload && typeof payload === 'object' ? payload : {};
+      stageState.song = safe.song && typeof safe.song === 'object' ? safe.song : {};
+      stageState.duration = Number.isFinite(Number(safe.duration)) ? Math.max(0, Number(safe.duration)) : 0;
+      stageState.playing = safe.playing === undefined ? true : !!safe.playing;
+      var incoming = Array.isArray(safe.lines) ? safe.lines : [];
+      var cleaned = [];
+      for (var i = 0; i < incoming.length && i < 400; i += 1) {
+        var item = incoming[i];
+        if (!item || typeof item !== 'object') { continue; }
+        var lineText = textOf(item.text);
+        if (!lineText) { continue; }
+        var chars = null;
+        if (Array.isArray(item.chars) && item.chars.length > 0) {
+          chars = [];
+          for (var j = 0; j < item.chars.length && j < 400; j += 1) {
+            var glyph = item.chars[j] && typeof item.chars[j] === 'object' ? item.chars[j] : {};
+            var glyphTime = Number(glyph.t);
+            chars.push({ t: Number.isFinite(glyphTime) ? glyphTime : NaN, c: textOf(glyph.c) });
+          }
+        }
+        cleaned.push({
+          t: Number.isFinite(Number(item.t)) ? Number(item.t) : 0,
+          dur: Math.max(0, Number(item.dur) || 0),
+          text: lineText,
+          chars: chars
+        });
+      }
+      cleaned.sort(function (left, right) { return left.t - right.t; });
+      stageState.linesRaw = cleaned;
+      stageState.lines = cleaned.length;
+      stageState.idx = -1;
+      if (cleaned.length === 0) {
+        resetLyrics();
+        dom.slotPrev.classList.add('hidden');
+        dom.slotNow.classList.add('hidden');
+        dom.slotNext.classList.add('hidden');
+        dom.emptyState.classList.remove('hidden');
+      } else {
+        dom.slotPrev.classList.remove('hidden');
+        dom.slotNow.classList.remove('hidden');
+        dom.slotNext.classList.remove('hidden');
+        dom.emptyState.classList.add('hidden');
+        stageState.idx = findLineIndex(cleaned, stageState.t);
+        renderLyric();
+      }
+      setMeta(stageState.song);
+      applyAccent(safe.accent);
+      stageState.started = true;
+    } catch (error) { reportError('init', error); }
+  }
+
+  function handleTick(payload) {
+    try {
+      var safe = payload && typeof payload === 'object' ? payload : {};
+      var time = Number(safe.time);
+      if (Number.isFinite(time)) { stageState.t = time; }
+      stageState.playing = safe.playing === undefined ? true : !!safe.playing;
+      var index = findLineIndex(stageState.linesRaw, stageState.t);
+      if (index !== stageState.idx) {
+        stageState.idx = index;
+        renderLyric();
+      } else {
+        updateReveal(stageState.t);
+        updateProgressBar(stageState.t);
+      }
+    } catch (error) { reportError('tick', error); }
+  }
+
+  var audioState = {
+    bass: 0, mid: 0, treble: 0, level: 0,
+    targetBass: 0, targetMid: 0, targetTreble: 0, targetLevel: 0,
+    beat: 0, beatIndex: -1, bpm: 0, playing: true, lastLiveAt: -1
+  };
+
+  function handleBeat(payload) {
+    try {
+      var safe = payload && typeof payload === 'object' ? payload : {};
+      var level = clampNumber(Number(safe.level), 0, 1);
+      audioState.beat = Math.max(audioState.beat, level > 0.02 ? level : 0.6);
+      var index = Number(safe.index);
+      if (Number.isFinite(index)) { audioState.beatIndex = index; }
+    } catch (error) { reportError('beat', error); }
+  }
+
+  function handleLive(payload) {
+    try {
+      var safe = payload && typeof payload === 'object' ? payload : {};
+      audioState.targetBass = clampNumber(Number(safe.bass), 0, 1);
+      audioState.targetMid = clampNumber(Number(safe.mid), 0, 1);
+      audioState.targetTreble = clampNumber(Number(safe.treble), 0, 1);
+      audioState.targetLevel = clampNumber(Number(safe.level), 0, 1);
+      var bpm = Number(safe.bpm);
+      if (Number.isFinite(bpm) && bpm > 0) { audioState.bpm = clampNumber(bpm, 20, 300); }
+      audioState.playing = safe.playing === undefined ? true : !!safe.playing;
+      audioState.lastLiveAt = stageState.t;
+    } catch (error) { reportError('live', error); }
+  }
+
+  function smoothAudio() {
+    var ease = 0.16;
+    audioState.bass += (audioState.targetBass - audioState.bass) * ease;
+    audioState.mid += (audioState.targetMid - audioState.mid) * ease;
+    audioState.treble += (audioState.targetTreble - audioState.treble) * ease;
+    audioState.level += (audioState.targetLevel - audioState.level) * ease;
+    audioState.beat *= 0.925;
+    if (audioState.beat < 0.001) { audioState.beat = 0; }
+  }
+
+  var lastSignalAt = 0;
+  function updateSignalBars(now) {
+    if (now - lastSignalAt < 90) { return; }
+    lastSignalAt = now;
+    var bars = dom.signalBars;
+    for (var i = 0; i < bars.length && i < 3; i += 1) {
+      var value = i === 0 ? audioState.bass : (i === 1 ? audioState.mid : audioState.treble);
+      var grown = clampNumber(0.12 + value * 0.88, 0.12, 1);
+      bars[i].style.transform = 'scaleY(' + grown.toFixed(3) + ')';
+      bars[i].style.opacity = (0.4 + value * 0.55).toFixed(2);
+    }
+  }
+
+  window.addEventListener('message', function (event) {
+    var data = event && event.data;
+    if (!data || data.__c100 !== 1) { return; }
+    if (data.type === 'init') { handleInit(data.payload); }
+    else if (data.type === 'tick') { handleTick(data.payload); }
+    else if (data.type === 'beat') { handleBeat(data.payload); }
+    else if (data.type === 'live') { handleLive(data.payload); }
+  }, false);
+
+  /* ---------- 渲染层 ---------- */
+  var glState = null;
+  var canvasState = null;
+
+  var CUBE_CORNERS = [
+    [-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5],
+    [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+  ];
+  var CUBE_EDGES = [
+    [0, 1], [1, 3], [3, 2], [2, 0],
+    [4, 5], [5, 7], [7, 6], [6, 4],
+    [0, 4], [1, 5], [2, 6], [3, 7]
+  ];
+
+  function pseudoRandom(index, salt) {
+    var value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+    return value - Math.floor(value);
+  }
+
+  function matrixPerspective(fovRadians, aspect, near, far) {
+    var focal = 1 / Math.tan(fovRadians / 2);
+    return new Float32Array([
+      focal / aspect, 0, 0, 0,
+      0, focal, 0, 0,
+      0, 0, (far + near) / (near - far), -1,
+      0, 0, (2 * far * near) / (near - far), 0
+    ]);
+  }
+
+  function matrixTranslation(shiftX, shiftY, shiftZ) {
+    return new Float32Array([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      shiftX, shiftY, shiftZ, 1
+    ]);
+  }
+
+  function matrixMultiply(left, right) {
+    var result = new Float32Array(16);
+    for (var column = 0; column < 4; column += 1) {
+      for (var row = 0; row < 4; row += 1) {
+        var sum = 0;
+        for (var step = 0; step < 4; step += 1) {
+          sum += left[step * 4 + row] * right[column * 4 + step];
+        }
+        result[column * 4 + row] = sum;
+      }
+    }
+    return result;
+  }
+
+  function buildMengerCubes(level) {
+    var cubes = [{ x: 0, y: 0, z: 0, size: 1 }];
+    var generations = Math.max(0, Math.min(2, Math.floor(level)));
+    for (var generation = 0; generation < generations; generation += 1) {
+      var next = [];
+      for (var index = 0; index < cubes.length; index += 1) {
+        var cube = cubes[index];
+        var unit = cube.size / 3;
+        for (var alongX = -1; alongX <= 1; alongX += 1) {
+          for (var alongY = -1; alongY <= 1; alongY += 1) {
+            for (var alongZ = -1; alongZ <= 1; alongZ += 1) {
+              var hollow = 0;
+              if (alongX === 0) { hollow += 1; }
+              if (alongY === 0) { hollow += 1; }
+              if (alongZ === 0) { hollow += 1; }
+              if (hollow >= 2) { continue; }
+              next.push({
+                x: cube.x + alongX * unit,
+                y: cube.y + alongY * unit,
+                z: cube.z + alongZ * unit,
+                size: unit
+              });
+            }
+          }
+        }
+      }
+      cubes = next;
+    }
+    return cubes;
+  }
+
+  function buildCrystalVertices(cubes) {
+    var data = new Float32Array(cubes.length * 24 * 7);
+    var cursor = 0;
+    for (var index = 0; index < cubes.length; index += 1) {
+      var cube = cubes[index];
+      var seed = pseudoRandom(index + 1, 3.7);
+      for (var edge = 0; edge < CUBE_EDGES.length; edge += 1) {
+        for (var side = 0; side < 2; side += 1) {
+          var corner = CUBE_CORNERS[CUBE_EDGES[edge][side]];
+          data[cursor] = corner[0] * cube.size;
+          data[cursor + 1] = corner[1] * cube.size;
+          data[cursor + 2] = corner[2] * cube.size;
+          data[cursor + 3] = cube.x;
+          data[cursor + 4] = cube.y;
+          data[cursor + 5] = cube.z;
+          data[cursor + 6] = seed;
+          cursor += 7;
+        }
+      }
+    }
+    return data;
+  }
+
+  function buildPointSeeds(count) {
+    var data = new Float32Array(count * 4);
+    for (var index = 0; index < count; index += 1) {
+      data[index * 4] = pseudoRandom(index + 0.5, 1.3);
+      data[index * 4 + 1] = pseudoRandom(index + 0.5, 5.1);
+      data[index * 4 + 2] = pseudoRandom(index + 0.5, 9.7);
+      data[index * 4 + 3] = pseudoRandom(index + 0.5, 13.1);
+    }
+    return data;
+  }
+
+  var BACKGROUND_VERTEX = [
+    'attribute vec2 aPosition;',
+    'void main() {',
+    '  gl_Position = vec4(aPosition, 0.0, 1.0);',
+    '}'
+  ].join('\n');
+
+  var BACKGROUND_FRAGMENT = [
+    'precision highp float;',
+    'uniform vec2 uRes;',
+    'uniform float uTime;',
+    'uniform float uBass;',
+    'uniform float uLevel;',
+    'uniform float uBeat;',
+    'uniform vec3 uAccent;',
+    'uniform vec3 uAccentAlt;',
+    'void main() {',
+    '  vec2 uv = gl_FragCoord.xy / uRes;',
+    '  vec2 plane = uv * 2.0 - 1.0;',
+    '  plane.x *= uRes.x / max(uRes.y, 1.0);',
+    '  float radius = length(plane);',
+    '  vec3 color = mix(vec3(0.007, 0.009, 0.019), vec3(0.026, 0.030, 0.055), uv.y);',
+    '  float glow = exp(-radius * 2.1) * (0.26 + 0.5 * uLevel + 0.3 * uBass + 0.18 * uBeat);',
+    '  color += uAccent * glow * 0.34;',
+    '  float ribbonA = sin(plane.x * 2.0 + uTime * 0.15 + sin(plane.y * 1.7 - uTime * 0.11) * 1.4);',
+    '  float ribbonB = sin(plane.y * 2.9 - uTime * 0.09 + sin(plane.x * 2.3 + uTime * 0.06) * 1.2);',
+    '  float ribbon = smoothstep(0.2, 1.0, ribbonA * 0.5 + 0.5) * smoothstep(-0.1, 0.9, ribbonB * 0.5 + 0.5);',
+    '  color += mix(uAccentAlt, uAccent, 0.55) * ribbon * (0.03 + 0.06 * uBass);',
+    '  color *= 1.0 - smoothstep(0.5, 1.65, radius) * 0.92;',
+    '  float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;',
+    '  color += dither * (1.0 / 255.0);',
+    '  gl_FragColor = vec4(max(color, vec3(0.0)), 1.0);',
+    '}'
+  ].join('\n');
+
+  var CRYSTAL_VERTEX = [
+    'attribute vec3 aCorner;',
+    'attribute vec3 aCenter;',
+    'attribute float aSeed;',
+    'uniform mat4 uViewProj;',
+    'uniform float uTime;',
+    'uniform float uBass;',
+    'uniform float uTreble;',
+    'uniform float uBeat;',
+    'uniform float uScale;',
+    'uniform float uAlpha;',
+    'uniform float uSpin;',
+    'uniform vec3 uAccent;',
+    'uniform vec3 uAccentAlt;',
+    'varying vec3 vTint;',
+    'varying float vAlpha;',
+    'mat3 rotateY(float angle) {',
+    '  float cosine = cos(angle);',
+    '  float sine = sin(angle);',
+    '  return mat3(cosine, 0.0, -sine, 0.0, 1.0, 0.0, sine, 0.0, cosine);',
+    '}',
+    'mat3 rotateX(float angle) {',
+    '  float cosine = cos(angle);',
+    '  float sine = sin(angle);',
+    '  return mat3(1.0, 0.0, 0.0, 0.0, cosine, sine, 0.0, -sine, cosine);',
+    '}',
+    'void main() {',
+    '  float breathe = 0.9 + 0.28 * uBass + 0.22 * uBeat;',
+    '  vec3 local = rotateY(uTime * 0.32 + aSeed * 6.2831) * rotateX(aSeed * 4.0) * (aCorner * breathe);',
+    '  vec3 center = aCenter * (1.0 + (0.08 + 0.26 * uBeat) * length(aCenter));',
+    '  vec3 position = center + local;',
+    '  position += normalize(position + vec3(0.0001)) * sin(uTime * 0.8 + aSeed * 27.0) * 0.02 * (0.35 + uTreble * 1.7);',
+    '  float twist = position.y * (1.25 + 0.85 * uBass) + sin(uTime * 0.17) * 0.15;',
+    '  vec2 twisted = mat2(cos(twist), sin(twist), -sin(twist), cos(twist)) * position.xz;',
+    '  position = vec3(twisted.x, position.y, twisted.y);',
+    '  position = rotateY(uTime * 0.2 * uSpin) * rotateX(0.38 + sin(uTime * 0.12) * 0.16) * (position * uScale);',
+    '  vec4 clip = uViewProj * vec4(position, 1.0);',
+    '  gl_Position = clip;',
+    '  float depth = clamp(clip.z / max(abs(clip.w), 0.0001) * 0.5 + 0.5, 0.0, 1.0);',
+    '  float core = clamp(1.0 - length(position) * 0.6, 0.0, 1.0);',
+    '  vTint = mix(uAccent, mix(uAccentAlt, vec3(1.0), 0.62), core);',
+    '  vAlpha = uAlpha * (0.28 + 0.72 * (1.0 - depth)) * (0.6 + 0.4 * sin(uTime * 0.5 + aSeed * 15.0));',
+    '}'
+  ].join('\n');
+
+  var CRYSTAL_FRAGMENT = [
+    'precision mediump float;',
+    'varying vec3 vTint;',
+    'varying float vAlpha;',
+    'void main() {',
+    '  gl_FragColor = vec4(vTint * vAlpha, 1.0);',
+    '}'
+  ].join('\n');
+
+  var POINTS_VERTEX = [
+    'attribute vec4 aSeed;',
+    'uniform mat4 uViewProj;',
+    'uniform float uTime;',
+    'uniform float uBass;',
+    'uniform float uTreble;',
+    'uniform float uLevel;',
+    'uniform float uBeat;',
+    'uniform float uRing;',
+    'uniform float uPixelRatio;',
+    'uniform float uSpin;',
+    'uniform vec3 uAccent;',
+    'uniform vec3 uAccentAlt;',
+    'varying vec3 vTint;',
+    'varying float vAlpha;',
+    'mat3 rotateY(float angle) {',
+    '  float cosine = cos(angle);',
+    '  float sine = sin(angle);',
+    '  return mat3(cosine, 0.0, -sine, 0.0, 1.0, 0.0, sine, 0.0, cosine);',
+    '}',
+    'mat3 rotateX(float angle) {',
+    '  float cosine = cos(angle);',
+    '  float sine = sin(angle);',
+    '  return mat3(1.0, 0.0, 0.0, 0.0, cosine, sine, 0.0, -sine, cosine);',
+    '}',
+    'void main() {',
+    '  float phase = aSeed.x * 6.28318;',
+    '  float angle = phase + uTime * (0.05 + aSeed.y * 0.1);',
+    '  float braid = 2.0 + floor(aSeed.z * 3.0);',
+    '  vec3 position;',
+    '  position.x = sin(angle * braid + phase * 2.0) * uRing * (0.55 + 0.75 * aSeed.w);',
+    '  position.y = sin(angle * (braid + 1.0) + phase) * uRing * 0.6;',
+    '  position.z = cos(angle * (braid + 2.0) - phase) * uRing * (0.55 + 0.75 * aSeed.z);',
+    '  position *= 1.0 + uBass * 0.55 + uBeat * 0.3;',
+    '  float twist = position.y * (1.0 + 0.7 * uBass);',
+    '  vec2 twisted = mat2(cos(twist), sin(twist), -sin(twist), cos(twist)) * position.xz;',
+    '  position = vec3(twisted.x, position.y, twisted.y);',
+    '  position = rotateY(uTime * 0.16 * uSpin) * rotateX(0.33) * position;',
+    '  position += vec3(sin(aSeed.w * 40.0 + uTime), cos(aSeed.x * 30.0 - uTime), 0.0) * 0.05 * (0.3 + uTreble);',
+    '  vec4 clip = uViewProj * vec4(position, 1.0);',
+    '  gl_Position = clip;',
+    '  float depth = clamp(clip.z / max(abs(clip.w), 0.0001) * 0.5 + 0.5, 0.0, 1.0);',
+    '  gl_PointSize = (1.0 + 2.8 * aSeed.w) * uPixelRatio * (1.5 - 0.9 * depth) * (1.0 + uBeat * 0.6);',
+    '  vTint = mix(uAccent, mix(vec3(1.0), uAccentAlt, 0.35), aSeed.y);',
+    '  vAlpha = (0.07 + 0.45 * aSeed.x) * (1.0 - depth * 0.6) * (0.4 + 0.9 * uLevel);',
+    '}'
+  ].join('\n');
+
+  var POINTS_FRAGMENT = [
+    'precision mediump float;',
+    'varying vec3 vTint;',
+    'varying float vAlpha;',
+    'void main() {',
+    '  vec2 offset = gl_PointCoord - vec2(0.5);',
+    '  float falloff = 1.0 - smoothstep(0.04, 0.5, length(offset));',
+    '  falloff = pow(falloff, 2.2);',
+    '  gl_FragColor = vec4(vTint * falloff * vAlpha, 1.0);',
+    '}'
+  ].join('\n');
+
+  function compileShader(context, type, source) {
+    var shader = context.createShader(type);
+    if (!shader) { throw new Error('createShader returned null'); }
+    context.shaderSource(shader, source);
+    context.compileShader(shader);
+    if (!context.getShaderParameter(shader, context.COMPILE_STATUS)) {
+      var log = context.getShaderInfoLog(shader);
+      context.deleteShader(shader);
+      throw new Error('shader compile failed: ' + log);
+    }
+    return shader;
+  }
+
+  function buildProgram(context, vertexSource, fragmentSource) {
+    var vertexShader = compileShader(context, context.VERTEX_SHADER, vertexSource);
+    var fragmentShader = compileShader(context, context.FRAGMENT_SHADER, fragmentSource);
+    var program = context.createProgram();
+    if (!program) { throw new Error('createProgram returned null'); }
+    context.attachShader(program, vertexShader);
+    context.attachShader(program, fragmentShader);
+    context.linkProgram(program);
+    context.deleteShader(vertexShader);
+    context.deleteShader(fragmentShader);
+    if (!context.getProgramParameter(program, context.LINK_STATUS)) {
+      throw new Error('program link failed: ' + context.getProgramInfoLog(program));
+    }
+    return program;
+  }
+
+  function createBuffer(context, data) {
+    var buffer = context.createBuffer();
+    if (!buffer) { throw new Error('createBuffer returned null'); }
+    context.bindBuffer(context.ARRAY_BUFFER, buffer);
+    context.bufferData(context.ARRAY_BUFFER, data, context.STATIC_DRAW);
+    return buffer;
+  }
+
+  function getUniforms(context, program, names) {
+    var result = {};
+    for (var index = 0; index < names.length; index += 1) {
+      result[names[index]] = context.getUniformLocation(program, names[index]);
+    }
+    return result;
+  }
+
+  function glColor(rgb) {
+    return [clampNumber(rgb[0], 0, 255) / 255, clampNumber(rgb[1], 0, 255) / 255, clampNumber(rgb[2], 0, 255) / 255];
+  }
+
+  function boostedColor(rgb) {
+    var red = clampNumber(rgb[0], 0, 255) / 255;
+    var green = clampNumber(rgb[1], 0, 255) / 255;
+    var blue = clampNumber(rgb[2], 0, 255) / 255;
+    var peak = Math.max(red, green, blue);
+    if (!Number.isFinite(peak) || peak <= 0.02) { peak = 0.35; }
+    var factor = clampNumber(0.62 / peak, 1, 2.8);
+    return [clampNumber(red * factor, 0, 1), clampNumber(green * factor, 0, 1), clampNumber(blue * factor, 0, 1)];
+  }
+
+  function setupGl() {
+    var canvas = dom.canvas;
+    var context = null;
+    try {
+      var options = {
+        alpha: false, antialias: true, depth: false, stencil: false,
+        premultipliedAlpha: false, powerPreference: 'high-performance'
+      };
+      context = canvas.getContext('webgl', options) || canvas.getContext('experimental-webgl', options);
+    } catch (error) { reportError('webgl-context', error); }
+    if (!context) { setupFallback(); return; }
+
+    try {
+      var backgroundProgram = buildProgram(context, BACKGROUND_VERTEX, BACKGROUND_FRAGMENT);
+      var crystalProgram = buildProgram(context, CRYSTAL_VERTEX, CRYSTAL_FRAGMENT);
+      var pointsProgram = buildProgram(context, POINTS_VERTEX, POINTS_FRAGMENT);
+
+      var quadBuffer = createBuffer(context, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]));
+
+      var cubes = buildMengerCubes(2);
+      var crystalData = buildCrystalVertices(cubes);
+      var crystalBuffer = createBuffer(context, crystalData);
+
+      var pointCount = window.innerWidth < 760 ? 11000 : 22000;
+      var pointData = buildPointSeeds(pointCount);
+      var pointBuffer = createBuffer(context, pointData);
+
+      glState = {
+        context: context,
+        canvas: canvas,
+        width: 2,
+        height: 2,
+        pixelRatio: 1,
+        viewProj: null,
+        crystalVertices: crystalData.length / 7,
+        pointVertices: pointCount,
+        quality: 1,
+        slowFrames: 0,
+        background: {
+          program: backgroundProgram,
+          buffer: quadBuffer,
+          position: context.getAttribLocation(backgroundProgram, 'aPosition'),
+          uniforms: getUniforms(context, backgroundProgram,
+            ['uRes', 'uTime', 'uBass', 'uLevel', 'uBeat', 'uAccent', 'uAccentAlt'])
+        },
+        crystal: {
+          program: crystalProgram,
+          buffer: crystalBuffer,
+          corner: context.getAttribLocation(crystalProgram, 'aCorner'),
+          center: context.getAttribLocation(crystalProgram, 'aCenter'),
+          seed: context.getAttribLocation(crystalProgram, 'aSeed'),
+          uniforms: getUniforms(context, crystalProgram,
+            ['uViewProj', 'uTime', 'uBass', 'uTreble', 'uBeat', 'uScale', 'uAlpha', 'uSpin', 'uAccent', 'uAccentAlt'])
+        },
+        points: {
+          program: pointsProgram,
+          buffer: pointBuffer,
+          seed: context.getAttribLocation(pointsProgram, 'aSeed'),
+          uniforms: getUniforms(context, pointsProgram,
+            ['uViewProj', 'uTime', 'uBass', 'uTreble', 'uLevel', 'uBeat', 'uRing', 'uPixelRatio', 'uSpin', 'uAccent', 'uAccentAlt'])
+        }
+      };
+
+      if (glState.background.position < 0 || glState.crystal.corner < 0 || glState.crystal.center < 0 ||
+          glState.crystal.seed < 0 || glState.points.seed < 0) {
+        throw new Error('vertex attribute location unavailable');
+      }
+
+      canvas.addEventListener('webglcontextlost', function (event) {
+        try {
+          event.preventDefault();
+          reportError('webgl-context-lost', new Error('context lost'));
+        } catch (error) { reportError('webgl-context-lost', error); }
+      }, false);
+
+      resizeGl();
+      stageState.gl = true;
+    } catch (error) {
+      reportError('webgl-setup', error);
+      glState = null;
+      stageState.gl = false;
+      setupFallback();
+    }
+  }
+
+  function resizeGl() {
+    if (!glState) { return; }
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+    if (!Number.isFinite(width) || width <= 0) { width = 1440; }
+    if (!Number.isFinite(height) || height <= 0) { height = 900; }
+    var ratio = Math.min(window.devicePixelRatio || 1, 1.7);
+    if (glState.quality < 0.8) { ratio = Math.min(ratio, 1); }
+    var bufferWidth = Math.max(4, Math.round(width * ratio));
+    var bufferHeight = Math.max(4, Math.round(height * ratio));
+    if (glState.canvas.width !== bufferWidth) { glState.canvas.width = bufferWidth; }
+    if (glState.canvas.height !== bufferHeight) { glState.canvas.height = bufferHeight; }
+    glState.width = bufferWidth;
+    glState.height = bufferHeight;
+    glState.pixelRatio = ratio;
+    var projection = matrixPerspective(1.06, bufferWidth / Math.max(1, bufferHeight), 0.1, 40);
+    glState.viewProj = matrixMultiply(projection, matrixTranslation(0, 0.16, -3.05));
+    glState.context.viewport(0, 0, bufferWidth, bufferHeight);
+  }
+
+  function drawGl(now) {
+    if (!glState) { return; }
+    var context = glState.context;
+    var seconds = now * 0.001;
+    var tempo = audioState.bpm > 0 ? clampNumber(audioState.bpm / 100, 0.75, 1.35) : 1;
+    var spin = (stageState.rm ? 0.3 : 1) * tempo;
+    var bass = clampNumber(audioState.bass + Math.sin(seconds * 0.55) * 0.035, 0, 1);
+    var treble = clampNumber(audioState.treble + Math.sin(seconds * 0.9 + 1.7) * 0.03, 0, 1);
+    var level = clampNumber(audioState.level, 0, 1);
+    var beat = window.__liziShake === false ? 0 : clampNumber(audioState.beat, 0, 1);
+    var accent = boostedColor(accentRgb);
+    var accentAlt = boostedColor(accentAltRgb);
+
+    context.viewport(0, 0, glState.width, glState.height);
+    context.clearColor(0.012, 0.014, 0.026, 1);
+    context.clear(context.COLOR_BUFFER_BIT);
+    context.disable(context.DEPTH_TEST);
+    context.disable(context.CULL_FACE);
+    context.enable(context.BLEND);
+
+    var background = glState.background;
+    context.useProgram(background.program);
+    context.blendFunc(context.ONE, context.ZERO);
+    context.uniform2f(background.uniforms.uRes, glState.width, glState.height);
+    context.uniform1f(background.uniforms.uTime, seconds);
+    context.uniform1f(background.uniforms.uBass, bass);
+    context.uniform1f(background.uniforms.uLevel, level);
+    context.uniform1f(background.uniforms.uBeat, beat);
+    context.uniform3fv(background.uniforms.uAccent, accent);
+    context.uniform3fv(background.uniforms.uAccentAlt, accentAlt);
+    context.bindBuffer(context.ARRAY_BUFFER, background.buffer);
+    context.enableVertexAttribArray(background.position);
+    context.vertexAttribPointer(background.position, 2, context.FLOAT, false, 0, 0);
+    context.drawArrays(context.TRIANGLE_STRIP, 0, 4);
+    context.disableVertexAttribArray(background.position);
+
+    context.blendFunc(context.ONE, context.ONE);
+
+    var crystal = glState.crystal;
+    context.useProgram(crystal.program);
+    context.uniformMatrix4fv(crystal.uniforms.uViewProj, false, glState.viewProj);
+    context.uniform1f(crystal.uniforms.uTime, seconds);
+    context.uniform1f(crystal.uniforms.uBass, bass);
+    context.uniform1f(crystal.uniforms.uTreble, treble);
+    context.uniform1f(crystal.uniforms.uBeat, beat);
+    context.uniform3fv(crystal.uniforms.uAccent, accent);
+    context.uniform3fv(crystal.uniforms.uAccentAlt, accentAlt);
+    context.bindBuffer(context.ARRAY_BUFFER, crystal.buffer);
+    context.enableVertexAttribArray(crystal.corner);
+    context.enableVertexAttribArray(crystal.center);
+    context.enableVertexAttribArray(crystal.seed);
+    context.vertexAttribPointer(crystal.corner, 3, context.FLOAT, false, 28, 0);
+    context.vertexAttribPointer(crystal.center, 3, context.FLOAT, false, 28, 12);
+    context.vertexAttribPointer(crystal.seed, 1, context.FLOAT, false, 28, 24);
+
+    var scales = [1, 1.58, 2.32];
+    var alphas = [0.5, 0.18, 0.07];
+    var spins = [1, 0.72, 0.5];
+    var tints = [accent, accentAlt, boostedColor(shiftHue(accentAltRgb, 42, 0.08))];
+    for (var copy = 0; copy < scales.length; copy += 1) {
+      context.uniform1f(crystal.uniforms.uScale, scales[copy]);
+      context.uniform1f(crystal.uniforms.uAlpha, alphas[copy]);
+      context.uniform1f(crystal.uniforms.uSpin, spin * spins[copy]);
+      context.uniform3fv(crystal.uniforms.uAccent, tints[copy]);
+      context.drawArrays(context.LINES, 0, glState.crystalVertices);
+    }
+    context.disableVertexAttribArray(crystal.corner);
+    context.disableVertexAttribArray(crystal.center);
+    context.disableVertexAttribArray(crystal.seed);
+
+    var points = glState.points;
+    context.useProgram(points.program);
+    context.uniformMatrix4fv(points.uniforms.uViewProj, false, glState.viewProj);
+    context.uniform1f(points.uniforms.uTime, seconds);
+    context.uniform1f(points.uniforms.uBass, bass);
+    context.uniform1f(points.uniforms.uTreble, treble);
+    context.uniform1f(points.uniforms.uLevel, level);
+    context.uniform1f(points.uniforms.uBeat, beat);
+    context.uniform1f(points.uniforms.uRing, 1.22);
+    context.uniform1f(points.uniforms.uPixelRatio, glState.pixelRatio);
+    context.uniform1f(points.uniforms.uSpin, spin);
+    context.uniform3fv(points.uniforms.uAccent, accent);
+    context.uniform3fv(points.uniforms.uAccentAlt, accentAlt);
+    context.bindBuffer(context.ARRAY_BUFFER, points.buffer);
+    context.enableVertexAttribArray(points.seed);
+    context.vertexAttribPointer(points.seed, 4, context.FLOAT, false, 16, 0);
+    context.drawArrays(context.POINTS, 0, Math.max(1000, Math.floor(glState.pointVertices * glState.quality)));
+    context.disableVertexAttribArray(points.seed);
+  }
+
+  function channelText(value) {
+    return String(Math.round(clampNumber(value, 0, 255)));
+  }
+
+  function setupFallback() {
+    var canvas = dom.canvas;
+    var context = null;
+    try { context = canvas.getContext('2d'); } catch (error) { reportError('canvas2d-context', error); }
+    if (!context) {
+      /* 画布已经被 WebGL 锁定时，换一块干净的画布再取 2D */
+      try {
+        var replacement = document.createElement('canvas');
+        replacement.id = 'gl';
+        if (canvas.parentNode) { canvas.parentNode.replaceChild(replacement, canvas); }
+        dom.canvas = replacement;
+        canvas = replacement;
+        context = replacement.getContext('2d');
+      } catch (error) { reportError('canvas2d-replace', error); }
+    }
+    if (!context) { reportError('canvas2d', new Error('2D context unavailable')); return; }
+    canvasState = {
+      context: context,
+      glowCanvas: buildGlowCanvas(),
+      width: 2,
+      height: 2,
+      rings: 6
+    };
+    resizeFallback();
+  }
+
+  function buildGlowCanvas() {
+    var glow = document.createElement('canvas');
+    glow.width = 512;
+    glow.height = 512;
+    var context = null;
+    try { context = glow.getContext('2d'); } catch (error) { reportError('glow-context', error); }
+    if (!context || typeof context.createRadialGradient !== 'function') { return null; }
+    try {
+      var gradient = context.createRadialGradient(256, 256, 0, 256, 256, 256);
+      gradient.addColorStop(0, 'rgba(' + channelText(accentRgb[0]) + ',' + channelText(accentRgb[1]) + ',' + channelText(accentRgb[2]) + ',0.9)');
+      gradient.addColorStop(0.34, 'rgba(' + channelText(accentRgb[0]) + ',' + channelText(accentRgb[1]) + ',' + channelText(accentRgb[2]) + ',0.24)');
+      gradient.addColorStop(1, 'rgba(' + channelText(accentAltRgb[0]) + ',' + channelText(accentAltRgb[1]) + ',' + channelText(accentAltRgb[2]) + ',0)');
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, 512, 512);
+    } catch (error) {
+      reportError('glow-paint', error);
+      return null;
+    }
+    return glow;
+  }
+
+  function resizeFallback() {
+    if (!canvasState) { return; }
+    var width = window.innerWidth;
+    var height = window.innerHeight;
+    if (!Number.isFinite(width) || width <= 0) { width = 1440; }
+    if (!Number.isFinite(height) || height <= 0) { height = 900; }
+    var ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    canvasState.width = Math.max(4, Math.round(width * ratio));
+    canvasState.height = Math.max(4, Math.round(height * ratio));
+    if (canvasState.context.canvas.width !== canvasState.width) { canvasState.context.canvas.width = canvasState.width; }
+    if (canvasState.context.canvas.height !== canvasState.height) { canvasState.context.canvas.height = canvasState.height; }
+  }
+
+  function drawFallback(now) {
+    if (!canvasState) { return; }
+    var context = canvasState.context;
+    var width = canvasState.width;
+    var height = canvasState.height;
+    var seconds = now * 0.001;
+    var spin = stageState.rm ? 0.25 : 1;
+    var level = clampNumber(audioState.level + audioState.bass * 0.4, 0, 1);
+
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.globalCompositeOperation = 'source-over';
+    context.globalAlpha = 1;
+    context.fillStyle = '#05060a';
+    context.fillRect(0, 0, width, height);
+
+    if (canvasState.glowCanvas && typeof context.drawImage === 'function' &&
+        canvasState.glowCanvas.width > 0 && canvasState.glowCanvas.height > 0) {
+      context.globalCompositeOperation = 'lighter';
+      context.globalAlpha = 0.2 + level * 0.22;
+      var size = Math.max(width, height) * 1.7;
+      context.drawImage(canvasState.glowCanvas, (width - size) / 2, (height - size) / 2, size, size);
+      context.globalAlpha = 1;
+    }
+
+    if (typeof context.beginPath !== 'function') { return; }
+    context.globalCompositeOperation = 'lighter';
+    var centerX = width * 0.5;
+    var centerY = height * 0.44;
+    var baseRadius = Math.min(width, height) * 0.3;
+    for (var ring = 0; ring < canvasState.rings; ring += 1) {
+      var sides = 6 + ring;
+      var ringRadius = baseRadius * (0.55 + ring * 0.28) * (1 + audioState.bass * 0.12);
+      var rotation = seconds * (0.18 + ring * 0.05) * spin * (ring % 2 === 0 ? 1 : -1);
+      context.beginPath();
+      for (var vertex = 0; vertex <= sides; vertex += 1) {
+        var angle = rotation + (vertex / sides) * Math.PI * 2;
+        var pointX = centerX + Math.cos(angle) * ringRadius;
+        var pointY = centerY + Math.sin(angle) * ringRadius * 0.72;
+        if (vertex === 0) { context.moveTo(pointX, pointY); }
+        else { context.lineTo(pointX, pointY); }
+      }
+      context.strokeStyle = 'rgba(' + channelText(accentRgb[0]) + ',' + channelText(accentRgb[1]) + ',' +
+        channelText(accentRgb[2]) + ',' + (0.1 + 0.24 / (ring + 1) + level * 0.12).toFixed(3) + ')';
+      context.lineWidth = Math.max(0.6, 0.8 + ring * 0.12);
+      context.stroke();
+    }
+    context.globalCompositeOperation = 'source-over';
+  }
+
+  function frame(now) {
+    var frameStart = (window.performance && performance.now) ? performance.now() : now;
+    stageState.frames += 1;
+    try { smoothAudio(); } catch (error) { reportError('smoothAudio', error); }
+    try {
+      if (glState) { drawGl(frameStart); }
+      else if (canvasState) { drawFallback(frameStart); }
+    } catch (error) { reportError('draw', error); }
+    try { updateSignalBars(frameStart); } catch (error) { reportError('signalBars', error); }
+    try {
+      if (glState) {
+        if (stageState.js > 26) { glState.slowFrames += 1; } else { glState.slowFrames = 0; }
+        if (glState.slowFrames > 45 && glState.quality > 0.6) {
+          glState.quality = 0.6;
+          glState.slowFrames = 0;
+          resizeGl();
+        }
+      }
+    } catch (error) { reportError('adaptive', error); }
+    var frameEnd = (window.performance && performance.now) ? performance.now() : Date.now();
+    stageState.js = Math.round((frameEnd - frameStart) * 10) / 10;
+    requestAnimationFrame(frame);
+  }
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    if (resizeTimer !== null) { clearTimeout(resizeTimer); }
+    resizeTimer = setTimeout(function () {
+      resizeTimer = null;
+      try {
+        if (glState) { resizeGl(); }
+        else { resizeFallback(); }
+      } catch (error) { reportError('resize', error); }
+    }, 120);
+  }, false);
+
+  requestAnimationFrame(frame);
+  requestAnimationFrame(function () {
+    setTimeout(function () {
+      try { setupGl(); } catch (error) { reportError('boot-renderer', error); }
+    }, 0);
+  });
+})();
+</script>
+</body>
+</html>

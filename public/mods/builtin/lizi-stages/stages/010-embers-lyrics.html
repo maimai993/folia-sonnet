@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>余烬歌词</title>
+<style>
+  html,body{margin:0;height:100%;background:#050304;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(255,185,120,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '余烬',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================================
+   010 · 余烬歌词 —— 字是被唱亮的
+
+   · 词团：用 004 的中文分词（词典 + 双向最大匹配）把一句切成 2~3 字的团。
+     每团的点火时间 = 团内首字的 YRC 逐字时间；没有 YRC 才按字数比例分。
+   · 点火：唱到哪个团，属于这个团的火星才被吸进字形、开始发亮；没唱到的团
+     还只是上升气流里的暗火。字是一个词一个词被点着的，不是整句一起摆出来。
+   · 镜头：微微推近并偏向当前这个词团，每点火一个团给一记很轻的推镜；
+     句与句之间回落到全景。幅度刻意压小，只在节奏上"点"一下，不抢字。
+   · 清楚：字形采样 3px（老版 4px + 3.6px 大颗粒，笔画上只有两三个点，糊成黄雾），
+     每个采样点约 1.1 颗火星，火焰按亮度分 4 档（暗红 → 亮橙 → 暖白）合批，
+     每颗带自己的闪烁相位 —— 远看是字，近看是火。长句按**团边界**折 2~3 行，不把词劈开。
+   ========================================================================== */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+
+/* ============================================================================
+   火星
+   gid[i] = 认领的团（-1 = 自由火星）；grel[i] 是这个团的点火时间
+   ========================================================================== */
+const N = 11000;
+const px = new Float32Array(N), py = new Float32Array(N);
+const vx = new Float32Array(N), vy = new Float32Array(N);
+const tx = new Float32Array(N), ty = new Float32Array(N);   // 目标（字形上的采样点）
+const lit = new Float32Array(N);                            // 被点亮的程度 0~1
+const seed = new Float32Array(N);
+const grel = new Float32Array(N);
+const gid = new Int16Array(N);
+const hot = new Uint8Array(N);   // 已经贴到采样点上的火星（爆闪只给它们）
+gid.fill(-1);
+
+function respawn(i, fromBottom) {
+  px[i] = Math.random() * W;
+  py[i] = fromBottom ? H + 8 + Math.random() * 150 : Math.random() * H;
+  vx[i] = (Math.random() - 0.5) * 12;
+  vy[i] = -(26 + Math.random() * 44);
+  lit[i] = 0;
+}
+for (let i = 0; i < N; i++) { respawn(i, false); seed[i] = Math.random() * 6.283; }
+
+/* ============================================================================
+   分词：决定"哪几个字一起被点亮"
+   · 词典 = public/segdict.bin —— 33 万个 2~4 字词的 32 位哈希（1.26 MB）。
+     只做二分查找、不存词原文，所以内存就是这 1.26 MB。
+   · 拿不到词典（例如直接 file:// 打开）自动退回"按标点 + 字数"硬切，形态不崩。
+   · 以下 isWord / segWords / groupByWords / groupByRule / latinSpans / spansForLine
+     与 004 完全一致，是纯函数，不依赖 004 的沙粒逻辑。
+   ========================================================================== */
+let DICT = null;
+fetch('segdict.bin')
+  .then((r) => (r.ok ? r.arrayBuffer() : null))
+  .then((b) => {
+    if (!b) return;
+    DICT = new Uint32Array(b);
+    /* 词典晚到：当前句如果已经用规则切过了，重排一次，免得整首歌都在硬切 */
+    if (lines.length && curIdx >= 0) build(curIdx);
+  })
+  .catch(() => {});
+
+const fnv = (s) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+};
+
+function isWord(s, i, L) {
+  const h = fnv(s.substr(i, L));
+  let lo = 0, hi = DICT.length - 1;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1, v = DICT[m];
+    if (v === h) return true;
+    if (v < h) lo = m + 1; else hi = m - 1;
+  }
+  return false;
+}
+
+/* 正/反向最大匹配，取词数少的那个 —— 只用正向会偏爱长词（"一个人" vs "一个/人"） */
+function segWords(text) {
+  const fwd = [];
+  for (let i = 0; i < text.length;) {
+    let hit = 0;
+    for (let L = Math.min(4, text.length - i); L >= 2; L--) if (isWord(text, i, L)) { hit = L; break; }
+    if (hit) { fwd.push(text.substr(i, hit)); i += hit; } else { fwd.push(text[i]); i++; }
+  }
+  const bwd = [];
+  for (let j = text.length; j > 0;) {
+    let hit = 0;
+    for (let L = Math.min(4, j); L >= 2; L--) if (isWord(text, j - L, L)) { hit = L; break; }
+    if (hit) { bwd.unshift(text.substr(j - hit, hit)); j -= hit; } else { bwd.unshift(text[j - 1]); j--; }
+  }
+  return fwd.length <= bwd.length ? fwd : bwd;
+}
+
+const MAXG = 3;      // 中文一团最多几个字。2~3 字点一次，节奏才不像机关枪
+
+/* 标点表**不含**撇号、连字符、空格：
+   "don't" / "well-known" 里的符号是词的一部分，当成标点会把词切碎、还会让撇号消失。 */
+const PUNCT = /[，。！？、；：,.!?;:…—~·「」『』（）()《》【】"]/;
+const SPACE = /\s/;
+
+/* 这行是中文还是拉丁文？拉丁按"整词"成团，中文才按 2~3 字合并 */
+function isLatin(text) {
+  let la = 0, cjk = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) la++;
+    else if (c >= '\u4e00' && c <= '\u9fff') cjk++;
+  }
+  return la > cjk;
+}
+
+/* 拉丁：一个词一团。词内标点原样保留，白空格不占位（本来就没笔画） */
+function latinSpans(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    if (SPACE.test(text[i])) { i++; continue; }
+    let j = i;
+    while (j < text.length && !SPACE.test(text[j])) j++;
+    out.push({ i0: i, i1: j });
+    i = j;
+  }
+  return out;
+}
+
+/* 虚词的方向决定了"还健在"还是"目前还"：
+   的/了/着/过 挂**前面**的词（磨平+了），但/还/就/才 留给**后面**的词（还+健在）。 */
+const SUFFIX = /^[的了着过地得吗呢吧啊嘛]$/;
+const PREFIX = /^[但还就才又也都把被在从向对和与而却很不没最更将已曾让给]$/;
+
+function countChars(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) if (!PUNCT.test(s[i]) && !SPACE.test(s[i])) n++;
+  return n;
+}
+
+/* 中文：词 → 团。贪心填到 MAXG 个汉字，标点并进本团并收尾（这样标点不会被吞掉） */
+function groupByWords(text) {
+  const words = segWords(text);
+  const out = [];
+  let cur = '', start = 0, chars = 0, pos = 0;
+  const flush = (end) => { if (cur) { out.push({ i0: start, i1: end }); cur = ''; chars = 0; } };
+  for (const w of words) {
+    const at = pos;
+    pos += w.length;
+    const isP = PUNCT.test(w);
+    if (!cur) { cur = w; start = at; chars = isP ? 0 : w.length; continue; }
+    if (isP) { cur += w; if (chars >= 2) flush(pos); continue; }
+
+    const single = w.length === 1;
+    if (single && SUFFIX.test(w)) {                  // 的/了/着：跟前面的词一起走
+      cur += w; chars++;
+      if (chars >= MAXG) flush(pos);
+      continue;
+    }
+    if (single && PREFIX.test(w) && chars >= 2) {     // 但/还/就：留给后面的词
+      flush(at); cur = w; start = at; chars = 1;
+      continue;
+    }
+    if (chars + w.length <= MAXG) { cur += w; chars += w.length; }
+    else { flush(at); cur = w; start = at; chars = w.length; }
+  }
+  flush(text.length);
+  /* 只有 1 个汉字的孤儿（"我""却"）并到邻居，别让它自己亮一团 */
+  for (let k = 0; k < out.length; k++) {
+    const g = out[k];
+    if (countChars(text.slice(g.i0, g.i1)) > 1) continue;
+    const prev = out[k - 1], next = out[k + 1];
+    if (prev && prev.i1 === g.i0 && countChars(text.slice(prev.i0, prev.i1)) < MAXG) { prev.i1 = g.i1; out.splice(k, 1); k--; }
+    else if (next && next.i0 === g.i1 && countChars(text.slice(next.i0, next.i1)) < MAXG) { next.i0 = g.i0; out.splice(k, 1); k--; }
+  }
+  return out;
+}
+
+/* 没词典时的兜底：不管词，按标点收尾 + MAXG 个汉字硬切（标点同样保留） */
+function groupByRule(text) {
+  const out = [];
+  let start = 0, chars = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const sep = PUNCT.test(c) || SPACE.test(c);
+    if (!sep) chars++;
+    if (sep && chars >= 2) { out.push({ i0: start, i1: i + 1 }); start = i + 1; chars = 0; continue; }
+    if (!sep && chars > MAXG) { out.push({ i0: start, i1: i }); start = i; chars = 1; }
+  }
+  if (start < text.length) out.push({ i0: start, i1: text.length });
+  return out;
+}
+
+/* 统一入口：拉丁按词、中文按分词 */
+function spansForLine(text) {
+  if (isLatin(text)) return latinSpans(text);
+  return DICT ? groupByWords(text) : groupByRule(text);
+}
+
+/* ============================================================================
+   字形采样 + 排版
+   ========================================================================== */
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+const FONT = (fs) => `800 ${fs}px "PingFang SC","Microsoft YaHei",system-ui,sans-serif`;
+const PAD = 6;
+const BASEF = 118;          // 基准字号：比老版的 112 再大一点
+const SAMP = 3;             // 采样步长
+const ROWCAP = 3;
+
+function measureTxt(text, fs) { octx.font = FONT(fs); return octx.measureText(text).width; }
+
+/* 采样一团的字形。返回的点以"文字左缘 / 垂直中线"为原点 */
+function samplePts(text, fs) {
+  const w = Math.ceil(measureTxt(text, fs)) + PAD * 2;
+  const h = Math.ceil(fs * 1.38);
+  off.width = w; off.height = h;
+  octx.clearRect(0, 0, w, h);
+  octx.font = FONT(fs);
+  octx.textAlign = 'left'; octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+  octx.fillText(text, PAD, h / 2);
+  const d = octx.getImageData(0, 0, w, h).data;
+  const pts = [];
+  /* 步长 3px：颗粒 1.5~3.0px，笔画能被铺满又不至于糊成实心色块。
+     老版 4px 采样 + 3.6px 大颗粒，一个百来像素的字在笔画上只剩两三个点 ——
+     那就是"字不清楚"的根因，不是亮度不够。 */
+  for (let y = 0; y < h; y += SAMP) {
+    for (let x = 0; x < w; x += SAMP) {
+      if (d[(y * w + x) * 4 + 3] > 128) pts.push(x - PAD, y - h / 2);
+    }
+  }
+  return { pts, w, h };
+}
+
+/* 有的 YRC 行首尾带空格（正文被 trim 过），逐字时间会比正文长 —— 对齐一下 */
+function alignChars(line) {
+  const text = line.text || '';
+  const cs = line.chars;
+  if (!cs || !cs.length) return null;
+  if (cs.length === text.length) return cs;
+  let joined = '';
+  for (let i = 0; i < cs.length; i++) joined += (cs[i] && cs[i].c) || '';
+  const at = joined.indexOf(text);
+  if (at >= 0 && at + text.length <= cs.length) return cs.slice(at, at + text.length);
+  return null;
+}
+
+/* 排一句：团 → 行 → 采样点。折行只在团的边界断，绝不把词劈成两行。 */
+function layoutLine(line, idx, endT) {
+  const text = line.text || '';
+  if (!text.trim()) return null;
+  const chars = alignChars(line);
+  const spans = spansForLine(text);
+  if (!spans.length) return null;
+
+  const maxW = Math.min(W * 0.84, 1320);
+  const sw = spans.map((s) => measureTxt(text.slice(s.i0, s.i1), BASEF));
+  const totalW = sw.reduce((a, b) => a + b, 0);
+  let nrows = 1;
+  if (totalW > maxW) nrows = Math.min(ROWCAP, Math.max(2, Math.ceil(totalW / maxW)));
+
+  const target = totalW / nrows;
+  const rows = [];
+  let cur = [], acc = 0;
+  for (let k = 0; k < spans.length; k++) {
+    if (cur.length && acc + sw[k] > target * 1.05 && rows.length < nrows - 1) {
+      rows.push(cur); cur = []; acc = 0;
+    }
+    cur.push(k); acc += sw[k];
+  }
+  if (cur.length) rows.push(cur);
+
+  const rowTexts = rows.map((r) => text.slice(spans[r[0]].i0, spans[r[r.length - 1]].i1));
+  let fs = BASEF;
+  const wmax = Math.max.apply(null, rowTexts.map((t) => measureTxt(t, BASEF)));
+  if (wmax > maxW) fs = BASEF * (maxW / wmax);
+
+  const lineH = fs * 1.42;
+  const cy0 = H / 2 - (rows.length - 1) * lineH / 2;
+  /* 每句给一点位置差：镜头本来就跟着词走，字别每次都钉死在正中央 */
+  const sx = ((idx * 7) % 5 - 2) * W * 0.018;
+  const sy = ((idx * 3) % 5 - 2) * H * 0.014;
+
+  const groups = [];
+  let pcTotal = 0;
+  for (let r = 0; r < rows.length; r++) {
+    const rt = rowTexts[r];
+    const left = W / 2 + sx - measureTxt(rt, fs) / 2;
+    const y = cy0 + sy + r * lineH;
+    const base = spans[rows[r][0]].i0;
+    for (const k of rows[r]) {
+      const s = spans[k];
+      const str = text.slice(s.i0, s.i1);
+      if (!str) continue;
+      const smp = samplePts(str, fs);
+      if (!smp.pts.length) continue;
+      /* 位置用**前缀宽度**量，不让各团自己量 —— 会累积误差、整行越走越偏 */
+      const x0 = left + measureTxt(text.slice(base, s.i0), fs);
+      /* 节奏 = 团内**首字**的 YRC 绝对秒；没有 YRC 才按字数比例分 */
+      const t = (chars && chars[s.i0] && typeof chars[s.i0].t === 'number')
+        ? chars[s.i0].t
+        : line.t + (line.dur || 4) * (s.i0 / Math.max(1, text.length));
+      groups.push({ t, x0, y, w: measureTxt(str, fs), h: smp.h, pts: smp.pts, pc: smp.pts.length >> 1 });
+      pcTotal += smp.pts.length >> 1;
+    }
+  }
+  if (!groups.length) return null;
+
+  /* 时间必须单调，否则拖进度条回来会出现"后面的团先亮" */
+  for (let k = 1; k < groups.length; k++) if (groups[k].t < groups[k - 1].t) groups[k].t = groups[k - 1].t;
+  /* 最后一团不能拖到换句之后才点 —— 留 0.42 秒让它站住 */
+  const tMax = endT - 0.42;
+  if (tMax > line.t) {
+    for (const g of groups) if (g.t > tMax) g.t = tMax;
+    for (let k = 1; k < groups.length; k++) if (groups[k].t < groups[k - 1].t) groups[k].t = groups[k - 1].t;
+  }
+
+  let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+  for (const g of groups) {
+    if (g.x0 < bx0) bx0 = g.x0;
+    if (g.x0 + g.w > bx1) bx1 = g.x0 + g.w;
+    if (g.y - g.h / 2 < by0) by0 = g.y - g.h / 2;
+    if (g.y + g.h / 2 > by1) by1 = g.y + g.h / 2;
+  }
+  return { groups, pc: pcTotal, box: { x0: bx0, x1: bx1, y0: by0, y1: by1 } };
+}
+
+/* ============================================================================
+   状态
+   ========================================================================== */
+let lines = [];
+let accent = [255, 185, 120];
+let LAY = null;              // 当前句的排版
+let curIdx = -1;             // 当前句
+let curG = -1;               // 已点亮到第几团
+let lastT = -1;
+let lineIdx = -1;
+const MAXGROUPS = 128;
+const glit = new Float32Array(MAXGROUPS);     // 每团的目标亮度
+const gflash = new Float32Array(MAXGROUPS);   // 点火那一瞬的爆闪
+
+const DENS = 1.08;           // 每个采样点约 1.1 颗火星：笔画铺得满，颗粒感还在
+const TEXT_BUDGET = 9300;   // 同时亮着的火星上限：多出来的留给背景，长句也不会把帧率烧穿
+/* 闪烁相位表：让同一笔里的火星有的亮有的暗，字才不会变成一块实心白 */
+const FLICK = [1, 0.92, 0.98, 0.86, 1, 0.95, 0.9, 1];
+let PAL = null;
+function palette() {
+  const [ar, ag, ab] = accent;
+  const base = [[255, 112, 48], [255, 150, 72], [255, 188, 116], [255, 232, 186]];
+  const alpha = [0.10, 0.28, 0.52, 0.86];
+  const size = [1.45, 1.8, 2.15, 2.55];
+  const k = 0.16;            // 只让主色轻微染色，余烬必须还是暖的
+  PAL = base.map((c, i) => {
+    const R = Math.round(c[0] * (1 - k) + ar * k);
+    const G = Math.round(c[1] * (1 - k) + ag * k);
+    const B = Math.round(c[2] * (1 - k) + ab * k);
+    return { fill: `rgba(${R},${G},${B},${alpha[i]})`, s: size[i] };
+  });
+}
+palette();
+
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+/** 换句：排版 + 把火星分给各团的采样点 */
+function build(idx) {
+  lineIdx = idx;
+  curG = -1;
+  const line = lines[idx];
+  if (!line) { LAY = null; gid.fill(-1); return; }
+  const endT = idx + 1 < lines.length ? lines[idx + 1].t : (line.t + (line.dur || 4));
+  LAY = layoutLine(line, idx, endT);
+  if (!LAY) { gid.fill(-1); return; }
+
+  const gs = LAY.groups;
+  const K = Math.min(N, TEXT_BUDGET, Math.ceil(LAY.pc * DENS));
+  let gi = 0, acc = gs[0].pc;
+  for (let i = 0; i < N; i++) {
+    if (i >= K) { gid[i] = -1; continue; }
+    /* 等间隔取样：字密的地方点多，分到的火星就多；不会因为按顺序取只用上半行 */
+    const si = Math.floor(i * LAY.pc / K);
+    while (si >= acc && gi + 1 < gs.length) { gi++; acc += gs[gi].pc; }
+    const g = gs[gi];
+    const p = (si - (acc - g.pc)) * 2;
+    gid[i] = gi;
+    grel[i] = g.t;
+    tx[i] = g.x0 + g.pts[p] + (Math.random() - 0.5) * 1.8;
+    ty[i] = g.y + g.pts[p + 1] + (Math.random() - 0.5) * 1.8;
+  }
+}
+
+/** 点火：一个团被唱到 */
+let camKick = 0;
+function ignite(k) {
+  if (window.__liziShake === false) return;   // 震动关闭：不推镜
+  camKick = Math.min(0.026, camKick + 0.013);
+}
+
+/* ---- 节奏 ---- */
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) { curIdx = -1; curG = -1; LAY = null; gid.fill(-1); }  // 拖进度条才允许回退
+  lastT = T;
+
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    if (ci >= 0) build(ci); else { LAY = null; curG = -1; gid.fill(-1); }
+    hint.style.opacity = ci >= 0 ? '0' : (lines.length ? '1' : '0.5');
+  }
+
+  if (LAY) {
+    const gs = LAY.groups;
+    let g = curG;
+    while (g + 1 < gs.length && T >= gs[g + 1].t) g++;
+    if (g !== curG) {
+      /* seek 跨过一整段时这里会连续补点，不会漏字 */
+      for (let k = curG + 1; k <= g; k++) ignite(k);
+      curG = g;
+    }
+  }
+}
+
+/* ---- 镜头：微微推近 + 偏向当前词团 ---- */
+const cam = { s: 1, x: 0, y: 0 };
+cam.x = W / 2; cam.y = H / 2;
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+function updateCam(dt) {
+  let ts = 1, x = W / 2, y = H / 2;
+  if (LAY && curG >= 0) {
+    const g = LAY.groups[curG];
+    const gx = g.x0 + g.w / 2, gy = g.y;
+    ts = 1.024 + camKick + Math.sin(t0 * 0.5) * 0.004;
+    x = W / 2 + (gx - W / 2) * 0.45;
+    y = H / 2 + (gy - H / 2) * 0.45;
+    /* 不许把整句切出画外：目标必须落在"整句还在画面里"的范围里。
+       用当前 scale 算（不是目标 scale），镜头推进途中也不会把字挤出边。 */
+    const sc = Math.max(1, cam.s);
+    const hw = W / (2 * sc) - 96, hh = H / (2 * sc) - 56;
+    const b = LAY.box;
+    x = b.x1 - hw > b.x0 + hw ? (b.x0 + b.x1) / 2 : clamp(x, b.x1 - hw, b.x0 + hw);
+    y = b.y1 - hh > b.y0 + hh ? (b.y0 + b.y1) / 2 : clamp(y, b.y1 - hh, b.y0 + hh);
+  }
+  camKick *= Math.exp(-dt * 4.2);
+  cam.s += (ts - cam.s) * Math.min(1, dt * 2.4);
+  cam.x += (x - cam.x) * Math.min(1, dt * 1.8);
+  cam.y += (y - cam.y) * Math.min(1, dt * 1.8);
+}
+
+/* ---- 主循环 ---- */
+const B0 = new Int32Array(N), B1 = new Int32Array(N), B2 = new Int32Array(N), B3 = new Int32Array(N);
+let viewX0 = 0, viewY0 = 0, viewX1 = 0, viewY1 = 0;
+function drawFire(b, arr, n) {
+  ctx.fillStyle = PAL[b].fill;
+  const sz = PAL[b].s, h2 = sz / 2;
+  for (let j = 0; j < n; j++) {
+    const i = arr[j];
+    const x = px[i], y = py[i];
+    if (x < viewX0 - 14 || x > viewX1 + 14 || y < viewY0 - 14 || y > viewY1 + 14) continue;
+    ctx.fillRect(x - h2, y - h2, sz, sz);
+  }
+}
+
+let last = performance.now();
+let t0 = 0;
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+
+  timing(T);
+  updateCam(dt);
+
+  const gs = LAY ? LAY.groups : null;
+  if (gs) {
+    const n = gs.length;
+    for (let k = 0; k < n; k++) {
+      glit[k] = k < curG ? 0.9 : k === curG ? 1 : 0;
+      gflash[k] = k === curG ? Math.max(0, 1 - (T - gs[k].t) / 0.34) : 0;
+    }
+  }
+
+  /* ---- 火星 ---- */
+  for (let i = 0; i < N; i++) {
+    const g = gid[i];
+    /* 提前 0.22 秒起飞：唱到那个词的时候刚好落位，不然每个词都要晚半拍才认得出来 */
+    if (g >= 0 && T >= grel[i] - 0.22) {
+      /* 朝采样点收拢：已经在字上的才烧到最亮，还在路上的是暗红余烬 ——
+         不然一整团火星飞到一半就全亮，字还没成形先糊成一团白雾。 */
+      const dx = tx[i] - px[i], dy = ty[i] - py[i];
+      const d2 = dx * dx + dy * dy;
+      if (d2 > 3) {
+        const d = Math.sqrt(d2);
+        const want = Math.min(1500, d * 7);
+        const r = Math.min(1, dt * 8);
+        vx[i] += ((dx / d) * want - vx[i]) * r;
+        vy[i] += ((dy / d) * want - vy[i]) * r;
+      } else {
+        vx[i] *= 0.82; vy[i] *= 0.82;
+      }
+      px[i] += vx[i] * dt; py[i] += vy[i] * dt;
+      const near = d2 < 1600;
+      hot[i] = near ? 1 : 0;
+      const litT = T >= grel[i] ? (near ? glit[g] : glit[g] * 0.3) : 0;
+      lit[i] += (litT - lit[i]) * Math.min(1, dt * (near ? 9 : 5));
+      if (lit[i] > 0.45) {
+        px[i] += Math.sin(t0 * 2.3 + seed[i] * 3.1) * 5 * dt;
+        py[i] += Math.cos(t0 * 1.9 + seed[i] * 4.7) * 4 * dt;
+      }
+    } else {
+      /* 还没被点：只是上升气流里的一粒暗火 */
+      const turb = Math.sin(py[i] * 0.006 + t0 * 0.9 + seed[i]) * Math.cos(px[i] * 0.005 - t0 * 0.6) * 34;
+      vx[i] += (turb - vx[i]) * Math.min(1, dt * 1.1);
+      vy[i] += (-(30 + 26 * Math.sin(seed[i] + t0 * 0.45)) - vy[i]) * Math.min(1, dt * 1.2);
+      px[i] += vx[i] * dt; py[i] += vy[i] * dt;
+      lit[i] = Math.max(0, lit[i] - dt * 2.4);
+    }
+    if (px[i] < -20) px[i] = W + 20; else if (px[i] > W + 20) px[i] = -20;
+    if (py[i] < -30) respawn(i, true);
+  }
+
+  /* ---- 绘制 ---- */
+  const s = cam.s, cx = cam.x, cy = cam.y;
+  ctx.setTransform(DPR * s, 0, 0, DPR * s, DPR * (W / 2 - cx * s), DPR * (H / 2 - cy * s));
+  const vw = W / s, vh = H / s;
+  const wx0 = cx - vw / 2, wy0 = cy - vh / 2;
+
+  ctx.fillStyle = 'rgba(5,3,4,0.27)';
+  ctx.fillRect(wx0 - 2, wy0 - 2, vw + 4, vh + 4);
+
+  ctx.globalCompositeOperation = 'lighter';
+
+  /* 火：按亮度分 4 档，先分桶再画 —— 每颗只算一次亮度、只画一次。
+     （老版是 4 档各扫一遍全体，等于每颗算 4 次；档内还要再判一次 band） */
+  const fq = (t0 * 7) | 0;
+  let n0 = 0, n1 = 0, n2 = 0, n3 = 0;
+  for (let i = 0; i < N; i++) {
+    const g = gid[i];
+    let k = lit[i];
+    if (g >= 0) {
+      /* 每颗火自己的闪烁相位（查表代替 sin，省 5 万次三角函数）；
+         爆闪只给贴到位的火星，还在飞的不算，免得点火时糊出一团白雾 */
+      k = k * FLICK[(i + fq) & 7] + (hot[i] ? gflash[g] * 0.45 : 0);
+    }
+    if (k < 0.2) B0[n0++] = i;
+    else if (k < 0.46) B1[n1++] = i;
+    else if (k < 0.78) B2[n2++] = i;
+    else B3[n3++] = i;
+  }
+  viewX0 = wx0; viewY0 = wy0; viewX1 = wx0 + vw; viewY1 = wy0 + vh;
+  drawFire(0, B0, n0);
+  drawFire(1, B1, n1);
+  drawFire(2, B2, n2);
+  drawFire(3, B3, n3);
+  ctx.globalCompositeOperation = 'source-over';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+addEventListener('resize', () => {
+  resize();
+  if (curIdx >= 0 && lines.length) { build(curIdx); }
+});
+
+/* ============================================================================
+   与播放器通信
+   ========================================================================== */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; curG = -1; lastT = -1; LAY = null; lineIdx = -1;
+    gid.fill(-1);
+    for (let i = 0; i < N; i++) lit[i] = 0;
+    if (p.accent) {
+      /* 余烬是暖橙，主色只轻微染色 */
+      const [r, g, b] = p.accent;
+      accent = [Math.round((r + 255 * 2) / 3), Math.round((g + 185 * 2) / 3), Math.round((b + 120 * 2) / 3)];
+      palette();
+    }
+    clockT = 0; clockAt = performance.now();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 踩拍：整片火星被托一下（相干的向上加速）。
+       逐颗随机方向踢会把字形踢散，所以只给一个统一的向上分量。
+       震动关闭：这一脚和推镜都不生效，火星仍按自己的气流走。 */
+    if (window.__liziShake !== false) {
+      const lv = 0.5 + (d.payload.level || 0);
+      for (let i = 0; i < N; i++) vy[i] -= 34 * lv;
+      camKick = Math.min(0.03, camKick + 0.004 * lv);
+    }
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+window.__stage = () => {
+  let l = 0, claimed = 0;
+  for (let i = 0; i < N; i++) { if (lit[i] > 0.5) l++; if (gid[i] >= 0) claimed++; }
+  return {
+    lines: lines.length, curIdx, curG,
+    groups: LAY ? LAY.groups.length : 0,
+    pc: LAY ? LAY.pc : 0,
+    claimed, lit: l,
+    cam: [+cam.s.toFixed(3), Math.round(cam.x), Math.round(cam.y)],
+    box: LAY ? [Math.round(LAY.box.x0), Math.round(LAY.box.y0), Math.round(LAY.box.x1), Math.round(LAY.box.y1)] : null,
+    dict: !!DICT, t: +now().toFixed(2),
+  };
+};
+</script>
+</body>
+</html>

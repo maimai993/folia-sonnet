@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>载波残影</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #04050a; }
+  body { -webkit-tap-highlight-color: transparent; }
+  #stage { display: block; width: 100%; height: 100%; background: #04050a; }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '载波残影',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+var stageCanvas = document.getElementById("stage");
+var stageCtx = null;
+var viewWidth = 1440;
+var viewHeight = 900;
+var pixelRatio = 1;
+
+var compositeCanvas = document.createElement("canvas");
+var compositeCtx = compositeCanvas.getContext("2d");
+var staticCanvas = document.createElement("canvas");
+var staticCtx = staticCanvas.getContext("2d");
+var glassCanvas = document.createElement("canvas");
+var glassCtx = glassCanvas.getContext("2d");
+
+var FONT_MONO = "ui-monospace, \"Cascadia Mono\", \"SF Mono\", Consolas, \"Courier New\", monospace";
+var FONT_SANS = "\"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans SC\", \"Source Han Sans SC\", sans-serif";
+
+var textureState = {
+  snow: null,
+  clouds: null,
+  scanlines: null,
+  snowPattern: null,
+  cloudReady: false,
+  scanPattern: null
+};
+
+var layout = {
+  width: 1440,
+  height: 900,
+  portrait: false,
+  barsHeight: 140,
+  idHeight: 46,
+  pictureTop: 0,
+  pictureBottom: 0,
+  ribbonTop: 0,
+  ribbonHeight: 0,
+  tickerTop: 0,
+  tickerHeight: 0,
+  margin: 0
+};
+
+var palette = {
+  accent: [72, 148, 255],
+  accentSoft: [40, 78, 140],
+  tickerBase: [8, 34, 96],
+  tickerInk: [236, 245, 255],
+  inkBright: [240, 246, 255],
+  inkDim: [104, 122, 148],
+  paper: [10, 13, 20]
+};
+
+var signalState = {
+  level: 0,
+  bass: 0,
+  mid: 0,
+  treble: 0,
+  bpm: 0,
+  glitchUntil: 0,
+  glitchPower: 0,
+  glitchSeed: 0,
+  beatFlash: 0,
+  lineFlash: 0,
+  rollOffset: 0
+};
+
+var captionState = {
+  lineIndex: -2,
+  rows: [],
+  glyphs: [],
+  fontSize: 44,
+  lineHeight: 1.42,
+  boxTop: 0,
+  boxHeight: 0,
+  totalChars: 0,
+  empty: false,
+  cacheKey: "",
+  plateWidth: 0,
+  plateTop: 0,
+  plateHeight: 0,
+  cacheWidth: 0,
+  cacheHeight: 0
+};
+
+var stateData = {
+  lines: [],
+  idx: -1,
+  time: 0,
+  playing: true,
+  accent: [72, 148, 255],
+  frames: 0,
+  js: 0,
+  text: "",
+  reduced: false,
+  duration: 0,
+  songName: "",
+  artists: ""
+};
+
+window.__stage = function () {
+  return {
+    lines: stateData.lines.length,
+    idx: stateData.idx,
+    t: stateData.time,
+    playing: stateData.playing,
+    frames: stateData.frames,
+    js: stateData.js,
+    err: "",
+    text: stateData.text,
+    gl: false,
+    rm: stateData.reduced
+  };
+};
+
+var readySent = false;
+function sendReady() {
+  if (readySent) { return; }
+  readySent = true;
+  try {
+    parent.postMessage({ __c100: 1, type: "ready" }, "*");
+  } catch (readyError) {
+    console.error("[361] ready postMessage failed", readyError);
+  }
+}
+
+function clampNumber(value, low, high) {
+  var number = typeof value === "number" && isFinite(value) ? value : low;
+  if (number < low) { return low; }
+  if (number > high) { return high; }
+  return number;
+}
+
+function safeAccent(value) {
+  var fallback = [72, 148, 255];
+  if (!value || typeof value.length !== "number" || value.length < 3) { return fallback; }
+  var result = [];
+  for (var channelIndex = 0; channelIndex < 3; channelIndex++) {
+    result.push(Math.round(clampNumber(Number(value[channelIndex]), 0, 255)));
+  }
+  if (!isFinite(result[0]) || !isFinite(result[1]) || !isFinite(result[2])) { return fallback; }
+  return result;
+}
+
+function mixColor(base, other, amount) {
+  var ratio = clampNumber(amount, 0, 1);
+  var first = Array.isArray(base) ? base : [0, 0, 0];
+  var second = Array.isArray(other) ? other : [255, 255, 255];
+  var mixed = [];
+  for (var channel = 0; channel < 3; channel++) {
+    var start = clampNumber(Number(first[channel]), 0, 255);
+    var end = clampNumber(Number(second[channel]), 0, 255);
+    mixed.push(Math.round(clampNumber(start + (end - start) * ratio, 0, 255)));
+  }
+  return mixed;
+}
+
+function cssColor(rgb, alpha) {
+  var safe = Array.isArray(rgb) ? rgb : [0, 0, 0];
+  var red = Math.round(clampNumber(Number(safe[0]), 0, 255));
+  var green = Math.round(clampNumber(Number(safe[1]), 0, 255));
+  var blue = Math.round(clampNumber(Number(safe[2]), 0, 255));
+  var opacity = clampNumber(Number(alpha), 0, 1);
+  return "rgba(" + red + "," + green + "," + blue + "," + opacity + ")";
+}
+
+function resizeCanvas() {
+  var width = stageCanvas.clientWidth || window.innerWidth || 1440;
+  var height = stageCanvas.clientHeight || window.innerHeight || 900;
+  if (!isFinite(width) || width <= 0) { width = 1440; }
+  if (!isFinite(height) || height <= 0) { height = 900; }
+  pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  viewWidth = Math.round(width);
+  viewHeight = Math.round(height);
+  stageCanvas.width = Math.max(1, Math.round(viewWidth * pixelRatio));
+  stageCanvas.height = Math.max(1, Math.round(viewHeight * pixelRatio));
+
+  layout.width = viewWidth;
+  layout.height = viewHeight;
+  compositeCanvas.width = Math.max(1, viewWidth);
+  compositeCanvas.height = Math.max(1, viewHeight);
+  staticCanvas.width = Math.max(1, viewWidth);
+  staticCanvas.height = Math.max(1, viewHeight);
+  glassCanvas.width = stageCanvas.width;
+  glassCanvas.height = stageCanvas.height;
+
+  computeLayout();
+  buildStaticCard();
+  buildGlassOverlay();
+  if (typeof buildCaptionLayout === "function") {
+    buildCaptionLayout(true);
+  }
+}
+
+function computeLayout() {
+  layout.width = viewWidth;
+  layout.height = viewHeight;
+  layout.portrait = viewHeight > viewWidth * 1.08;
+  var shortest = Math.min(viewWidth, viewHeight);
+  layout.margin = Math.round(Math.max(8, shortest * 0.018));
+  layout.barsHeight = Math.round(viewHeight * (layout.portrait ? 0.078 : 0.148));
+  layout.idHeight = Math.round(Math.max(24, viewHeight * 0.045));
+  layout.pictureTop = layout.barsHeight + layout.idHeight;
+  layout.tickerHeight = Math.round(Math.max(46, viewHeight * (layout.portrait ? 0.105 : 0.118)));
+  layout.tickerTop = viewHeight - layout.tickerHeight;
+  layout.ribbonHeight = Math.round(Math.max(30, viewHeight * 0.072));
+  layout.ribbonTop = layout.tickerTop - layout.ribbonHeight;
+  layout.pictureBottom = layout.ribbonTop - Math.round(Math.max(6, viewHeight * 0.012));
+  if (layout.pictureBottom - layout.pictureTop < viewHeight * 0.22) {
+    layout.pictureBottom = layout.pictureTop + Math.round(viewHeight * 0.22);
+  }
+}
+
+function buildStaticCard() {
+  var ctx = staticCtx;
+  var width = layout.width;
+  var height = layout.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.clearRect(0, 0, width, height);
+
+  var skyGradient = null;
+  try {
+    skyGradient = ctx.createLinearGradient(0, 0, 0, height);
+    skyGradient.addColorStop(0, "#070a13");
+    skyGradient.addColorStop(0.55, "#05070d");
+    skyGradient.addColorStop(1, "#03040a");
+  } catch (gradientError) {
+    console.error("[361] base gradient failed", gradientError);
+    skyGradient = null;
+  }
+  ctx.fillStyle = skyGradient || "#05070d";
+  ctx.fillRect(0, 0, width, height);
+
+  drawColorBars(ctx, width, layout.barsHeight);
+
+  var barColors = ["#d9dfe8", "#d5c24c", "#48c2c6", "#41a062", "#b74f9b", "#bd4c46", "#405fc0"];
+  var lowerHeight = layout.barsHeight * 0.34;
+  var lowerTop = layout.barsHeight * 0.66;
+  var barWidth = width / barColors.length;
+  for (var index = 0; index < barColors.length; index++) {
+    ctx.fillStyle = "rgba(4,6,12,0.42)";
+    ctx.fillRect(index * barWidth, lowerTop, barWidth + 1, lowerHeight);
+    ctx.fillStyle = barColors[index];
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(index * barWidth, lowerTop, barWidth + 1, lowerHeight * 0.34);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.fillStyle = "#04060c";
+  ctx.fillRect(0, layout.barsHeight, width, layout.idHeight);
+  ctx.fillStyle = "rgba(150,180,220,0.16)";
+  ctx.fillRect(0, layout.barsHeight, width, 1);
+  ctx.fillRect(0, layout.barsHeight + layout.idHeight - 1, width, 1);
+
+  var monoSize = Math.max(9, Math.min(16, Math.round(layout.height * 0.016)));
+  ctx.font = "500 " + monoSize + "px " + FONT_MONO;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillStyle = "rgba(196,214,240,0.62)";
+  var idText = layout.portrait ? "CH-04 · 载波残影" : "CH-04 · 载波残影 · 停播后持续发射";
+  ctx.fillText(idText, layout.margin, layout.barsHeight + layout.idHeight * 0.5);
+
+  drawGraticule(ctx);
+  drawRegistrationMarks(ctx);
+  drawStationGrid(ctx);
+}
+
+function drawColorBars(ctx, width, barHeight) {
+  var colors = ["#e6ebf2", "#c9b446", "#3fb7bd", "#3f9a5c", "#b04a93", "#b3453f", "#3b57b4"];
+  var barWidth = width / colors.length;
+  for (var index = 0; index < colors.length; index++) {
+    ctx.fillStyle = colors[index];
+    ctx.globalAlpha = 0.82;
+    ctx.fillRect(index * barWidth, 0, barWidth + 1, barHeight * 0.66);
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  for (var line = 0; line < 3; line++) {
+    ctx.fillRect(0, barHeight * (0.66 + line * 0.113), width, 1);
+  }
+}
+
+function drawGraticule(ctx) {
+  var top = layout.pictureTop;
+  var bottom = layout.pictureBottom;
+  var left = layout.margin;
+  var right = layout.width - layout.margin;
+  ctx.strokeStyle = "rgba(150,186,232,0.075)";
+  ctx.lineWidth = 1;
+  var columns = 10;
+  var rows = 5;
+  for (var column = 1; column < columns; column++) {
+    var columnX = Math.round(left + (right - left) * (column / columns)) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(columnX, top);
+    ctx.lineTo(columnX, bottom);
+    ctx.stroke();
+  }
+  for (var row = 1; row < rows; row++) {
+    var rowY = Math.round(top + (bottom - top) * (row / rows)) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(left, rowY);
+    ctx.lineTo(right, rowY);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(150,186,232,0.18)";
+  ctx.strokeRect(left + 0.5, top + 0.5, right - left, bottom - top);
+}
+
+function drawRegistrationMarks(ctx) {
+  var radius = Math.max(12, Math.round(Math.min(layout.width, layout.height) * 0.028));
+  var spots = [
+    [layout.margin + radius, layout.pictureTop + radius],
+    [layout.width - layout.margin - radius, layout.pictureTop + radius],
+    [layout.margin + radius, layout.pictureBottom - radius],
+    [layout.width - layout.margin - radius, layout.pictureBottom - radius]
+  ];
+  ctx.strokeStyle = "rgba(174,204,244,0.13)";
+  ctx.lineWidth = 1;
+  for (var index = 0; index < spots.length; index++) {
+    var spot = spots[index];
+    ctx.beginPath();
+    ctx.arc(spot[0], spot[1], radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(spot[0] - radius, spot[1]);
+    ctx.lineTo(spot[0] + radius, spot[1]);
+    ctx.moveTo(spot[0], spot[1] - radius);
+    ctx.lineTo(spot[0], spot[1] + radius);
+    ctx.stroke();
+  }
+}
+
+function drawStationGrid(ctx) {
+  var top = layout.ribbonTop;
+  var height = layout.tickerTop - layout.ribbonTop;
+  ctx.fillStyle = "rgba(2,4,9,0.75)";
+  ctx.fillRect(0, top, layout.width, height);
+  ctx.fillStyle = "rgba(150,180,220,0.12)";
+  ctx.fillRect(0, top, layout.width, 1);
+  ctx.fillRect(0, layout.tickerTop - 1, layout.width, 1);
+}
+
+function buildGlassOverlay() {
+  var ctx = glassCtx;
+  var width = glassCanvas.width;
+  var height = glassCanvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, width, height);
+
+  var lineGap = Math.max(2, Math.round(3 * pixelRatio));
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  var bandCount = Math.min(1200, Math.ceil(height / lineGap));
+  for (var band = 0; band < bandCount; band++) {
+    ctx.fillRect(0, band * lineGap, width, Math.max(1, Math.round(pixelRatio * 0.9)));
+  }
+
+  var vignette = null;
+  try {
+    vignette = ctx.createRadialGradient(
+      width * 0.5, height * 0.48, Math.min(width, height) * 0.18,
+      width * 0.5, height * 0.5, Math.max(width, height) * 0.78
+    );
+    vignette.addColorStop(0, "rgba(0,0,0,0)");
+    vignette.addColorStop(0.62, "rgba(0,0,0,0.16)");
+    vignette.addColorStop(1, "rgba(0,0,0,0.82)");
+  } catch (vignetteError) {
+    console.error("[361] vignette gradient failed", vignetteError);
+    vignette = null;
+  }
+  if (vignette) {
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  var glare = null;
+  try {
+    glare = ctx.createLinearGradient(0, 0, width * 0.85, height);
+    glare.addColorStop(0, "rgba(180,210,255,0.055)");
+    glare.addColorStop(0.35, "rgba(180,210,255,0.012)");
+    glare.addColorStop(1, "rgba(180,210,255,0)");
+  } catch (glareError) {
+    console.error("[361] glare gradient failed", glareError);
+    glare = null;
+  }
+  if (glare) {
+    ctx.fillStyle = glare;
+    ctx.fillRect(0, 0, width, height * 0.7);
+  }
+}
+
+function drawGlassOverlay(timestamp) {
+  var ctx = stageCtx;
+  ctx.drawImage(glassCanvas, 0, 0);
+  var phase = ((timestamp * 0.000045) % 1 + 1) % 1;
+  var bandY = phase * stageCanvas.height;
+  var bandHeight = stageCanvas.height * 0.16;
+  var sweep = null;
+  try {
+    sweep = ctx.createLinearGradient(0, bandY - bandHeight, 0, bandY);
+    sweep.addColorStop(0, "rgba(190,215,255,0)");
+    sweep.addColorStop(0.5, "rgba(190,215,255,0.035)");
+    sweep.addColorStop(1, "rgba(190,215,255,0)");
+  } catch (sweepError) {
+    console.error("[361] sweep gradient failed", sweepError);
+    sweep = null;
+  }
+  if (sweep) {
+    ctx.fillStyle = sweep;
+    ctx.fillRect(0, bandY - bandHeight, stageCanvas.width, bandHeight);
+  }
+}
+
+function findLineIndex(time) {
+  var lines = stateData.lines;
+  var found = -1;
+  for (var lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    if (lines[lineIndex].t - 0.001 <= time) { found = lineIndex; } else { break; }
+  }
+  return found;
+}
+
+function applyLyricState() {
+  var nextIndex = findLineIndex(stateData.time);
+  if (nextIndex !== stateData.idx) { signalState.lineFlash = 1; }
+  stateData.idx = nextIndex;
+  stateData.text = stateData.idx >= 0 ? String(stateData.lines[stateData.idx].text || "") : "";
+}
+
+function handleInit(payload) {
+  var source = payload && typeof payload === "object" ? payload : {};
+  var incoming = Array.isArray(source.lines) ? source.lines : [];
+  var clean = [];
+  for (var rowIndex = 0; rowIndex < incoming.length; rowIndex++) {
+    if (clean.length > 2000) { break; }
+    var row = incoming[rowIndex];
+    if (!row || typeof row !== "object") { continue; }
+    var text = typeof row.text === "string" ? row.text : "";
+    clean.push({
+      t: clampNumber(Number(row.t), 0, 100000),
+      dur: clampNumber(Number(row.dur), 0, 1000),
+      text: text,
+      chars: Array.isArray(row.chars) ? row.chars : null
+    });
+  }
+  clean.sort(function (a, b) { return a.t - b.t; });
+  stateData.lines = clean;
+  stateData.duration = clampNumber(Number(source.duration), 0, 100000);
+  stateData.accent = safeAccent(source.accent);
+  var song = source.song && typeof source.song === "object" ? source.song : {};
+  stateData.songName = typeof song.name === "string" ? song.name : "";
+  stateData.artists = Array.isArray(song.artists) ? song.artists.join(" / ") : (typeof song.artists === "string" ? song.artists : "");
+  stateData.playing = source.playing === undefined ? true : !!source.playing;
+  buildPalette();
+  rebuildTicker();
+  applyLyricState();
+  buildCaptionLayout(true);
+  captionState.cacheKey = "";
+}
+
+function handleTick(payload) {
+  var source = payload && typeof payload === "object" ? payload : {};
+  var nextTime = Number(source.time);
+  if (isFinite(nextTime)) { stateData.time = nextTime; }
+  if (source.playing !== undefined) { stateData.playing = !!source.playing; }
+  applyLyricState();
+  buildCaptionLayout(false);
+}
+
+function handleBeat(payload) {
+  var source = payload && typeof payload === "object" ? payload : {};
+  var level = clampNumber(Number(source.level), 0, 1);
+  signalState.beatFlash = Math.max(signalState.beatFlash, 0.3 + level * 0.7);
+  if (stateData.reduced) { return; }
+  signalState.glitchSeed = Math.random() * 1000;
+  signalState.glitchPower = level > 0.55 ? level * 1.1 : 0.35;
+  signalState.glitchUntil = performance.now() + (level > 0.72 ? 140 : 70);
+}
+
+function handleLive(payload) {
+  var source = payload && typeof payload === "object" ? payload : {};
+  signalState.level = clampNumber(Number(source.level), 0, 1);
+  signalState.bass = clampNumber(Number(source.bass), 0, 1);
+  signalState.mid = clampNumber(Number(source.mid), 0, 1);
+  signalState.treble = clampNumber(Number(source.treble), 0, 1);
+  signalState.bpm = clampNumber(Number(source.bpm), 0, 400);
+  if (source.playing !== undefined) { stateData.playing = !!source.playing; }
+}
+
+function handleMessage(event) {
+  var data = event && event.data;
+  if (!data || data.__c100 !== 1) { return; }
+  try {
+    if (data.type === "init") { handleInit(data.payload); }
+    else if (data.type === "tick") { handleTick(data.payload); }
+    else if (data.type === "beat") { handleBeat(data.payload); }
+    else if (data.type === "live") { handleLive(data.payload); }
+  } catch (messageError) {
+    console.error("[361] message handling failed", messageError);
+  }
+}
+
+function loadTextures() {
+  loadTexture("snow", "assets/361-snow.png");
+  loadTexture("clouds", "assets/361-clouds.png");
+  buildNoiseFallback();
+}
+
+function loadTexture(key, source) {
+  try {
+    var image = new Image();
+    image.onload = function () {
+      textureState[key] = image;
+    };
+    image.onerror = function () {
+      console.error("[361] texture missing, procedural fallback in use: " + source);
+      textureState[key] = null;
+    };
+    image.src = source;
+  } catch (textureError) {
+    console.error("[361] texture load failed: " + source, textureError);
+    textureState[key] = null;
+  }
+}
+
+function buildNoiseFallback() {
+  try {
+    var size = 160;
+    var scratch = document.createElement("canvas");
+    scratch.width = size;
+    scratch.height = size;
+    var scratchCtx = scratch.getContext("2d");
+    var pixels = scratchCtx.createImageData(size, size);
+    for (var index = 0; index < pixels.data.length; index += 4) {
+      var value = 96 + Math.floor(Math.random() * 128);
+      pixels.data[index] = value;
+      pixels.data[index + 1] = value;
+      pixels.data[index + 2] = value;
+      pixels.data[index + 3] = 255;
+    }
+    scratchCtx.putImageData(pixels, 0, 0);
+    textureState.fallbackSnow = scratch;
+  } catch (noiseError) {
+    console.error("[361] procedural noise failed", noiseError);
+    textureState.fallbackSnow = null;
+  }
+}
+
+function drawCloudField(ctx, time) {
+  var top = layout.pictureTop;
+  var height = layout.pictureBottom - top;
+  var width = layout.width;
+  if (height <= 4) { return; }
+  var source = textureState.clouds;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, top - 2, width, height + 4);
+  ctx.clip();
+  if (source) {
+    var imageRatio = source.width / Math.max(1, source.height);
+    var targetWidth = Math.max(width * 1.08, height * 1.06 * imageRatio);
+    var targetHeight = targetWidth / imageRatio;
+    var drift = ((time * 3.2) % targetWidth + targetWidth) % targetWidth;
+    var top2 = top - (targetHeight - height) * 0.5;
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 0.2 + signalState.level * 0.1;
+    ctx.drawImage(source, -drift, top2, targetWidth, targetHeight);
+    ctx.drawImage(source, targetWidth - drift, top2, targetWidth, targetHeight);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  } else {
+    ctx.fillStyle = "rgba(120,150,200,0.05)";
+    ctx.fillRect(0, top, width, height);
+  }
+  ctx.restore();
+}
+
+function drawSatelliteLabel(ctx) {
+  var size = Math.max(8, Math.min(12, Math.round(layout.height * 0.0125)));
+  var baselineY = layout.pictureBottom - size * 1.15;
+  if (baselineY <= layout.pictureTop + size * 2) { return; }
+  ctx.save();
+  ctx.font = "500 " + size + "px " + FONT_MONO;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(150,182,222,0.34)";
+  ctx.fillText("SAT 04:00 · 红外云图 静止轨道 · 覆盖 无回波", layout.width * 0.5, baselineY);
+  ctx.restore();
+}
+
+function drawRibbon(ctx, time) {
+  var top = layout.ribbonTop;
+  var height = layout.tickerTop - layout.ribbonTop;
+  if (height <= 6) { return; }
+  var left = layout.margin;
+  var right = layout.width - layout.margin;
+  var middle = top + height * 0.5;
+  var amplitude = height * (0.24 + signalState.level * 0.36);
+  var points = 88;
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(160,196,240,0.16)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(left, Math.round(middle) + 0.5);
+  ctx.lineTo(right, Math.round(middle) + 0.5);
+  ctx.stroke();
+  for (var tick = 0; tick <= 8; tick++) {
+    var tickX = Math.round(left + (right - left) * (tick / 8)) + 0.5;
+    ctx.beginPath();
+    ctx.moveTo(tickX, middle - height * 0.16);
+    ctx.lineTo(tickX, middle + height * 0.16);
+    ctx.stroke();
+  }
+
+  var geometry = {
+    left: left,
+    right: right,
+    middle: middle,
+    amplitude: amplitude,
+    points: points,
+    time: time
+  };
+  drawRibbonTrace(ctx, geometry, 6, 0.14, cssColor(palette.accent, 0.9));
+  drawRibbonTrace(ctx, geometry, 2, 0.72, cssColor(mixColor(palette.accent, [255, 255, 255], 0.55), 0.95));
+  drawRibbonTrace(ctx, geometry, 1, 0.9, "rgba(236,246,255,0.55)");
+
+  var labelSize = Math.max(8, Math.min(13, Math.round(layout.height * 0.0135)));
+  ctx.globalAlpha = 1;
+  ctx.font = "500 " + labelSize + "px " + FONT_MONO;
+  ctx.fillStyle = "rgba(168,198,236,0.5)";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillText("-24  AUDIO  CARRIER  " + (signalState.level * 42 - 42).toFixed(1) + " dB", left, top + height * 0.08);
+  ctx.restore();
+}
+
+function drawRibbonTrace(ctx, geometry, fatness, alpha, tint) {
+  var pointCount = Math.max(2, Math.round(clampNumber(geometry.points, 2, 400)));
+  ctx.globalAlpha = clampNumber(alpha, 0, 1);
+  ctx.strokeStyle = tint;
+  ctx.lineWidth = fatness;
+  ctx.beginPath();
+  for (var point = 0; point < pointCount; point++) {
+    var ratio = point / (pointCount - 1);
+    var envelope = Math.pow(Math.max(0, Math.sin(Math.PI * ratio)), 0.55);
+    var wave =
+      Math.sin(ratio * 19.1 + geometry.time * 3.3) * 0.56 +
+      Math.sin(ratio * 6.7 - geometry.time * 1.9) * 0.3 +
+      Math.sin(ratio * 41.3 + geometry.time * 6.1) * 0.14;
+    var traceY = geometry.middle - wave * geometry.amplitude * envelope;
+    if (point === 0) {
+      ctx.moveTo(geometry.left, traceY);
+    } else {
+      ctx.lineTo(geometry.left + (geometry.right - geometry.left) * ratio, traceY);
+    }
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawTicker(ctx, time) {
+  var top = layout.tickerTop;
+  var height = layout.tickerHeight;
+  if (height <= 4) { return; }
+  ctx.save();
+  var band = null;
+  try {
+    band = ctx.createLinearGradient(0, top, 0, top + height);
+    band.addColorStop(0, cssColor(mixColor(palette.tickerBase, [255, 255, 255], 0.1), 1));
+    band.addColorStop(1, cssColor(mixColor(palette.tickerBase, [0, 0, 0], 0.35), 1));
+  } catch (bandError) {
+    console.error("[361] ticker gradient failed", bandError);
+    band = null;
+  }
+  ctx.fillStyle = band || cssColor(palette.tickerBase, 1);
+  ctx.fillRect(0, top, layout.width, height);
+  ctx.fillStyle = "rgba(210,232,255,0.28)";
+  ctx.fillRect(0, top, layout.width, 1);
+
+  var textSize = Math.round(Math.min(height * 0.36, layout.width * 0.022, 34));
+  textSize = Math.max(12, textSize);
+  ctx.font = "600 " + textSize + "px " + FONT_MONO;
+  ctx.textBaseline = "middle";
+  var centerY = top + height * 0.52;
+  var message = tickerState.message;
+  var textWidth = Math.max(1, ctx.measureText(message).width);
+  var speed = stateData.reduced ? 24 : 68;
+  var travel = ((time * speed) % textWidth + textWidth) % textWidth;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, top + 2, layout.width, height - 4);
+  ctx.clip();
+  ctx.fillStyle = "rgba(240,248,255,0.9)";
+  ctx.textAlign = "left";
+  var startX = layout.width - travel;
+  ctx.fillText(message, startX, centerY);
+  ctx.fillText(message, startX - textWidth, centerY);
+  ctx.fillText(message, startX + textWidth, centerY);
+  ctx.restore();
+
+  var chipWidth = Math.round(height * 1.35);
+  ctx.fillStyle = cssColor(mixColor(palette.accent, [255, 255, 255], 0.15), 0.95);
+  ctx.fillRect(0, top + 1, chipWidth, height - 1);
+  ctx.fillStyle = "rgba(4,8,20,0.92)";
+  ctx.font = "700 " + Math.max(10, Math.round(textSize * 0.78)) + "px " + FONT_MONO;
+  ctx.textAlign = "center";
+  ctx.fillText("CH·04", chipWidth * 0.5, centerY);
+  ctx.restore();
+}
+
+var tickerState = { message: " 载波残影 · 本台凌晨四点后停止播音 · PLEASE STAND BY · ", width: 0 };
+
+function rebuildTicker() {
+  var name = stateData.songName || "未知曲目";
+  var artists = stateData.artists || "未知艺人";
+  tickerState.message = " ◀ " + name + " — " + artists + " · 本台凌晨四点后停止播音 · 无人应答 · NO CARRIER · PLEASE STAND BY ";
+  try {
+    compositeCtx.font = "600 20px " + FONT_MONO;
+    tickerState.width = Math.max(1, compositeCtx.measureText(tickerState.message).width);
+  } catch (measureError) {
+    console.error("[361] ticker measure failed", measureError);
+    tickerState.width = 1;
+  }
+}
+
+function buildPalette() {
+  var accent = safeAccent(stateData.accent);
+  palette.accent = accent;
+  palette.accentSoft = mixColor([24, 42, 78], accent, 0.42);
+  palette.tickerBase = mixColor([7, 26, 78], accent, 0.32);
+  palette.inkBright = mixColor([247, 251, 255], accent, 0.1);
+  palette.inkDim = mixColor([128, 146, 172], accent, 0.12);
+}
+
+function buildCaptionLayout(force) {
+  var sideInset = layout.margin + Math.round(layout.width * (layout.portrait ? 0.05 : 0.035));
+  var maxWidth = Math.max(140, layout.width - sideInset * 2);
+  var pictureHeight = Math.max(90, layout.pictureBottom - layout.pictureTop);
+  var maxHeight = pictureHeight * (layout.portrait ? 0.56 : 0.46);
+  var baseSize = Math.round(clampNumber(pictureHeight * 0.115, 18, 74));
+
+  var rawText = stateData.idx >= 0 ? String(stateData.lines[stateData.idx].text || "") : "";
+  var text = rawText.replace(/\s+/g, " ").trim();
+  var cacheKey = layout.width + "x" + layout.height + "|" + stateData.idx + "|" + stateData.lines.length + "|" + text;
+  if (!force && cacheKey === captionState.cacheKey) { return; }
+  captionState.cacheKey = cacheKey;
+  captionState.rows = [];
+  captionState.glyphs = [];
+  captionState.plateWidth = 0;
+  captionState.plateHeight = 0;
+  captionState.boxTop = Math.round(layout.pictureTop + pictureHeight * 0.2);
+  captionState.boxHeight = Math.round(maxHeight);
+  captionState.empty = stateData.lines.length === 0;
+  if (captionState.empty || text === "") { return; }
+
+  var characters = Array.from(text);
+  var times = buildCharTimes(stateData.lines[stateData.idx], characters);
+  var size = baseSize;
+  var rows = [];
+  var lineHeight = Math.round(size * 1.42);
+  for (var attempt = 0; attempt < 14; attempt++) {
+    rows = wrapCaptionRows(compositeCtx, characters, maxWidth, size);
+    lineHeight = Math.round(size * 1.42);
+    if (rows.length * lineHeight <= maxHeight || size <= 16) { break; }
+    size = Math.max(16, Math.round(size * 0.9));
+  }
+  if (!rows.length) { return; }
+  var glyphs = [];
+  var widest = 0;
+  for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+    var row = rows[rowIndex];
+    var rowTop = captionState.boxTop + rowIndex * lineHeight;
+    var cursorX = layout.width * 0.5 - row.width * 0.5;
+    for (var cellIndex = 0; cellIndex < row.cells.length; cellIndex++) {
+      var cell = row.cells[cellIndex];
+      glyphs.push({
+        character: cell.character,
+        x: cursorX,
+        y: rowTop + lineHeight * 0.5,
+        time: times[cell.sourceIndex] !== undefined ? times[cell.sourceIndex] : stateData.time
+      });
+      cursorX += cell.advance;
+    }
+    if (row.width > widest) { widest = row.width; }
+  }
+  captionState.glyphs = glyphs;
+  captionState.rows = rows;
+  captionState.fontSize = size;
+  captionState.lineHeight = lineHeight;
+  captionState.plateWidth = Math.min(layout.width - layout.margin * 2, widest + size * 1.6);
+  captionState.plateTop = captionState.boxTop - lineHeight * 0.28;
+  captionState.plateHeight = rows.length * lineHeight + lineHeight * 0.56;
+}
+
+function buildCaptionTokens(characters) {
+  var tokens = [];
+  var word = null;
+  for (var index = 0; index < characters.length; index++) {
+    var character = characters[index];
+    var isWordCharacter = /[0-9A-Za-z\u00C0-\u024F]/.test(character);
+    if (isWordCharacter) {
+      if (!word) {
+        word = { cells: [], width: 0 };
+        tokens.push(word);
+      }
+      word.cells.push({ character: character, sourceIndex: index, advance: 0 });
+    } else {
+      word = null;
+      tokens.push({ cells: [{ character: character, sourceIndex: index, advance: 0 }], width: 0 });
+    }
+    if (tokens.length > 600) { break; }
+  }
+  return tokens;
+}
+
+function wrapCaptionRows(ctx, characters, maxWidth, size) {
+  ctx.font = "600 " + size + "px " + FONT_SANS;
+  var tokens = buildCaptionTokens(characters);
+  for (var tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+    var token = tokens[tokenIndex];
+    var tokenWidth = 0;
+    for (var cellIndex = 0; cellIndex < token.cells.length; cellIndex++) {
+      var advance = Math.max(0, ctx.measureText(token.cells[cellIndex].character).width);
+      token.cells[cellIndex].advance = advance;
+      tokenWidth += advance;
+    }
+    token.width = tokenWidth;
+  }
+
+  var rows = [];
+  var current = { cells: [], width: 0 };
+  for (var index = 0; index < tokens.length; index++) {
+    var next = tokens[index];
+    var isSpace = next.cells.length === 1 && next.cells[0].character === " ";
+    if (current.cells.length === 0 && isSpace) { continue; }
+    if (next.width > maxWidth) {
+      for (var charIndex = 0; charIndex < next.cells.length; charIndex++) {
+        var cell = next.cells[charIndex];
+        if (current.width + cell.advance > maxWidth && current.cells.length > 0) {
+          rows.push(current);
+          current = { cells: [], width: 0 };
+          if (rows.length >= 6) { break; }
+        }
+        current.cells.push(cell);
+        current.width += cell.advance;
+      }
+      continue;
+    }
+    if (current.width + next.width > maxWidth && current.cells.length > 0) {
+      rows.push(current);
+      current = { cells: [], width: 0 };
+      if (rows.length >= 6) { break; }
+      if (isSpace) { continue; }
+    }
+    for (var mergeIndex = 0; mergeIndex < next.cells.length; mergeIndex++) {
+      current.cells.push(next.cells[mergeIndex]);
+    }
+    current.width += next.width;
+  }
+  if (current.cells.length > 0) { rows.push(current); }
+  return rows.slice(0, 6);
+}
+
+function buildCharTimes(line, characters) {
+  var times = [];
+  var chars = line && Array.isArray(line.chars) ? line.chars : null;
+  var start = line && isFinite(line.t) ? Number(line.t) : 0;
+  var duration = line && line.dur > 0.05 ? line.dur : Math.min(7, Math.max(2.4, characters.length * 0.24));
+  for (var index = 0; index < characters.length; index++) {
+    var value = start + duration * (index / Math.max(1, characters.length));
+    if (chars && chars.length > 0 && index < chars.length) {
+      var entry = chars[index];
+      if (entry && isFinite(Number(entry.t))) { value = Number(entry.t); }
+    }
+    times.push(value);
+  }
+  for (var fix = 1; fix < times.length; fix++) {
+    if (times[fix] < times[fix - 1]) { times[fix] = times[fix - 1]; }
+  }
+  return times;
+}
+
+function drawCaption(ctx, time) {
+  var boxTop = captionState.boxTop;
+  var boxHeight = captionState.boxHeight;
+  if (boxHeight <= 0) { return; }
+  ctx.save();
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+
+  if (captionState.empty) {
+    ctx.textAlign = "center";
+    var bigSize = Math.max(19, Math.min(44, Math.round(layout.height * 0.045)));
+    var panelWidth = Math.min(layout.width - layout.margin * 2, bigSize * 13);
+    var panelTop = Math.round(boxTop + boxHeight * 0.32);
+    var panelHeight = Math.round(bigSize * 2.8);
+    var panelLeft = layout.width * 0.5 - panelWidth * 0.5;
+    var emptyGradient = null;
+    try {
+      emptyGradient = ctx.createLinearGradient(panelLeft, 0, panelLeft + panelWidth, 0);
+      emptyGradient.addColorStop(0, cssColor([4, 7, 14], 0));
+      emptyGradient.addColorStop(0.12, cssColor([4, 7, 14], 0.7));
+      emptyGradient.addColorStop(0.88, cssColor([4, 7, 14], 0.7));
+      emptyGradient.addColorStop(1, cssColor([4, 7, 14], 0));
+    } catch (emptyError) {
+      console.error("[361] empty state gradient failed", emptyError);
+      emptyGradient = null;
+    }
+    ctx.fillStyle = emptyGradient || cssColor([4, 7, 14], 0.68);
+    ctx.fillRect(panelLeft, panelTop, panelWidth, panelHeight);
+
+    ctx.font = "600 " + bigSize + "px " + FONT_SANS;
+    ctx.fillStyle = cssColor(palette.inkBright, 0.82);
+    ctx.fillText("本曲无歌词", layout.width * 0.5, panelTop + panelHeight * 0.4);
+
+    var ruleSize = Math.max(10, Math.round(bigSize * 0.26));
+    ctx.fillStyle = cssColor(palette.accent, 0.55);
+    ctx.fillRect(layout.width * 0.5 - bigSize * 1.6, panelTop + panelHeight * 0.56, bigSize * 3.2, Math.max(1, Math.round(bigSize * 0.045)));
+
+    ctx.font = "500 " + ruleSize + "px " + FONT_MONO;
+    ctx.fillStyle = "rgba(168,196,232,0.62)";
+    ctx.fillText("NO LYRIC DATA · 请勿离台 · TEST CARD", layout.width * 0.5, panelTop + panelHeight * 0.72);
+    ctx.restore();
+    return;
+  }
+
+  var glyphs = captionState.glyphs;
+  if (!glyphs.length) {
+    if (stateData.idx < 0) {
+      ctx.textAlign = "center";
+      var waitSize = Math.max(11, Math.round(layout.height * 0.017));
+      ctx.font = "500 " + waitSize + "px " + FONT_MONO;
+      var pulse = isFinite(time) ? 0.32 + 0.28 * (0.5 + 0.5 * Math.sin(time * 2.2)) : 0.45;
+      ctx.fillStyle = "rgba(164,194,232," + pulse.toFixed(3) + ")";
+      ctx.fillText("▌ 载波搜索中 · 请稍候", layout.width * 0.5, boxTop + boxHeight * 0.4);
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (captionState.plateHeight > 0) {
+    var plateWidth = captionState.plateWidth;
+    var plateX = layout.width * 0.5 - plateWidth * 0.5;
+    var plateGradient = null;
+    try {
+      plateGradient = ctx.createLinearGradient(plateX, 0, plateX + plateWidth, 0);
+      plateGradient.addColorStop(0, cssColor([4, 7, 14], 0));
+      plateGradient.addColorStop(0.1, cssColor([4, 7, 14], 0.72));
+      plateGradient.addColorStop(0.9, cssColor([4, 7, 14], 0.72));
+      plateGradient.addColorStop(1, cssColor([4, 7, 14], 0));
+    } catch (plateError) {
+      console.error("[361] caption plate gradient failed", plateError);
+      plateGradient = null;
+    }
+    ctx.fillStyle = plateGradient || cssColor([4, 7, 14], 0.66);
+    ctx.fillRect(plateX, captionState.plateTop, plateWidth, captionState.plateHeight);
+  }
+  var size = captionState.fontSize;
+  ctx.font = "600 " + size + "px " + FONT_SANS;
+  var currentIndex = -1;
+  for (var index = 0; index < glyphs.length; index++) {
+    if (glyphs[index].time <= time && glyphs[index].character.trim() !== "") { currentIndex = index; }
+  }
+  var glitchLeft = signalState.glitchUntil - performance.now();
+  var splitAmount = glitchLeft > 0 ? Math.min(7, signalState.glitchPower * 5) : 0;
+  var enterOffset = -clampNumber(signalState.lineFlash, 0, 1) * size * 0.14;
+  for (var glyphIndex = 0; glyphIndex < glyphs.length; glyphIndex++) {
+    var glyph = glyphs[glyphIndex];
+    if (glyph.character.trim() === "") { continue; }
+    var sung = glyph.time <= time;
+    var drawY = glyph.y + enterOffset;
+    if (splitAmount > 0.5) {
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = "rgba(255,64,88,0.95)";
+      ctx.fillText(glyph.character, glyph.x - splitAmount, drawY);
+      ctx.fillStyle = "rgba(64,214,255,0.95)";
+      ctx.fillText(glyph.character, glyph.x + splitAmount, drawY);
+      ctx.globalAlpha = 1;
+    }
+    if (sung) {
+      ctx.fillStyle = cssColor(palette.inkBright, 1);
+      ctx.globalAlpha = 1;
+      if (glyphIndex === currentIndex) {
+        ctx.shadowColor = cssColor(mixColor(palette.accent, [255, 255, 255], 0.5), 0.9);
+        ctx.shadowBlur = size * 0.42;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+    } else {
+      ctx.fillStyle = cssColor(palette.inkDim, 1);
+      ctx.globalAlpha = 0.8;
+      ctx.shadowBlur = 0;
+    }
+    ctx.fillText(glyph.character, glyph.x, drawY);
+  }
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 1;
+
+  if (currentIndex >= 0 && stateData.playing && !stateData.reduced) {
+    var lastGlyph = glyphs[currentIndex];
+    var lastWidth = Math.max(1, ctx.measureText(lastGlyph.character).width);
+    var cursorHeight = size * 0.68;
+    var cursorWidth = Math.max(3, size * 0.15);
+    var cursorX = lastGlyph.x + lastWidth + size * 0.1;
+    var cursorY = lastGlyph.y + enterOffset - cursorHeight * 0.5;
+    var blink = 0.3 + 0.34 * (0.5 + 0.5 * Math.sin(time * 5.6));
+    ctx.globalAlpha = clampNumber(blink, 0, 1);
+    ctx.fillStyle = cssColor(palette.accent, 1);
+    ctx.fillRect(cursorX, cursorY, cursorWidth, cursorHeight);
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function drawStationHead(ctx, time) {
+  var size = Math.max(10, Math.min(15, Math.round(layout.height * 0.016)));
+  var stripY = layout.barsHeight + layout.idHeight * 0.5;
+  ctx.save();
+  ctx.font = "600 " + size + "px " + FONT_MONO;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "right";
+  var stamp = formatTimecode(Math.max(0, isFinite(time) ? time : 0));
+  var stampWidth = ctx.measureText(stamp).width;
+  ctx.fillStyle = "rgba(206,224,248,0.6)";
+  ctx.textAlign = "right";
+  ctx.fillText(stamp, layout.width - layout.margin, stripY);
+  var lampX = layout.width - layout.margin - stampWidth - size * 1.2;
+  ctx.fillStyle = stateData.playing ? "rgba(226,96,84,0.92)" : "rgba(150,170,196,0.55)";
+  ctx.fillText(stateData.playing ? "ON AIR" : "STANDBY", lampX, stripY);
+  var dotX = lampX - ctx.measureText(stateData.playing ? "ON AIR" : "STANDBY").width - size * 0.9;
+  ctx.beginPath();
+  ctx.arc(dotX, stripY, Math.max(2, size * 0.24), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function formatTimecode(seconds) {
+  var total = Math.max(0, Math.floor(seconds));
+  var hours = Math.floor(total / 3600);
+  var minutes = Math.floor((total % 3600) / 60);
+  var secs = total % 60;
+  return pad2(hours) + ":" + pad2(minutes) + ":" + pad2(secs);
+}
+
+function pad2(value) {
+  var rounded = Math.round(clampNumber(value, 0, 999));
+  return rounded < 10 ? "0" + rounded : String(rounded);
+}
+
+function drawGrain(ctx) {
+  var source = textureState.snow || textureState.fallbackSnow;
+  if (!source) { return; }
+  var base = 0.075 + signalState.level * 0.06 + signalState.beatFlash * 0.05 + signalState.lineFlash * 0.07;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = clampNumber(base, 0, 0.5);
+  var jitterX = (stateData.reduced || window.__liziShake === false) ? 0 : (Math.random() - 0.5) * 6;
+  var jitterY = (stateData.reduced || window.__liziShake === false) ? 0 : (Math.random() - 0.5) * 6;
+  ctx.drawImage(source, jitterX, jitterY, layout.width + 8, layout.height + 8);
+  ctx.restore();
+}
+
+function drawSlices(rollOffset, tearAmplitude) {
+  var ctx = stageCtx;
+  var width = layout.width;
+  var height = layout.height;
+  var ratio = pixelRatio;
+  var slices = Math.round(clampNumber(width / 11, 56, 140));
+  var sliceWidth = width / slices;
+  for (var index = 0; index < slices; index++) {
+    var x0 = index * sliceWidth;
+    var middleRatio = (index + 0.5) / slices * 2 - 1;
+    var edge = middleRatio * middleRatio;
+    var horizontalScale = 1 + 0.09 * edge;
+    var verticalScale = 1 - 0.05 * edge;
+    var sourceWidth = Math.min(width, sliceWidth * horizontalScale + 0.8);
+    var sourceX = width * 0.5 + (x0 + sliceWidth * 0.5 - width * 0.5) * horizontalScale - sourceWidth * 0.5;
+    sourceX = clampNumber(sourceX, 0, Math.max(0, width - sourceWidth));
+    var destinationY = (height - height * verticalScale) * 0.5 + rollOffset;
+    var destinationX = x0;
+    if (tearAmplitude > 0.05) {
+      var seed = Math.sin(index * 12.9898 + signalState.glitchSeed) * 43758.5453;
+      var wobble = (seed - Math.floor(seed)) - 0.5;
+      destinationX += wobble * tearAmplitude * 2;
+    }
+    ctx.drawImage(
+      compositeCanvas,
+      sourceX, 0, sourceWidth, height,
+      destinationX * ratio - 1, destinationY * ratio,
+      sliceWidth * ratio + 2, height * verticalScale * ratio
+    );
+  }
+}
+
+function blitThroughTube() {
+  var ctx = stageCtx;
+  var ratio = pixelRatio;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#03040a";
+  ctx.fillRect(0, 0, stageCanvas.width, stageCanvas.height);
+
+  var remaining = signalState.glitchUntil - performance.now();
+  var tear = 0;
+  if (remaining > 0) {
+    tear = signalState.glitchPower * clampNumber(remaining / 150, 0, 1) * 18;
+  }
+  var rollOffset = signalState.rollOffset;
+  drawSlices(rollOffset, tear);
+  if (Math.abs(rollOffset) > 0.5) {
+    drawSlices(rollOffset - layout.height, tear);
+  }
+}
+
+function renderFrame(timestamp) {
+  var ctx = compositeCtx;
+  var time = stateData.time;
+  var seconds = timestamp * 0.001 * (stateData.reduced ? 0.4 : 1);
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.drawImage(staticCanvas, 0, 0);
+
+  drawBarPulse(ctx);
+  drawPhosphorGlow(ctx);
+  drawCloudField(ctx, seconds);
+  drawSatelliteLabel(ctx);
+  drawCaption(ctx, time);
+  drawStationHead(ctx, time);
+  drawRibbon(ctx, seconds);
+  drawTicker(ctx, seconds);
+  drawGrain(ctx);
+
+  blitThroughTube();
+  drawGlassOverlay(timestamp);
+}
+
+function drawBarPulse(ctx) {
+  var energy = clampNumber(signalState.bass * 0.7 + signalState.level * 0.5, 0, 1);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.globalAlpha = 0.04 + energy * 0.16;
+  ctx.fillStyle = cssColor(mixColor(palette.accent, [255, 255, 255], 0.35), 1);
+  ctx.fillRect(0, 0, layout.width, layout.barsHeight * 0.66);
+  ctx.globalAlpha = 0.06 + energy * 0.1;
+  ctx.fillStyle = cssColor(palette.accent, 1);
+  ctx.fillRect(0, layout.barsHeight * 0.66, layout.width, layout.barsHeight * 0.34);
+  ctx.restore();
+}
+
+function drawPhosphorGlow(ctx) {
+  var centerX = layout.width * 0.5;
+  var centerY = captionState.boxTop + Math.max(40, captionState.boxHeight * 0.32);
+  var radius = Math.max(180, layout.width * 0.38);
+  var intensity = 0.05 + signalState.level * 0.09 + signalState.beatFlash * 0.06;
+  var glow = null;
+  try {
+    glow = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
+    glow.addColorStop(0, cssColor(palette.accent, clampNumber(intensity, 0, 0.3)));
+    glow.addColorStop(0.55, cssColor(palette.accent, clampNumber(intensity * 0.35, 0, 0.2)));
+    glow.addColorStop(1, cssColor(palette.accent, 0));
+  } catch (glowError) {
+    console.error("[361] phosphor glow gradient failed", glowError);
+    glow = null;
+  }
+  if (!glow) { return; }
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, layout.pictureTop, layout.width, layout.pictureBottom - layout.pictureTop);
+  ctx.restore();
+}
+
+function updateSignals(timestamp) {
+  var now = timestamp || performance.now();
+  signalState.beatFlash = Math.max(0, signalState.beatFlash - 0.045);
+  signalState.lineFlash = Math.max(0, signalState.lineFlash - 0.06);
+  if (signalState.glitchUntil > 0 && now > signalState.glitchUntil) {
+    signalState.glitchUntil = 0;
+  }
+  var phase = (stateData.time % 21.7) / 21.7;
+  var dropout = phase > 0.978 && !stateData.reduced;
+  signalState.rollOffset = dropout ? Math.sin((phase - 0.978) / 0.022 * Math.PI) * layout.height * 0.06 : 0;
+  if (dropout) {
+    signalState.glitchPower = Math.max(signalState.glitchPower, 0.8);
+    signalState.glitchUntil = Math.max(signalState.glitchUntil, now + 60);
+  }
+}
+
+function frameLoop(timestamp) {
+  var startedAt = performance.now();
+  try {
+    updateSignals(timestamp);
+    renderFrame(timestamp);
+  } catch (frameError) {
+    console.error("[361] frame failed", frameError);
+  }
+  stateData.js = Math.max(0, performance.now() - startedAt);
+  stateData.frames = stateData.frames + 1;
+  window.requestAnimationFrame(frameLoop);
+}
+
+function boot() {
+  try {
+    stageCtx = stageCanvas.getContext("2d");
+    if (!stageCtx) { throw new Error("2d context unavailable"); }
+    resizeCanvas();
+    loadTextures();
+    buildPalette();
+    rebuildTicker();
+    updateReducedMotion();
+    if (window.matchMedia) {
+      try {
+        var motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+        if (motionQuery.addEventListener) {
+          motionQuery.addEventListener("change", updateReducedMotion);
+        } else if (motionQuery.addListener) {
+          motionQuery.addListener(updateReducedMotion);
+        }
+      } catch (motionError) {
+        console.error("[361] motion query failed", motionError);
+      }
+    }
+    window.addEventListener("message", handleMessage);
+    window.addEventListener("resize", function () {
+      try { resizeCanvas(); } catch (resizeError) { console.error("[361] resize failed", resizeError); }
+    });
+  } catch (bootError) {
+    console.error("[361] boot failed", bootError);
+  }
+}
+
+function updateReducedMotion() {
+  try {
+    stateData.reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  } catch (reducedError) {
+    console.error("[361] reduced motion check failed", reducedError);
+    stateData.reduced = false;
+  }
+}
+
+boot();
+
+window.requestAnimationFrame(function () {
+  sendReady();
+  try {
+    frameLoop(performance.now());
+  } catch (loopError) {
+    console.error("[361] loop start failed", loopError);
+  }
+});
+window.setTimeout(sendReady, 500);
+</script>
+</body>
+</html>

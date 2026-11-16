@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>网格地平线</title>
+<style>
+  html,body{margin:0;height:100%;background:#05030c;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+        font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(210,225,255,.28);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '网格地平线',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================================
+   020 · 网格地平线 —— 精修稿（r3）
+
+   一句话：整句歌词是**从地面网格里立起来的一片灯柱**，每根柱子的柱顶就是字形上的一个点。
+
+   这一稿改了什么（对着审图逐条修的）：
+   ① **删掉屏幕空间"全息字幕"层**。那是上一版为了抢救可读性硬盖上去的实体字（fillText
+      精灵，不是粒子），压在最前面，字和背景两套字各走各的，构图也死了。
+      现在可读性交还给粒子本身：按笔画覆盖面积自适应采样（每句 ≈2400 点，
+      步长 2~6 px 自动选），**点径与采样间距联动**（点必须挨着，笔画才不会碎成虚线）。
+   ② **整体换色**。不再固定紫红：由封面主色推出 8 套"专辑色"（天空/地面/网格/柱芯
+      是同一组明度关系，只转色相），每 4 句换一套（+62°）；每 4 拍再往下一套漂 1/4，
+      所以一个段落里颜色一直在缓慢流动，但永远是一套设计。
+   ③ **运镜**：整帧 2D 相机（平移 / 滚转 / 推拉）。常态慢摇 + 呼吸推拉；
+      换句时甩一下再推近；鼓点 → 竖向鼓点震（FX10）+ 微推镜（FX05）；
+      小节首拍 → 定向冲击震（FX01）+ 白闪（FX11）+ 地平线冲击环（FX18）。
+      另加缓慢下扫的光带（FX59）和压边的暗角（FX52）。
+   ④ **灯柱的"立"**：每个字脚下的网格上有一摊地面光斑，光斑到字底升一道细灯柱 ——
+      字是站在网格上的，不是漂着的。
+   ⑤ 字形本身三档打光：暗边（先画一层偏移的深色 = 厚度）→ 中间色 → 白芯，
+      每档一次 path + fill。
+
+   性能：颜色每帧只做数值插值（不建对象）；每字的点火/扫描亮度先算成 charBright，
+   内层循环里没有 exp、没有 sin；所有点分 5 档亮度装桶，每档一次 beginPath + fill。
+   ========================================================================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+
+let W = 0, H = 0, DPR = 1;
+
+/* ---------------- 状态 ---------------- */
+let lines = [];
+let accent = [255, 110, 200];
+let accentHue = 322;
+let curIdx = -1, brewIdx = -1, lastT = -1;
+let clockT = 0, clockAt = 0, playing = false;
+let last = performance.now(), t0 = 0;
+let beatN = 0, pulse = 0, flash = 0, shake = 0, liveE = 0;
+let kickZ = 0, kickX = 0, kickY = 0, kickRoll = 0;
+let scroll = 0;
+const rings = [];          /* 冲击环（FX18） */
+
+/* ---------------- 相机 / 世界 ---------------- */
+const CAM_H = 1.05;        /* 相机高度（世界单位）—— 字叠 1.9 高的垂直中点 */
+const FOCAL = 1.36;        /* 焦距（投影 s = FOCAL / z） */
+const VIS_AHEAD = 46;      /* 视野前方多远 */
+const ZNEAR = 2.6;         /* 近裁剪 */
+const Z_SING = 5.8;        /* 演唱期间句子驻留深度 */
+const V_IN = 7.0;          /* 进场速度 */
+const WORLD_W = 6.95;      /* 整句横向铺满的世界宽度（z=5.8 时约占屏宽 82%，留出运镜余量） */
+const TARGET_PTS = 2400;   /* 每句的目标粒子数（自适应采样往这个数上靠） */
+
+/* ---------------- 台词切排 ----------------
+   按**像素宽度**切，不按字数：字号是固定的（见 FONT_H），每排能放多少字取决于字宽，
+   拉丁字母只有汉字一半宽 —— 按字数切会让英文排得空、中文挤爆。 */
+const FONT_REF = 100;                       /* 参考字号：先按 100px 排版，再整体缩到世界尺寸 */
+const FONT_H = 0.62;                        /* 字号在世界里占多高 —— 固定值，歌词才不会一句大一句小 */
+const MAX_ROW_PX = WORLD_W * FONT_REF / FONT_H;   /* 一排最多多宽（参考像素） */
+const MAXH = 2.6;                           /* 整叠最高的世界高度（三排时压这条线） */
+const FONTF = (fs) => '800 ' + fs + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+
+function splitRows(text, maxRowPx, maxRows) {
+  octx.font = FONTF(FONT_REF);
+  const n = text.length;
+  /* 前缀宽度表：切排时只做数值比较，不再来回 measureText */
+  const cum = new Float64Array(n + 1);
+  for (let k = 1; k <= n; k++) cum[k] = octx.measureText(text.slice(0, k)).width;
+  const total = cum[n];
+  /* 允许每排超宽 10% 再降字号，也尽量不多切一排（22 字排两排比排三排好看） */
+  const rows = Math.max(1, Math.min(maxRows, Math.ceil(total / (maxRowPx * 1.10))));
+  const out = [];
+  let start = 0;
+  for (let r = 0; r < rows; r++) {
+    if (r === rows - 1) { out.push({ text: text.slice(start), off: start }); break; }
+    /* 平衡切：目标是剩余宽度平均分，不要"第一排塞满、最后排剩俩字" */
+    const target = cum[start] + (cum[n] - cum[start]) / (rows - r);
+    let cut = start + 1;
+    for (let k = start + 1; k <= n - (rows - r - 1); k++) {
+      if (cum[k] - cum[start] > maxRowPx * 1.10) break;
+      if (Math.abs(cum[k] - target) < Math.abs(cum[cut] - target)) cut = k;
+    }
+    if (cut <= start) cut = start + 1;
+    /* 不从拉丁词中间劈开 */
+    if (cut < n && /[A-Za-z0-9'’]/.test(text[cut - 1]) && /[A-Za-z0-9'’]/.test(text[cut])) {
+      for (let d = 1; d <= 10 && cut - d > start + 2; d++) {
+        if (/\s/.test(text[cut - d])) { cut = cut - d + 1; break; }
+      }
+    }
+    out.push({ text: text.slice(start, cut), off: start });
+    start = cut;
+  }
+  return out.filter((r) => r.text.length);
+}
+
+/* ============================================================================
+   颜色：8 套"专辑色"（手工定的，不是色相硬转）。
+   每套都是同一套设计 —— 近黑的天空 / 亮而饱和的地平线 / 霓虹网格 / 白芯的字 ——
+   所以换的只是"这张专辑的调子"，不是换了一套美术。
+   ========================================================================== */
+const CKEYS = ['skyT', 'skyM', 'skyH', 'gnd0', 'gnd1', 'grid', 'sun', 'b0', 'b1', 'b2', 'b3', 'core', 'beam'];
+const KI = {};
+for (let i = 0; i < CKEYS.length; i++) KI[CKEYS[i]] = i;
+const CUR = new Float32Array(CKEYS.length * 3);
+
+const ALBUM_DEF = [
+  /* 0 深海蓝 */ { skyT: '#03050e', skyM: '#081229', skyH: '#18487f', gnd: '#04080f', grid: '#2f8ad8', glow: '#58c8f0', dim: '#1d5a8e', hi: '#c2ecff', core: '#f4fcff' },
+  /* 1 紫罗兰 */ { skyT: '#05040e', skyM: '#130c2b', skyH: '#3d2270', gnd: '#07050f', grid: '#7f57d8', glow: '#a888ff', dim: '#4a2f88', hi: '#d8c8ff', core: '#faf6ff' },
+  /* 2 品红霓 */ { skyT: '#08040e', skyM: '#1e0a26', skyH: '#641c52', gnd: '#0c0510', grid: '#cf3f95', glow: '#ff6cc0', dim: '#7a2460', hi: '#ffc4e8', core: '#fff5fb' },
+  /* 3 琥珀金 */ { skyT: '#070403', skyM: '#1e0e05', skyH: '#6e3a10', gnd: '#0b0604', grid: '#d98a2a', glow: '#ffb95c', dim: '#7a4a1c', hi: '#ffdcae', core: '#fffaf2' },
+  /* 4 冰青 */   { skyT: '#03080b', skyM: '#051a22', skyH: '#0e5461', gnd: '#04100e', grid: '#33b8ae', glow: '#64e6d6', dim: '#1a6560', hi: '#c4f7f0', core: '#f2fffd' },
+  /* 5 玫红 */   { skyT: '#080307', skyM: '#1f0614', skyH: '#661330', gnd: '#0b0407', grid: '#d83060', glow: '#ff7690', dim: '#7a1f3c', hi: '#ffc6cf', core: '#fff6f8' },
+  /* 6 墨绿 */   { skyT: '#030806', skyM: '#05170f', skyH: '#125238', gnd: '#040f0a', grid: '#35b87c', glow: '#66e6a8', dim: '#1a6346', hi: '#bff7d8', core: '#f2fff8' },
+  /* 7 靛紫 */   { skyT: '#04040e', skyM: '#0d0f2c', skyH: '#262c74', gnd: '#060612', grid: '#5566e0', glow: '#9098ff', dim: '#2d3388', hi: '#ccceff', core: '#f7f7ff' },
+];
+
+const hex2rgb = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+const mixc = (a, b, f) => [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+
+function makePal(d) {
+  const skyT = hex2rgb(d.skyT), skyM = hex2rgb(d.skyM), skyH = hex2rgb(d.skyH);
+  const gnd = hex2rgb(d.gnd), grid = hex2rgb(d.grid), glow = hex2rgb(d.glow);
+  const dim = hex2rgb(d.dim), hi = hex2rgb(d.hi), core = hex2rgb(d.core);
+  const out = new Float32Array(CKEYS.length * 3);
+  const put = (k, c) => { const i = KI[k] * 3; out[i] = c[0]; out[i + 1] = c[1]; out[i + 2] = c[2]; };
+  put('skyT', skyT); put('skyM', skyM); put('skyH', skyH);
+  put('gnd0', gnd); put('gnd1', mixc(gnd, [0, 0, 0], 0.62));
+  put('grid', grid); put('sun', glow);
+  put('b0', dim);                          /* 未唱到的字：暗，但必须还能读 */
+  put('b1', mixc(dim, hi, 0.45));
+  put('b2', mixc(dim, hi, 0.78));
+  put('b3', hi);
+  put('core', core); put('beam', glow);
+  return out;
+}
+
+let ALB = [];
+let albBase = 0;
+function buildAlbums() {
+  ALB = ALBUM_DEF.map(makePal);
+  /* 开场用哪套：挑网格色相最接近封面主色的那一套（歌和画面同色系） */
+  let best = 0, bd = 1e9;
+  for (let i = 0; i < ALB.length; i++) {
+    const j = KI.grid * 3;
+    const h = hueOfRgb([ALB[i][j], ALB[i][j + 1], ALB[i][j + 2]]);
+    let dd = Math.abs(h - accentHue) % 360;
+    if (dd > 180) dd = 360 - dd;
+    if (dd < bd) { bd = dd; best = i; }
+  }
+  albBase = best;
+}
+
+/* 每 4 句换一套专辑色；换的时候 0.3s 交叉淡入，不是硬切 */
+const albumOf = () => ALB[(albBase + (curIdx >= 0 ? (curIdx >> 2) : 0)) % ALB.length];
+
+function easePalette(dt) {
+  const A = albumOf();
+  const k = Math.min(1, dt * 2.6);
+  for (let i = 0; i < CUR.length; i++) CUR[i] += (A[i] - CUR[i]) * k;
+}
+function snapPalette() {
+  const A = albumOf();
+  for (let i = 0; i < CUR.length; i++) CUR[i] = A[i];
+}
+
+const rgbStr = (i) => 'rgb(' + (CUR[i * 3] | 0) + ',' + (CUR[i * 3 + 1] | 0) + ',' + (CUR[i * 3 + 2] | 0) + ')';
+const rgbaStr = (i, a) => 'rgba(' + (CUR[i * 3] | 0) + ',' + (CUR[i * 3 + 1] | 0) + ',' + (CUR[i * 3 + 2] | 0) + ',' +
+  (a < 0 ? 0 : a > 1 ? 1 : a).toFixed(3) + ')';
+
+/* ---------------- 字形采样 ---------------- */
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+
+const G = [];              /* 每句的粒子数据 */
+let built = [];
+
+function charOf(bnd, xl) {
+  let lo = 0, hi = bnd.length - 2;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (bnd[m] <= xl) lo = m; else hi = m - 1; }
+  return lo;
+}
+
+function buildLine(idx) {
+  if (built[idx]) return;
+  built[idx] = true;
+  G[idx] = null;
+  if (idx < 0 || !lines[idx]) return;
+  const line = lines[idx];
+  const text = line.text || '';
+  if (!text) return;
+
+  /* 逐字时刻：chars 可信才用 YRC，否则均分回退 */
+  const chars = line.chars && line.chars.length === text.length ? line.chars : null;
+  const dur = line.dur > 0 ? line.dur : 2.4;
+  const ct = new Float32Array(text.length);
+  for (let k = 0; k < text.length; k++)
+    ct[k] = chars ? chars[k].t : line.t + dur * k / text.length;
+
+  const rows = splitRows(text, MAX_ROW_PX, 3);
+  octx.font = FONTF(FONT_REF);
+  let wAtF = 1;
+  for (const r of rows) wAtF = Math.max(wAtF, octx.measureText(r.text).width);
+  /* 只有在"一排怎么切都超过画幅"时才缩字号；否则字号固定 = 歌词高度一致 */
+  const fs = Math.max(14, Math.min(FONT_REF, FONT_REF * MAX_ROW_PX / Math.max(1, wAtF)));
+  octx.font = FONTF(fs);
+
+  const GAP = Math.round(fs * 0.05);
+  let totalH = 0, maxRowW = 1;
+  const pix = [];
+  for (const r of rows) {
+    const rowW = octx.measureText(r.text).width;
+    const w = Math.ceil(rowW) + 8;
+    const h = Math.ceil(fs * 1.12) + 4;
+    off.width = w; off.height = h;
+    octx.clearRect(0, 0, w, h);
+    octx.font = FONTF(fs);
+    octx.textAlign = 'center'; octx.textBaseline = 'middle';
+    octx.fillStyle = '#fff';
+    octx.fillText(r.text, w / 2, h / 2);
+    const data = octx.getImageData(0, 0, w, h).data;
+    let lit = 0;
+    for (let y = 0; y < h; y += 4) {
+      const base = y * w * 4;
+      for (let x = 0; x < w; x += 4) if (data[base + x * 4 + 3] > 128) lit++;
+    }
+    const bnd = [0];
+    for (let k = 1; k <= r.text.length; k++) bnd.push(octx.measureText(r.text.substring(0, k)).width);
+    pix.push({ text: r.text, w: w, h: h, data: data, lit: lit, bnd: bnd, off: r.off, rowW: rowW });
+    totalH += h;
+    maxRowW = Math.max(maxRowW, rowW);
+  }
+  totalH += GAP * (pix.length - 1);
+  if (!(totalH > 0) || !(maxRowW > 0)) return;
+
+  /* 采样步长：笔画覆盖面积 / 目标点数 —— 长句自动放粗，短句保持细 */
+  let area = 0;
+  for (const g of pix) area += g.lit * 16;
+  let stp = Math.round(Math.sqrt(area / TARGET_PTS));
+  if (!(stp >= 2)) stp = 2; else if (stp > 6) stp = 6;
+
+  /* 等比缩放，而且**字号定死**：sFit 首选 FONT_H/fs（= 每句字号一样大），
+     只有整排超宽或三排叠太高时才让步。横竖必须同一个比例，否则字会被拉扁/拉长。 */
+  const sFit = Math.min(FONT_H / fs, WORLD_W / maxRowW, MAXH / totalH);
+  const sX = sFit, sY = sFit;
+  const yBot = CAM_H - totalH * sFit * 0.5;
+  let below = 0;
+  for (let ri = pix.length - 1; ri >= 0; ri--) { pix[ri].basePx = below; below += pix[ri].h + GAP; }
+
+  let n = 0;
+  for (const g of pix) {
+    for (let y = (stp >> 1); y < g.h; y += stp) {
+      const base = y * g.w * 4;
+      for (let x = (stp >> 1); x < g.w; x += stp) if (g.data[base + x * 4 + 3] > 128) n++;
+    }
+  }
+  if (!n) return;
+
+  const X = new Float32Array(n), Y = new Float32Array(n), Z = new Float32Array(n), CI = new Uint16Array(n);
+  let i = 0;
+  for (const g of pix) {
+    const pad = (g.w - g.rowW) * 0.5;
+    for (let y = (stp >> 1); y < g.h; y += stp) {
+      const base = y * g.w * 4;
+      for (let x = (stp >> 1); x < g.w; x += stp) {
+        if (g.data[base + x * 4 + 3] <= 128) continue;
+        X[i] = (x - pad - g.rowW * 0.5) * sFit;
+        Y[i] = yBot + (g.basePx + (g.h - y)) * sFit;
+        CI[i] = charOf(g.bnd, x - pad) + g.off;
+        Z[i] = 0;
+        i++;
+      }
+    }
+  }
+  /* 字面是一块**斜插进景深里的板**：整块按 x 线性倾斜。
+     （上一版给每个点随机 ±0.15 的 z —— 在画面边缘等于 ±17px 的横向错位，
+      笔画直接被抖成噪点，这是字认不出来的真凶。） */
+  for (let q = 0; q < n; q++) Z[q] = -X[q] * 0.05;
+
+  /* 逐字：中心 x、宽、字底高度（用来画地面光斑和灯柱） */
+  const nch = text.length;
+  const ccx = new Float32Array(nch), cbot = new Float32Array(nch), cw = new Float32Array(nch);
+  for (const g of pix) {
+    const yB = yBot + g.basePx * sFit;
+    for (let k = 0; k < g.text.length; k++) {
+      const gi = k + g.off;
+      const x0 = (g.bnd[k] - g.rowW * 0.5) * sFit;
+      const x1 = (g.bnd[k + 1] - g.rowW * 0.5) * sFit;
+      ccx[gi] = (x0 + x1) * 0.5;
+      cw[gi] = Math.max(0.02, x1 - x0);
+      cbot[gi] = yB;
+    }
+  }
+
+  G[idx] = {
+    x: X, y: Y, z: Z, ci: CI, n: n,
+    ct: ct, ccx: ccx, cbot: cbot, cw: cw, cb: new Float32Array(nch),
+    sp: stp * sFit,                /* 采样格子的世界间距 —— 点径必须 ≥ 它，笔画才不断 */
+    t: line.t, dur: dur, rows: pix.length, stp: stp,
+  };
+}
+
+/* ---------------- 每句的世界 z：远处快速进场 → 演唱期间驻留 → 换句前掠走 ---------------- */
+function lineZW(idx, T) {
+  const ln = lines[idx];
+  const st = ln.t, end = ln.t + (ln.dur > 0 ? ln.dur : 2.4);
+  const lane = (idx % 2) * 1.2;
+  const nxt = lines[idx + 1];
+  const outAt = nxt ? nxt.t - 0.15 : end + 2.0;
+  if (T < st) return Z_SING + (st - T) * V_IN + lane;
+  if (T < outAt) return Z_SING + lane;
+  const p = Math.min(1, (T - outAt) / 0.30);
+  return Z_SING + lane - p * p * (Z_SING - 1.4);
+}
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(1, window.innerWidth);
+  H = Math.max(1, window.innerHeight);
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  /* 采样依赖窗口尺寸：已建好的句子按新尺寸重建 */
+  const keep = [];
+  for (let i = 0; i < built.length; i++) if (built[i] && G[i]) keep.push(i);
+  built = [];
+  G.length = 0;
+  for (let j = 0; j < keep.length; j++) buildLine(keep[j]);
+}
+
+/* ---------------- 节奏 ---------------- */
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+/* ① 显示与酝酿分离 ② 索引单调不回退 ③ 提前量自适应 ④ 只有时间明显倒退才重置 */
+const LEAD = 1.3;
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) {
+    curIdx = -1; brewIdx = -1;
+    G.length = 0; built = [];
+    rings.length = 0;
+  }
+  lastT = T;
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    brewIdx = -1;
+    if (ci >= 0) buildLine(ci);
+    /* 换句：甩一下 + 推近（运镜的"切"） */
+    const dir = (ci & 1) ? 1 : -1;
+    kickRoll += dir * 0.012;
+    kickX += dir * W * 0.008;
+    kickZ += 0.022;
+    for (let q = 0; q < ci - 3; q++) {
+      if (!built[q]) continue;
+      built[q] = false;
+      G[q] = null;
+    }
+    hint.style.opacity = lines.length ? (ci >= 0 ? '0' : '1') : '0.5';
+  }
+  const nx = curIdx + 1;
+  if (nx < lines.length && brewIdx !== nx) {
+    const gap = lines[nx].t - (curIdx >= 0 ? lines[curIdx].t : lines[nx].t - 4);
+    const lead = Math.min(LEAD, Math.max(0.45, gap * 0.55));
+    if (T >= lines[nx].t - lead) {
+      brewIdx = nx;
+      buildLine(nx);
+    }
+  }
+}
+
+/* ---------------- 粒子缓冲（每档一次 beginPath + fill） ---------------- */
+const NB = 5;
+const GB = [], GC = [];
+for (let b = 0; b < NB; b++) { GB.push(new Float32Array(16000 * 3)); GC.push({ v: 0 }); }
+const HB = new Float32Array(10000 * 3), HC = { v: 0 };
+const XB = new Float32Array(14000 * 3), XC = { v: 0 };   /* 远处的下一句（柔光回声） */
+const COLF = ['', '', '', '', ''];
+const BKEY = ['b0', 'b1', 'b2', 'b3', 'core'];
+const BALPHA = [0.50, 0.62, 0.76, 0.90, 1.00];
+
+function pushRect(buf, ctr, sx, sy, d) {
+  const i = ctr.v * 3;
+  if (i > buf.length - 3) return;
+  buf[i] = sx - d * 0.5; buf[i + 1] = sy - d * 0.5; buf[i + 2] = d;
+  ctr.v++;
+}
+function flushRects(buf, ctr) {
+  if (!ctr.v) return;
+  ctx.beginPath();
+  for (let i = 0; i < ctr.v * 3; i += 3) ctx.rect(buf[i], buf[i + 1], buf[i + 2], buf[i + 2]);
+  ctx.fill();
+}
+
+/* ============================================================================
+   主循环
+   ========================================================================== */
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+  timing(T);
+
+  /* 包络衰减 */
+  pulse *= Math.exp(-dt * 2.6);
+  flash *= Math.exp(-dt * 7.4);
+  shake *= Math.exp(-dt * 5.2);
+  if (window.__liziShake === false) shake = 0;
+  kickZ *= Math.exp(-dt * 4.0);
+  kickX *= Math.exp(-dt * 4.8);
+  kickY *= Math.exp(-dt * 5.4);
+  kickRoll *= Math.exp(-dt * 3.4);
+  scroll += dt * (2.3 + pulse * 1.5 + liveE * 0.7);
+  easePalette(dt);
+  for (let b = 0; b < NB; b++) COLF[b] = rgbaStr(KI[BKEY[b]], BALPHA[b]);
+
+  const hzn = H * 0.385;
+  const cx = W * 0.5;
+  const scaleW = W * 0.5;
+  const M = Math.max(W, H) * 0.18 + 48;
+
+  /* ---- 相机：常态慢摇 + 冲击量（FX02 手持漂移 / FX10 竖向鼓点震 / FX05 推镜） ---- */
+  const panX = Math.sin(t0 * 0.13) * W * 0.011 + Math.sin(t0 * 0.051 + 1.7) * W * 0.005
+    + kickX + (Math.random() - 0.5) * shake * 0.55;
+  const panY = Math.sin(t0 * 0.09 + 0.6) * H * 0.007
+    + kickY + (Math.random() - 0.5) * shake * 0.38;
+  const roll = Math.sin(t0 * 0.057) * 0.007 + kickRoll + (Math.random() - 0.5) * shake * 0.0007;
+  const zoom = 1.006 + 0.009 * Math.sin(t0 * 0.16) + kickZ;
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.translate(W * 0.5 + panX, H * 0.5 + panY);
+  ctx.rotate(roll);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-W * 0.5, -H * 0.5);
+
+  /* ---- 天空 ---- */
+  const sky = ctx.createLinearGradient(0, -M, 0, hzn + M * 0.15);
+  sky.addColorStop(0, rgbStr(KI.skyT));
+  sky.addColorStop(0.58, rgbStr(KI.skyM));
+  sky.addColorStop(1, rgbStr(KI.skyH));
+  ctx.fillStyle = sky;
+  ctx.fillRect(-M, -M, W + M * 2, hzn + M + 2);
+
+  /* ---- 地平线逆光（一轮光球 + 横向光带 = 逆光轮廓） ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  const sunY = hzn - H * 0.030;
+  const sg = ctx.createRadialGradient(cx, sunY, 0, cx, sunY, H * 0.34);
+  sg.addColorStop(0, rgbaStr(KI.sun, 0.42 + pulse * 0.16));
+  sg.addColorStop(0.30, rgbaStr(KI.sun, 0.14));
+  sg.addColorStop(1, rgbaStr(KI.sun, 0));
+  ctx.fillStyle = sg;
+  ctx.fillRect(-M, hzn - H * 0.36, W + M * 2, H * 0.40);
+
+  /* 星星（屏幕空间、地平线以上） */
+  ctx.fillStyle = rgbaStr(KI.b3, 0.42 + liveE * 0.16);
+  ctx.beginPath();
+  for (let i = 0; i < 110; i++) {
+    const sx = ((i * 971) % 1000) / 1000 * W;
+    const sy = (((i * 613) % 1000) / 1000) * hzn * 0.90;
+    const tw = 0.5 + 0.5 * Math.sin(t0 * 1.5 + i * 1.7);
+    const r = 0.5 + tw * 0.8;
+    ctx.rect(sx, sy, r, r);
+  }
+  ctx.fill();
+
+  /* ---- 地面 ---- */
+  ctx.globalCompositeOperation = 'source-over';
+  const gr = ctx.createLinearGradient(0, hzn - 2, 0, H + M);
+  gr.addColorStop(0, rgbStr(KI.gnd0));
+  gr.addColorStop(0.30, rgbStr(KI.gnd1));
+  gr.addColorStop(1, rgbStr(KI.gnd1));
+  ctx.fillStyle = gr;
+  ctx.fillRect(-M, hzn - 1, W + M * 2, H - hzn + M + 2);
+
+  /* ---- 透视网格：一次 beginPath、一次 stroke ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = rgbaStr(KI.grid, 0.24 + pulse * 0.22 + liveE * 0.08);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let k = -24; k <= 24; k++) {
+    const wx = k * 0.92;
+    const sN = FOCAL / 1.6;
+    const xN = cx + wx * sN * scaleW;
+    const yN = hzn + CAM_H * sN * scaleW;
+    if (yN < hzn) continue;
+    const sF = FOCAL / VIS_AHEAD;
+    ctx.moveTo(xN, yN);
+    ctx.lineTo(cx + wx * sF * scaleW, hzn + CAM_H * sF * scaleW + 1);
+  }
+  for (let j = 0; j < 26; j++) {
+    const zw = (Math.floor(scroll / 4.4) + j) * 4.4;
+    const zf = zw - scroll + 2.0;
+    if (zf < ZNEAR) continue;
+    const y = hzn + CAM_H * (FOCAL / zf) * scaleW;
+    if (y > H + M) break;
+    ctx.moveTo(-M, y);
+    ctx.lineTo(W + M, y);
+  }
+  ctx.stroke();
+
+  /* ---- 地平线光带（压在字下面：这道光是地面的，不该横穿歌词） ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  const hg = ctx.createLinearGradient(0, hzn - H * 0.031, 0, hzn + H * 0.031);
+  hg.addColorStop(0, rgbaStr(KI.sun, 0));
+  hg.addColorStop(0.48, rgbaStr(KI.sun, 0.20 + pulse * 0.18));
+  hg.addColorStop(1, rgbaStr(KI.sun, 0));
+  ctx.fillStyle = hg;
+  ctx.fillRect(-M, hzn - H * 0.031, W + M * 2, H * 0.062);
+
+  /* ---- FX18' 地面像素波纹（小节首拍）：一圈方块在地面上炸开，从景深里推过来 ----
+     不是描边的椭圆 —— 那是"贴在画面上的圈"，太廉价；方块是落在地上的，
+     而且透视天然把它压扁，和网格同一套空间。画在粒子之前 = 在字的下面。 */
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i];
+    r.age += dt;
+    if (r.age > 1.15) { rings.splice(i, 1); continue; }
+    const p = r.age / 1.15;
+    const R = 0.6 + p * 10.5;          /* 世界半径 */
+    const ZC = 9.5;                    /* 波心在景深里多远 —— 落在字的后面，不压在字上 */
+    const a = (1 - p) * (1 - p);
+    for (let band = 0; band < 3; band++) {
+      const Rb = R * (1 - band * 0.11);
+      ctx.globalAlpha = a * (0.85 - band * 0.22);
+      ctx.fillStyle = rgbStr(KI.beam);
+      ctx.beginPath();
+      const SEG = 170;
+      for (let q = 0; q < SEG; q++) {
+        const th = q / SEG * 6.28318;
+        const Xw = Math.cos(th) * Rb;
+        const Zw = ZC + Math.sin(th) * Rb;
+        if (Zw < 2.3) continue;
+        const s = FOCAL / Zw;
+        const px = cx + Xw * s * scaleW;
+        const py = hzn + CAM_H * s * scaleW;
+        let sz = 32 * s;
+        if (sz < 3) sz = 3; else if (sz > 18) sz = 18;
+        sz = Math.round(sz / 3) * 3;                        /* 像素化 */
+        ctx.rect(Math.round(px / 3) * 3, Math.round(py / 3) * 3, sz, Math.round(sz * 0.85 / 3) * 3);
+      }
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ============================================================================
+     粒子层：把 4 句之内的字都算进来，统一装桶后一次画完（additive 可交换，不用排序）
+     ========================================================================== */
+  for (let b = 0; b < NB; b++) GC[b].v = 0;
+  HC.v = 0; XC.v = 0;
+
+  const shaftArr = [];
+  /* 只画"这一句 + 下一句 + 上一句"：再往后的句子亮度只有 5%，看不见，
+     却要按满屏点数去填像素 —— 纯浪费（软件栅格下这是最贵的一笔）。 */
+  const l1 = Math.min(lines.length - 1, curIdx + 1);
+  const l0 = Math.max(0, curIdx - 1);
+
+  for (let idx = l1; idx >= l0; idx--) {
+    const L = G[idx];
+    if (!L) continue;
+    const zw = lineZW(idx, T);
+    if (zw < ZNEAR || zw > VIS_AHEAD + 8) continue;
+    const isCur = idx === curIdx;
+    /* 景深衰减：驻留的这句 = 1，往远处掉得很快 —— 否则前/后几句会亮成一片，
+       好几行字叠在屏幕上，谁也读不清（这是上一版最致命的问题）。 */
+    const fog = Math.max(0.04, 1 - Math.max(0, zw - Z_SING) / (VIS_AHEAD * 0.42));
+    /* 句尾掠过镜头：3.0 以后直接归零，别让巨大的残句糊在脸上 */
+    const fade = Math.min(1, Math.max(0, (zw - 3.0) / 2.8));
+    /* 下一句：只在**远处**（z>8.5）留一条淡通道 —— 走近了就撤，接着说下一句从深处来。
+       它是柔光的回声，点放大 1.7 倍、亮度定死，所以不会变成"第二行字幕"。 */
+    if (!isCur && (idx < curIdx || zw < 8.5)) continue;
+    /* 下一句从景深里来：整句照样满密度画（稀疏取样会碎成一片灰渣），只是远、小、暗 */
+    const stepP = isCur ? 1 : 2;
+    const ln = lines[idx];
+
+    /* 逐字亮度：点火包络 + 扫描前沿（每帧只算 N_char 次 exp，内层循环只查表） */
+    const scanP = Math.max(-0.15, Math.min(1.15, (T - ln.t) / Math.max(0.5, L.dur)));
+    const scanXw = -4.6 + scanP * 9.2;
+    const scanW = 1.25 + pulse * 1.0;
+    for (let k = 0; k < L.ct.length; k++) {
+      const dtc = T - L.ct[k];
+      let li;
+      if (dtc < -0.45) li = 0.52;                                  /* 未唱：可读的暗 */
+      else if (dtc < 0) li = 0.52 + 0.44 * (1 + dtc / 0.45);       /* 预备：抬起来 */
+      else li = 1.0 + 1.0 * Math.exp(-dtc * 3.0);                  /* 点火：闪一下再回落 */
+      const dx = L.ccx[k] - scanXw;
+      li *= 0.74 + 0.50 * Math.exp(-(dx * dx) / (scanW * scanW));
+      L.cb[k] = li;
+    }
+
+    const n = L.n, X = L.x, Y = L.y, Z = L.z, CI = L.ci;
+    const fogF = fog * fade;
+    /* 下一句**从景深里出来**：远、小、暗，随镜头推进长大 —— 不做上下偏移，
+       那会把"纵深"变成"从地里冒出来"，空间感就散了。 */
+    for (let k = 0; k < n; k += stepP) {
+      const zf = zw + Z[k];
+      if (zf < ZNEAR) continue;
+      const s = FOCAL / zf;
+      const sx = cx + X[k] * s * scaleW;
+      if (sx < -16 || sx > W + 16) continue;
+      const sy = hzn + (CAM_H - Y[k]) * s * scaleW;
+      if (sy < -16 || sy > H + 16) continue;
+      /* 点径跟采样间距绑死（×1.35 = 相邻点必然重叠），笔画才是一条，不是一串珠子 */
+      let d = L.sp * s * scaleW * 1.35;
+      if (d < 2.0) d = 2.0; else if (d > 12) d = 12;
+      if (!isCur) { pushRect(XB, XC, sx, sy, Math.min(13, d * 1.7)); continue; }
+      const br = L.cb[CI[k]] * fogF;
+      if (br < 0.012) continue;                       /* 已经看不见的点不要进桶（白填像素） */
+      let b = (br * 3.0 + 0.4) | 0;
+      if (b < 0) b = 0; else if (b > 4) b = 4;
+      pushRect(GB[b], GC[b], sx, sy, d);
+      if (br > 1.0) pushRect(HB, HC, sx, sy, d * 2.3);   /* 光晕只给刚点着的字 */
+    }
+
+    /* 最下一排字：脚下接一道短灯柱到网格上（字是"立"在地上的）。
+       上排不画 —— 它的灯柱会横穿下排的字，白添一层糊。 */
+    if (isCur) {
+      const sBase = FOCAL / zw;
+      const syG = hzn + CAM_H * sBase * scaleW;
+      for (let k = 0; k < L.ct.length; k++) {
+        if (L.cbot[k] > 0.62) continue;
+        const gx2 = cx + L.ccx[k] * sBase * scaleW;
+        if (gx2 < -40 || gx2 > W + 40) continue;
+        const yTop = hzn + (CAM_H - L.cbot[k]) * sBase * scaleW;
+        if (syG - yTop > 5) shaftArr.push(gx2, syG, yTop);
+      }
+    }
+  }
+
+  /* 地面的泛光：字底下一摊软光，下半屏才不是一片死黑（不是倒影 —— 倒影会变成重影） */
+  {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.save();
+    ctx.translate(cx, hzn + H * 0.055);
+    ctx.scale(1, 0.24);
+    const fr = W * 0.36;
+    const fg = ctx.createRadialGradient(0, 0, 0, 0, 0, fr);
+    fg.addColorStop(0, rgbaStr(KI.sun, 0.11 + pulse * 0.06));
+    fg.addColorStop(1, rgbaStr(KI.sun, 0));
+    ctx.fillStyle = fg;
+    ctx.fillRect(-fr, -fr, fr * 2, fr * 2);
+    ctx.restore();
+  }
+  /* 灯柱（一次 stroke） */
+  if (shaftArr.length) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = rgbaStr(KI.beam, 0.10);
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let i = 0; i < shaftArr.length; i += 3) {
+      ctx.moveTo(shaftArr[i], shaftArr[i + 1]);
+      ctx.lineTo(shaftArr[i], shaftArr[i + 2]);
+    }
+    ctx.stroke();
+  }
+
+  /* 远处的下一句（柔光回声）先画，当前句的字压在它上面 */
+  if (XC.v) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = rgbaStr(KI.b1, 0.065);
+    flushRects(XB, XC);
+  }
+
+  /* 光晕 → 五档字芯。不再盖深色副本：那层会从点缝里透出来，把笔画弄脏。 */
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = rgbaStr(KI.beam, 0.075);
+  flushRects(HB, HC);
+  for (let b = 0; b < NB; b++) {
+    ctx.fillStyle = COLF[b];
+    flushRects(GB[b], GC[b]);
+  }
+
+  /* ---- 扫描前沿：一团跟着点火走的柔光（椭圆径向渐变，没有硬边） ---- */
+  if (curIdx >= 0) {
+    const ln = lines[curIdx];
+    const p = Math.max(0, Math.min(1, (T - ln.t) / Math.max(0.5, ln.dur > 0 ? ln.dur : 2.4)));
+    const swX = cx + (-4.3 + p * 8.6) * (FOCAL / Z_SING) * scaleW;
+    const rr = H * 0.17;
+    ctx.save();
+    ctx.translate(swX, hzn - H * 0.045);
+    ctx.scale(1, 2.1);
+    const swg = ctx.createRadialGradient(0, 0, 0, 0, 0, rr);
+    swg.addColorStop(0, rgbaStr(KI.core, 0.13 + pulse * 0.08));
+    swg.addColorStop(0.55, rgbaStr(KI.core, 0.035));
+    swg.addColorStop(1, rgbaStr(KI.core, 0));
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = swg;
+    ctx.fillRect(-rr, -rr, rr * 2, rr * 2);
+    ctx.restore();
+  }
+
+  /* ---- FX59 光带扫过（很慢，一整段才扫一次） ---- */
+  {
+    const p = (t0 * 0.085) % 1.22 - 0.11;
+    const by = p * (H + 240) - 120;
+    const bg2 = ctx.createLinearGradient(0, by - 70, 0, by + 70);
+    bg2.addColorStop(0, rgbaStr(KI.beam, 0));
+    bg2.addColorStop(0.5, rgbaStr(KI.beam, 0.045));
+    bg2.addColorStop(1, rgbaStr(KI.beam, 0));
+    ctx.fillStyle = bg2;
+    ctx.fillRect(-M, by - 70, W + M * 2, 140);
+  }
+
+  /* ---- 回到屏幕空间：暗角 + 白闪 ---- */
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  const vg = ctx.createRadialGradient(W * 0.5, H * 0.46, Math.min(W, H) * 0.30, W * 0.5, H * 0.46, Math.max(W, H) * 0.78);
+  vg.addColorStop(0, 'rgba(3,2,9,0)');
+  vg.addColorStop(1, 'rgba(3,2,9,0.70)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  if (flash > 0.004) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255,248,240,' + (flash * 0.5).toFixed(3) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+
+  requestAnimationFrame(frame);
+}
+
+resize();
+buildAlbums();
+snapPalette();
+addEventListener('resize', resize);
+requestAnimationFrame(frame);
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+function hueOfRgb(rgb) {
+  const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  if (d < 1e-4) return 322;
+  let h;
+  if (mx === r) h = ((g - b) / d) % 6;
+  else if (mx === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  return ((h * 60) + 360) % 360;
+}
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; brewIdx = -1; lastT = -1;
+    G.length = 0; built = [];
+    rings.length = 0;
+    scroll = 0; beatN = 0; pulse = 0; shake = 0; flash = 0; liveE = 0;
+    if (p.accent && p.accent.length === 3) {
+      accent = p.accent.slice();
+      accentHue = hueOfRgb(accent);
+      buildAlbums();
+      snapPalette();
+    }
+    clockT = 0; clockAt = performance.now(); playing = false;
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'live') {
+    liveE = Math.max(0, Math.min(1, d.payload.energy || d.payload.level || 0));
+  } else if (d.type === 'beat') {
+    const lv = d.payload.level || 0.6;
+    beatN++;
+    pulse = Math.min(1.6, pulse + 0.34 + lv * 0.55);
+    const down = d.payload.index === 0 || (beatN & 3) === 0;
+    if (down) {
+      /* 小节首拍：定向冲击震 + 白闪 + 冲击环 + 推镜 */
+      shake += 7.5 + lv * 6;
+      flash = Math.max(flash, 0.13 + lv * 0.14);
+      kickZ += 0.035 + lv * 0.02;
+      kickRoll += (Math.random() < 0.5 ? -1 : 1) * 0.006;
+      rings.push({ age: 0 });
+      if (rings.length > 4) rings.shift();
+    } else {
+      /* 普通拍：竖向鼓点震 */
+      shake += 3.2 + lv * 3.2;
+      kickY -= 2.6 + lv * 2.6;
+    }
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+window.__stage = () => {
+  const L = curIdx >= 0 ? G[curIdx] : null;
+  const T = now(), zs = [];
+  for (let i = Math.max(0, curIdx - 1); i <= Math.min(lines.length - 1, curIdx + 3); i++)
+    if (lines[i]) zs.push([i, +lineZW(i, T).toFixed(2)]);
+  return {
+    lines: lines.length, curIdx: curIdx, brewIdx: brewIdx,
+    yrc: curIdx >= 0 ? !!(lines[curIdx] && lines[curIdx].chars) : false,
+    pts: L ? L.n : 0, stp: L ? L.stp : 0, rows: L ? L.rows : 0,
+    album: curIdx >= 0 ? (curIdx >> 2) % ALB.length : 0, hue: Math.round(accentHue),
+    beatN: beatN, rings: rings.length, zs: zs, scroll: +scroll.toFixed(2), t: +T.toFixed(2)
+  };
+};
+</script>
+</body>
+</html>
