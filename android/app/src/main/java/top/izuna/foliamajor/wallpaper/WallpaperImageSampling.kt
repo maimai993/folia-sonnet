@@ -26,6 +26,17 @@ object WallpaperImageSampling {
      */
     const val MAX_SOURCE_PIXELS = 100L * 1000L * 1000L
 
+    /**
+     * 采样后**整张**解码结果的像素上限。
+     *
+     * inSampleSize 作用在整张源图上，而裁切是解码之后才做的：只按裁切块选倍数的话，
+     * 9000×9000 只留 25% 时倍数是 1，要解出 81M 像素（约 324MB）。所以另设一道按整张解码结果算的预算：
+     * 25M 像素（约 100MB，ARGB_8888）。整张保留时按目标边长选出的倍数本来就不会超过它
+     * （最长边小于 2×2560 即至多 26M 像素量级），它只在「大图 + 小裁切块」时起作用，
+     * 代价是这种情况下裁切块的分辨率会低于它在源图里的真实分辨率。
+     */
+    const val MAX_DECODE_PIXELS = 25L * 1000L * 1000L
+
     /** 下载超过 [MAX_DOWNLOAD_BYTES] 时抛出；调用方据此留下说得清原因的日志。 */
     class TooLargeException(val limit: Long) : IOException("body exceeds $limit bytes")
 
@@ -47,8 +58,9 @@ object WallpaperImageSampling {
         width > 0 && height > 0 && width.toLong() * height.toLong() <= MAX_SOURCE_PIXELS
 
     /**
-     * 选 inSampleSize：2 的幂（BitmapFactory 只认 2 的幂），在**保证裁切后那块的最长边仍不小于 [targetEdge]**
-     * 的前提下取最大值 —— 之后再精确缩到目标，不会糊。
+     * 选 inSampleSize：2 的幂（BitmapFactory 只认 2 的幂）。先在**保证裁切后那块的最长边仍不小于 [targetEdge]**
+     * 的前提下取最大值 —— 之后再精确缩到目标，不会糊；再按整张解码结果的像素预算
+     * （[MAX_DECODE_PIXELS]）往上加，防止「大图只留一小块」时仍整张全分辨率解码。
      *
      * 裁切范围是相对**旋转后**的图给的（0..1），所以裁切块在源图里占多少像素要先按旋转换算：
      * 旋转 90/270 时旋转后的宽是源图的高。范围无效（太小）时与 `crop()` 一样当作整张保留。
@@ -77,6 +89,8 @@ object WallpaperImageSampling {
         val edge = Math.max(cropWidth, cropHeight)
         var sample = 1
         while (edge / (sample * 2) >= targetEdge) sample *= 2
+        // 再按整张解码结果的内存预算往上加（见 MAX_DECODE_PIXELS）；倍数只会变大，内存只会更省。
+        while ((width.toLong() / sample) * (height.toLong() / sample) > MAX_DECODE_PIXELS) sample *= 2
         return sample
     }
 }

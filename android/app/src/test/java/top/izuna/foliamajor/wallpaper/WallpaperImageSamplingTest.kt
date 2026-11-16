@@ -37,33 +37,60 @@ class WallpaperImageSamplingTest {
 
     @Test
     fun cropKeepsEnoughResolutionForTheCroppedBlock() {
-        // 9000x9000 只留左上 25%：裁切块只有 2250 像素，一点都不能采，否则放大后糊。
-        assertEquals(1, sample(9000, 9000, l = 0f, t = 0f, r = 0.25f, b = 0.25f))
-        // 横图只留中间一半宽：8000 * 0.5 = 4000 →采一次到 2000 < 2560，不采。
-        assertEquals(1, sample(8000, 4000, l = 0.25f, r = 0.75f))
+        // 裁切块只有 2250 像素：按清晰度一点都不能采。9000x9000 整张有 81M 像素，
+        // 超过解码预算（见下一个用例）才被迫采一次到 4500x4500，块仍有 1125 像素、整张只有 20M 像素。
+        assertEquals(2, sample(9000, 9000, l = 0f, t = 0f, r = 0.25f, b = 0.25f))
+        // 不超预算时按清晰度来：5000x5000（25M，刚好在预算内）只留左上 25%，一点都不采。
+        assertEquals(1, sample(5000, 5000, l = 0f, t = 0f, r = 0.25f, b = 0.25f))
+        // 横图只留中间一半宽：8000 * 0.5 = 4000 →采一次到 2000 < 2560，按清晰度不采；
+        // 但整张 32M 像素超预算，所以被迫采 2 倍。
+        assertEquals(2, sample(8000, 4000, l = 0.25f, r = 0.75f))
         // 整张保留时 16000 的横图可以采 4 倍（16000/4 = 4000 ≥ 2560，/8 = 2000 <）。
         assertEquals(4, sample(16000, 8000))
     }
 
     @Test
+    fun wholeDecodeStaysWithinThePixelBudget() {
+        // 解码解的是整张，不是裁切块：无论裁切成什么样，采样后的整张像素数都不能超预算。
+        val sizes = listOf(1 to 1, 2560 to 2560, 5119 to 3000, 9000 to 9000, 10000 to 10000, 16000 to 6000, 3000 to 30000)
+        val crops = listOf(
+            floatArrayOf(0f, 0f, 1f, 1f), floatArrayOf(0f, 0f, 0.25f, 0.25f),
+            floatArrayOf(0.25f, 0.25f, 0.75f, 0.75f), floatArrayOf(0f, 0f, 0.5f, 1f),
+        )
+        for ((w, h) in sizes) for (c in crops) for (rotation in intArrayOf(0, 90, 180, 270)) {
+            val s = sample(w, h, rotation, c[0], c[1], c[2], c[3])
+            val decoded = (w.toLong() / s) * (h.toLong() / s)
+            assertTrue("${w}x$h rot=$rotation crop=${c.toList()} sample=$s decoded=$decoded",
+                s == 1 || decoded <= WallpaperImageSampling.MAX_DECODE_PIXELS)
+            // 倍数永远是 2 的幂，BitmapFactory 只认 2 的幂。
+            assertEquals(0, s and (s - 1))
+        }
+        // 预算内的整张不被多采：5119x3000 = 15M 像素，不采。
+        assertEquals(1, sample(5119, 3000))
+    }
+
+    @Test
     fun rotationSwapsTheAxesTheCropIsMeasuredOn() {
-        // 源图 8000x4000，转 90° 后是 4000x8000。裁切给的是转后的范围：
-        // 上半（0..0.5）→ 4000x4000，最长边 4000，采一次到 2000 < 2560，不采。
-        assertEquals(1, sample(8000, 4000, rotation = 90, t = 0f, b = 0.5f))
-        // 同一个范围不转的话：8000x2000，最长边 8000，可以采 2 倍（4000 ≥ 2560）。
-        assertEquals(2, sample(8000, 4000, rotation = 0, t = 0f, b = 0.5f))
+        // 源图 10000x2500（25M 像素，刚好在解码预算内），单看清晰度这一项。
+        // 转 90° 后是 2500x10000，裁切给的是转后的范围：上半（0..0.5）→ 2500x5000，
+        // 最长边 5000，再采一次到 2500 < 2560，所以不采。
+        assertEquals(1, sample(10000, 2500, rotation = 90, t = 0f, b = 0.5f))
+        // 同一个范围不转：10000x1250，最长边 10000，采 2 倍到 5000 ≥ 2560，采 4 倍到 2500 < 2560，停在 2。
+        assertEquals(2, sample(10000, 2500, rotation = 0, t = 0f, b = 0.5f))
         // 负角度与 360 以上等价。
-        assertEquals(sample(8000, 4000, rotation = 90, t = 0f, b = 0.5f), sample(8000, 4000, rotation = -270, t = 0f, b = 0.5f))
+        assertEquals(sample(10000, 2500, rotation = 90, t = 0f, b = 0.5f), sample(10000, 2500, rotation = -270, t = 0f, b = 0.5f))
         assertEquals(sample(8000, 4000, rotation = 0), sample(8000, 4000, rotation = 360))
     }
 
     @Test
     fun invalidCropFallsBackToTheWholeImage() {
-        // 与 crop() 一致：范围太小说明参数坏了，整张保留。
+        // 与 crop() 一致：范围太小说明参数坏了，整张保留（9000x9000 整张得 2）。
         assertEquals(2, sample(9000, 9000, l = 0.5f, r = 0.51f))
         assertEquals(2, sample(9000, 9000, l = 0.9f, r = 0.1f))
         // 越界值先夹到 0..1。
         assertEquals(2, sample(9000, 9000, l = -5f, t = -5f, r = 5f, b = 5f))
+        // 无效范围与整张保留给出同一个倍数。
+        assertEquals(sample(9000, 9000), sample(9000, 9000, l = 0.5f, r = 0.51f))
     }
 
     @Test
