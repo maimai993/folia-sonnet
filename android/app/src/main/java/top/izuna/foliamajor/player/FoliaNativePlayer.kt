@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.util.Log
 
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -70,6 +71,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     }
 
     companion object {
+        private const val TAG = "FoliaNativePlayer"
+
         /**
          * 手动拖动之后，位置要自然走过这么远才允许报 nearEnd。
          *
@@ -129,6 +132,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     private val playerLooper: Looper
     private val context: Context
     private val listener: Listener
+
+    /**
+     * 「这条源读不出来」时叫一声，参数是播放器装的地址。
+     *
+     * 插件在 `load()` 里挂上它：那份媒体缓存在哪个目录只有插件那边的 server 实例知道，
+     * 播放器不该知道。为空时（测试 / 没有缓存层）就只是上报一条 error 事件。
+     */
+    var onUnreadableSource: ((url: String) -> Unit)? = null
 
     private var player: ExoPlayer? = null
     /** 换源时要就地改默认请求头（飞牛的会话 Cookie），所以提成字段。 */
@@ -1335,6 +1346,22 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             cachedPlaying = false
             stopTicking()
             /*
+             * ★ 这一条读不出来，而它正是本机的那份缓存副本：删掉它，别让它下次再命中。
+             *
+             * 缓存命中的判据只有「文件在不在」，所以一份写坏的副本会永远命中、永远报错，
+             * 用户看到「播放错误 → 暂停 → 继续播放却没声音」，而且切分离会拿着同一个
+             * 坏源去解码、立刻失败。删掉之后 Web 侧重新取流才会回到网络。
+             *
+             * 只在「解析不了容器 / 读不出流」这类**源本身坏了**的错误上删：
+             * 403 / 超时 / 网络断了不代表本机这份文件有问题，删了只是白白重下一遍。
+             *
+             * 具体的删除交给 onUnreadableSource：那需要那份媒体缓存所在的目录（插件里的
+             * server 实例才有），播放器自己不该知道这份缓存在哪。
+             */
+            if (isSourceUnreadable(error)) {
+                lastUrl?.let { onUnreadableSource?.invoke(it) }
+            }
+            /*
              * 只交 error.message 的话，日志里只剩「Source error」这种通用文案，403 / 404 /
              * 超时 / 解码全部长得一样（见 #152）。错误码与名字一起交出去，下一次真机日志
              * 就能定位到具体是哪一类，再决定是重试、重取流还是换源。
@@ -1345,6 +1372,26 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 "${error.errorCodeName}(${error.errorCode}): ${error.message}"
             }
             emit("error", cachedPositionMs, cachedDurationMs, detail)
+        }
+    }
+
+    /**
+     * 这个错误是不是「源本身读不出来」（而不是网络暂时不通）。
+     *
+     * 对应 media3 的 `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED`(3003) /
+     * `ERROR_CODE_PARSING_CONTAINER_MALFORMED`(3001) /
+     * `ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED`(3004) —— 文件在手边却认不出来，
+     * 换成网络重下才有意义。`ERROR_CODE_IO_*`（4xxx）一律不碰：那是链路问题。
+     */
+    private fun isSourceUnreadable(error: PlaybackException?): Boolean {
+        if (error == null) return false
+        return when (error.errorCode) {
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+            -> true
+            else -> false
         }
     }
 

@@ -333,6 +333,20 @@ class FoliaNativePlayerPlugin : Plugin() {
             event.put("percent", percent)
             MAIN.post { notifyListeners("instrumental", event) }
         }
+        /*
+         * 「切回全部时手上的原曲地址可能已经过期，请重新解析一个」。
+         *
+         * 原生不认识任何音乐平台，重新要地址只能由 Web 侧（omni）来。这条事件只带
+         * 这一首的身份，Web 侧确认还是当前这首之后走正常的音源恢复路径 —— 拿到新地址
+         * 就装源，装完播放器自然在「全部」上。少了这一段，切回全部就是一个读不出来的源
+         * （本地又没有缓存）—— 用户听到的是没有声音，界面却显示「全部」。
+         */
+        InstrumentalCoordinator.requestFreshSource = { songKey, reason ->
+            val event = JSObject()
+            event.put("songKey", songKey)
+            event.put("reason", reason)
+            MAIN.post { notifyListeners("sourceReload", event) }
+        }
         val appContext = context.applicationContext
         Thread { InstrumentalCoordinator.sweep(appContext) }.apply {
             isDaemon = true
@@ -568,6 +582,23 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         // 插件加载顺序不保证：过渡插件可能比播放器插件先起来。播放器就绪后在这里补挂引擎。
         TransitionRuntime.attachIfNeeded { transitionHost() }
+        /*
+         * 「这条源读不出来」→ 把本机那份缓存副本删掉。
+         *
+         * 媒体缓存命中的判据只有「文件在不在」，一份写坏的副本会永远命中、永远报错
+         * （用户看到「播放错误 → 暂停 → 继续播放没声音」，切分离也因为解码同一个坏源
+         * 立刻失败）。删掉之后下一次取源回到网络。
+         *
+         * 删除要那份缓存所在的目录，只有插件这边的 server 实例知道；播放器只负责
+         * 在「错误属于源本身读不出来」时叫这一声（见 FoliaNativePlayer.isSourceUnreadable）。
+         */
+        player?.onUnreadableSource = { url ->
+            try {
+                top.izuna.foliamajor.LocalAudioServer.dropBrokenMediaCacheFor(url)
+            } catch (error: Throwable) {
+                android.util.Log.w("FoliaNativePlayer", "drop unreadable cache failed", error)
+            }
+        }
     }
 
     override fun handleOnDestroy() {
@@ -644,6 +675,12 @@ class FoliaNativePlayerPlugin : Plugin() {
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
         currentSongKey = webSongKey
+        /*
+         * 记下「原曲是这一刻装的」：切回全部时用它判断手上那条地址放了多久
+         * （见 InstrumentalCoordinator.sourceMayBeStale）。放在装源之后，与
+         * currentSongKey 一起写，两者才会描述同一首歌。
+         */
+        InstrumentalCoordinator.noteSourcePrepared()
         /*
          * 开关开着的话：这首歌要是有现成的那一轨就直接换过去，没有就开始生成。
          * reconcile 内部会先把旧任务作废（generation +1），不会串到上一首。

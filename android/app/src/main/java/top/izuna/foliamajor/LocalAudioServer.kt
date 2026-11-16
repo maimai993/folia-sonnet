@@ -51,6 +51,100 @@ class LocalAudioServer(context: Context) {
         private const val TAG = "LocalAudioServer"
 
         /**
+         * media-cache 目录的位置，由 [rememberMediaCacheDirectory] 记下。
+         *
+         * 播放器那边的坏缓存自愈入口是静态的（它没有 server 实例），但目录要 context
+         * 才能算出来；server 一建目录就记下来，静态入口才定位得到。
+         */
+        @Volatile
+        private var rememberedMediaCacheDirectory: File? = null
+
+        /** server 建好缓存目录之后叫一声，静态入口（播放器那条路）才能定位到它。 */
+        fun rememberMediaCacheDirectory(dir: File) {
+            rememberedMediaCacheDirectory = dir
+        }
+
+        /**
+         * 播放器说「这一条读不出来」时，把对应的那份缓存副本删掉。
+         *
+         * 为什么要这一手：缓存命中的判据过去只有「文件在不在」—— 一份写坏了的副本
+         * （下到一半断了、来源本身是段错误页）会**永远**命中，于是永远播放错误：
+         * 界面显示那一档，点了没声音，切分离又因为解码同一个坏源而立刻失败。
+         * 用户看到的就是「播放错误 → 暂停 → 继续播放没声音」。
+         *
+         * 删掉之后下一次取源会回到网络，坏的那份不会自己长回来。
+         *
+         * ⚠️ 这是**静态**入口：调用它的是播放器那边（见 FoliaNativePlayer.onUnreadableSource），
+         * 那里没有 server 实例。目录由 [rememberMediaCacheDirectory] 记着，没记过就
+         * 什么都不做 —— 宁可让用户再点一次播放，也不要猜一个路径去删文件。
+         *
+         * @param url 播放器装的那条地址（`/media-cache/<名字>` 或原样回环地址）
+         * @return 是否真的删掉了什么
+         */
+        fun dropBrokenMediaCacheFor(url: String?): Boolean =
+            dropBrokenMediaCache(url, rememberedMediaCacheDirectory)
+
+        /**
+         * 按地址删掉一份读不出来的媒体缓存副本（见实例方法 [dropBrokenMediaCacheFor]）。
+         *
+         * 目录为 null 时什么都不做：宁可让用户再点一次播放，也不要猜一个路径去删文件。
+         */
+        private fun dropBrokenMediaCache(url: String?, dir: File?): Boolean {
+            if (url == null || url.isEmpty() || dir == null) return false
+            val marker = url.indexOf(MEDIA_CACHE_PATH_PREFIX)
+            if (marker < 0) return false
+            val rest = url.substring(marker + MEDIA_CACHE_PATH_PREFIX.length)
+            // 地址里可能带 query（`?stored=...`）：名字到 ? 或 # 为止。
+            val cut = rest.indexOfFirst { it == '?' || it == '#' }
+            val rawName = if (cut >= 0) rest.substring(0, cut) else rest
+            if (rawName.isEmpty()) return false
+            val fileName = try {
+                java.net.URLDecoder.decode(rawName, "UTF-8")
+            } catch (_: Throwable) {
+                rawName
+            }
+            if (!isMediaCacheNameAllowed(fileName)) return false
+            val target = resolveMediaCacheFile(dir, fileName) ?: return false
+            val size = target.length()
+            val removed = target.delete()
+            if (removed) {
+                // 计数 sidecar 跟着走：留着的话同一 key 下次写进来会继承旧计数。
+                File(target.parentFile, target.name + ".cnt").delete()
+                Log.w(TAG, "dropped unreadable media cache: " + target.name + " (" + size + "B)")
+            }
+            return removed
+        }
+
+        /**
+         * 这个名字算不算「那份缓存副本」本身（而不是挂在旁边的 sidecar 或残骸）。
+         *
+         * 副本命名是 `<key>.<扩展名>`，而命中计数（`.cnt`）与写入中的临时文件（`.part`）
+         * 也是同一个前缀。按前缀找副本时必须跳过这两类 —— 否则会把一个 1 字节的计数
+         * 文件当成音频发出去（播放器报「认不出格式」），或者把该删的坏副本换成它。
+         */
+        internal fun isMediaCachePayloadName(name: String): Boolean {
+            if (name.endsWith(".cnt")) return false
+            if (name.endsWith(".part")) return false
+            return true
+        }
+
+        /** 与实例上的 `mediaCacheFile` 同一套规则，但目录由调用方给。 */
+        private fun resolveMediaCacheFile(dir: File, fileName: String): File? {
+            if (!isMediaCacheNameAllowed(fileName)) return null
+            val direct = File(dir, fileName)
+            if (direct.isFile) return direct
+            if (fileName.indexOf('.') >= 0) return null
+            val files = dir.listFiles() ?: return null
+            for (file in files) {
+                if (!file.isFile) continue
+                if (!file.name.startsWith(fileName + ".")) continue
+                if (!isMediaCachePayloadName(file.name)) continue
+                return file
+            }
+            return null
+        }
+
+        /**
          * 手机在局域网里的 IPv4 地址。投送时音响要反过来连手机上的转发服务，
          * 127.0.0.1 对它是「自己」，必须换成这个地址。拿不到就返回 null，
          * 前端会退回「只推公网地址」的路径并给出提示。
@@ -434,6 +528,8 @@ class LocalAudioServer(context: Context) {
     fun mediaCacheDirectory(): File {
         val dir = File(context.filesDir, "media-cache")
         if (!dir.exists()) dir.mkdirs()
+        // 记给静态侧：播放器发现一条源读不出来时，要按地址删掉对应的那份副本。
+        rememberMediaCacheDirectory(dir)
         return dir
     }
 
@@ -903,13 +999,36 @@ class LocalAudioServer(context: Context) {
     }
 
     /**
+     * 一份副本最短能有多长。
+     *
+     * 不是「音频必须有这么大」，而是「小于这个的一定不是音频」：ID3 头 + 至少一帧
+     * 的有效载荷。写入是「先写 .part 再 rename」的，所以半截文件正常不会以正式名
+     * 存在；这一条防的是老版本 / 异常中断留下的残骸 —— 那样一份文件交给播放器，
+     * 结果就是「认不出格式」或者一直缓冲下去，永远不放。
+     */
+    private val MIN_MEDIA_CACHE_BYTES = 8L * 1024L
+
+    /**
      * 定位一份副本。
      *
      * 名字是 key 的 base64url，**不带扩展名**：读的时候（播放）调用方并不知道那份副本
      * 当初是什么格式，只有写的时候知道。所以这里按 `<名字>.` 前缀找，找到谁就是谁 ——
      * 同一个 key 永远只有一份（写入时会清掉同 base 的别的格式）。
+     *
+     * 太小的不算命中（见 [MIN_MEDIA_CACHE_BYTES]）：交给播放器只会一直缓冲/报错，
+     * 当成没有这份缓存，上层回去取网络反而是对的。
      */
     private fun mediaCacheFile(fileName: String): File? {
+        val found = mediaCacheFileAnyone(fileName) ?: return null
+        if (found.length() < MIN_MEDIA_CACHE_BYTES) {
+            Log.w(TAG, "media cache copy too small, treating as absent: " + found.name + " (" + found.length() + "B)")
+            return null
+        }
+        return found
+    }
+
+    /** 按名字找到那份副本，**不看大小**（写入路径清旧文件时要用，不能因为它小就找不到）。 */
+    private fun mediaCacheFileAnyone(fileName: String): File? {
         if (!isMediaCacheNameAllowed(fileName)) return null
         val dir = mediaCacheDirectory()
         val direct = File(dir, fileName)
@@ -918,7 +1037,11 @@ class LocalAudioServer(context: Context) {
         val files = dir.listFiles()
         if (files == null) return null
         for (file in files) {
-            if (file.isFile && file.name.startsWith(fileName + ".")) return file
+            if (!file.isFile) continue
+            if (!file.name.startsWith(fileName + ".")) continue
+            // 计数 sidecar 与写到一半的残骸不是那份副本本身（见 isMediaCachePayloadName）。
+            if (!isMediaCachePayloadName(file.name)) continue
+            return file
         }
         return null
     }
@@ -1128,7 +1251,8 @@ class LocalAudioServer(context: Context) {
         fileName: String,
         queryString: String
     ) {
-        val target = mediaCacheFile(fileName)
+        // 用 mediaCacheFileAnyone：删除是「把它从盘上清掉」，不该因为文件小就说没有。
+        val target = mediaCacheFileAnyone(fileName)
         if (target == null) {
             writeStatus(output, 404, "Not Found")
             return
