@@ -110,6 +110,9 @@ export const useNativePlaybackRuntime = ({
         shouldAutoPlayRef.current = false;
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
         void nativePlaybackEngine.play().catch(error => {
+            // setSource() owns source-ready failures; do not report the same rejection again
+            // from the autoplay waiter.
+            if (nativePlaybackEngine.sourceReadyError() === error) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });

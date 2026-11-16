@@ -108,6 +108,13 @@ class NativePlaybackEngine {
     private trackGain = 1;
     private currentUrl: string | null = null;
     private songKey: string | null = null;
+    private sourceReadyPromise: Promise<void> = Promise.resolve();
+    private sourceReadyFailure: unknown = null;
+
+    /** Returns the current source preparation failure, if one has already been observed. */
+    sourceReadyError(): unknown {
+        return this.sourceReadyFailure;
+    }
 
     /** 认领只重置本地时钟，绝不 prepare / seek / play 原生。 */
     adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
@@ -189,7 +196,12 @@ class NativePlaybackEngine {
 
     async setSource(url: string, options: { startPositionMs?: number | null; repeatMode?: number; songKey?: string | null } = {}): Promise<void> {
         if (isNativePlaybackReconciling()) return;
-        if (this.hasSource && this.currentUrl === url && (!options.songKey || options.songKey === this.songKey)) return;
+        if (
+            this.hasSource
+            && this.currentUrl === url
+            && (!options.songKey || options.songKey === this.songKey)
+            && !this.sourceReadyFailure
+        ) return;
         this.ensureSubscription();
         this.songKey = options.songKey ?? null;
         this.currentUrl = url;
@@ -202,18 +214,27 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
         if (typeof options.repeatMode === 'number') this.repeatMode = options.repeatMode;
-        await nativePlayer.prepare({
-            url,
-            startPositionMs: options.startPositionMs ?? null,
-            repeatMode: this.repeatMode,
-            songKey: this.songKey,
+        this.sourceReadyFailure = null;
+        const sourceReady = (async () => {
+            await nativePlayer.prepare({
+                url,
+                startPositionMs: options.startPositionMs ?? null,
+                repeatMode: this.repeatMode,
+                songKey: this.songKey,
+            });
+            await nativePlayer.setVolume(this.volume);
+        })();
+        this.sourceReadyPromise = sourceReady.catch(error => {
+            this.sourceReadyFailure = error;
+            throw error;
         });
-        await nativePlayer.setVolume(this.volume);
+        await this.sourceReadyPromise;
     }
 
     async play(): Promise<void> {
         // 同上：没有订阅就没有状态回执，按钮按下去界面只能靠乐观值猜。
         this.ensureSubscription();
+        await this.sourceReadyPromise;
         await nativePlayer.play();
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
@@ -258,6 +279,9 @@ class NativePlaybackEngine {
         this.durationMs = 0;
         this.lastDeliveredMs = 0;
         this.currentUrl = null;
+        this.sourceReadyPromise = Promise.resolve();
+        this.sourceReadyFailure = null;
+        this.songKey = null;
         await nativePlayer.stop();
     }
 
