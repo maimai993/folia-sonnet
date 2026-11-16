@@ -1905,6 +1905,9 @@ export default {
     "quality480p": "480P",
     "quality720p": "720P",
     "quality1080p": "1080P",
+    "quality1080p60": "1080P60",
+    "quality4k": "4K",
+    "qualityVipOnly": "Hội viên VIP",
     "vipOnly": "Chỉ VIP"
   },
   "playlist": {
