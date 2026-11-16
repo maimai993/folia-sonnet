@@ -49,6 +49,15 @@ internal object InstrumentalBuilder {
     private const val MIN_CACHE_BYTES = 16L * 1024 * 1024
 
     /**
+     * 分离时最多解多长的音轨（秒）。
+     *
+     * `TrackPcmDecoder.decode` 默认只解 8 分钟 —— 那是给「分析」用的省内存上限。
+     * 分离出来的伴奏要当整条音轨播放，截断就成了「时间轴变短」，所以这里放宽。
+     * 30 分钟覆盖所有正常投稿，再长的（整场直播回放）本来也不该做分离。
+     */
+    private const val MAX_SEPARATION_SECONDS = 30 * 60
+
+    /**
      * 分离阶段的窗口数换算成整条进度。
      *
      * 分离占 6–99%：前面留给解码和模型加载，100 留给「文件写完」。
@@ -108,6 +117,16 @@ internal object InstrumentalBuilder {
         val decoded = TrackPcmDecoder.decode(
             context,
             url,
+            /*
+             * 分离要**整条**音轨，不按默认的 8 分钟截断。
+             *
+             * 视频站的一条投稿常常长于 8 分钟（一首歌的 MV 加上前奏、访谈、合集），
+             * 而分离出来的伴奏会被当作这首歌的整条音轨来放 —— 一旦截断，播放到
+             * 第 8 分钟就静音了，用户看到的正是「音轨分离之后时间轴变短」。
+             * 长到这个地步的曲子本来就少见，内存按实际长度算（见 TrackPcmDecoder
+             * 里的预估），所以放宽到 30 分钟就够覆盖所有正常投稿了。
+             */
+            maxSeconds = MAX_SEPARATION_SECONDS,
             onProgress = { fraction -> onProgress(1 + (fraction * 2).toInt()) },
         ) ?: run {
             Log.w(TAG, "解码失败: $url")
@@ -358,7 +377,25 @@ internal object InstrumentalBuilder {
                     index == MediaCodec.INFO_TRY_AGAIN_LATER -> return
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         if (!muxerStarted) {
-                            trackIndex = muxer.addTrack(codec.outputFormat)
+                            /*
+                             * 写 mvhd 的时长。
+                             *
+                             * MediaMuxer 自己不知道总长度（它只见到一个个采样），mp4 的
+                             * 时长字段因此常常是 0 或者很短一截；播放器读到的就是
+                             * 「这条音轨只有几十秒」—— 用户看到的是进度条突然到头、
+                             * 后半段没声音，也就是报的那句「音轨分离之后时间轴变短」。
+                             *
+                             * 已经在喂的帧数能算出准确长度（总帧数 / 采样率），
+                             * 趁建轨的时候写进格式里。
+                             */
+                            val trackFormat = codec.outputFormat
+                            if (fedFrames > 0 && sampleRate > 0) {
+                                trackFormat.setLong(
+                                    MediaFormat.KEY_DURATION,
+                                    fedFrames * 1_000_000L / sampleRate,
+                                )
+                            }
+                            trackIndex = muxer.addTrack(trackFormat)
                             muxer.start()
                             muxerStarted = true
                         }

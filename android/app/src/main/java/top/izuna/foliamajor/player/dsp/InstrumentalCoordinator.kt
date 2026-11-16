@@ -216,7 +216,18 @@ internal object InstrumentalCoordinator {
             // 两份成品都是刚写的，清理时都别删。
             InstrumentalStore.trim(appContext, keep = tracks.instrumental)
             notify?.invoke(state, percent)
-            if (!switchOnDone) return@execute
+            /*
+             * ★ 生成完了要不要切过去，看的是**用户此刻开着分离**，不是当初那一趟有没有说要切。
+             *
+             * 以前这里只认 switchOnDone（发起时 wantSwitch 的快照），于是：用户先拨到「只留人声」，
+             * 这一拨立刻起了一趟生成；几十秒里又切歌 / 重进播放页，那趟被 cancel 或换成了
+             * prebuild(false)；等模型真正跑完，switchOnDone 早已是 false —— 文件写好了，
+             * 播放器却还装着原曲。用户看到的就是「分离生成完毕了，但它不自动替换正在播的音频，
+             * 要我再手动拨一次才生效」。
+             *
+             * 意图（mode）本来就一直在原生这边：mode 非空就说明用户要分离结果，
+             * 该不该动播放器由下面那段严格身份校验（stillThisSong + shouldSwapVocalTrack）兜底。
+             */
             switchOnDone = false
             /*
              * 生成完就地换源：用户此刻可能已经切歌 / 关了开关 ——

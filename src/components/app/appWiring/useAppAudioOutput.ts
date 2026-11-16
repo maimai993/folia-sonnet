@@ -184,6 +184,34 @@ export const useAppAudioOutput = (model: Input) => {
         onlineAudioUrlRefreshBufferMs: ONLINE_AUDIO_URL_REFRESH_BUFFER_MS,
     }), [audioQuality, audioSrc, audioRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, currentSong, lastAudioRecoverySourceRef, onlinePlaybackRecoveryRef, pendingResumeTimeRef, persistLastPlaybackCache, setAudioSrc, setCurrentSong, setPlayQueue, shouldAutoPlay]);
 
+    /*
+     * 档位改了就把这一首换一条流。
+     *
+     * 以前这里什么都不做：档位只写进设置，下一次起播才生效 —— 于是「换清晰度」看起来
+     * 一点反应都没有，用户得切歌才看得到效果（#354）。
+     *
+     * 走的是播放出错时的同一条恢复路径（recoverOnlinePlaybackSource）：它按当前档位
+     * 重新取地址，并且把 pendingResumeTimeRef 设成现在的位置，所以换完之后接着放，
+     * 不会从头开始。
+     *
+     * 用 ref 记住上一次的档位而不是比 audioQuality 与某个快照：这个 effect 在挂载时
+     * 也会跑一次，直接换流等于一进应用就把正在放的歌重来一遍。
+     */
+    const lastAppliedQualityRef = useRef(audioQuality);
+    useEffect(() => {
+        if (lastAppliedQualityRef.current === audioQuality) return;
+        lastAppliedQualityRef.current = audioQuality;
+        const element = audioRef.current;
+        // 没在放东西（或者放的是本地文件）时没什么可换的，下一次起播自然用新档位。
+        if (!element || !currentSong) return;
+        void recoverOnlinePlaybackSource({
+            force: true,
+            resumeAt: element.currentTime,
+            // 原来是暂停的就别因为换个档位自己放起来。
+            autoplay: !element.paused && !element.ended,
+        });
+    }, [audioQuality, currentSong, audioRef, recoverOnlinePlaybackSource]);
+
     const getCoverUrl = useMemo(
         () => createCoverUrlResolver(cachedCoverUrl, currentSong),
         [cachedCoverUrl, currentSong],

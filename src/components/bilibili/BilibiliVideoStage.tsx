@@ -1,8 +1,16 @@
 import React from 'react';
 import { selectDisplaySong, usePlaybackStore } from '../../stores/usePlaybackStore';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
-import { dropStreamsExcept, ensureStream, peekStream, prefetchQueueStreams } from '../../services/bilibili/streamPrefetch';
-import { bilibiliBvidOf } from '../../services/bilibili/bilibiliNormalize';
+import {
+    dropStreamsExcept,
+    ensureStream,
+    forgetStreamQuality,
+    peekStream,
+    prefetchQueueStreams,
+    streamTargetOf,
+} from '../../services/bilibili/streamPrefetch';
+import { useBilibiliMvStore } from '../../stores/useBilibiliMvStore';
+import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import {
     isInjectedVideoUrl,
     useVideoLayerSettingsStore,
@@ -22,9 +30,29 @@ import {
 
 const BilibiliVideoStage: React.FC = () => {
     const displaySong = usePlaybackStore(selectDisplaySong);
-    const bvid = React.useMemo(
-        () => bilibiliBvidOf(displaySong as { id?: string } | null),
-        [displaySong],
+    const target = React.useMemo(() => streamTargetOf(displaySong), [displaySong]);
+
+    /*
+     * 画面按哪一档取。
+     *
+     * 面板上那一行「画质」写的正是这份（见 buildPlayerPanelModel 的 onAudioQualityChange），
+     * MV 背景自己的子选项写的也是它 —— 两处写同一个值，这里只读这一个，
+     * 换画质就一定会重新取流（以前缓存只按 bvid 记，换档之后命中的还是老地址，
+     * 画面纹丝不动，「换画质不重新加载」就是这个）。
+     */
+    const quality = useBilibiliMvStore(state => state.quality);
+    /*
+     * 画面要跟声音走同一个上限。
+     *
+     * 以前这里还留着一句「用户从没动过就用 standard」，那是音频默认值改成 1080P
+     * （useAudioSettingsStore 的 DEFAULT_AUDIO_QUALITY）之前的老规矩 —— 现在默认就是
+     * ultra，再把它按回 standard 等于用户设了 1080P、画面却只取 480P。
+     * 直接信 store 里那一档；组件没拿到（quality 为空）时也回 store 的，不自己猜。
+     */
+    const audioQuality = useAudioSettingsStore(state => state.audioQuality);
+    const effectiveQuality = React.useMemo(
+        () => quality || audioQuality,
+        [quality, audioQuality],
     );
 
     // 队列一变就把里面所有投稿的地址取回来。
@@ -32,10 +60,10 @@ const BilibiliVideoStage: React.FC = () => {
     const playQueue = usePlaybackStore(state => state.playQueue);
     React.useEffect(() => {
         if (playQueue.length === 0) return;
-        prefetchQueueStreams(playQueue);
+        prefetchQueueStreams(playQueue, effectiveQuality);
         // 队列里已经没有的那些，缓存留着没意义。
         dropStreamsExcept(playQueue);
-    }, [playQueue]);
+    }, [playQueue, effectiveQuality]);
 
     const [videoUrl, setVideoUrl] = React.useState('');
 
@@ -45,11 +73,11 @@ const BilibiliVideoStage: React.FC = () => {
     // 先看预取缓存：队列一变 streamPrefetch 就把整条队列的地址取回来了，
     // 切歌时这里直接命中，不用等两个往返（详情 + 取流）才出画面。
     React.useEffect(() => {
-        if (!bvid || !isBilibiliAvailable()) {
+        if (!target || !isBilibiliAvailable()) {
             setVideoUrl('');
             return undefined;
         }
-        const ready = peekStream(bvid);
+        const ready = peekStream(target.bvid, effectiveQuality, target.cid);
         if (ready) {
             setVideoUrl(ready);
             return undefined;
@@ -57,13 +85,21 @@ const BilibiliVideoStage: React.FC = () => {
         let alive = true;
         setVideoUrl('');
         void (async () => {
-            const entry = await ensureStream(bvid);
+            const entry = await ensureStream(target.bvid, effectiveQuality, target.cid, target.epId);
             if (!alive) return;
             // 取不到画面只是没有背景，声音照放：不要因此影响播放。
             setVideoUrl(entry?.videoUrl ?? '');
         })();
         return () => { alive = false; };
-    }, [bvid]);
+    }, [target, effectiveQuality]);
+
+    // 换画质时把这一首其它档的缓存清掉，免得下次又命中一条不对档的地址。
+    const previousQuality = React.useRef(effectiveQuality);
+    React.useEffect(() => {
+        if (previousQuality.current === effectiveQuality) return;
+        previousQuality.current = effectiveQuality;
+        if (target) forgetStreamQuality(target.bvid, target.cid);
+    }, [effectiveQuality, target]);
 
     /*
      * 注入到视频层。

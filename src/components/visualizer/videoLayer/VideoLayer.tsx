@@ -124,6 +124,7 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         };
         const onMetadata = () => {
             setBuffering(false);
+            resumeSource();
             align();
             followState();
         };
@@ -132,6 +133,7 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         const onWaiting = () => setBuffering(true);
         const onCanPlay = () => {
             setBuffering(false);
+            resumeSource();
             align();
             followState();
         };
@@ -139,6 +141,28 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         const onStalled = () => setBuffering(true);
         const onSeeking = () => setBuffering(true);
         const onSeeked = () => setBuffering(false);
+        /*
+         * ★ 换源之后**立刻**站到播放器当下的位置，不要从头开始。
+         *
+         * 换画质 = 换一条 <video> 的 src。新流的时间轴和原来那条是同一支 MV，
+         * 所以「该看哪一秒」完全由播放器的 clock 决定：currentTime.get()。
+         * 元素复用之后（不再有 key）换源不会把播放进度清零，但**新的这一条流**
+         * 本身是从 0 开始的 —— 所以元数据一到就 seek 一次。
+         *
+         * 只做一次：之后交给 align 的漂移校正。这里和 align 用同一个取模
+         * （clock % duration），短片循环的规则因此也和原来一致。
+         */
+        let resumed = false;
+        const resumeSource = () => {
+            if (resumed) return;
+            if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+            resumed = true;
+            const target = currentTime.get() % video.duration;
+            // 差得很少就不动它：一次没必要的 seek 会黑一帧。
+            if (target > 0.25 && Math.abs(video.currentTime - target) > 0.25) {
+                video.currentTime = target;
+            }
+        };
 
         video.addEventListener('loadedmetadata', onMetadata);
         video.addEventListener('waiting', onWaiting);
@@ -189,7 +213,15 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
             video.removeEventListener('stalled', onStalled);
             video.removeEventListener('seeking', onSeeking);
             video.removeEventListener('seeked', onSeeked);
-            video.pause();
+            /*
+             * 换源时**别在这里 pause**。
+             *
+             * 元素是复用的（见下面 <video> 上的注释）：这个 cleanup 在每次 source
+             * 变化时都会跑一遍，旧代码在这里无条件 pause()，紧接着新 effect 又
+             * play() —— 中间那一下停顿就是用户说的「衔接不顺」。真正要停下的时候
+             * （这一层关掉了）由 active 那条分支处理。
+             */
+            if (!active) video.pause();
         };
     }, [active, source]);
 
@@ -205,13 +237,31 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         }
     }, [active, paused]);
 
+    /*
+     * 没有源就什么都不画。
+     *
+     * 这一层在 MV 背景下面是**唯一的画面来源**（MV 背景自己什么都不画，画面全靠这里
+     * 注入）。所以「开着、但一条源都没有」不能渲染任何铺满全屏的东西 —— 尤其是不能
+     * 让它带着自己的底色/黑底，那样用户看到的就是「切到 MV 整块黑」；从 MV 切走时
+     * 这里也要立刻让位，把下面真正选中的那款背景露出来。
+     */
     if (!active || !source) return null;
 
     return (
         <>
+            {/*
+               * ★ 不给 key。
+               *
+               * 这里原来写着 key={source}：换画质、换源时 React 会把整个 <video> 拆掉重建，
+               * 于是（1）进度归零 —— 用户报的「换清晰度之后时间轴被重置」；（2）旧元素先拆、
+               * 新元素后挂，中间那一帧是黑的 —— 观感上就是闪一下。
+               *
+               * 现在元素自始至终是同一个，只换 src。换源之后 position 由 align 拉到
+               * 「播放器现在的位置」（见下面 resumeSource 那段），所以画面从正确的
+               * 地方开始，而不是从 0 开始。
+               */}
             <video
                 ref={videoRef}
-                key={source}
                 src={source}
                 muted
                 loop

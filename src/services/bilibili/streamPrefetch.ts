@@ -1,5 +1,5 @@
 import { fetchBilibiliPlayUrl, fetchBilibiliVideoInfo } from './api';
-import { bilibiliBvidOf } from './bilibiliNormalize';
+import { bilibiliBvidOf, bilibiliCidOf, bilibiliEpIdOf } from './bilibiliNormalize';
 import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
 
 // src/services/bilibili/streamPrefetch.ts
@@ -11,12 +11,17 @@ import { isBilibiliAvailable, proxyBilibiliStream } from './transport';
 //
 // 地址是带时效的签名 URL，所以缓存要过期：太久的那条宁可重新取，也不要拿一条
 // 已经失效的去喂 <video>（表现是画面裂开）。
+//
+// **缓存按清晰度分开**（key = bvid + 清晰度）。以前只按 bvid 记一条：用户把画质从
+// 720P 调到 1080P，缓存里那条老的还在有效期内，于是「换了画质画面纹丝不动」。
 
 /** 一条投稿取到的流。 */
 export interface PrefetchedStream {
     videoUrl: string;
     /** 取到的时刻，用来判断还新不新鲜。 */
     fetchedAt: number;
+    /** 按这一档取到的（缓存 key 的一部分）。 */
+    quality: string;
 }
 
 /**
@@ -32,27 +37,72 @@ const cache = new Map<string, PrefetchedStream>();
 /** 正在取的那些，避免同一首被并发取两次。 */
 const inflight = new Map<string, Promise<PrefetchedStream | null>>();
 
+/**
+ * 缓存 key。
+ *
+ * 分P 投稿的每一集 cid 不同、流的地址也不同，所以 cid 也要进 key —— 只按 bvid
+ * 记的话，多P 投稿的第二集拿到的是第一集的画面。
+ */
+const cacheKeyOf = (bvid: string, quality: string, cid?: number | null): string => (
+    `${bvid}\u0000${typeof cid === 'number' && cid > 0 ? cid : 'first'}\u0000${quality}`
+);
+
+/** 一首歌的（bvid, cid, epId）：与播放取流用的是同一份解析。 */
+export interface StreamTarget {
+    bvid: string;
+    cid: number | null;
+    epId: number | null;
+}
+
+/** 从一首歌（或者一个播放队列条目）里取出取流要用的三元组。 */
+export const streamTargetOf = (song: unknown): StreamTarget | null => {
+    const bvid = bilibiliBvidOf(song as { id?: string } | null);
+    const epId = bilibiliEpIdOf(song as { id?: string } | null);
+    if (!bvid && !epId) return null;
+    return { bvid, cid: bilibiliCidOf(song as { id?: string } | null), epId };
+};
+
 const isFresh = (entry: PrefetchedStream | undefined): entry is PrefetchedStream => (
     Boolean(entry) && Date.now() - (entry as PrefetchedStream).fetchedAt < TTL_MS
 );
 
 /** 已经取好、还能用的那条；没有就返回 null（不发起请求）。 */
-export const peekStream = (bvid: string): string | null => {
-    const entry = cache.get(bvid);
+export const peekStream = (
+    bvid: string,
+    quality = 'standard',
+    cid?: number | null,
+): string | null => {
+    const entry = cache.get(cacheKeyOf(bvid, quality, cid));
     return isFresh(entry) ? entry.videoUrl : null;
 };
 
-/** 取一条的流地址，已经有新鲜的就直接给。失败返回 null，不抛。 */
-export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => {
-    const cached = cache.get(bvid);
+/**
+ * 取一条的流地址，已经有新鲜的就直接给。失败返回 null，不抛。
+ *
+ * `quality` 是用户当前选的那一档：调用方在切歌 / 换画质时一定要把它传进来，
+ * 否则拿到的可能还是上一档的那条老地址。
+ */
+export const ensureStream = (
+    bvid: string,
+    quality = 'standard',
+    cid?: number | null,
+    epId?: number | null,
+): Promise<PrefetchedStream | null> => {
+    const key = cacheKeyOf(bvid, quality, cid);
+    const cached = cache.get(key);
     if (isFresh(cached)) return Promise.resolve(cached);
-    const running = inflight.get(bvid);
+    const running = inflight.get(key);
     if (running) return running;
 
     const task = (async (): Promise<PrefetchedStream | null> => {
         try {
-            const info = await fetchBilibiliVideoInfo(bvid);
-            const track = await fetchBilibiliPlayUrl(bvid, info.cid);
+            const info = cid ? null : await fetchBilibiliVideoInfo(bvid);
+            const track = await fetchBilibiliPlayUrl(
+                bvid,
+                cid ?? info?.cid ?? 0,
+                quality,
+                epId,
+            );
             /*
              * 画面也走原生中转。
              *
@@ -69,8 +119,9 @@ export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => 
             const entry: PrefetchedStream = {
                 videoUrl: local ?? track.url,
                 fetchedAt: Date.now(),
+                quality,
             };
-            cache.set(bvid, entry);
+            cache.set(key, entry);
             // 地址到手就开始预热：切过去时第一帧已经在缓存里了。
             void warmStreamCache(entry.videoUrl);
             return entry;
@@ -79,12 +130,25 @@ export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => 
             console.warn('[Bilibili] Stream prefetch failed', error);
             return null;
         } finally {
-            inflight.delete(bvid);
+            inflight.delete(key);
         }
     })();
 
-    inflight.set(bvid, task);
+    inflight.set(key, task);
     return task;
+};
+
+/**
+ * 换一档画面之后把这一首**同一个 cid** 的其它档都丢掉。
+ *
+ * 留着没意义：地址是签名 URL，用户既然换了档就不会再换回旧的那条；而留在表里
+ * 会让下一次切换命中一条不对档的地址。
+ */
+export const forgetStreamQuality = (bvid: string, cid?: number | null): void => {
+    const suffix = `\u0000${typeof cid === 'number' && cid > 0 ? cid : 'first'}\u0000`;
+    for (const key of [...cache.keys()]) {
+        if (key.startsWith(`${bvid}${suffix}`)) cache.delete(key);
+    }
 };
 
 /**
@@ -93,20 +157,29 @@ export const ensureStream = (bvid: string): Promise<PrefetchedStream | null> => 
  * 串行没有必要（它们互不依赖），但也不该一次全发出去 —— 一下就几十个请求。
  * 这里分小批推，先取靠前的几首（下一首最可能要），再补后面。
  */
-export const prefetchQueueStreams = (songs: readonly unknown[]): void => {
+export const prefetchQueueStreams = (songs: readonly unknown[], quality = 'standard'): void => {
     if (!isBilibiliAvailable()) return;
-    const bvids: string[] = [];
+    const targets: StreamTarget[] = [];
+    const seen = new Set<string>();
     for (const song of songs) {
-        const bvid = bilibiliBvidOf(song as { id?: string } | null);
-        if (bvid && !bvids.includes(bvid)) bvids.push(bvid);
+        const target = streamTargetOf(song);
+        if (!target) continue;
+        const key = cacheKeyOf(target.bvid || `ep${target.epId}`, quality, target.cid);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push(target);
     }
-    if (bvids.length === 0) return;
+    if (targets.length === 0) return;
 
     void (async () => {
         const BATCH = 3;
-        for (let i = 0; i < bvids.length; i += BATCH) {
-            const slice = bvids.slice(i, i + BATCH).filter(bvid => !isFresh(cache.get(bvid)));
-            if (slice.length > 0) await Promise.all(slice.map(bvid => ensureStream(bvid)));
+        for (let i = 0; i < targets.length; i += BATCH) {
+            const slice = targets.slice(i, i + BATCH).filter(target =>
+                !isFresh(cache.get(cacheKeyOf(target.bvid || `ep${target.epId}`, quality, target.cid))));
+            if (slice.length > 0) {
+                await Promise.all(slice.map(target =>
+                    ensureStream(target.bvid, quality, target.cid, target.epId)));
+            }
         }
     })();
 };
@@ -115,11 +188,11 @@ export const prefetchQueueStreams = (songs: readonly unknown[]): void => {
 export const dropStreamsExcept = (songs: readonly unknown[]): void => {
     const keep = new Set<string>();
     for (const song of songs) {
-        const bvid = bilibiliBvidOf(song as { id?: string } | null);
-        if (bvid) keep.add(bvid);
+        const target = streamTargetOf(song);
+        if (target) keep.add(target.bvid || `ep${target.epId}`);
     }
-    for (const bvid of [...cache.keys()]) {
-        if (!keep.has(bvid)) cache.delete(bvid);
+    for (const key of [...cache.keys()]) {
+        if (!keep.has(key.split('\u0000')[0])) cache.delete(key);
     }
 };
 

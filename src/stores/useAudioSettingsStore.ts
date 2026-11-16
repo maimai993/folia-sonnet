@@ -137,9 +137,24 @@ export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 
 export type AudioQuality = AudioQualityPreference;
 
-export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
-    saved === 'standard' || saved === 'ultra' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
-);
+/**
+ * 没有存过时用哪一档。
+ *
+ * `ultra` = 1080P（B 站）/ 超高音质（音乐平台）。以前默认是 `high`（720P），
+ * 在 B 站上就是「默认给 720P」—— 而视频站的曲目几乎都是 1080P 源，
+ * 默认看得清比默认省一点流量更重要。
+ *
+ * 只影响**没选过**的人：存过的那一档原样尊重。
+ */
+export const DEFAULT_AUDIO_QUALITY: AudioQuality = 'ultra';
+
+export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => {
+    // 上一代网易云的那档叫 exhigh，含义就是现在的 high：迁移过来，不是回退到默认。
+    if (saved === 'exhigh') return 'high';
+    return saved === 'standard' || saved === 'high' || saved === 'ultra' || saved === 'lossless' || saved === 'hires'
+        ? saved
+        : DEFAULT_AUDIO_QUALITY;
+};
 
 /**
  * Reads the media cache toggle from the v2 key: default **on**.
@@ -168,7 +183,7 @@ export const readStoredMediaCacheLimitGb = (): number => {
 
 const readStoredAudioQuality = (): AudioQuality => {
     if (typeof window === 'undefined') {
-        return 'high';
+        return DEFAULT_AUDIO_QUALITY;
     }
 
     const saved = localStorage.getItem('default_audio_quality');
@@ -451,7 +466,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     vocalCancelCacheLimit: 0,
     vocalTrackMode: 'off',
     // 默认关：预拆两轨是几十秒的推理，不替用户决定要不要占这份负载。
-    prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, false),
+    // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
+    prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
     audioEqualizerModCurve: readStoredAudioEqualizerModCurve(initialAudioEqualizerSettings),

@@ -616,6 +616,19 @@ class FoliaPlaybackService : android.app.Service() {
         // 而服务已经存在时 onCreate 不会再跑（promoteToForeground 里那句「已前台就返回」
         // 让它几乎没有开销）。放在 action 判断里面的话，一条没带 action 的
         // startForegroundService 就永远等不到 startForeground()。
+        /*
+         * 无条件兑现一次前台化 —— 包括「标志位说已经在前台」的情形。
+         *
+         * 上面那道守卫（foregrounded 为真就返回）是为了省掉每秒搬 1 MB 封面 Bitmap 的开销，
+         * 但它默认「我说在前台就真的在前台」。实际情况不是这样：服务被销毁重建、
+         * 或某次 startForeground 失败之后，标志可能与系统的判定不一致 —— 而系统那边
+         * 一旦因为一条 startForegroundService 开了倒计时，**只有 startForeground() 能兑现**，
+         * 跳过就是 ForegroundServiceDidNotStartInTimeException 直接杀进程。
+         *
+         * 所以在每条启动命令上都真调一次：开销是每条 intent 一次，而不是每秒一次，
+         * 换来「后台放着放着突然没声音」这个崩溃不再发生。
+         */
+        foregrounded = false
         promoteToForeground()
         if (intent != null) {
             val action: String? = intent.getAction()
@@ -2652,6 +2665,18 @@ class FoliaPlaybackService : android.app.Service() {
          */
         @JvmStatic
         fun isForegrounded(): Boolean {
+            /*
+             * 实例已经不在（onDestroy 走过 / 进程被重建）时不能报 true。
+             *
+             * 这个标志是**静态**的：它跟着类走，不跟着实例走。服务被销毁、进程还在
+             * （用户从最近任务划掉、系统杀掉服务但保住进程）之后，它还留着 true ——
+             * 插件于是改走普通 startService（不开 5 秒倒计时），可新起来的实例
+             * onCreate 里 promoteToForeground() 又会因为「已前台」直接返回……
+             * 两头一对，谁都没兑现，系统 5 秒后抛
+             * ForegroundServiceDidNotStartInTimeException 把进程带走。
+             * 用户看到的就是「后台放着放着突然没声音，打开 App 报这个错」。
+             */
+            if (!running) return false
             return foregrounded
         }
 

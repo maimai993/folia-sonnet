@@ -114,7 +114,18 @@ const BilibiliMvLayer: React.FC = () => {
      * 这一层，声音走 BilibiliVideoStage，两半各管各的。
      */
     const isOwnPost = isBilibiliSongId((displaySong as { id?: string } | null)?.id);
-    const active = enabled && isBilibiliAvailable() && current.title.length > 0;
+    /*
+     * ★ B 站自己的投稿，这一层**整个不参与**（不是只掐掉声音）。
+     *
+     * 以前 active 没管 isOwnPost：声音确实没注入（下面那个 effect 判了），但**画面照注入**，
+     * 于是它会盖到 BilibiliVideoStage 注入的同一条投稿上 —— 用户看到的是「放视频的时候
+     * 又匹配了一层 MV 把画面盖住了」。画面和声音都由 BilibiliVideoStage 负责，
+     * 这一层对这类歌没有存在的理由。
+     *
+     * 效果：B 站曲目开着「MV」背景时，看到的仍然是那条投稿自己的画面，不再被
+     * 「匹配来的 MV」覆盖。
+     */
+    const active = enabled && isBilibiliAvailable() && current.title.length > 0 && !isOwnPost;
 
     // 当前这首：没解析过就解析（store 有缓存，同一首不会重复搜）。
     React.useEffect(() => {
@@ -155,10 +166,27 @@ const BilibiliMvLayer: React.FC = () => {
      * 「没有源」的状态，再把新的写进去，它才会重新走一次加载。
      */
     React.useEffect(() => {
-        if (!videoUrl) return undefined;
         const store = useVideoLayerSettingsStore.getState();
         // 上一条（如果还是注入的那条）先摘掉 —— 用户自己的视频不动。
         if (store.injectedUrl && isInjectedVideoUrl(store.injectedUrl)) store.setInjectedUrl(null);
+        /*
+         * 没有地址时**只做清理，不早退**。
+         *
+         * 这里早先写的是 `if (!videoUrl) return undefined;` —— 于是「地址还在 ->
+         * 地址变空」这一次依赖变化，React 先跑上一轮的清理（把槽位清成 null），
+         * 再跑这一轮的 body，而 body 一进来就 return，**没有任何人把槽位写回去**。
+         * 视频层于是落在「有 MV 背景、但没有源」的状态：整个画面是黑的，切到
+         * 别的背景也回不来（槽位一直是 null，组件以为已经卸干净了）。
+         *
+         * 现在两种情形都走同一条路：先把旧的那条摘掉，有新的就一帧后写进去，
+         * 没有就让它保持空 —— 清理只做一次，不会漏。
+         */
+        if (!videoUrl) {
+            return () => {
+                const current = useVideoLayerSettingsStore.getState();
+                if (current.injectedUrl && isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
+            };
+        }
         // 一帧之后再写：让 <video> 先把上一条彻底卸掉。写的这一条带上前缀，
         // 之后才分得清「这条是注入的」和「用户自己选的」。
         const frame = requestAnimationFrame(() => {

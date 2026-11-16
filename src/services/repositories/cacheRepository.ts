@@ -17,7 +17,7 @@ import {
 // src/services/repositories/cacheRepository.ts
 // Centralizes cache routing, legacy user-cache migration, prefix operations, cleanup, and usage metrics.
 
-export type CacheCategory = 'playlist' | 'lyrics' | 'cover' | 'media' | 'analysis' | 'volumeBalance';
+export type CacheCategory = 'playlist' | 'lyrics' | 'cover' | 'media' | 'analysis' | 'volumeBalance' | 'mvMatch';
 export type CacheTableName = 'api_cache' | 'user_cache' | 'media_cache' | 'metadata_cache';
 
 const CACHE_TABLE_NAMES: CacheTableName[] = [

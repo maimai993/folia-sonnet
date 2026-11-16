@@ -39,6 +39,8 @@ interface AccountTabProps {
     onSyncData: () => void;
     isSyncing: boolean;
     onNavigateHome: () => void;
+    /** 打开某个 UP 主的投稿页（关注 / 粉丝列表里点头像）。不给就不可点。 */
+    onOpenBilibiliUser?: (mid: number, name: string) => void;
     /** 投送浮层按日间/夜间取配色（和播放页那颗旧按钮一致）。 */
     isDaylight: boolean;
 }
@@ -54,16 +56,23 @@ const AUDIO_QUALITY_OPTIONS: Array<{
     { value: 'hires', labelKey: 'account.qualityHires' },
 ];
 
-/**
- * 视频平台的那三档叫「清晰度」，不叫音质。
+/*
+ * 视频平台的那几档叫「清晰度」，不叫音质。
  *
- * 同一个 stored 偏好（standard / high / ultra）在两个世界里意思一样：更清楚的那一档。
- * 只是标签不同 —— 选「标准」在音乐平台是普通音质，在 B 站是 480P。
+ * 同一个 stored 偏好（standard / high / ultra / lossless / hires）在两个世界里意思一样：
+ * 更清楚的那一档。只是标签不同 —— 选「标准」在音乐平台是普通音质，在 B 站是 480P。
+ *
+ * **五档都要有对应**：以前只写了前三档，大会员那两个（lossless / hires）落回音质那套
+ * 名字，于是同一行里前三个写着 480P/720P/1080P、后两个写着「无损 / Hi-Res」——
+ * 用户报的「音质显示成画质」其实就是这一行自相矛盾。B 站没有「无损」这回事，
+ * 它的高阶档是 1080P60 和 4K（见 api.ts 的 qualityToQn）。
  */
-const VIDEO_QUALITY_LABEL_KEYS: Partial<Record<AudioQualityPreference, string>> = {
+const VIDEO_QUALITY_LABEL_KEYS: Record<AudioQualityPreference, string> = {
     standard: 'account.quality480p',
     high: 'account.quality720p',
     ultra: 'account.quality1080p',
+    lossless: 'account.quality1080p60',
+    hires: 'account.quality4k',
 };
 
 /** 视频平台（B 站）：结果是一段视频，这一行说的是清晰度。 */
@@ -77,6 +86,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
     onSyncData,
     isSyncing,
     onNavigateHome,
+    onOpenBilibiliUser,
     isDaylight,
 }) => {
     const { t } = useTranslation();
@@ -270,7 +280,12 @@ const AccountTab: React.FC<AccountTabProps> = ({
             {/* B 站特有的那几行：关注 / 粉丝 / 签名。只在登录着、且当前平台就是它时挂出来 ——
                 别的平台没有「关注」这种关系，摆一行点了没反应的按钮比不摆更糟。 */}
             {activeUser && activeProviderId === 'bilibili' && (
-                <BilibiliAccountRows providerId={activeProviderId} />
+                <BilibiliAccountRows
+                    providerId={activeProviderId}
+                    onOpenUser={onOpenBilibiliUser
+                        ? user => onOpenBilibiliUser(user.mid, user.name)
+                        : undefined}
+                />
             )}
 
             {activeUser && (
