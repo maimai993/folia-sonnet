@@ -1,6 +1,6 @@
 // src/services/videoSources/net.ts
 // 影视源的取数通道。桌面版有 CORS 限制（webSecurity 开着），第三方影视配置与 CMS 接口几乎都不带
-// 跨域头，所以在桌面版一律走主进程转发（复用洛雪音源已经建好的那条通道 `window.electron.lxFetch`：
+// 跨域头，所以在桌面版优先走主进程转发（若宿主注册了洛雪音源那条 `window.electron.lxFetch`：
 // 主进程发请求、把文本带回来，环回与私网地址会被主进程拒绝）。网页版没有主进程，退化成直连 fetch。
 //
 // 只做「拿到文本」：配置要么是 JSON、要么是图片（图片形态在这里拿不到二进制，会明确报错而不是返回乱码）。
@@ -12,6 +12,31 @@ export type VideoHttpResponse = {
 };
 
 const HTTP_TIMEOUT = 12000;
+
+/**
+ * 桌面端的主进程取数通道。
+ *
+ * 本仓库的内核没有这条 IPC：它由「洛雪音源」那份集成在 preload 里注册成 `window.electron.lxFetch`
+ * （主进程发请求、只把文本带回来，并且会拒绝环回与私网地址）。所以这里按「宿主有就有、没有就没有」
+ * 取：有它就走主进程转发绕开 CORS 并复用那套地址拦截，没有就退回渲染层直连 `fetch`（受同源策略约束）。
+ */
+export type DesktopFetchResult = {
+    ok: boolean;
+    status: number;
+    bodyText?: string;
+    error?: string;
+};
+
+export type DesktopFetch = (
+    url: string,
+    init: { method: 'GET'; headers?: Record<string, string> },
+) => Promise<DesktopFetchResult>;
+
+export const desktopFetch = (): DesktopFetch | undefined => {
+    if (typeof window === 'undefined') return undefined;
+    const host = window as unknown as { electron?: { lxFetch?: DesktopFetch } };
+    return host.electron?.lxFetch;
+};
 
 /**
  * 冒充 TVBox 客户端的那套请求头。
@@ -31,7 +56,7 @@ export const fetchVideoText = async (
     headers?: Record<string, string>,
 ): Promise<VideoHttpResponse> => {
     const merged = { ...TVBOX_HEADERS, ...headers };
-    const desktop = typeof window !== 'undefined' ? window.electron?.lxFetch : undefined;
+    const desktop = desktopFetch();
     if (desktop) {
         const result = await desktop(url, { method: 'GET', headers: merged });
         if (!result.ok) {
@@ -60,7 +85,7 @@ export const fetchVideoTextWithTimeout = async (url: string): Promise<VideoHttpR
  * 渲染层可以直接 fetch，拿到的是 Blob 而不是文本；网页版直连。
  */
 export const fetchVideoBytesWithTimeout = async (url: string, timeoutMs = HTTP_TIMEOUT): Promise<Blob> => {
-    const desktop = typeof window !== 'undefined' && window.electron?.lxFetch;
+    const desktop = desktopFetch();
     const target = desktop
         // eslint-disable-next-line no-restricted-syntax -- 这个自定义协议的地址只能由这里拼
         ? `folia-lx://stream?url=${encodeURIComponent(url)}`

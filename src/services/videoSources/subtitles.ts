@@ -6,6 +6,7 @@
 // 注意它只认英文名与拼音，中文剧名直接搜通常是 0 条（所以界面上把搜索词做成可改的）。
 // 下载下来的是 .gz，要在渲染层用 DecompressionStream('gzip') 解，再转 VTT。
 
+import { desktopFetch } from './net';
 import { fetchVideoText } from './net';
 
 export type SubtitleHit = {
@@ -88,7 +89,7 @@ const SUB_UA = { 'User-Agent': 'TemporaryUserAgent' };
  * 顺带把 UA 带上——字幕站按 UA 决定给文件还是给跳转页。
  */
 const fetchBytesFollow = async (url: string): Promise<Blob> => {
-    const desktop = typeof window !== 'undefined' ? window.electron?.lxFetch : undefined;
+    const desktop = desktopFetch();
     let target = url;
     for (let hop = 0; hop < 4; hop += 1) {
         const proxied = desktop
