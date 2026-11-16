@@ -203,8 +203,11 @@ class NativePlaybackEngine {
         return this.sourceGenerationVersion;
     }
 
-    private enqueueNativeCommand<T>(command: () => Promise<T>): Promise<T> {
-        const run = this.nativeCommandChain.then(command, command);
+    private enqueueNativeCommand<T>(command: () => Promise<T>, isCurrent: () => boolean = () => true): Promise<T | undefined> {
+        const run = this.nativeCommandChain.then(
+            () => isCurrent() ? command() : undefined,
+            () => isCurrent() ? command() : undefined,
+        );
         this.nativeCommandChain = run.then(() => undefined, () => undefined);
         return run;
     }
@@ -226,15 +229,17 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
         if (typeof options.repeatMode === 'number') this.repeatMode = options.repeatMode;
+        const songKey = this.songKey;
         const sourceReady = this.enqueueNativeCommand(async () => {
             await nativePlayer.prepare({
                 url,
                 startPositionMs: options.startPositionMs ?? null,
                 repeatMode: this.repeatMode,
-                songKey: this.songKey,
+                songKey,
             });
+            if (sourceGeneration !== this.sourceGenerationVersion) return;
             await nativePlayer.setVolume(this.volume);
-        });
+        }, () => sourceGeneration === this.sourceGenerationVersion);
         this.sourceReadyPromise = sourceReady.then(() => undefined);
         await sourceReady;
         if (sourceGeneration !== this.sourceGenerationVersion) return;
