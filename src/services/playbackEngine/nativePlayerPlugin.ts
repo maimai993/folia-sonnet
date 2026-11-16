@@ -31,9 +31,27 @@ export type NativePlaybackEvent = {
     wallMs?: number;
     message?: string;
     songKey?: string;
+    /**
+     * 事件发出那一刻原生装载着的 source 令牌。Web 发起的装源令牌以 `w:` 开头；
+     * 原生自己换源（交叉淡化 / 过渡 / 系统控件）用 `n:`。songKey 分不开 A→B→A 同 key，令牌可以。
+     */
+    sourceToken?: string;
     /** 原生实际出声/缓冲状态，seeked 不再凭位置跳变推断已恢复播放。 */
     playing?: boolean;
     buffering?: boolean;
+};
+
+/**
+ * 传输命令（prepare / play / pause / stop / seek）的结果。
+ *
+ * Promise 在播放器线程**真正执行完**动作之后才结束；被更新的换源 / 播放意图取代而没执行的命令
+ * 以 `{ ok: false, stale: true }` resolve（不是 reject）。真正的失败才 reject。
+ */
+export type NativeCommandResult = {
+    ok: boolean;
+    stale?: boolean;
+    reason?: string;
+    transition?: boolean;
 };
 
 export type NativePlaybackSnapshot = {
@@ -49,6 +67,8 @@ export type NativePlaybackSnapshot = {
      * metadata 变，拿它当判据等于自己给自己盖章。
      */
     songKey?: string;
+    /** 引擎此刻装的那一首的 source 令牌（认领时用它丢旧 source 的迟到事件）。 */
+    sourceToken?: string;
 };
 
 /**
@@ -228,11 +248,13 @@ interface FoliaNativePlayerPlugin {
         repeatMode?: number | null;
         /** 这首歌的身份，装进去之后 getSnapshot().songKey 会回它。 */
         songKey?: string | null;
-    }): Promise<{ ok: boolean }>;
-    play(): Promise<void>;
-    pause(): Promise<void>;
-    stop(): Promise<void>;
-    seek(options: { positionMs: number }): Promise<void>;
+        /** 这一次装源的令牌（`w:` 开头）；原生随事件回传，Web 侧据此丢旧 source 的迟到事件。 */
+        sourceToken?: string | null;
+    }): Promise<NativeCommandResult>;
+    play(): Promise<NativeCommandResult | void>;
+    pause(): Promise<NativeCommandResult | void>;
+    stop(): Promise<NativeCommandResult | void>;
+    seek(options: { positionMs: number }): Promise<NativeCommandResult | void>;
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;
