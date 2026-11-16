@@ -30,7 +30,7 @@ class WallpaperBackgroundImage private constructor() {
          * 只是防御性上限：壁纸要铺满一整屏，图本身必须比屏幕大，否则放大上去就是一团糊。
          * Web 侧已经按壁纸的用途单独压过一遍（不是封面那张 256 的小图），这里不再主动缩。
          */
-        private const val MAX_EDGE = 2560
+        private const val MAX_EDGE = WallpaperImageSampling.MAX_EDGE
         private const val JPEG_QUALITY = 92
 
         /**
@@ -107,32 +107,129 @@ class WallpaperBackgroundImage private constructor() {
             if (context == null || url.isNullOrBlank()) {
                 return null
             }
-            val bytes = try {
-                val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 20_000
-                    readTimeout = 30_000
-                    instanceFollowRedirects = true
-                    // 壁纸站按 UA / Referer 拒绝直连。
-                    setRequestProperty("User-Agent", DOWNLOAD_USER_AGENT)
-                    setRequestProperty("Accept", "image/*,*/*;q=0.8")
+            /*
+             * 整段兜住 Throwable：这个函数跑在插件里的裸 Thread 上（没有 try/catch），
+             * OutOfMemoryError 是 Error，漏出去就是未捕获异常、应用崩溃（#364）。
+             * 失败一律返回 null 并留下说得清原因的日志，不带走进程。
+             */
+            val temp = File(context.cacheDir, "$FILE_NAME.download")
+            try {
+                if (!download(url, temp)) {
+                    return null
                 }
+                val scaled = decodeSampled(temp, rotationDegrees, cropLeft, cropTop, cropRight, cropBottom)
+                    ?: return null
+                val file = file(context)
+                var written = false
                 try {
-                    if (connection.responseCode !in 200..299) {
-                        Log.w(TAG, "Wallpaper image download failed: HTTP ${connection.responseCode}")
-                        return null
+                    FileOutputStream(file).use { out ->
+                        written = scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
                     }
-                    connection.inputStream.use { it.readBytes() }
+                } catch (error: Exception) {
+                    Log.w(TAG, "Failed to persist the wallpaper background image", error)
                 } finally {
-                    connection.disconnect()
+                    scaled.recycle()
                 }
+                if (!written) {
+                    delete(file)
+                    return null
+                }
+                return key(context)
+            } catch (error: OutOfMemoryError) {
+                // 单独点名：这是「大图撑爆」而不是「下载失败」，排查时要一眼看出来。同一张图再来一次结果一样。
+                Log.w(TAG, "Wallpaper image decode ran out of memory; the source is too large", error)
+                return null
             } catch (error: Throwable) {
+                Log.w(TAG, "Failed to store the wallpaper background image from a url", error)
+                return null
+            } finally {
+                delete(temp)
+            }
+        }
+
+        /**
+         * 流式下载到 [target]，不把整张图读进堆；超过 [WallpaperImageSampling.MAX_DOWNLOAD_BYTES] 就放弃。
+         * @return 下载完整、非空时为 true。
+         */
+        private fun download(url: String, target: File): Boolean {
+            val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+                connectTimeout = 20_000
+                readTimeout = 30_000
+                instanceFollowRedirects = true
+                // 壁纸站按 UA / Referer 拒绝直连。
+                setRequestProperty("User-Agent", DOWNLOAD_USER_AGENT)
+                setRequestProperty("Accept", "image/*,*/*;q=0.8")
+            }
+            try {
+                if (connection.responseCode !in 200..299) {
+                    Log.w(TAG, "Wallpaper image download failed: HTTP ${connection.responseCode}")
+                    return false
+                }
+                // 声明的长度已经超限就不必开始读（没声明或声明错时由 copyLimited 兜底）。
+                val declared = connection.contentLengthLong
+                if (declared > WallpaperImageSampling.MAX_DOWNLOAD_BYTES) {
+                    Log.w(TAG, "Wallpaper image skipped: declared $declared bytes exceeds ${WallpaperImageSampling.MAX_DOWNLOAD_BYTES}")
+                    return false
+                }
+                val copied = try {
+                    connection.inputStream.use { input ->
+                        FileOutputStream(target).use { out -> WallpaperImageSampling.copyLimited(input, out) }
+                    }
+                } catch (error: WallpaperImageSampling.TooLargeException) {
+                    Log.w(TAG, "Wallpaper image skipped: body exceeds ${error.limit} bytes")
+                    return false
+                }
+                if (copied <= 0L) {
+                    Log.w(TAG, "Wallpaper image download returned an empty body")
+                    return false
+                }
+                return true
+            } catch (error: Throwable) {
+                if (error is OutOfMemoryError) throw error
                 Log.w(TAG, "Failed to download the wallpaper background image", error)
+                return false
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+        /**
+         * 把 [source] 解码成已旋转、已裁切、最长边不超过 [WallpaperImageSampling.MAX_EDGE] 的位图。
+         *
+         * 先 inJustDecodeBounds 量出尺寸：像素数超上限的不解（见 [WallpaperImageSampling.MAX_SOURCE_PIXELS]）；
+         * 再按**裁切后那一块**的尺寸选 inSampleSize，峰值内存只有目标图的几倍，而不是整图。
+         * 解不了返回 null，原因写进日志。
+         */
+        private fun decodeSampled(
+            source: File,
+            rotationDegrees: Int,
+            cropLeft: Float,
+            cropTop: Float,
+            cropRight: Float,
+            cropBottom: Float,
+        ): Bitmap? {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(source.absolutePath, bounds)
+            val width = bounds.outWidth
+            val height = bounds.outHeight
+            if (width < 2 || height < 2) {
+                Log.w(TAG, "Wallpaper image skipped: not a decodable image (mime=${bounds.outMimeType}, ${source.length()} bytes)")
                 return null
             }
-            if (bytes.isEmpty()) {
+            if (!WallpaperImageSampling.isDecodable(width, height)) {
+                Log.w(TAG, "Wallpaper image skipped: source too large ${width}x$height " +
+                        "(limit ${WallpaperImageSampling.MAX_SOURCE_PIXELS} px, mime=${bounds.outMimeType})")
                 return null
             }
-            val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = WallpaperImageSampling.sampleSize(
+                    width, height, rotationDegrees, cropLeft, cropTop, cropRight, cropBottom)
+            }
+            val decoded = BitmapFactory.decodeFile(source.absolutePath, options)
+            if (decoded == null) {
+                Log.w(TAG, "Wallpaper image skipped: decoder returned no bitmap (${width}x$height, mime=${bounds.outMimeType})")
+                return null
+            }
             if (decoded.width < 2 || decoded.height < 2) {
                 decoded.recycle()
                 return null
@@ -140,28 +237,11 @@ class WallpaperBackgroundImage private constructor() {
             val rotated = rotate(decoded, rotationDegrees)
             val cropped = crop(rotated, cropLeft, cropTop, cropRight, cropBottom)
             val scaled = downscale(cropped)
-            if (scaled !== cropped) cropped.recycle()
-            if (rotated !== decoded) {
-                // rotate() 返回新图时，原图要放掉。
-                if (rotated !== cropped && rotated !== scaled) rotated.recycle()
-            }
-            if (scaled !== decoded && decoded !== rotated) decoded.recycle()
-
-            val file = file(context)
-            var written = false
-            try {
-                FileOutputStream(file).use { out ->
-                    written = scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-                }
-            } catch (error: Exception) {
-                Log.w(TAG, "Failed to persist the wallpaper background image", error)
-            }
-            scaled.recycle()
-            if (!written) {
-                delete(file)
-                return null
-            }
-            return key(context)
+            // 每一步返回的要么是新图要么是原图：只放掉中间产物，最终返回的 scaled 交给调用方。
+            val intermediates = linkedSetOf(decoded, rotated, cropped)
+            intermediates.remove(scaled)
+            intermediates.forEach { it.recycle() }
+            return scaled
         }
 
         /** 按 90° 的整数倍旋转；角度不合法时原样返回。 */
@@ -247,7 +327,19 @@ class WallpaperBackgroundImage private constructor() {
                 val comma = base64.indexOf(',')
                 val payload = if (comma >= 0) base64.substring(comma + 1) else base64
                 val bytes = Base64.decode(payload, Base64.DEFAULT)
-                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                // 与 storeFromUrl 同一道闸：先量尺寸，超像素上限的不解，其余按壁纸最长边采样（#364）。
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                if (bounds.outWidth > 0 && bounds.outHeight > 0
+                        && !WallpaperImageSampling.isDecodable(bounds.outWidth, bounds.outHeight)) {
+                    Log.w(TAG, "Wallpaper image skipped: source too large ${bounds.outWidth}x${bounds.outHeight}")
+                    return null
+                }
+                val options = BitmapFactory.Options().apply {
+                    inSampleSize = WallpaperImageSampling.sampleSize(
+                        bounds.outWidth, bounds.outHeight, 0, 0f, 0f, 1f, 1f)
+                }
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 if (bitmap == null || bitmap.width < 2 || bitmap.height < 2) {
                     null
                 } else {
