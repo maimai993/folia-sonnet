@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SongResult } from '../../../src/types';
+import { resolveProxiedSongCover } from '../../../src/services/onlineMusic/onlineCoverFallback';
 import {
     buildQueueMirrorEntries,
     buildQueueMirrorEntry,
@@ -7,6 +8,12 @@ import {
     resolveLikeIdentity,
 } from '../../../src/utils/queueMirrorEntry';
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
+
+// 封面兜底会把渲染过的封面换成 WebView 内的 blob: 地址；这里只需要控制它的返回值。
+vi.mock('../../../src/services/onlineMusic/onlineCoverFallback', () => ({
+    resolveProxiedSongCover: vi.fn((_song: unknown, url: string) => url),
+    requestSongCoverFallback: vi.fn(),
+}));
 
 /*
  * 原生镜像的字段契约（queueMirrorEntry.ts 与 FoliaPlaybackService 的镜像解析一一对应）。
@@ -117,6 +124,42 @@ describe('buildQueueMirrorEntry', () => {
         // likeStateOf 回 undefined 时同理 —— 原生那边按布尔读，容不下 null。
         expect(buildQueueMirrorEntry(song, () => undefined).liked).toBe(false);
         expect(buildQueueMirrorEntry(song, () => null).canLike).toBe(false);
+    });
+
+    describe('artworkUrl (#336)', () => {
+        const withCover = (coverUrl: string): SongResult => ({
+            ...online('netease', '1'),
+            album: { id: 1, name: 'Album', coverUrl },
+        } as unknown as SongResult);
+
+        beforeEach(() => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation((_song, url) => url);
+        });
+
+        it('keeps a downloadable https cover as is', () => {
+            expect(buildQueueMirrorEntry(withCover('https://img.example/c.jpg')).artworkUrl).toBe('https://img.example/c.jpg');
+        });
+
+        it('falls back to the provider https url when the UI cover became a blob:', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation(() => 'blob:https://localhost/abc');
+            expect(buildQueueMirrorEntry(withCover('https://img.example/c.jpg')).artworkUrl).toBe('https://img.example/c.jpg');
+        });
+
+        it('falls back to the provider https url when the UI cover became a data: url', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation(() => 'data:image/jpeg;base64,AAAA');
+            expect(buildQueueMirrorEntry(withCover('https://img.example/c.jpg')).artworkUrl).toBe('https://img.example/c.jpg');
+        });
+
+        it('never hands a blob:/data: url to native, even when the song itself only has one', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation((_song, url) => url);
+            expect(buildQueueMirrorEntry(withCover('blob:https://localhost/abc')).artworkUrl).toBe('');
+            expect(buildQueueMirrorEntry(withCover('DATA:image/png;base64,AAAA')).artworkUrl).toBe('');
+        });
+
+        it('keeps a loopback proxy url (cookie-gated covers) that native can download', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation(() => 'http://127.0.0.1:5555/cover?u=1');
+            expect(buildQueueMirrorEntry(withCover('https://nas.example/c.jpg')).artworkUrl).toBe('http://127.0.0.1:5555/cover?u=1');
+        });
     });
 
     it('builds one entry per song, in order', () => {
