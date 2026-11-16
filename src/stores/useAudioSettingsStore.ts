@@ -90,12 +90,13 @@ export const BACKGROUND_SILENT_SKIP_KEY = 'background_silent_skip';
 /**
  * 后台与其他音源同时播放（Android）。
  *
- * 关（默认）：别的应用一出声，系统就把 WebView 持有的音频焦点收走，Chromium 收到
- * 焦点丢失会**直接把 `<audio>` 暂停** —— 游戏音效、导航播报、短视频都可能打断，
- * 而且打断之后经常叫不醒（见 usePlaybackAudioBridge 里的自动恢复）。
- * 开：WebView 感知不到「焦点丢了」这件事，两边一起响（见原生 FoliaAudioManager）。
+ * 开（默认）：播放器不请求音频焦点，别的应用出声不会打断我们 —— 打开抖音、微信、
+ * 导航抢焦点时音乐继续响。原生 ExoPlayer 走 setAudioAttributes(..., handleAudioFocus=false)，
+ * WebView 那套走 FoliaAudioManager，两边都不再响应焦点丢失。
+ * 关：请求并持有焦点，别的应用一出声系统就把焦点收走，我们暂停（标准媒体 App 行为）。
  *
- * 默认关：会让人家的声音也被压着 / 互相抢焦点，这是用户能听见的行为，该由他点头。
+ * 默认开：切到后台再打开别的应用就断声是最常遇到的抱怨，默认让它不打断；需要在乎
+ * 「独占焦点」的人仍可在设置里关掉。
  */
 export const MIX_WITH_OTHER_AUDIO_KEY = 'folia_mix_with_other_audio';
 
@@ -319,7 +320,7 @@ export type AudioSettingsState = {
     backgroundSilentSkip: boolean;
     /** 播放时保持屏幕常亮（Android 的 FLAG_KEEP_SCREEN_ON）。Off by default. */
     keepScreenOnWhilePlaying: boolean;
-    /** 后台与其他音源同时播放（Android）。Off by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
+    /** 后台与其他音源同时播放（Android）。On by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
     mixWithOtherAudio: boolean;
     /**
      * 关闭人声（中置相消）。Off by default，见 VOCAL_CANCEL_KEY。
@@ -480,7 +481,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     backgroundSilentSkip: getStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, true),
     // 默认关：常亮等于放弃系统那套自动熄屏，该由用户点头，不该替他决定。
     keepScreenOnWhilePlaying: getStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, false),
-    mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, false),
+    mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, true),
     // 默认关：它改变的是这首歌本来的样子，该由用户自己拨。
     vocalCancelEnabled: getStoredBoolean(VOCAL_CANCEL_KEY, false),
     vocalOnlyEnabled: getStoredBoolean(VOCAL_ONLY_KEY, false),

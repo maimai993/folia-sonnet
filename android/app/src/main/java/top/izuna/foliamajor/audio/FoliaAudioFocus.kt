@@ -45,7 +45,7 @@ class FoliaAudioFocus private constructor() {
                 return false
             }
             return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .getBoolean(KEY_MIX_WITH_OTHERS, false)
+                    .getBoolean(KEY_MIX_WITH_OTHERS, true)
         }
     }
 }

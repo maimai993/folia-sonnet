@@ -19,6 +19,7 @@ import { useAppViewStore } from '../../../stores/useAppViewStore';
 import { selectAudioSettingsSnapshot, useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { writeNativeLoopMode } from '../../../services/nativeQueueBridge';
 import { writeNativeSettings } from '../../../services/nativeSettingsBridge';
+import { setAudioFocusPolicy } from '../../../platform/foliaNative';
 import { startNativeEqualizerSync } from '../../../services/playbackEngine/nativeEqualizer';
 import { useNativeAiConfigSync } from '../../../hooks/useNativeAiConfigSync';
 import { useFoliaMachineCodeSync } from '../../../hooks/useFoliaMachineCodeSync';
@@ -233,6 +234,12 @@ export const useAppFoundation = () => {
                 crossfadeMs: Math.round(useAutomixSettingsStore.getState().crossfadeMaxSec * 1000),
                 crossfadeCurve: useAutomixSettingsStore.getState().crossfadeCurve,
             });
+            /*
+             * 音频焦点策略走独立插件方法（不在 setSettings 那批里）。启动时也把落盘值对一次表：
+             * 新装用户靠原生默认值（已改为 true）就对，但升级用户若很久以前拨过一次关，
+             * 原生 SharedPreferences 里残留的 false 会压过默认值 —— 这里用 Web 当前值盖掉它。
+             */
+            void setAudioFocusPolicy(useAudioSettingsStore.getState().mixWithOtherAudio);
             if (merged || cancelled || attempts >= 20) return;
             attempts += 1;
             setTimeout(() => {

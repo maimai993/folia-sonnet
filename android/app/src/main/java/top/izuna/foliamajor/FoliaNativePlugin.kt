@@ -2922,7 +2922,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun setAudioFocusPolicy(call: PluginCall) {
-        val mixWithOthers = java.lang.Boolean.TRUE.equals(call.getBoolean("mixWithOthers", false))
+        val mixWithOthers = java.lang.Boolean.TRUE.equals(call.getBoolean("mixWithOthers", true))
         top.izuna.foliamajor.audio.FoliaAudioFocus.setMixWithOthers(getContext(), mixWithOthers)
         // 落盘之外还要让原生播放器**现在**就换策略：ExoPlayer 那台是复用的，只落盘的话
         // 要等下一次建播放器才生效 —— 用户看到的正是「开关拨了没反应」。
