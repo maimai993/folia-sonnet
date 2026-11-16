@@ -90,6 +90,8 @@ export const useNativePlaybackRuntime = ({
                 || nativePlaybackEngine.activeUrl() !== expectedUrl
                 || nativePlaybackEngine.currentSongKey() !== expectedSongKey
             ) return;
+            const sourceError = nativePlaybackEngine.sourceReadyError();
+            if (sourceError && sourceError !== error) return;
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });

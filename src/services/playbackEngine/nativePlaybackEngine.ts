@@ -246,6 +246,13 @@ class NativePlaybackEngine {
     async play(): Promise<void> {
         // 同上：没有订阅就没有状态回执，按钮按下去界面只能靠乐观值猜。
         this.ensureSubscription();
+        if (this.sourceReadyFailure && this.currentUrl) {
+            await this.setSource(this.currentUrl, {
+                startPositionMs: this.positionMs,
+                repeatMode: this.repeatMode,
+                songKey: this.songKey,
+            });
+        }
         await this.sourceReadyPromise;
         await nativePlayer.play();
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
@@ -418,7 +425,16 @@ class NativePlaybackEngine {
                 break;
             case 'paused':
             case 'ended':
+                this.playing = false;
+                this.stalled = false;
+                break;
             case 'error':
+                // ExoPlayer may reject asynchronously after prepare() has already resolved.
+                // Remember it so retrying the same URL does not take the early-return path.
+                this.sourceReadyFailure = new Error(event.message ?? 'native playback error');
+                this.playing = false;
+                this.stalled = false;
+                break;
             case 'idle':
                 this.playing = false;
                 this.stalled = false;
