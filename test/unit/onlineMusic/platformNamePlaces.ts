@@ -29,6 +29,12 @@ export interface PlatformNamePlace {
 }
 
 export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
+    // 存储页「缓存详情」新增的 MV 匹配结果那一行：key 与文案都是这一家的东西。
+    'src/components/modal/settings/pages/storage/options.ts': { n: { bilibili: 1 }, kind: 'file', why: 'the storage page lists the platform own MV match cache as one row of its cache details, next to the caches every platform shares' },
+    'src/components/modal/settings/useCacheUsagePanel.ts': { n: { bilibili: 2 }, kind: 'file', why: 'the usage panel measures that MV match cache (it lives in localStorage, not IndexedDB) and clears it through the platform store' },
+    'src/services/db.ts': { n: { bilibili: 2 }, kind: 'file', why: 'clearCacheByCategory routes the MV match category to the platform store instead of the database' },
+    'src/services/repositories/cacheUsage.ts': { n: { bilibili: 1 }, kind: 'file', why: 'the category walker says the MV match caches are not counted here, since the panel measures them itself' },
+    'src/utils/songThemeAutoGeneration.ts': { n: { bilibili: 4 }, kind: 'question', why: 'songs from this video platform do not get an automatic AI theme: the picture is already the song, so a theme would only compete with it' },
     'src/App.tsx': { n: {}, kind: 'file', why: 'the thin shell: it only strings the wiring hooks together, so it names no platform. When it grows back into a monolith this line is the signal that something came home that should have stayed in a hook' },
     'src/components/login/PlatformMark.tsx': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
     'src/hooks/useExclusiveKeyLayer.ts': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
@@ -84,7 +90,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/modal/settings/pages/IntegrationPage.tsx': { n: { netease: 4, lxmusic: 1, bilibili: 1 }, kind: 'stored', why: 'the stored setting neteaseScrobbleEnabled and its i18n keys' },
     'src/components/modal/settings/pages/LyricsPage.tsx': { n: { spotify: 1 }, kind: 'lyric', why: 'which of two hand-written descriptions of the lyric sources is shown' },
     'src/components/modal/settings/pages/integration/options.ts': { n: { netease: 1, lxmusic: 7, bilibili: 2 }, kind: 'stored', why: 'an i18n key' },
-        'src/components/panelTab/AccountTab.tsx': { n: { bilibili: 15 }, kind: 'doc', why: 'the comments: video platforms name qualities 480P/720P/1080P (and 1080P60/4K for the premium levels), and the quality column header names the platform; 9 -> 13 by passing the follow/fans avatar tap on to the user uploads page (the callback type, the destructure, and the two comments saying what it opens); 13 -> 15 by giving the two premium levels their picture labels, where the comments say what Bilibili calls them' },
+        'src/components/panelTab/AccountTab.tsx': { n: { bilibili: 14 }, kind: 'doc', why: 'the comments: video platforms name qualities 480P/720P/1080P (and 1080P60/4K for the premium levels), and the quality column header names the platform; 9 -> 13 by passing the follow/fans avatar tap on to the user uploads page (the callback type, the destructure, and the two comments saying what it opens); 13 -> 15 by giving the two premium levels their picture labels, where the comments say what Bilibili calls them' },
 'src/components/app/player-panel/usePlayerPanelModel.ts': { n: { bilibili: 8 }, kind: 'file', why: 'the follow/fans avatar tap builds the artist id for this platform and hands it to the grid collection tray; the id has to be built where the callback is made, since the tray takes an already-formed descriptor (8 lines: the import, the callback body and its comments)' },
     'src/components/panelTab/BilibiliAccountRows.tsx': { n: { bilibili: 14 }, kind: 'doc', why: 'the account rows are the site\'s own (following / followers / signature); the comments say which site' },
     'src/stores/useVideoLayerSettingsStore.ts': { n: { bilibili: 1 }, kind: 'doc' },   // comments only,
@@ -94,7 +100,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/components/visualizer/useVisualizerRendererModel.ts': { n: { bilibili: 1 }, kind: 'doc', why: 'the comment saying the video platform has no lyrics to feed the renderer' },
     'src/components/login/window/LoginScreen.tsx': { n: { lxmusic: 4 }, kind: 'file', why: 'the login window explains what each accountless source is; it names them in comments only' },
     'src/stores/useBilibiliAuthStore.ts': { n: { bilibili: 22 }, kind: 'file', why: 'that platform own sign-in state' },
-    'src/stores/useBilibiliMvStore.ts': { n: { bilibili: 56 }, kind: 'file', why: 'that platform own MV resolution and cache; 50 -> 56 by the MV picture-quality setting (the stored key, its reader, its type, and the two playurl calls that now pass it)' },
+    'src/stores/useBilibiliMvStore.ts': { n: { bilibili: 53, lxmusic: 1 }, kind: 'file', why: 'that platform own MV resolution and cache; 50 -> 56 by the MV picture-quality setting (the stored key, its reader, its type, and the two playurl calls that now pass it)' },
     'src/components/panelTab/MvSourceRow.tsx': { n: { bilibili: 10 }, kind: 'file', why: 'the video-source row: that platform own MV picker for the song on the play page' },
     'src/components/app/appWiring/useAppPublishers.ts': { n: { bilibili: 5 }, kind: 'file', why: 'the match-MV action: it resolves the playing song through that platform own MV store' },
     'src/components/app/player-panel/buildPlayerPanelModel.ts': { n: { bilibili: 5 }, kind: 'file', why: 'passes the match-MV props through the panel model; 1 -> 5 by writing the panel quality into this platform MV store as well, so the panel and the settings page show the same档' },
@@ -209,7 +215,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/sync/syncRepository.ts': { n: { netease: 6 }, kind: 'stored', why: 'records of before the fingerprint carried a platform' },
     'src/services/sync/themeSyncRegistry.ts': { n: { netease: 6 }, kind: 'stored', why: 'a synced fingerprint and the theme cache key made from it' },
     'src/stores/exploreFeedMemory.ts': { n: { ytm: 1 }, kind: 'doc' },   // comments only,
-    'src/stores/useAudioSettingsStore.ts': { n: { netease: 11 }, kind: 'stored', why: 'a storage key and the setting kept under it' },
+    'src/stores/useAudioSettingsStore.ts': { n: { netease: 12, bilibili: 2 }, kind: 'stored', why: 'a storage key and the setting kept under it' },
     'src/stores/useExploreFeedStore.ts': { n: { ytm: 2, spotify: 1 }, kind: 'doc' },   // comments only,
     'src/types.ts': { n: { netease: 11, qq: 2, ytm: 1 }, kind: 'stored', why: 'the stage API\'s lyric source, a stored song field, the AMLL DB platform' },
     'src/types/localLibrary.ts': { n: { netease: 1, qq: 1, kugou: 1, spotify: 2 }, kind: 'doc' },   // comments only,
