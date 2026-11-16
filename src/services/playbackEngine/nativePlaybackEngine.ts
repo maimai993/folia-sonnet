@@ -120,6 +120,10 @@ class NativePlaybackEngine {
 
     /** 认领只重置本地时钟，绝不 prepare / seek / play 原生。 */
     adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
+        this.sourceGenerationVersion++;
+        this.sourceReadyGeneration++;
+        this.sourceReadyPromise = Promise.resolve();
+        this.sourceReadyFailure = null;
         this.ensureSubscription();
         this.currentUrl = snapshot.url;
         this.songKey = snapshot.songKey ?? null;
@@ -290,6 +294,7 @@ class NativePlaybackEngine {
     }
 
     async stop(): Promise<void> {
+        this.sourceGenerationVersion++;
         this.hasSource = false;
         this.nativeMediaLive = false;
         this.playing = false;
