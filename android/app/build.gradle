@@ -269,6 +269,14 @@ android {
             version "3.22.1"
         }
     }
+    /*
+     * libnode.so 是 CMake 的 IMPORTED 库（只参与链接，不参与编译），AGP 不会把
+     * 它打进 jniLibs —— 但 libfolia-node-native.so 的 DT_NEEDED 指向它，运行时
+     * System.loadLibrary("node") 找不到就 UnsatisfiedLinkError，应用直接起不来。
+     * 它按 <ABI>/libnode.so 的目录约定放在 cpp/libnode/ 下，正好能被 jniLibs 按
+     * ABI 收进去，所以这里显式指过去补上这一条。
+     */
+    sourceSets.main.jniLibs.srcDirs 'src/main/cpp/libnode'
 }
 
 try {
