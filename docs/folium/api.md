@@ -214,6 +214,7 @@ A lyric animation mode. Its mode id is `mod:<modid>:<id>`.
 | `id` | `string` | Local id; the mode id becomes `mod:<modid>:<id>`. |
 | `label` | `FoliumLabel` | Name in the mode picker. |
 | `order?` | `number` | Position in the mode picker; default 500 (after builtin modes). |
+| `glyph?` | `string` | 样式选择器里代表这款动画的小图标：一段 SVG path 的 `d` 字符串，画在 宿主统一的 24×24 描边 <svg> 里（与内置样式的 glyph 同一套画框）。 不填则用通用字形。只接受 path 的 d 数据 —— mod 没有 React，不能传节点。 |
 | `mount` | `FoliumMount<FoliumStageContext>` | Draws the visualizer into its container. |
 | `settings?` | `FoliumSetting[]` | Settings schema; the host renders the form under the mode picker, persists the values and includes them in visual config import/export. |
 | `settingsPanel?` | `FoliumMount<FoliumSettingsPanelContext>` | Replaces the host-rendered form; values still follow `settings`. |
