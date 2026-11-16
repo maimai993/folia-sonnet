@@ -210,7 +210,7 @@ describe('nativePlaybackEngine clock', () => {
 
     it('marks an asynchronous native error as retryable', async () => {
         vi.clearAllMocks();
-        emit({ type: 'error', message: 'HTTP 403', songKey: 'song-key' });
+        emit({ type: 'error', message: 'HTTP 403' });
         expect(nativePlaybackEngine.sourceReadyError()).toBeInstanceOf(Error);
 
         await nativePlaybackEngine.play();
