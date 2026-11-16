@@ -3131,6 +3131,7 @@ export default {
     "analysisData": "Dữ liệu phân tích",
     "volumeBalanceData": "Dữ liệu cân bằng thông minh",
     "mvMatchData": "Kết quả MV",
+    "mvMediaData": "Âm thanh & video MV",
     "lyrics": "Lời bài hát",
     "covers": "Ảnh bìa",
     "mediaFiles": "Tệp phương tiện",

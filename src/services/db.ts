@@ -194,6 +194,7 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
      * 否则界面还会继续拿着刚被删掉的结果。
      */
     if (category === 'mvMatch') {
+      // 匹配记录与盘上的字节缓存（音轨 + 画面 + 绑定）一起清；具体怎么清由那个平台自己的 store 负责。
       useBilibiliMvStore.getState().clear();
       return;
     }
@@ -201,7 +202,9 @@ export const clearCacheByCategory = async (category: CacheCategory): Promise<voi
     if (category === 'media' && hasElectronAudioCacheBridge()) {
       await window.electron!.clearAudioCache();
     }
-    if (category === 'media') await clearNativeMediaCache();
+    if (category === 'media') {
+      await clearNativeMediaCache();
+    }
     if (category === 'cover') await clearCoverAssets();
   } catch (error) {
     console.error('Failed to clear cache by category', error);

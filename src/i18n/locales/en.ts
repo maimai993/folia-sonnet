@@ -3131,6 +3131,7 @@ export default {
     "analysisData": "Analysis Data",
     "volumeBalanceData": "Smart Balance Data",
     "mvMatchData": "MV matches",
+    "mvMediaData": "MV audio & video",
     "lyrics": "Lyrics",
     "covers": "Covers",
     "mediaFiles": "Media Files",

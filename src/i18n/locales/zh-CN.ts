@@ -3207,6 +3207,7 @@ export default {
     "analysisData": "分析数据",
     "volumeBalanceData": "智能平衡数据",
     "mvMatchData": "MV 匹配结果",
+    "mvMediaData": "MV 缓存音视频",
     "lyrics": "歌词",
     "covers": "封面",
     "mediaFiles": "媒体文件",

@@ -3094,6 +3094,7 @@ export default {
     "analysisData": "Data Analisis",
     "volumeBalanceData": "Data Pintar",
     "mvMatchData": "Hasil MV",
+    "mvMediaData": "Audio & video MV",
     "lyrics": "Lirik",
     "covers": "Sampul",
     "mediaFiles": "File Media",

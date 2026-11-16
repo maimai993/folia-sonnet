@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db';
-import { cacheSizeLabels } from './settings/useCacheUsagePanel';
+import { cacheSizeLabels, readMvMediaCacheBytes, clearMvMatchCache, clearMvMediaCacheBytes } from './settings/useCacheUsagePanel';
 
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
@@ -385,7 +385,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         media: '0 B',
         analysis: '0 B',
         volumeBalance: '0 B',
-        mvMatch: '0 B'
+        mvMatch: '0 B',
+        mvMedia: '0 B'
     });
     const [mediaCount, setMediaCount] = useState(0);
     const [isCleaning, setIsCleaning] = useState<CacheCategory | null>(null);
@@ -816,19 +817,30 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         refreshServerProfile(config);
     };
 
-    const applyCacheUsage = (usage: Awaited<ReturnType<typeof getCacheUsageByCategory>>) => {
-        setCacheSizes(cacheSizeLabels(usage));
+    const applyCacheUsage = (
+        usage: Awaited<ReturnType<typeof getCacheUsageByCategory>>,
+        mvMediaBytes = 0,
+    ) => {
+        setCacheSizes(cacheSizeLabels(usage, mvMediaBytes));
         setMediaCount(usage.mediaCount);
     };
 
     const fetchCacheUsage = async () => {
-        applyCacheUsage(await getCacheUsageByCategory());
+        // MV 那份字节缓存在盘上、要问原生；与 IndexedDB 的用量一起量好再交给界面。
+        const [usage, mvMediaBytes] = await Promise.all([
+            getCacheUsageByCategory(),
+            readMvMediaCacheBytes().catch(() => 0),
+        ]);
+        applyCacheUsage(usage, mvMediaBytes);
     };
 
     useEffect(() => {
         if (activeTab === 'options') {
             // Like the answers above, it lands while the window is opening.
-            void getCacheUsageByCategory().then(usage => startTransition(() => applyCacheUsage(usage)));
+            void Promise.all([
+                getCacheUsageByCategory(),
+                readMvMediaCacheBytes().catch(() => 0),
+            ]).then(([usage, mvMediaBytes]) => startTransition(() => applyCacheUsage(usage, mvMediaBytes)));
         }
     }, [activeTab]);
 
@@ -837,7 +849,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         // 智能平衡's readings held in memory go with its stored ones, or they would be written back. First, so
         // a write already sent lands before the clear and none is sent after it.
         if (category === 'volumeBalance') clearBalanceRuntime();
-        await clearCacheByCategory(category);
+        if (category === 'mvMatch') {
+            // MV 匹配结果不进 IndexedDB，清的是那平台自己的 store。
+            clearMvMatchCache();
+        } else if (category === 'mvMedia') {
+            // 只清盘上的音视频字节，保留「配了哪条投稿」的记录。
+            await clearMvMediaCacheBytes();
+        } else {
+            await clearCacheByCategory(category);
+        }
         // The drum hits' memory of which tracks are stored goes with the stored analyses.
         if (category === 'analysis') forgetSettledDrumHits();
         await fetchCacheUsage();
