@@ -80,9 +80,23 @@ class VocalTrackSwitchTest {
     }
 
     @Test
-    fun `songKey 为空的老路径只比原曲地址`() {
-        assertTrue(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, null))
+    fun `songKey 为空时不许换源 地址相同也不能放行`() {
+        // 旧写法在这里放行（isNullOrBlank 就只比地址）。地址根本不变、变的只是「装进去的
+        // 那个地址属于哪一首」的两种路径都靠这一条漏了过去：同一首重新装源（恢复进度、
+        // 切画质）时 baseUrl 不变；队列里两首歌解析出同一个直链时 baseUrl 也相同。
+        // 上一首那趟任务跑完就把上一首的伴奏装到当前播放器上 —— 正是用户报的
+        // 「切了人声 / 伴奏，放的却不是这首歌」。宁可白跑，不放错歌。
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, null))
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, ""))
         assertFalse(stillPlayingGeneratedTrack(secondUrl, "", firstUrl, null))
+    }
+
+    @Test
+    fun `同一首重新装源时 地址不变也不能当成同一趟`() {
+        // 生成时带着 songKey，而播放器现在没有（重新装源丢了身份）：无从确认，不放行。
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, "song:first"))
+        // 播放器有身份，但生成时没有：同上。
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "song:first", firstUrl, null))
     }
 
     @Test

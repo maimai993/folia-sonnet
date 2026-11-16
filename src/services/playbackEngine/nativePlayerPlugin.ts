@@ -396,3 +396,41 @@ export const addInstrumentalListener = (
         ) => Promise<unknown>;
     }).addListener('instrumental', listener);
 };
+
+/**
+ * 「原生手上那条原曲地址不该再用了，请重新解析一个」。
+ *
+ * 原生那边切回「全部」时，如果原曲地址带取流签名、或者已经装了很久，它不会把那条
+ * 可疑的地址塞给播放器（本地又没有原曲的媒体缓存副本时，那就是一个读不出来的源 ——
+ * 用户看到「全部」，却听不到声音），而是发这一条事件让 Web 侧重新要地址。
+ *
+ * 原生不认识任何音乐平台，重新要地址只能在这里做（omni）；拿到新地址后走的是
+ * 播放页现成的音源恢复路径，装完播放器自然停在「全部」上。
+ *
+ * 回一个取消订阅的函数：这个订阅挂在随歌曲变化而重新挂载的 effect 里，
+ * 不取消就会一次一次叠上去，同一次事件换好几次流。
+ */
+export const addSourceReloadListener = (
+    listener: (event: { songKey?: string; reason?: string }) => void,
+): (() => void) => {
+    let handle: { remove?: () => Promise<void> } | null = null;
+    let removed = false;
+    void (FoliaNativePlayer as unknown as {
+        addListener: (
+            eventName: string,
+            callback: (event: { songKey?: string; reason?: string }) => void,
+        ) => Promise<{ remove?: () => Promise<void> }>;
+    }).addListener('sourceReload', listener).then(
+        (registered) => {
+            // 注册在取消之后才回来：立刻拆掉，别让它活过这次挂载。
+            if (removed) void registered.remove?.();
+            else handle = registered;
+        },
+        () => undefined,
+    );
+    return () => {
+        removed = true;
+        void handle?.remove?.();
+        handle = null;
+    };
+};
