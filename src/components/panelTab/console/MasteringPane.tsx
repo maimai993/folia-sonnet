@@ -7,22 +7,6 @@ import {
     AUDIO_CONSOLE_COMP_MAX_GAIN_MIN,
     AUDIO_CONSOLE_COMP_RESPONSE_MAX,
     AUDIO_CONSOLE_COMP_RESPONSE_MIN,
-    AUDIO_CONSOLE_GATE_THRESHOLD_MIN,
-    AUDIO_CONSOLE_GATE_THRESHOLD_MAX,
-    AUDIO_CONSOLE_GATE_ATTACK_MIN,
-    AUDIO_CONSOLE_GATE_ATTACK_MAX,
-    AUDIO_CONSOLE_GATE_RELEASE_MIN,
-    AUDIO_CONSOLE_GATE_RELEASE_MAX,
-    AUDIO_CONSOLE_GATE_REDUCTION_MIN,
-    AUDIO_CONSOLE_GATE_REDUCTION_MAX,
-    AUDIO_CONSOLE_DEESS_FREQ_MIN,
-    AUDIO_CONSOLE_DEESS_FREQ_MAX,
-    AUDIO_CONSOLE_DEESS_THRESHOLD_MIN,
-    AUDIO_CONSOLE_DEESS_THRESHOLD_MAX,
-    AUDIO_CONSOLE_DEESS_RATIO_MIN,
-    AUDIO_CONSOLE_DEESS_RATIO_MAX,
-    AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MIN,
-    AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MAX,
     AUDIO_CONSOLE_BASS_GAIN_MIN,
     AUDIO_CONSOLE_BASS_GAIN_MAX,
     AUDIO_CONSOLE_BASS_FREQ_MIN,
@@ -41,14 +25,15 @@ import {
 import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Toggle } from '../../modal/settings/kit';
 import EqualizerSection from '../equalizer/EqualizerSection';
-import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent, formatRatio } from './controls';
+import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent } from './controls';
 
 // src/components/panelTab/console/MasteringPane.tsx
-// 调音台的第六页：母带台。
+// 调音台的母带页。
 //
-// 十项处理按「先补偿、再修复、再塑造、最后平衡」分组，全部是「一个滑杆一个效果」——
+// 只放真正的母带处理：损失补偿、音色塑造、增强、声像平衡。全部是「一个滑杆一个效果」——
 // 名字借自母带行业，但每一项都不用懂中心频率、Q 或包络，推滑杆就能听出变化。
 // 最顶上的「损失补偿」是本方案的核心：开调音后声音变小变闷，它把响度补回来。
+// 原本混在这里的「修复」类（噪声门/去齿音/去喷麦）已移到独立的「修复」页，让分类更清楚。
 //
 // 和其余四页一样，这里直接读写 useAudioConsoleStore（不经过均衡器那层的草稿），
 // 拖动即试听、松手即落盘由 store 的 commit 负责。
@@ -57,9 +42,6 @@ const MasteringPane: React.FC = () => {
     const { t } = useTranslation();
     const mastering = useAudioConsoleStore(state => state.settings.mastering);
     const setCompensation = useAudioConsoleStore(state => state.setCompensation);
-    const setNoiseGate = useAudioConsoleStore(state => state.setNoiseGate);
-    const setDeEsser = useAudioConsoleStore(state => state.setDeEsser);
-    const setDePlosive = useAudioConsoleStore(state => state.setDePlosive);
     const setBassBoost = useAudioConsoleStore(state => state.setBassBoost);
     const setExciter = useAudioConsoleStore(state => state.setExciter);
     const setTransient = useAudioConsoleStore(state => state.setTransient);
@@ -115,48 +97,6 @@ const MasteringPane: React.FC = () => {
                             onCommit={() => undefined}
                         />
                         <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringCompResponseHint')}</p>
-                    </div>
-                </div>
-            </EqualizerSection>
-
-            {/* —— 修复：噪声门 / 去齿音 / 去喷麦 —— */}
-            <EqualizerSection title={t('ui.consoleMasteringRepair')} hint={t('ui.consoleMasteringRepairHint')}>
-                <div className="divide-y divide-[var(--st-line)]">
-                    {/* 噪声门 */}
-                    <div className="space-y-3.5 px-4 py-3.5">
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[13px] leading-5">{t('ui.consoleMasteringGate')}</span>
-                            <Toggle checked={mastering.noiseGate.enabled} onChange={enabled => setNoiseGate({ enabled })} label={t('ui.consoleMasteringGate')} />
-                        </div>
-                        <div className={mastering.noiseGate.enabled ? '' : 'opacity-40'}>
-                            <ConsoleSlider label={t('ui.consoleThreshold')} valueText={formatDb(mastering.noiseGate.thresholdDb, 1)} value={mastering.noiseGate.thresholdDb} min={AUDIO_CONSOLE_GATE_THRESHOLD_MIN} max={AUDIO_CONSOLE_GATE_THRESHOLD_MAX} decimals={1} onChange={thresholdDb => setNoiseGate({ thresholdDb })} onCommit={() => undefined} />
-                            <ConsoleSlider label={t('ui.consoleAttack')} valueText={formatMs(mastering.noiseGate.attackMs)} value={mastering.noiseGate.attackMs} min={AUDIO_CONSOLE_GATE_ATTACK_MIN} max={AUDIO_CONSOLE_GATE_ATTACK_MAX} log decimals={1} onChange={attackMs => setNoiseGate({ attackMs })} onCommit={() => undefined} />
-                            <ConsoleSlider label={t('ui.consoleRelease')} valueText={formatMs(mastering.noiseGate.releaseMs)} value={mastering.noiseGate.releaseMs} min={AUDIO_CONSOLE_GATE_RELEASE_MIN} max={AUDIO_CONSOLE_GATE_RELEASE_MAX} log decimals={0} onChange={releaseMs => setNoiseGate({ releaseMs })} onCommit={() => undefined} />
-                            <ConsoleSlider label={t('ui.consoleMasteringReduction')} valueText={formatDb(mastering.noiseGate.reductionDb, 1)} value={mastering.noiseGate.reductionDb} min={AUDIO_CONSOLE_GATE_REDUCTION_MIN} max={AUDIO_CONSOLE_GATE_REDUCTION_MAX} decimals={1} onChange={reductionDb => setNoiseGate({ reductionDb })} onCommit={() => undefined} />
-                        </div>
-                    </div>
-                    {/* 去齿音 */}
-                    <div className="space-y-3.5 px-4 py-3.5">
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[13px] leading-5">{t('ui.consoleMasteringDeEsser')}</span>
-                            <Toggle checked={mastering.deEsser.enabled} onChange={enabled => setDeEsser({ enabled })} label={t('ui.consoleMasteringDeEsser')} />
-                        </div>
-                        <div className={mastering.deEsser.enabled ? '' : 'opacity-40'}>
-                            <ConsoleSlider label={t('ui.consoleMasteringFreq')} valueText={formatHz(mastering.deEsser.frequencyHz)} value={mastering.deEsser.frequencyHz} min={AUDIO_CONSOLE_DEESS_FREQ_MIN} max={AUDIO_CONSOLE_DEESS_FREQ_MAX} log decimals={0} onChange={frequencyHz => setDeEsser({ frequencyHz })} onCommit={() => undefined} />
-                            <ConsoleSlider label={t('ui.consoleThreshold')} valueText={formatDb(mastering.deEsser.thresholdDb, 1)} value={mastering.deEsser.thresholdDb} min={AUDIO_CONSOLE_DEESS_THRESHOLD_MIN} max={AUDIO_CONSOLE_DEESS_THRESHOLD_MAX} decimals={1} onChange={thresholdDb => setDeEsser({ thresholdDb })} onCommit={() => undefined} />
-                            <ConsoleSlider label={t('ui.consoleRatio')} valueText={formatRatio(mastering.deEsser.ratio)} value={mastering.deEsser.ratio} min={AUDIO_CONSOLE_DEESS_RATIO_MIN} max={AUDIO_CONSOLE_DEESS_RATIO_MAX} decimals={1} onChange={ratio => setDeEsser({ ratio })} onCommit={() => undefined} />
-                        </div>
-                    </div>
-                    {/* 去喷麦 */}
-                    <div className="space-y-3.5 px-4 py-3.5">
-                        <div className="flex items-center justify-between gap-3">
-                            <span className="text-[13px] leading-5">{t('ui.consoleMasteringDePlosive')}</span>
-                            <Toggle checked={mastering.dePlosive.enabled} onChange={enabled => setDePlosive({ enabled })} label={t('ui.consoleMasteringDePlosive')} />
-                        </div>
-                        <div className={mastering.dePlosive.enabled ? '' : 'opacity-40'}>
-                            <ConsoleSlider label={t('ui.consoleMasteringReduction')} valueText={formatDb(mastering.dePlosive.reductionDb, 1)} value={mastering.dePlosive.reductionDb} min={AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MIN} max={AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MAX} decimals={1} onChange={reductionDb => setDePlosive({ reductionDb })} onCommit={() => undefined} />
-                            <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringDePlosiveHint')}</p>
-                        </div>
                     </div>
                 </div>
             </EqualizerSection>

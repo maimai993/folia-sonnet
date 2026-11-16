@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
     AUDIO_CONSOLE_TARGET_LUFS_MIN,
     AUDIO_CONSOLE_TARGET_LUFS_MAX,
-    AUDIO_CONSOLE_RESTORE_AMOUNT_MIN,
-    AUDIO_CONSOLE_RESTORE_AMOUNT_MAX,
     AUDIO_CONSOLE_DYNEQ_FREQ_MIN,
     AUDIO_CONSOLE_DYNEQ_FREQ_MAX,
     AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN,
@@ -21,20 +19,20 @@ import {
 import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Segmented, Toggle } from '../../modal/settings/kit';
 import EqualizerSection from '../equalizer/EqualizerSection';
-import { ConsoleSlider, formatDb, formatHz, formatPercent } from './controls';
+import { ConsoleSlider, formatDb, formatHz } from './controls';
 
 // src/components/panelTab/console/StudioPane.tsx
-// 调音台的第七页：工作室台 —— 四大方向 12 项，把调音从「修补」升级到「美化 + 智能」。
+// 调音台的「智能」页：工作室台 —— 把调音从「修补」升级到「美化 + 智能」。
 //
-// 分组：响度标准化 → 音频修复 → 进阶效果 → 智能场景。
+// 分组：A/B 对比 → 响度标准化 → 进阶效果 → 智能场景。
 // 每一项仍是「一个开关 + 一根滑杆 / 一个选择」，名字专业但用法直觉。
 // A/B 对比放最顶上，随时一键听「原声 vs 调音后」。
+// 原本混在这里的「音频修复」（去咔嗒/去嗡/降噪）已移到独立的「修复」页，让分类更清楚。
 
 const StudioPane: React.FC = () => {
     const { t } = useTranslation();
     const studio = useAudioConsoleStore(state => state.settings.mastering.studio);
     const setNormalize = useAudioConsoleStore(state => state.setNormalize);
-    const setRestore = useAudioConsoleStore(state => state.setRestore);
     const setAdvanced = useAudioConsoleStore(state => state.setAdvanced);
     const setScene = useAudioConsoleStore(state => state.setScene);
 
@@ -92,35 +90,6 @@ const StudioPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleStudioTruePeak')}</span>
                             <Toggle checked={studio.normalize.truePeak} onChange={truePeak => setNormalize({ truePeak })} label={t('ui.consoleStudioTruePeak')} />
                         </div>
-                    </div>
-                </div>
-            </EqualizerSection>
-
-            {/* —— 音频修复 —— */}
-            <EqualizerSection title={t('ui.consoleStudioRestore')} hint={t('ui.consoleStudioRestoreHint')}>
-                <div className="divide-y divide-[var(--st-line)]">
-                    <div className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStudioDeclick')}</span>
-                        <Toggle checked={studio.restore.declick} onChange={declick => setRestore({ declick })} label={t('ui.consoleStudioDeclick')} />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStudioHum')}</span>
-                        <Toggle checked={studio.restore.hum} onChange={hum => setRestore({ hum })} label={t('ui.consoleStudioHum')} />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 px-4 py-3">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStudioDenoise')}</span>
-                        <Toggle checked={studio.restore.denoise} onChange={denoise => setRestore({ denoise })} label={t('ui.consoleStudioDenoise')} />
-                    </div>
-                    <div className="px-4 py-3.5">
-                        <ConsoleSlider
-                            label={t('ui.consoleStudioRestoreAmount')}
-                            valueText={percentage(studio.restore.amount)}
-                            value={studio.restore.amount}
-                            min={AUDIO_CONSOLE_RESTORE_AMOUNT_MIN}
-                            max={AUDIO_CONSOLE_RESTORE_AMOUNT_MAX}
-                            onChange={amount => setRestore({ amount })}
-                            onCommit={() => undefined}
-                        />
                     </div>
                 </div>
             </EqualizerSection>
