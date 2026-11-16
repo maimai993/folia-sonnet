@@ -3,6 +3,7 @@ package top.izuna.foliamajor.automix
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.min
 import top.izuna.foliamajor.FoliaPlaybackService
 
@@ -30,6 +31,29 @@ internal object AutomixLoad {
     /** 后台时每个分块之间让出的时间。一块推理通常 0.5~2 秒，这点延迟看不出来。 */
     private const val BACKGROUND_SLEEP_MS = 60L
 
+    /**
+     * 正在放歌时，单个推理窗口让出去的上限。
+     *
+     * 一个 11 秒窗口的推理手机上要好几秒，按占比让出去就够了，上限只是防尾值：
+     * 真遇到极快的设备，按比例算出来的让路时间也不会没边地涨。
+     */
+    private const val PLAYING_SLEEP_MAX_MS = 2500L
+
+    /** 播放器此刻是否在出声。由 FoliaNativePlayerPlugin 的播放状态事件翻转，分析线程只读。 */
+    @Volatile var playbackAudible = false
+
+    /** 正在跑的分离任务数（ScnetRunner.separate 进出各记一次）。两个任务同时跑时让路要更狠。 */
+    private val activeRuns = AtomicInteger(0)
+
+    /** 一个分离任务开始 / 结束。配对调用（finally 里收尾），计数错了只是让路比例偏一点。 */
+    fun beginSeparation() {
+        activeRuns.incrementAndGet()
+    }
+
+    fun endSeparation() {
+        activeRuns.decrementAndGet()
+    }
+
     /** 当前线程上一次设置的优先级；`Int.MIN_VALUE` 表示还没设置过。 */
     private var appliedPriority = Int.MIN_VALUE
 
@@ -46,9 +70,14 @@ internal object AutomixLoad {
     val inBackground: Boolean
         get() = runCatching { !FoliaPlaybackService.appUiVisible }.getOrDefault(false)
 
-    /** 按当前前后台调整本线程的调度优先级。同一状态重复调用是空操作。 */
+    /** 按当前前后台与播放状态调整本线程的调度优先级。同一状态重复调用是空操作。 */
     fun applyThreadPriority() {
-        val wanted = if (inBackground) Process.THREAD_PRIORITY_BACKGROUND else Process.THREAD_PRIORITY_DEFAULT
+        /*
+         * 正在放歌也降到 BACKGROUND：歌在放的时候解码与 AudioTrack 是硬实时，
+         * 分析线程哪怕在前台也该让路 —— 不然就是用户报的「负载太大，卡到
+         * 歌词对不上曲子」。暂停 / 没放歌时恢复默认，分析全速跑。
+         */
+        val wanted = if (inBackground || playbackAudible) Process.THREAD_PRIORITY_BACKGROUND else Process.THREAD_PRIORITY_DEFAULT
         if (wanted == appliedPriority) return
         try {
             Process.setThreadPriority(wanted)
@@ -98,5 +127,44 @@ internal object AutomixLoad {
     fun yieldUnless(cancelled: () -> Boolean) {
         if (cancelled()) return
         yieldPoint()
+    }
+
+    /**
+     * 分离推理专用的让路：一个 11 秒窗口（SCNet）跑完调一次。
+     *
+     * 与 [yieldPoint] 的差别在于让多少：推理窗口比 mel / 解码块重得多，
+     * 4 条 ORT 线程整整跑一个窗口，正在放的歌抢不到时间片就是「歌词对不上曲子」。
+     * 所以只要播放器在出声，就按窗口耗时的大头让出去 —— 分离慢一点没关系，
+     * 用户在听歌；暂停 / 没放歌时不让（只走前台 12% 那条），全速跑。
+     *
+     * @param windowMs 刚跑完的这个窗口实际花了多久（推理 + 逆变换）
+     * @param eager    用户正拨着开关等结果。让得少一档，但也不许全速 ——
+     *                 体验优先级是：听得顺 > 等得短。
+     */
+    fun separationYield(windowMs: Long, eager: Boolean = false) {
+        applyThreadPriority()
+        val now = SystemClock.elapsedRealtime()
+        val since = if (lastYieldAt == 0L) 0L else now - lastYieldAt
+        lastYieldAt = now
+        if (inBackground) {
+            sleepFor(BACKGROUND_SLEEP_MS)
+            return
+        }
+        if (playbackAudible) {
+            /*
+             * 两个分离任务同时跑（伴奏预生成 + 智能动感精修）时再压一档：
+             * 各让各的相加还是会把核占满，比例随任务数抬。
+             */
+            val share = when {
+                activeRuns.get() > 1 -> if (eager) 55 else 80
+                eager -> 35
+                else -> 65
+            }
+            val give = (windowMs * share / 100).coerceIn(if (eager) 200L else 400L, PLAYING_SLEEP_MAX_MS)
+            sleepFor(give)
+            return
+        }
+        val give = min(120L, since * 12 / 100)
+        if (give > 0) sleepFor(give)
     }
 }

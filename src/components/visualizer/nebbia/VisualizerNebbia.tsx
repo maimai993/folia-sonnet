@@ -1,4 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useTransform } from 'framer-motion';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { useTranslation } from 'react-i18next';
 import type { Line } from '../../../types';
 import { resolveThemeFontStack, resolveThemeFontWeight } from '../../../utils/fontStacks';
@@ -115,41 +119,59 @@ const VisualizerNebbia: React.FC<Props> = (props) => {
     });
     const subtitleFontSizes = resolveSubtitleFontSizes(lyricsFontScale);
 
+    /*
+     * 智能动感（雾笺）：雾的浓度随整体能量变一点：响的时候雾更实，间奏时散开 —— 这一套的整个画面就是雾。
+     */
+    const nebbiaFogDensityStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.nebbiaFogDensity);
+    const fogDensity = useEffectTrack(BEAT_EFFECT_IDS.nebbiaFogDensity);
+    const musicLayerScale = useTransform(fogDensity, value => 0.82 + Math.min(1, value * 2.4) * 0.26 * nebbiaFogDensityStrength);
+    const musicLayerActive = nebbiaFogDensityStrength > 0;
+
     return (
         <VisualizerShell theme={theme} audioPower={audioPower} audioBands={audioBands} sharedProps={props} renderBackground={seeThrough}>
-            <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" style={{ background: seeThrough ? undefined : '#05070a' }}>
-                <div ref={hostRef} className="absolute inset-0" aria-hidden="true" {...(drawn ? {} : { [ARRIVING_MARK]: '' })} />
-                {failed && (
-                    <div
-                        className="absolute inset-0 flex items-center justify-center px-10 text-center"
-                        style={{
-                            color: theme.primaryColor,
-                            fontFamily: resolveThemeFontStack(theme),
-                            fontWeight: resolveThemeFontWeight(theme, 600),
-                            fontSize: `clamp(2rem, ${5.4 * lyricsFontScale}vw, 5.6rem)`,
-                        }}
-                    >
-                        {showText && !committed.isInstrumental ? (activeLine?.fullText || t('ui.waitingForMusic')) : null}
-                    </div>
-                )}
+            {/* 音频呼吸只作用在画面层，字幕独立在外。 */}
+            <div className="pointer-events-none absolute inset-0">
+                <motion.div
+                    className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+                    style={{
+                        ...(musicLayerActive ? { opacity: musicLayerScale } : undefined),
+                        background: seeThrough ? undefined : '#05070a',
+                    }}
+                >
+                    <div ref={hostRef} className="absolute inset-0" aria-hidden="true" {...(drawn ? {} : { [ARRIVING_MARK]: '' })} />
+                    {failed && (
+                        <div
+                            className="absolute inset-0 flex items-center justify-center px-10 text-center"
+                            style={{
+                                color: theme.primaryColor,
+                                fontFamily: resolveThemeFontStack(theme),
+                                fontWeight: resolveThemeFontWeight(theme, 600),
+                                fontSize: `clamp(2rem, ${5.4 * lyricsFontScale}vw, 5.6rem)`,
+                            }}
+                        >
+
+                            {showText && !committed.isInstrumental ? (activeLine?.fullText || t('ui.waitingForMusic')) : null}
+                        </div>
+                    )}
+                </motion.div>
+                <VisualizerSubtitleOverlay
+                    showText={showText}
+                    activeLine={activeLine}
+                    recentCompletedLine={recentCompletedLine}
+                    nextLines={nextLines}
+                    theme={theme}
+                    subtitleTheme={subtitleTheme}
+                    translationFontSize={subtitleFontSizes.translationFontSize}
+                    upcomingFontSize={subtitleFontSizes.upcomingFontSize}
+                    subtitleFontScale={subtitleFontScale}
+                    subtitleOverlayOpacity={subtitleOverlayOpacity}
+                    subtitleOverlayBackground={subtitleOverlayBackground}
+                    subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
+                    isPlayerChromeHidden={isPlayerChromeHidden}
+                    hideTranslationSubtitle={hideTranslationSubtitle}
+                    subtitleOverlayLayout={subtitleOverlayLayout}
+                />
             </div>
-            <VisualizerSubtitleOverlay
-                showText={showText}
-                activeLine={activeLine}
-                recentCompletedLine={recentCompletedLine}
-                nextLines={nextLines}
-                theme={theme}
-                subtitleTheme={subtitleTheme}
-                translationFontSize={subtitleFontSizes.translationFontSize}
-                upcomingFontSize={subtitleFontSizes.upcomingFontSize}
-                subtitleFontScale={subtitleFontScale}
-                subtitleOverlayOpacity={subtitleOverlayOpacity}
-                subtitleOverlayBackground={subtitleOverlayBackground}
-                subtitleUpcomingLyricsBlur={subtitleUpcomingLyricsBlur}
-                isPlayerChromeHidden={isPlayerChromeHidden}
-                hideTranslationSubtitle={hideTranslationSubtitle}
-                subtitleOverlayLayout={subtitleOverlayLayout}
-            />
         </VisualizerShell>
     );
 };

@@ -205,6 +205,9 @@ const navidromeSong = {
     navidromeData: { id: 'n1', name: 'N', navidromeData: { id: 'n1' } },
 } as unknown as SongResult;
 
+/** The quality tier the restore routes are run under; deliberately not the store's default. */
+const PINNED_AUDIO_QUALITY = 'high' as const;
+
 beforeEach(() => {
     resetPlaybackStore();
     env.effects.length = 0;
@@ -227,7 +230,9 @@ beforeEach(() => {
     env.released.length = 0;
     env.hifiInstalls = 0;
     useHifiSettingsStore.setState({ enabled: false });
-    useAudioSettingsStore.setState({ autoPlayOnLaunch: false });
+    // Pinned rather than left to the default: the restore hands this tier to the prefetch, and the
+    // default has already changed once (#369: high -> ultra) without this file knowing (#372).
+    useAudioSettingsStore.setState({ autoPlayOnLaunch: false, audioQuality: PINNED_AUDIO_QUALITY });
     vi.mocked(prefetchNearbySongs).mockClear();
     clearPlaybackRepresentationsForTests();
     useStatusMessageStore.setState({ message: null });
@@ -1128,7 +1133,7 @@ describe('a whole-queue write while the last session is read', () => {
         // Saved with the song once it is current (the replacement's own save had no song to keep), and
         // again once the replay gain came: the mod's queue both times.
         expect(persistLastPlaybackCache.mock.calls.map(([, queue]) => queue)).toEqual([modQueue, modQueue]);
-        expect(prefetchNearbySongs).toHaveBeenCalledWith(expect.objectContaining({ id: 'x1' }), modQueue, 'high', undefined);
+        expect(prefetchNearbySongs).toHaveBeenCalledWith(expect.objectContaining({ id: 'x1' }), modQueue, PINNED_AUDIO_QUALITY, undefined);
     });
 
     it('saves the mod\'s queue on the local rebuild\'s path too', async () => {
@@ -1273,7 +1278,7 @@ describe('a sign-out of a platform while the last session is restored', () => {
 
         expect(refs.currentSongRef.current).toBe('online:bodian:x1');
         expect(queued()).toEqual(['x1', 'y1']);
-        expect(prefetchNearbySongs).toHaveBeenCalledWith(expect.objectContaining({ id: 'x1' }), usePlaybackStore.getState().playQueue, 'high', undefined);
+        expect(prefetchNearbySongs).toHaveBeenCalledWith(expect.objectContaining({ id: 'x1' }), usePlaybackStore.getState().playQueue, PINNED_AUDIO_QUALITY, undefined);
     });
 
     it('of another platform while the library is read for a local snapshot: neither the queue nor what is saved holds its songs', async () => {

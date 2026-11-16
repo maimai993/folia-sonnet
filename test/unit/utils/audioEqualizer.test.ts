@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyAudioEqualizerSettings, connectAudioEqualizerGraph } from '@/services/audioEqualizerGraph';
 import {
     AUDIO_EQUALIZER_BANDS,
@@ -284,5 +284,30 @@ describe('the equalizer helpers Folium 1.7 shares', () => {
             expect(areAudioEqualizerSettingsEqual(base, other), what).toBe(false);
             expect(areAudioEqualizerSettingsEqual(other, base), what).toBe(false);
         }
+    });
+});
+
+/*
+ * `window` 在、`localStorage` 不在的时候不许抛。
+ *
+ * 这个函数在 useAudioSettingsStore 求值时就跑（见 audioCache -> useAudioSettingsStore 那条链），
+ * 所以它一抛就不是「读不到设置」，而是把引用它的整个模块图带崩。测试里 stub 一个只为别的事
+ * 存在、没有存储的 window 是很常见的写法，无痕/受限的 WebView 也是这个形状。
+ */
+describe('an environment with a window but no storage', () => {
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    it('reads the defaults instead of throwing', async () => {
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
+        const { readStoredAudioEqualizerSettings } = await import('@/utils/audioEqualizer');
+        expect(readStoredAudioEqualizerSettings()).toEqual(resolveAudioEqualizerSettings(DEFAULT_AUDIO_EQUALIZER_SETTINGS));
+    });
+
+    it('writes nothing instead of throwing', async () => {
+        vi.stubGlobal('window', { electron: { platform: 'win32' } });
+        const { writeStoredAudioEqualizerSettings } = await import('@/utils/audioEqualizer');
+        expect(() => writeStoredAudioEqualizerSettings(DEFAULT_AUDIO_EQUALIZER_SETTINGS)).not.toThrow();
     });
 });

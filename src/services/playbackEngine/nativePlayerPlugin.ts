@@ -31,9 +31,27 @@ export type NativePlaybackEvent = {
     wallMs?: number;
     message?: string;
     songKey?: string;
+    /**
+     * 事件发出那一刻原生装载着的 source 令牌。Web 发起的装源令牌以 `w:` 开头；
+     * 原生自己换源（交叉淡化 / 过渡 / 系统控件）用 `n:`。songKey 分不开 A→B→A 同 key，令牌可以。
+     */
+    sourceToken?: string;
     /** 原生实际出声/缓冲状态，seeked 不再凭位置跳变推断已恢复播放。 */
     playing?: boolean;
     buffering?: boolean;
+};
+
+/**
+ * 传输命令（prepare / play / pause / stop / seek）的结果。
+ *
+ * Promise 在播放器线程**真正执行完**动作之后才结束；被更新的换源 / 播放意图取代而没执行的命令
+ * 以 `{ ok: false, stale: true }` resolve（不是 reject）。真正的失败才 reject。
+ */
+export type NativeCommandResult = {
+    ok: boolean;
+    stale?: boolean;
+    reason?: string;
+    transition?: boolean;
 };
 
 export type NativePlaybackSnapshot = {
@@ -49,6 +67,8 @@ export type NativePlaybackSnapshot = {
      * metadata 变，拿它当判据等于自己给自己盖章。
      */
     songKey?: string;
+    /** 引擎此刻装的那一首的 source 令牌（认领时用它丢旧 source 的迟到事件）。 */
+    sourceToken?: string;
 };
 
 /**
@@ -228,11 +248,13 @@ interface FoliaNativePlayerPlugin {
         repeatMode?: number | null;
         /** 这首歌的身份，装进去之后 getSnapshot().songKey 会回它。 */
         songKey?: string | null;
-    }): Promise<{ ok: boolean }>;
-    play(): Promise<void>;
-    pause(): Promise<void>;
-    stop(): Promise<void>;
-    seek(options: { positionMs: number }): Promise<void>;
+        /** 这一次装源的令牌（`w:` 开头）；原生随事件回传，Web 侧据此丢旧 source 的迟到事件。 */
+        sourceToken?: string | null;
+    }): Promise<NativeCommandResult>;
+    play(): Promise<NativeCommandResult | void>;
+    pause(): Promise<NativeCommandResult | void>;
+    stop(): Promise<NativeCommandResult | void>;
+    seek(options: { positionMs: number }): Promise<NativeCommandResult | void>;
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;
@@ -247,6 +269,56 @@ interface FoliaNativePlayerPlugin {
      * 不重新加载音频，拨开关即时生效。算法见原生 VocalCancelProcessor.kt。
      */
     setVocalCancelEnabled(options: { enabled: boolean }): Promise<void>;
+    /** 只留人声（清唱轨）；与关闭人声互斥，互斥由原生状态层保证。 */
+    setVocalOnlyEnabled(options: { enabled: boolean }): Promise<void>;
+    /**
+     * 三态「全部 / 人声 / 伴奏」的原子切换：一次调用同时写两个互斥开关、只换源一次。
+     * 界面那一行的三选一走这里；旧包没有这个方法的会 reject，调用方降级到两个旧 setter。
+     */
+    setVocalTrackMode(options: { mode: 'off' | 'vocal' | 'instrumental' }): Promise<void>;
+    /**
+     * 「删除人声分离缓存」：清掉原生 cacheDir 里两轨 m4a、把模式退回全部，回新的用量。
+     * 界面拿到后要同步本地的两个开关，别让选中态还停在「人声 / 伴奏」。
+     */
+    clearSeparationCache(): Promise<{ ok: boolean; mode: 'off'; usedCount: number; usedBytes: number; limitBytes: number }>;
+    /**
+     * 提前把这首歌的两轨分离结果备好，不换源。
+     *
+     * 返回只表示「任务已排上」，真正生成在原生后台跑几十秒；
+     * 已经备过或正在生成的歌会直接返回。
+     */
+    prepareSongTracks(options: { url: string; songKey: string | null }): Promise<{ ok: boolean }>;
+    /** 「设置 → 存储」里的总开关：预先拆分音轨。原生存一份，通知栏起播也能读到。 */
+    setPrebuildTracksEnabled(options: { enabled: boolean }): Promise<void>;
+    /**
+     * 「关闭人声」此刻的状态。
+     *
+     * idle / building / ready / failed —— ready 表示播的是离线分离好的伴奏，
+     * building 时 percent 是分离进度。只在那一页开着时问，不轮询。
+     */
+    getInstrumentalState(): Promise<{
+        state: string;
+        percent: number;
+        key: string | null;
+        /**
+         * 这条状态是不是「此刻正在播的这首歌」的。切歌后原生可能还留着上一首的
+         * building / ready，界面据此把状态归零，不沿用上一首的旧数据。
+         * 可选：旧版 APK 不回这个字段，缺省按「属于当前歌」处理。
+         */
+        forCurrent?: boolean;
+        /** 已缓存首数 / 占用字节 / 当前上限（上限跟着磁盘剩余走，见 InstrumentalStore）。 */
+        usedCount: number;
+        usedBytes: number;
+        limitBytes: number;
+        /** instrumental / vocal / off：此刻生效的是哪一轨（用户意图 / 开关）。 */
+        mode: 'instrumental' | 'vocal' | 'off';
+        /**
+         * 播放器此刻真正装着的那一轨：original / instrumental / vocal / none。
+         * 换源是异步的，它可能与 mode 短暂不一致；界面据此纠正「切了没生效」的选中态。
+         * 可选：旧版 APK 不回这个字段。
+         */
+        currentTrack?: 'original' | 'instrumental' | 'vocal' | 'none';
+    }>;
     getSpectrum(): Promise<NativeSpectrumFrame>;
     getSnapshot(): Promise<NativePlaybackSnapshot>;
     /**
@@ -289,10 +361,76 @@ export const nativePlayer = {
     getEqualizerState: () => FoliaNativePlayer.getEqualizerState(),
     setSpectrumEnabled: (enabled: boolean) => FoliaNativePlayer.setSpectrumEnabled({ enabled }),
     setVocalCancelEnabled: (enabled: boolean) => FoliaNativePlayer.setVocalCancelEnabled({ enabled }),
+    setVocalOnlyEnabled: (enabled: boolean) => FoliaNativePlayer.setVocalOnlyEnabled({ enabled }),
+    setVocalTrackMode: (mode: 'off' | 'vocal' | 'instrumental') =>
+        FoliaNativePlayer.setVocalTrackMode({ mode }),
+    clearSeparationCache: () => FoliaNativePlayer.clearSeparationCache(),
+    prepareSongTracks: (url: string, songKey: string | null) =>
+        FoliaNativePlayer.prepareSongTracks({ url, songKey }),
+    setPrebuildTracksEnabled: (enabled: boolean) => FoliaNativePlayer.setPrebuildTracksEnabled({ enabled }),
+    getInstrumentalState: () => FoliaNativePlayer.getInstrumentalState(),
     getSpectrum: () => FoliaNativePlayer.getSpectrum(),
     getSnapshot: () => FoliaNativePlayer.getSnapshot(),
     getAudioPipelineDiagnostics: () => FoliaNativePlayer.getAudioPipelineDiagnostics(),
     release: () => FoliaNativePlayer.release(),
     addListener: (listener: (event: NativePlaybackEvent) => void) =>
         FoliaNativePlayer.addListener('foliaNativePlayer', listener),
+};
+
+/**
+ * 「关闭人声」的进度事件。
+ *
+ * 与播放事件分开一条通道：它是几十秒一次的长任务，混进 foliaNativePlayer
+ * 那条高频流里，界面代码到处都要多判一次类型。
+ *
+ * ⚠️ registerPlugin 返回的代理上 addListener 的签名只声明了播放事件，
+ * 这里按事件名另外注册 —— 传错名字不会报错，只是永远收不到。
+ */
+export const addInstrumentalListener = (
+    listener: (event: { state: string; percent: number }) => void,
+): void => {
+    void (FoliaNativePlayer as unknown as {
+        addListener: (
+            eventName: string,
+            callback: (event: { state: string; percent: number }) => void,
+        ) => Promise<unknown>;
+    }).addListener('instrumental', listener);
+};
+
+/**
+ * 「原生手上那条原曲地址不该再用了，请重新解析一个」。
+ *
+ * 原生那边切回「全部」时，如果原曲地址带取流签名、或者已经装了很久，它不会把那条
+ * 可疑的地址塞给播放器（本地又没有原曲的媒体缓存副本时，那就是一个读不出来的源 ——
+ * 用户看到「全部」，却听不到声音），而是发这一条事件让 Web 侧重新要地址。
+ *
+ * 原生不认识任何音乐平台，重新要地址只能在这里做（omni）；拿到新地址后走的是
+ * 播放页现成的音源恢复路径，装完播放器自然停在「全部」上。
+ *
+ * 回一个取消订阅的函数：这个订阅挂在随歌曲变化而重新挂载的 effect 里，
+ * 不取消就会一次一次叠上去，同一次事件换好几次流。
+ */
+export const addSourceReloadListener = (
+    listener: (event: { songKey?: string; reason?: string }) => void,
+): (() => void) => {
+    let handle: { remove?: () => Promise<void> } | null = null;
+    let removed = false;
+    void (FoliaNativePlayer as unknown as {
+        addListener: (
+            eventName: string,
+            callback: (event: { songKey?: string; reason?: string }) => void,
+        ) => Promise<{ remove?: () => Promise<void> }>;
+    }).addListener('sourceReload', listener).then(
+        (registered) => {
+            // 注册在取消之后才回来：立刻拆掉，别让它活过这次挂载。
+            if (removed) void registered.remove?.();
+            else handle = registered;
+        },
+        () => undefined,
+    );
+    return () => {
+        removed = true;
+        void handle?.remove?.();
+        handle = null;
+    };
 };

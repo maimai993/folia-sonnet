@@ -184,13 +184,27 @@ export const getCacheUsageByCategory = async (): Promise<{
   }
 };
 
+import { useBilibiliMvStore } from '../stores/useBilibiliMvStore';
+
 export const clearCacheByCategory = async (category: CacheCategory): Promise<void> => {
   try {
+    /*
+     * MV 匹配结果不进 IndexedDB（它在 WebView 的 localStorage 里），
+     * 所以这一类要绕开数据库那一步，直接清 store —— 顺手把内存里那份也清掉，
+     * 否则界面还会继续拿着刚被删掉的结果。
+     */
+    if (category === 'mvMatch') {
+      // 匹配记录与盘上的字节缓存（音轨 + 画面 + 绑定）一起清；具体怎么清由那个平台自己的 store 负责。
+      useBilibiliMvStore.getState().clear();
+      return;
+    }
     await clearBrowserCacheByCategory(category);
     if (category === 'media' && hasElectronAudioCacheBridge()) {
       await window.electron!.clearAudioCache();
     }
-    if (category === 'media') await clearNativeMediaCache();
+    if (category === 'media') {
+      await clearNativeMediaCache();
+    }
     if (category === 'cover') await clearCoverAssets();
   } catch (error) {
     console.error('Failed to clear cache by category', error);

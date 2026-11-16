@@ -341,7 +341,7 @@ const restoreSourceForSong = async (
 
         const cacheKey = `cover_local_${songToRestore.id}`;
         const cachedCoverUrl = songToRestore.useOnlineCover
-            ? await getCachedCoverUrl(cacheKey)
+            ? await getCachedCoverUrl(cacheKey, songToRestore.onlineMetadata?.coverUrl)
             : null;
         if (overtaken()) return 'stale';
         if (cachedCoverUrl) setCachedCoverUrl(cachedCoverUrl);

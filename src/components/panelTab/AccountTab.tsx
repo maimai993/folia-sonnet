@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { LogOut, RefreshCw, Crown, User as UserIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AudioQualityPreference } from '../../types/onlineMusic';
@@ -9,16 +9,18 @@ import { omni } from '../../services/onlineMusic/omni';
 import { providerDisplayName } from '../../i18n/providerName';
 import { openLoginWindow } from '../login/loginWindowStore';
 import { PlatformMark } from '../login/PlatformMark';
-import { Select, Toggle } from '../modal/settings/kit';
+import { Select } from '../modal/settings/kit';
 import { useKitReducedMotion } from '../modal/settings/kit/motion';
 import { GroupLine } from './shell/GroupLine';
 import { PanelButton } from './shell/PanelButton';
 import { PanelIconButton } from './shell/PanelIconButton';
 import { PanelRow } from './shell/PanelRow';
+import { Segments } from './shell/Segments';
 import { shortAccountId } from '../../utils/accountIdDisplay';
 import { isCapacitorAndroid } from '../../platform/runtime';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { refreshInstrumentalStatus } from '../../services/playbackEngine/nativeEqualizer';
 import { PlaybackSignalPathButton } from '../hifi/PlaybackSignalPathButton';
 import BilibiliAccountRows from './BilibiliAccountRows';
 import LanCastControl from '../lan-cast/LanCastControl';
@@ -37,6 +39,8 @@ interface AccountTabProps {
     onSyncData: () => void;
     isSyncing: boolean;
     onNavigateHome: () => void;
+    /** 打开某个 UP 主的投稿页（关注 / 粉丝列表里点头像）。不给就不可点。 */
+    onOpenBilibiliUser?: (mid: number, name: string) => void;
     /** 投送浮层按日间/夜间取配色（和播放页那颗旧按钮一致）。 */
     isDaylight: boolean;
 }
@@ -52,16 +56,23 @@ const AUDIO_QUALITY_OPTIONS: Array<{
     { value: 'hires', labelKey: 'account.qualityHires' },
 ];
 
-/**
- * 视频平台的那三档叫「清晰度」，不叫音质。
+/*
+ * 视频平台的那几档叫「清晰度」，不叫音质。
  *
- * 同一个 stored 偏好（standard / high / ultra）在两个世界里意思一样：更清楚的那一档。
- * 只是标签不同 —— 选「标准」在音乐平台是普通音质，在 B 站是 480P。
+ * 同一个 stored 偏好（standard / high / ultra / lossless / hires）在两个世界里意思一样：
+ * 更清楚的那一档。只是标签不同 —— 选「标准」在音乐平台是普通音质，在 B 站是 480P。
+ *
+ * **五档都要有对应**：以前只写了前三档，大会员那两个（lossless / hires）落回音质那套
+ * 名字，于是同一行里前三个写着 480P/720P/1080P、后两个写着「无损 / Hi-Res」——
+ * 用户报的「音质显示成画质」其实就是这一行自相矛盾。B 站没有「无损」这回事，
+ * 它的高阶档是 1080P60 和 4K（见 api.ts 的 qualityToQn）。
  */
-const VIDEO_QUALITY_LABEL_KEYS: Partial<Record<AudioQualityPreference, string>> = {
+const VIDEO_QUALITY_LABEL_KEYS: Record<AudioQualityPreference, string> = {
     standard: 'account.quality480p',
     high: 'account.quality720p',
     ultra: 'account.quality1080p',
+    lossless: 'account.quality1080p60',
+    hires: 'account.quality4k',
 };
 
 /** 视频平台（B 站）：结果是一段视频，这一行说的是清晰度。 */
@@ -75,6 +86,7 @@ const AccountTab: React.FC<AccountTabProps> = ({
     onSyncData,
     isSyncing,
     onNavigateHome,
+    onOpenBilibiliUser,
     isDaylight,
 }) => {
     const { t } = useTranslation();
@@ -107,7 +119,63 @@ const AccountTab: React.FC<AccountTabProps> = ({
      * 桌面端的出声不经过那条链，放一颗点了没反应的开关比不放更糟。
      */
     const vocalCancelEnabled = useAudioSettingsStore(state => state.vocalCancelEnabled);
-    const toggleVocalCancel = useAudioSettingsStore(state => state.handleToggleVocalCancel);
+    const vocalOnlyEnabled = useAudioSettingsStore(state => state.vocalOnlyEnabled);
+    const setVocalMode = useAudioSettingsStore(state => state.handleSetVocalMode);
+    const vocalCancelState = useAudioSettingsStore(state => state.vocalCancelState);
+    const vocalCancelPercent = useAudioSettingsStore(state => state.vocalCancelPercent);
+    /*
+     * 这一行的说明要跟着「做到哪一步」走：
+     *   关着 → 说明它靠中置相消，有个固有代价；
+     *   开着且在分离 → 报进度（几十秒，不能让人以为开关坏了）；
+     *   开着且就绪 → 播的是离线分离的伴奏，人声真没了；
+     *   失败 → 退回实时相消，别让人等一个不会来的结果。
+     */
+    const anyVocalMode = vocalCancelEnabled || vocalOnlyEnabled;
+    // 三态选中值取「用户意图」（两个开关），不取 vocalTrackMode（那是原生实际上报的模式，
+    // 分离进行中会滞后，拿它做选中态会跳回旧值）。
+    const vocalMode: 'off' | 'vocal' | 'instrumental' = vocalCancelEnabled
+        ? 'instrumental'
+        : vocalOnlyEnabled ? 'vocal' : 'off';
+    const vocalModeLabels: Record<'off' | 'vocal' | 'instrumental', string> = {
+        off: t('account.vocalTrackAll'),
+        vocal: t('account.vocalTrackVocal'),
+        instrumental: t('account.vocalTrackAccompaniment'),
+    };
+    const vocalCancelHint = !anyVocalMode
+        ? t('account.vocalCancelHint')
+        : vocalCancelState === 'building'
+            ? `${t('account.vocalCancelBuilding')} ${vocalCancelPercent}%`
+            : vocalCancelState === 'ready'
+                ? (vocalMode === 'vocal' ? t('account.vocalOnlyReady') : t('account.vocalCancelReady'))
+                : vocalCancelState === 'failed'
+                    ? t('account.vocalCancelFailed')
+                    : t('account.vocalCancelHint');
+
+    /*
+     * 进这一页问一次真实状态（进度 + 缓存用量）。
+     *
+     * 开关拨动也问一次 —— 打开时可能刚命中缓存、顺手清了旧的。
+     */
+    useEffect(() => {
+        if (isCapacitorAndroid()) refreshInstrumentalStatus();
+    }, [vocalCancelEnabled, vocalOnlyEnabled]);
+
+    /*
+     * 开关开着的时候每 1.5 秒自己问一次。
+     *
+     * 光靠原生推事件不够：事件丢了界面就永远停在「正在分离人声 0%」，
+     * 而原生那边可能已经跑完、甚至已经切到伴奏了。轮询是这里唯一的兜底 ——
+     * 它读的是原生三个 volatile 字段，不遍历目录、不碰音频线程。
+     *
+     * 条件写成「开关开着」而不是「状态是 building」：状态本身也靠这条通道回填，
+     * 一旦靠状态来开关轮询，通道坏了就再也醒不过来（事件丢了 → 一直 idle → 不轮询）。
+     * 只在这一页开着、而且开关开着时才跑，代价是 1.5 秒一次跨桥读三个数。
+     */
+    useEffect(() => {
+        if (!isCapacitorAndroid() || !anyVocalMode) return undefined;
+        const timer = window.setInterval(refreshInstrumentalStatus, 1500);
+        return () => window.clearInterval(timer);
+    }, [anyVocalMode]);
 
     return (
         <div>
@@ -188,19 +256,19 @@ const AccountTab: React.FC<AccountTabProps> = ({
 
             <PlaybackSignalPathButton />
 
-            {/* 关闭人声：只在安卓（原生 AudioSink 那条链在，桌面端没有）。
-                ★ 目前不挂在音频链上：这个处理器的透传分支连续两版都把样本写坏
-                （开不开都是滋滋声），已从 FoliaAudioSinkFactory 摘掉。开关保留，
-                但打开不会有任何效果 —— 恢复前必须先在设备上逐样本验证透传无损。 */}
+            {/* 三态「全部 / 人声 / 伴奏」：一行三选一，取代原来两个互斥开关。
+                只在安卓出现（原生 AudioSink 那条链在，桌面端没有）。
+                分离缓存的用量已搬到「设置 → 存储」，与其余缓存并列显示。 */}
             {isCapacitorAndroid() && (
                 <PanelRow
-                    label={t('account.vocalCancel')}
-                    hint={t('account.vocalCancelHint')}
+                    label={t('account.vocalTrackMode')}
+                    hint={vocalCancelHint}
                 >
-                    <Toggle
-                        checked={vocalCancelEnabled}
-                        onChange={toggleVocalCancel}
-                        label={t('account.vocalCancel')}
+                    <Segments
+                        fill
+                        value={vocalMode}
+                        onChange={setVocalMode}
+                        options={(['off', 'vocal', 'instrumental'] as const).map(value => ({ value, label: vocalModeLabels[value] }))}
                     />
                 </PanelRow>
             )}
@@ -212,7 +280,12 @@ const AccountTab: React.FC<AccountTabProps> = ({
             {/* B 站特有的那几行：关注 / 粉丝 / 签名。只在登录着、且当前平台就是它时挂出来 ——
                 别的平台没有「关注」这种关系，摆一行点了没反应的按钮比不摆更糟。 */}
             {activeUser && activeProviderId === 'bilibili' && (
-                <BilibiliAccountRows providerId={activeProviderId} />
+                <BilibiliAccountRows
+                    providerId={activeProviderId}
+                    onOpenUser={onOpenBilibiliUser
+                        ? user => onOpenBilibiliUser(user.mid, user.name)
+                        : undefined}
+                />
             )}
 
             {activeUser && (

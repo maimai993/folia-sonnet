@@ -1,6 +1,9 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { motion, useMotionValueEvent, useDragControls, useMotionValue } from 'framer-motion';
+import { motion, useMotionValueEvent, useDragControls, useMotionValue, useTransform } from 'framer-motion';
+import { useEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { RotateCcw } from 'lucide-react';
 import { Tooltip } from '../../modal/settings/kit/Tooltip';
 import { SettingsKitThemeContext } from '../../modal/settings/kit/kitTheme';
@@ -248,6 +251,22 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
             ? monetPortraitImage?.url ?? portraitCoverUrl
             : portraitCoverUrl ?? monetPortraitImage?.url;
 
+    /*
+     * 智能动感（睡莲）：笔触随整体能量往外铺开一点，主色随人声亮一层 —— 这一套的画面本来就是一层层笔触，动静就长在这个尺度上。
+     */
+    const monetBrushBloomStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.monetBrushBloom);
+    const monetKeyGlowStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.monetKeyGlow);
+    /*
+     * 两个效果各读各的轨（见 effectTracks）：笔触只登记伴奏（harmony / pad / brightness），
+     * 主光只登记人声与亮度。两条都不含鼓 —— 以前 scale 读 `musicBody`，那条线里有 other
+     * 轨残留的鼓，笔触会跟着底鼓一涨一收。
+     */
+    const brushBloom = useEffectTrack(BEAT_EFFECT_IDS.monetBrushBloom);
+    const keyGlow = useEffectTrack(BEAT_EFFECT_IDS.monetKeyGlow);
+    const musicLayerScale = useTransform(brushBloom, value => 1 + Math.min(1, value * 2.4) * 0.17 * monetBrushBloomStrength);
+    const musicLayerGlow = useTransform(keyGlow, value => `brightness(${1 + Math.min(1, value * 2.5) * 0.36 * monetKeyGlowStrength})`);
+    const musicLayerActive = monetBrushBloomStrength > 0 || monetKeyGlowStrength > 0;
+
     return (
         <VisualizerShell
             theme={theme}
@@ -255,12 +274,15 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
             audioBands={audioBands}
             sharedProps={props}
         >
-            {showText && (
+
+            {/* 笔触呼吸只作用在画面层，字幕独立在外。 */}
+            <div className="pointer-events-none absolute inset-0">            {showText && (
                 <motion.div
                     key={`decor-${introKey}`}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ duration: 2.2, ease: 'easeOut' }}
+                    style={musicLayerActive ? { scale: musicLayerScale, filter: musicLayerGlow, transformOrigin: '50% 50%' } : undefined}
                 >
                     <MonetFloatingDecor theme={theme} staticMode={staticMode} />
                 </motion.div>
@@ -394,19 +416,19 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                     transition={{ duration: 1.0, ease: [0.25, 1, 0.5, 1], delay: 0.95 }}
                                     className="group/monet-description relative mt-auto w-fit pt-4 before:absolute before:-inset-x-6 before:top-0 before:-bottom-6 before:content-['']"
                                 >
-                                        <div
-                                            className={`inline-flex items-center gap-3 rounded-full border px-4 py-2 backdrop-blur-md transition-opacity duration-200 motion-reduce:transition-none ${descriptionVisibility === 'always'
-                                                ? 'opacity-100'
-                                                : 'opacity-0 group-hover/monet-description:opacity-100 [@media(hover:none)]:opacity-100'}`}
-                                            style={{
-                                                borderColor: colorWithAlpha(theme.primaryColor, 0.16),
-                                                backgroundColor: colorWithAlpha(theme.backgroundColor, 0.18),
-                                                color: colorWithAlpha(theme.primaryColor, 0.9),
-                                            }}
-                                        >
-                                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.accentColor }} />
-                                            <span className="text-xs uppercase" style={{ letterSpacing: 0 }}>{capsuleLabel}</span>
-                                        </div>
+                                    <div
+                                        className={`inline-flex items-center gap-3 rounded-full border px-4 py-2 backdrop-blur-md transition-opacity duration-200 motion-reduce:transition-none ${descriptionVisibility === 'always'
+                                            ? 'opacity-100'
+                                            : 'opacity-0 group-hover/monet-description:opacity-100 [@media(hover:none)]:opacity-100'}`}
+                                        style={{
+                                            borderColor: colorWithAlpha(theme.primaryColor, 0.16),
+                                            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.18),
+                                            color: colorWithAlpha(theme.primaryColor, 0.9),
+                                        }}
+                                    >
+                                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.accentColor }} />
+                                        <span className="text-xs uppercase" style={{ letterSpacing: 0 }}>{capsuleLabel}</span>
+                                    </div>
                                 </motion.div>
                             )}
                         </div>
@@ -493,15 +515,15 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                         animate={
                                             theme.animationIntensity === 'chaotic'
                                                 ? {
-                                                      y: [0, -18, 0, 18, 0],
-                                                      x: [0, -9, 0, 9, 0],
-                                                      rotate: [0, 1.2, 0, -1.2, 0],
-                                                  }
+                                                    y: [0, -18, 0, 18, 0],
+                                                    x: [0, -9, 0, 9, 0],
+                                                    rotate: [0, 1.2, 0, -1.2, 0],
+                                                }
                                                 : {
-                                                      y: 0,
-                                                      x: 0,
-                                                      rotate: 0,
-                                                  }
+                                                    y: 0,
+                                                    x: 0,
+                                                    rotate: 0,
+                                                }
                                         }
                                         transition={
                                             theme.animationIntensity === 'chaotic'
@@ -521,75 +543,75 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                                         {/* Hanger / Black-White Bar */}
                                         {hangerVisibility !== 'hidden' && (
                                             <SettingsKitThemeContext.Provider value={tooltipTheme}>
-                                              <Tooltip
-                                                text={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
-                                                className={`group/monet-hanger absolute -top-6 ${mirrored ? 'left-5' : 'right-5'} z-20 flex h-20 w-9 justify-center pt-3`}
-                                              >
-                                            <motion.button
-                                                type="button"
-                                                aria-label={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
-                                                aria-pressed={isEditingPosition}
-                                                onKeyDown={(e) => {
-                                                    if (!isEditingPosition || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
-                                                    e.preventDefault();
-                                                    const next = offsetX.get() + (e.key === 'ArrowLeft' ? -5 : 5);
-                                                    offsetX.set(mirrored ? Math.min(150, Math.max(0, next)) : Math.min(0, Math.max(-150, next)));
-                                                }}
-                                                onPointerDown={(e) => {
-                                                    if (isEditingPosition) {
-                                                        e.preventDefault();
-                                                        dragControls.start(e);
-                                                    }
-                                                }}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (isDraggingRef.current) return;
+                                                <Tooltip
+                                                    text={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
+                                                    className={`group/monet-hanger absolute -top-6 ${mirrored ? 'left-5' : 'right-5'} z-20 flex h-20 w-9 justify-center pt-3`}
+                                                >
+                                                    <motion.button
+                                                        type="button"
+                                                        aria-label={t(isEditingPosition ? 'options.monetPortraitPositionEditing' : 'options.monetPortraitPositionHint')}
+                                                        aria-pressed={isEditingPosition}
+                                                        onKeyDown={(e) => {
+                                                            if (!isEditingPosition || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+                                                            e.preventDefault();
+                                                            const next = offsetX.get() + (e.key === 'ArrowLeft' ? -5 : 5);
+                                                            offsetX.set(mirrored ? Math.min(150, Math.max(0, next)) : Math.min(0, Math.max(-150, next)));
+                                                        }}
+                                                        onPointerDown={(e) => {
+                                                            if (isEditingPosition) {
+                                                                e.preventDefault();
+                                                                dragControls.start(e);
+                                                            }
+                                                        }}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            if (isDraggingRef.current) return;
                                                     
-                                                    if (!isEditingPosition) {
-                                                        setIsEditingPosition(true);
-                                                    } else {
-                                                        // Saved as the original layout counts it (see initialOffsetX).
-                                                        const finalOffset = Math.round(offsetX.get() * side);
-                                                        handleSetMonetTuning?.({
-                                                            ...monetTuning,
-                                                            portraitOffsetX: finalOffset,
-                                                        });
-                                                        setIsEditingPosition(false);
-                                                    }
-                                                }}
-                                                onMouseEnter={() => setIsHangerHovered(true)}
-                                                onMouseLeave={() => setIsHangerHovered(false)}
-                                                className={`h-14 w-3 cursor-pointer rounded-full shadow-md transition-[opacity,transform] duration-200 hover:scale-y-105 active:scale-y-95 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${isEditingPosition || hangerVisibility === 'always' ? 'opacity-100' : 'opacity-0 group-hover/monet-cover:opacity-100'}`}
-                                                animate={isEditingPosition ? {
-                                                    borderColor: [
-                                                        colorWithAlpha(theme.accentColor, 0.3),
-                                                        colorWithAlpha(theme.accentColor, 1.0),
-                                                        colorWithAlpha(theme.accentColor, 0.3)
-                                                    ],
-                                                    boxShadow: [
-                                                        `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
-                                                        `0 0 10px ${colorWithAlpha(theme.accentColor, 0.65)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
-                                                        `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
-                                                    ]
-                                                } : {
-                                                    borderColor: isHangerHovered
-                                                        ? colorWithAlpha(theme.primaryColor, 0.36)
-                                                        : colorWithAlpha(theme.primaryColor, 0),
-                                                    boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
-                                                }}
-                                                transition={isEditingPosition ? {
-                                                    duration: 1.5,
-                                                    repeat: Infinity,
-                                                    ease: "easeInOut"
-                                                } : { duration: 0.2 }}
-                                                style={{
-                                                    backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
-                                                    borderWidth: '1.5px',
-                                                    borderStyle: 'solid',
-                                                    touchAction: isEditingPosition ? 'none' : 'auto',
-                                                }}
-                                            />
-                                              </Tooltip>
+                                                            if (!isEditingPosition) {
+                                                                setIsEditingPosition(true);
+                                                            } else {
+                                                                // Saved as the original layout counts it (see initialOffsetX).
+                                                                const finalOffset = Math.round(offsetX.get() * side);
+                                                                handleSetMonetTuning?.({
+                                                                    ...monetTuning,
+                                                                    portraitOffsetX: finalOffset,
+                                                                });
+                                                                setIsEditingPosition(false);
+                                                            }
+                                                        }}
+                                                        onMouseEnter={() => setIsHangerHovered(true)}
+                                                        onMouseLeave={() => setIsHangerHovered(false)}
+                                                        className={`h-14 w-3 cursor-pointer rounded-full shadow-md transition-[opacity,transform] duration-200 hover:scale-y-105 active:scale-y-95 focus-visible:opacity-100 [@media(hover:none)]:opacity-100 ${isEditingPosition || hangerVisibility === 'always' ? 'opacity-100' : 'opacity-0 group-hover/monet-cover:opacity-100'}`}
+                                                        animate={isEditingPosition ? {
+                                                            borderColor: [
+                                                                colorWithAlpha(theme.accentColor, 0.3),
+                                                                colorWithAlpha(theme.accentColor, 1.0),
+                                                                colorWithAlpha(theme.accentColor, 0.3)
+                                                            ],
+                                                            boxShadow: [
+                                                                `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                                `0 0 10px ${colorWithAlpha(theme.accentColor, 0.65)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`,
+                                                                `0 0 2px ${colorWithAlpha(theme.accentColor, 0.2)}, 0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                                            ]
+                                                        } : {
+                                                            borderColor: isHangerHovered
+                                                                ? colorWithAlpha(theme.primaryColor, 0.36)
+                                                                : colorWithAlpha(theme.primaryColor, 0),
+                                                            boxShadow: `0 8px 18px ${colorWithAlpha('#000000', 0.24)}`
+                                                        }}
+                                                        transition={isEditingPosition ? {
+                                                            duration: 1.5,
+                                                            repeat: Infinity,
+                                                            ease: 'easeInOut'
+                                                        } : { duration: 0.2 }}
+                                                        style={{
+                                                            backgroundColor: colorWithAlpha(theme.backgroundColor, 0.86),
+                                                            borderWidth: '1.5px',
+                                                            borderStyle: 'solid',
+                                                            touchAction: isEditingPosition ? 'none' : 'auto',
+                                                        }}
+                                                    />
+                                                </Tooltip>
                                             </SettingsKitThemeContext.Provider>
                                         )}
 
@@ -665,6 +687,7 @@ const VisualizerMonet: React.FC<VisualizerMonetProps> = (props) => {
                     </div>
                 </motion.div>
             )}
+            </div>
         </VisualizerShell>
     );
 };

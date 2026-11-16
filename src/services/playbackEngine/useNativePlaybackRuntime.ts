@@ -1,9 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { PlayerState } from '../../types';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
-import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { setDuration, setPlayerState, usePlaybackStore } from '../../stores/usePlaybackStore';
 import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nativePlaybackSync';
 import type { MutableRefObject } from 'react';
-import { setDuration } from '../../stores/usePlaybackStore';
 import { currentTime } from '../../stores/motionSignals';
 import { nativePlaybackEngine } from './nativePlaybackEngine';
 
@@ -78,10 +78,16 @@ export const useNativePlaybackRuntime = ({
          */
         const resumeAtSec = pendingResumeTimeRef.current;
         pendingResumeTimeRef.current = null;
+        const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
         void nativePlaybackEngine.setSource(audioSrc, {
             songKey: song ? getPlaybackSongKey(song) : null,
             startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
         }).catch(error => {
+            if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration) return;
+            if (nativePlaybackEngine.activeUrl() !== audioSrc) return;
+            // 同一条装源失败只报一次：setSource 已经把它记成可重试状态了（#368）。
+            const sourceError = nativePlaybackEngine.sourceReadyError();
+            if (sourceError && sourceError !== error) return;
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
@@ -109,7 +115,28 @@ export const useNativePlaybackRuntime = ({
         if (!shouldAutoPlayRef.current) return;
         shouldAutoPlayRef.current = false;
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
-        void nativePlaybackEngine.play().catch(error => {
+        const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
+        const sourceGeneration = nativePlaybackEngine.sourceGeneration();
+        const songKey = nativePlaybackEngine.currentSongKey();
+        void nativePlaybackEngine.play().then(applied => {
+            // 只让当前 source 的起播意图同步状态，避免迟到的结果覆盖恢复、换歌或 ABA 换源。
+            // applied === false：这次 play 被原生判为已被取代（例如同一瞬间通知栏暂停），不能写 PLAYING。
+            if (
+                applied !== false
+                && nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
+                && nativePlaybackEngine.sourceGeneration() === sourceGeneration
+                && nativePlaybackEngine.currentSongKey() === songKey
+            ) {
+                setPlayerState(PlayerState.PLAYING);
+            }
+        }).catch(error => {
+            if (
+                nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
+                || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
+                || nativePlaybackEngine.currentSongKey() !== songKey
+            ) return;
+            // 装源失败由 setSource() 那边报，这里不再重复报同一条（#368）。
+            if (nativePlaybackEngine.sourceReadyError() === error) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });

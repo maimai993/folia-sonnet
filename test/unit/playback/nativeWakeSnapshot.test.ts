@@ -37,6 +37,15 @@ describe('native wake snapshot', () => {
         expect(usePlaybackStore.getState().audioSrc).toBe(native.nativeMedia!.url);
         expect(usePlaybackStore.getState().lyrics).toBe(null);
     });
+    // #323：换歌那一下 store 会清掉上一首的封面，原生给的封面要在换歌之后写，才不会被一起清掉。
+    it('keeps the native artwork once the claimed song has replaced the previous one', () => {
+        h.makeCurrent.mockImplementation((next: SongResult) => usePlaybackStore.getState().setCurrentSong(next));
+        usePlaybackStore.setState({ cachedCoverUrl: 'blob:cover-of-A' });
+        const native = { ...snapshot(), artworkUrl: 'https://cover.invalid/B.jpg' };
+        expect(adoptNativePlaybackState(native)).toBe(true);
+        expect(usePlaybackStore.getState().cachedCoverUrl).toBe('https://cover.invalid/B.jpg');
+        h.makeCurrent.mockReset();
+    });
     it('preserves pause and a zero position, not truthy-only position or forced PLAYING', () => {
         adoptNativePlaybackState(snapshot(false, 0));
         expect(usePlaybackStore.getState().playerState).toBe('PAUSED');

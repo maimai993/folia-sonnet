@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, type MotionValue } from 'framer-motion';
 import { type Line, type Theme } from '../../../types';
 import type { CappellaIntensityConfig, CappellaMessage, ChatSide } from './cappellaTypes';
 import { DEFAULT_CHAR_FADE_MS, LEFT_AVATAR_INDICES, RIGHT_AVATAR_INDEX } from './cappellaConstants';
@@ -86,7 +86,13 @@ export const AnimatedBubbleFrame: React.FC<{
     floatingAdornment?: React.ReactNode;
     targetSize?: { width: number; height: number; };
     style: React.CSSProperties;
-}> = ({ children, className, floatingAdornment, targetSize, style }) => {
+    /**
+     * 智能动感（群唱·气泡随人声）：缩放与上浮直接绑 MotionValue，由 framer 每帧写 transform，
+     * 不经过 React 渲染 —— 气泡里是逐字测量的文本，用 setState 驱动会把整行重排。只在当前
+     * 这一条消息是 active 时才有值，其余气泡保持静止。
+     */
+    motionStyle?: { scale?: MotionValue<number>; y?: MotionValue<number> };
+}> = ({ children, className, floatingAdornment, targetSize, style, motionStyle }) => {
     return (
         <motion.div
             className="relative shrink-0"
@@ -109,6 +115,7 @@ export const AnimatedBubbleFrame: React.FC<{
                 } : {}),
             }}
             style={{
+                ...motionStyle,
                 width: targetSize ? targetSize.width : 'fit-content',
                 height: targetSize ? targetSize.height : 'auto',
             }}

@@ -22,6 +22,7 @@ import { getSongCacheWithLegacyMigration, hasCachedSongAudio } from './onlineMus
 import { toPlayableAudioUrl, toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { ensureTrackProfile, setAnalysisScope } from './automix/profileService';
+import { queueSongAssetPrecompute } from './analysis/songAssetPrecompute';
 import { loadBalanceRecord } from './volumeBalance/balanceRecords';
 import { getNavidromeConfig, navidromeApi } from './navidromeService';
 import { onPlaybackRepresentationRegistered } from './playbackRecovery/representationRegistry';
@@ -58,6 +59,18 @@ const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond
  * try to fetch. Never awaited: a slow decode must not hold up the song after this one.
  */
 const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined) => {
+  /*
+   * 智能动感的整曲曲线**始终**提前预热，与「预先拆分音轨」总开关无关。
+   *
+   * 总开关只管那几十秒的 SCNet 拆轨（songAssetPrecompute.ts 里的 prepareSongTracks），
+   * 不管解码 + 带通秒出的曲线。上一版把整个 queueSongAssetPrecompute 一起 gate 到了
+   * 总开关上，默认关着时曲线再也不落盘 —— 用户看到的就是「智能动感的数据没拿到」，
+   * 以及「分离过的歌重放还在重新分析」。
+   *
+   * 放在最前面的 gate 之前：下面那段 `if (!automixEnabled && !balancing) return`
+   * 是 automix 自己的省电开关，不该顺手把这件事也关掉。不 await，不拖住预取队列。
+   */
+  queueSongAssetPrecompute(song);
   const settingsAudioSettings = useAudioSettingsStore.getState();
   const settingsAutomixSettings = useAutomixSettingsStore.getState();
   const settingsLyricSettings = useLyricSettingsStore.getState();
@@ -545,6 +558,15 @@ export const warmupSongAudio = (
     // 不带 requiredQuality 读：音质不同只表示这次要重新要地址，不能先把缓存里另一音质的
     // 地址与 ReplayGain 抹掉 —— 这次预热失败时，原有音源还要照常可用。
     const cached = getPrefetchedData(song);
+    /*
+     * `CACHED_IN_DB` 只说明「缓存里有这份」，不说明它**能读出来**。
+     *
+     * 以前这里见到哨兵就直接原样返回，调用方（分析、预听）一律判死 —— 于是一份写坏的
+     * 缓存（旧版本落下的、写到一半断的）会把这首歌的分析永远挡住，而歌本身照样在放。
+     * 现在只把「缓存命中」当成**乐观结论**：真正要读的那一刻会去问回环地址，读不出来
+     * 就重新要一次平台地址（见 beatFxSource 的 resolveStreamUrl / resolveNativeAudioUrl）。
+     * 这里照旧返回哨兵，那正是「先看缓存」的意思。
+     */
     if (cached?.audioUrl === 'CACHED_IN_DB') {
         return Promise.resolve({ audioUrl: 'CACHED_IN_DB' });
     }
@@ -636,6 +658,17 @@ export const prefetchNearbySongs = async (
     );
     analysisScopeSongs = nextSong ? [currentSong, nextSong] : [currentSong];
     setAnalysisScope(analysisScopeSongs);
+
+    /*
+     * 「提前分析下一首」：把下一首明确排进队列。
+     *
+     * 预取窗口可能被切歌 / 队列编辑 abort，而下一首是下一切换必定要用的那首，
+     * 单独保一次。这里只排「整曲曲线」这条路；真正拆两轨由 songAssetPrecompute
+     * 内部按总开关决定，关着时不跑 SCNet，但智能动感的数据照常提前备好。
+     */
+    if (nextSong) {
+        queueSongAssetPrecompute(nextSong);
+    }
 
     if (currentIndex === -1) {
         console.log('[Prefetch] Current song not in queue, skipping prefetch');

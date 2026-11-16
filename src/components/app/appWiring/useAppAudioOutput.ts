@@ -6,10 +6,11 @@ import { hifiEngine } from '../../../services/hifi/hifiEngine';
 import { isHifiRoute } from '../../../services/hifi/hifiPlayback';
 import { selectHifiEngineConfig, useHifiSettingsStore } from '../../../stores/useHifiSettingsStore';
 import { NATIVE_PLAYBACK_ENABLED, nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
-import { isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
+import { addSourceReloadListener, isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { LyricData, StageLoopMode } from '../../../types';
 import { clampMediaVolume } from '../../../utils/appPlaybackHelpers';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { createCoverUrlResolver } from '../../../utils/coverUrlResolver';
 import { writeLyricOffset } from '../../../utils/lyrics/lyricOffsetMemory';
 import { createLyricsSetter } from '../playback/createLyricsSetter';
@@ -183,6 +184,61 @@ export const useAppAudioOutput = (model: Input) => {
         onlineAudioUrlTtlMs: ONLINE_AUDIO_URL_TTL_MS,
         onlineAudioUrlRefreshBufferMs: ONLINE_AUDIO_URL_REFRESH_BUFFER_MS,
     }), [audioQuality, audioSrc, audioRef, blobUrlRef, currentOnlineAudioUrlFetchedAtRef, currentSong, lastAudioRecoverySourceRef, onlinePlaybackRecoveryRef, pendingResumeTimeRef, persistLastPlaybackCache, setAudioSrc, setCurrentSong, setPlayQueue, shouldAutoPlay]);
+
+    /*
+     * 档位改了就把这一首换一条流。
+     *
+     * 以前这里什么都不做：档位只写进设置，下一次起播才生效 —— 于是「换清晰度」看起来
+     * 一点反应都没有，用户得切歌才看得到效果（#354）。
+     *
+     * 走的是播放出错时的同一条恢复路径（recoverOnlinePlaybackSource）：它按当前档位
+     * 重新取地址，并且把 pendingResumeTimeRef 设成现在的位置，所以换完之后接着放，
+     * 不会从头开始。
+     *
+     * 用 ref 记住上一次的档位而不是比 audioQuality 与某个快照：这个 effect 在挂载时
+     * 也会跑一次，直接换流等于一进应用就把正在放的歌重来一遍。
+     */
+    const lastAppliedQualityRef = useRef(audioQuality);
+    useEffect(() => {
+        if (lastAppliedQualityRef.current === audioQuality) return;
+        lastAppliedQualityRef.current = audioQuality;
+        const element = audioRef.current;
+        // 没在放东西（或者放的是本地文件）时没什么可换的，下一次起播自然用新档位。
+        if (!element || !currentSong) return;
+        void recoverOnlinePlaybackSource({
+            force: true,
+            resumeAt: element.currentTime,
+            // 原来是暂停的就别因为换个档位自己放起来。
+            autoplay: !element.paused && !element.ended,
+        });
+    }, [audioQuality, currentSong, audioRef, recoverOnlinePlaybackSource]);
+
+    /*
+     * 原生说「手上那条原曲地址不该再用了」：重新要一个。
+     *
+     * 切回「全部」时，原生不会把一条可能已过期的签名直链塞给播放器 —— 本地又没有
+     * 原曲的媒体缓存副本时，那就是一个读不出来的源（界面显示「全部」，却没有声音）。
+     * 这里走的是上面换档位用的同一条恢复路径，位置接着走，不从头开始。
+     *
+     * 事件只带 songKey，不带别的：先确认说的确实是此刻这一首，否则（用户已经切歌）
+     * 什么都不做 —— 不能拿旧歌的通知去换新歌的流。
+     */
+    useEffect(() => {
+        if (!isNativePlayerAvailable()) return undefined;
+        return addSourceReloadListener(event => {
+            const element = audioRef.current;
+            if (!element || !currentSong) return;
+            const askedKey = getPlaybackSongKey(currentSong);
+            if (event.songKey && event.songKey !== askedKey) return;
+            // 本地曲目 / 本地服务那类没有平台可问，重解析没有意义（原生那边也不会发）。
+            void recoverOnlinePlaybackSource({
+                force: true,
+                resumeAt: element.currentTime,
+                // 原来是暂停的就别因为这次补地址自己放起来。
+                autoplay: !element.paused && !element.ended,
+            });
+        });
+    }, [audioRef, currentSong, recoverOnlinePlaybackSource]);
 
     const getCoverUrl = useMemo(
         () => createCoverUrlResolver(cachedCoverUrl, currentSong),

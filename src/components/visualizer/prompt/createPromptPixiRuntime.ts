@@ -7,6 +7,9 @@ import { linkPixiPrograms } from '../pixi/pixiProgramLinks';
 import { resolveWordColor } from '../wordColoring';
 import { buildPromptCard, PROMPT_MONO_STACK, PROMPT_PALETTE, type PromptCardView } from './promptBox';
 import type { PromptBoxPlan } from './promptProgram';
+import { readEffectTrack } from '../../../services/beatFx/effectTracks';
+import { getBeatEffectStrength } from '../../../services/beatFx/beatFxLive';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 // src/components/visualizer/prompt/createPromptPixiRuntime.ts
 // 「提示词」样式自己的 Pixi 运行时。它不认商籁那套节目单（场景 / 镜头 / 排版），只做三件事：
@@ -589,7 +592,20 @@ export class PromptPixiRuntime {
 
             const near = (1 + (this.zoomFor(box, card) - 1) * enter) * (1 + punch * 0.02);
             const far = this.zoomOutFor(box, card);
-            const zoom = near + (far - near) * pull;
+            /*
+             * 智能动感（文字PV）：镜头本来就在唱到哪推到哪，这里让这句话的「气口」也进镜头 ——
+             *   typePace —— 整句能量起来时推近一点点，像打字加快时的逼近。
+             *   boxFly   —— 人声扬起来时再推一点，框体显得向前浮出。
+             * 只乘在 zoom 上（一个数），token 位置、打字进度、换行一个都不动；两个效果都关时恒为 1。
+             */
+            /*
+             * 两条都走效果表：typePace 登记的是伴奏（harmony / pad），boxFly 是人声。
+             * 原来 typePace 读 `musicBody` —— 那条线里掺着 other 轨残留的鼓，打字节奏
+             * 会跟着底鼓一冲一冲。现在推镜只跟乐句的厚薄走。
+             */
+            const typePaceLift = Math.min(1, readEffectTrack(BEAT_EFFECT_IDS.promptTypePace) * 1.5) * 0.1 * getBeatEffectStrength(BEAT_EFFECT_IDS.promptTypePace);
+            const boxFlyLift = Math.min(1, readEffectTrack(BEAT_EFFECT_IDS.promptBoxFly) * 1.6) * 0.04 * getBeatEffectStrength(BEAT_EFFECT_IDS.promptBoxFly);
+            const zoom = (near + (far - near) * pull) * (1 + typePaceLift + boxFlyLift);
 
             /*
              * 横移：把「正在唱的那个位置」挪到画面正中。

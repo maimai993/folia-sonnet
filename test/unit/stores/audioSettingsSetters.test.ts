@@ -19,7 +19,7 @@ const storage = vi.hoisted(() => {
 });
 
 import i18n from '@/i18n/config';
-import { useAudioSettingsStore } from '@/stores/useAudioSettingsStore';
+import { PREBUILD_TRACKS_KEY, VOCAL_CANCEL_KEY, VOCAL_ONLY_KEY, useAudioSettingsStore } from '@/stores/useAudioSettingsStore';
 import { useStatusMessageStore } from '@/stores/useStatusMessageStore';
 
 // test/unit/stores/audioSettingsSetters.test.ts
@@ -96,5 +96,114 @@ describe('handleSetLoopMode', () => {
             ['off', i18n.t('player.loopOff')],
         ]);
         expect(storage.get('player_loop_mode')).toBe('off');
+    });
+});
+
+// One three-way control, not two independent switches: every choice writes both keys and both
+// fields in a single store update, so there is never a frame with both modes on together. That
+// in-between state is what used to leave the player on the wrong source with no sound when going
+// from vocals-only to instrumental. The native swap itself is covered by VocalTrackSwitchTest.kt.
+describe('handleSetVocalMode', () => {
+    const keys = () => [storage.get(VOCAL_CANCEL_KEY), storage.get(VOCAL_ONLY_KEY)];
+
+    it('all clears both keys and fields and returns to idle', () => {
+        useAudioSettingsStore.getState().handleSetVocalMode('instrumental');
+        useAudioSettingsStore.getState().handleSetVocalMode('off');
+        expect(useAudioSettingsStore.getState()).toMatchObject({
+            vocalCancelEnabled: false,
+            vocalOnlyEnabled: false,
+            vocalCancelState: 'idle',
+            vocalCancelPercent: 0,
+        });
+        expect(keys()).toEqual(['false', 'false']);
+    });
+
+    it('vocal turns on vocals-only and clears the instrumental half', () => {
+        useAudioSettingsStore.getState().handleSetVocalMode('vocal');
+        expect(useAudioSettingsStore.getState()).toMatchObject({
+            vocalCancelEnabled: false,
+            vocalOnlyEnabled: true,
+            vocalCancelState: 'building',
+        });
+        expect(keys()).toEqual(['false', 'true']);
+    });
+
+    it('instrumental turns on the instrumental and clears the vocals-only half', () => {
+        useAudioSettingsStore.getState().handleSetVocalMode('instrumental');
+        expect(useAudioSettingsStore.getState()).toMatchObject({
+            vocalCancelEnabled: true,
+            vocalOnlyEnabled: false,
+            vocalCancelState: 'building',
+        });
+        expect(keys()).toEqual(['true', 'false']);
+    });
+
+    it('each choice is one atomic store update, never both modes on', () => {
+        const seen: Array<[boolean, boolean]> = [];
+        const stop = useAudioSettingsStore.subscribe(state => {
+            seen.push([state.vocalCancelEnabled, state.vocalOnlyEnabled]);
+        });
+        useAudioSettingsStore.getState().handleSetVocalMode('vocal');
+        useAudioSettingsStore.getState().handleSetVocalMode('instrumental');
+        stop();
+        expect(seen).toEqual([
+            [false, true],
+            [true, false],
+        ]);
+    });
+
+    // The reported failure: 只留人声 → 关闭人声 left no sound. The web side must land on the
+    // instrumental half in one step, without leaving the vocals-only track still selected.
+    it('vocals-only to instrumental lands on the backing in one step', () => {
+        useAudioSettingsStore.getState().handleSetVocalMode('vocal');
+        expect(useAudioSettingsStore.getState()).toMatchObject({ vocalCancelEnabled: false, vocalOnlyEnabled: true });
+        useAudioSettingsStore.getState().handleSetVocalMode('instrumental');
+        expect(useAudioSettingsStore.getState()).toMatchObject({ vocalCancelEnabled: true, vocalOnlyEnabled: false });
+        expect(keys()).toEqual(['true', 'false']);
+    });
+});
+
+// The 存储 page's master switch: on by default (the separation is done ahead of time, so switching
+// between vocals and instrumental is instant), persisted on its own key, and independent of the
+// vocal-mode switches. jsdom is not Android, so no native call happens.
+describe('handleTogglePrebuildTracks', () => {
+    it('is on by default', () => {
+        expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(true);
+        // Nothing written until the listener touches it: the default lives in the code, not in storage.
+        expect(storage.get(PREBUILD_TRACKS_KEY)).toBeUndefined();
+    });
+
+    it('persists and exposes the switch', () => {
+        // Off first: it already starts on, and setting the same value is deliberately a no-op.
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(true);
+        expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(true);
+        expect(storage.get(PREBUILD_TRACKS_KEY)).toBe('true');
+    });
+
+    it('turns back off', () => {
+        const state = useAudioSettingsStore.getState();
+        state.handleTogglePrebuildTracks(true);
+        state.handleTogglePrebuildTracks(false);
+        expect(useAudioSettingsStore.getState().prebuildTracksEnabled).toBe(false);
+        expect(storage.get(PREBUILD_TRACKS_KEY)).toBe('false');
+    });
+
+    it('leaves the vocal-mode keys alone', () => {
+        useAudioSettingsStore.getState().handleSetVocalMode('vocal');
+        const before = [storage.get(VOCAL_CANCEL_KEY), storage.get(VOCAL_ONLY_KEY)];
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(true);
+        expect([storage.get(VOCAL_CANCEL_KEY), storage.get(VOCAL_ONLY_KEY)]).toEqual(before);
+    });
+
+    it('the same value is a no-op', () => {
+        // Starts on, so turn it off first: the two `false`s below are the pair being compared.
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
+        const seen: boolean[] = [];
+        const stop = useAudioSettingsStore.subscribe(state => seen.push(state.prebuildTracksEnabled));
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
+        useAudioSettingsStore.getState().handleTogglePrebuildTracks(false);
+        stop();
+        expect(seen).toEqual([]);
     });
 });

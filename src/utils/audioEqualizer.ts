@@ -262,12 +262,30 @@ export const areAudioEqualizerSettingsEqual = (left: AudioEqualizerSettings, rig
     ))
 );
 
+/*
+ * 有没有 localStorage 可用。
+ *
+ * 不能只判 `typeof window === 'undefined'`：`window` 在、`localStorage` 不在的地方是有的
+ * —— 无痕/受限的 WebView、被裁掉存储的沙箱环境，以及测试里只为别的事 stub 了一个 window
+ * 的情形。这里读不到就当没存过，别让模块求值时就抛（这个函数在 store 初始化时就被调到）。
+ */
+const storageOrNull = (): Storage | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.localStorage ?? null;
+    } catch {
+        // 取 localStorage 本身就可能抛（安全策略禁掉存储时）。
+        return null;
+    }
+};
+
 export const readStoredAudioEqualizerSettings = (): AudioEqualizerSettings => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return resolveAudioEqualizerSettings(DEFAULT_AUDIO_EQUALIZER_SETTINGS);
     }
 
-    const saved = window.localStorage.getItem(AUDIO_EQUALIZER_STORAGE_KEY);
+    const saved = storage.getItem(AUDIO_EQUALIZER_STORAGE_KEY);
     if (!saved) {
         return resolveAudioEqualizerSettings(DEFAULT_AUDIO_EQUALIZER_SETTINGS);
     }
@@ -280,7 +298,8 @@ export const readStoredAudioEqualizerSettings = (): AudioEqualizerSettings => {
 };
 
 export const writeStoredAudioEqualizerSettings = (settings: AudioEqualizerSettings) => {
-    if (typeof window !== 'undefined') {
-        window.localStorage.setItem(AUDIO_EQUALIZER_STORAGE_KEY, JSON.stringify(settings));
+    const storage = storageOrNull();
+    if (storage) {
+        storage.setItem(AUDIO_EQUALIZER_STORAGE_KEY, JSON.stringify(settings));
     }
 };

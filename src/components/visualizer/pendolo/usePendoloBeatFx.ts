@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useMotionValue, type MotionValue } from 'framer-motion';
 import { getBeatEffectStrength, getBeatFxBeatPeriod, getBeatFxHeard, isBeatFxReady } from '../../../services/beatFx/beatFxLive';
+import { readEffectTrack } from '../../../services/beatFx/effectTracks';
 import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { DRUM_HAT, DRUM_KICK, DRUM_SNARE, getDrumHits, type DrumHits } from '../../../services/analysis/drumHits';
 import {
@@ -123,7 +124,7 @@ const DRUM_TILT_PX = 10;
 const DRUM_TILT_DECAY = 9;
 const DRUM_TILT_HZ = 8;
 /** A kick swells the whole head by up to this share, wobbling at DRUM_BREATH_HZ, settling over DRUM_BREATH_SECONDS. */
-const DRUM_BREATH = 0.035;
+const DRUM_BREATH = 0.06;
 const DRUM_BREATH_HZ = 6;
 const DRUM_BREATH_SECONDS = 0.15;
 /** A kick at least this strong also shakes the screen, as a downbeat does. */
@@ -323,6 +324,16 @@ export const usePendoloBeatFx = (
             } else {
                 haloOpacity.set(wave ? resolvePendoloHaloOpacity(state, now) : 0);
                 if (wave) haloScale.set(wave.radius / maxRadius);
+            }
+            /*
+             * 宝石辉光：不吃鼓点、只吃人声曲线 —— 唱起来时中心那颗宝石自己亮着，
+             * 鼓点来时再叠在它上面。这是「机械钟摆」这一套里唯一会「常亮」的东西。
+             */
+            const jewelGlowStrength = getBeatEffectStrength(BEAT_EFFECT_IDS.pendoloJewelGlow);
+            if (jewelGlowStrength > 0) {
+                const jewelGlow = Math.min(1, readEffectTrack(BEAT_EFFECT_IDS.pendoloJewelGlow) * 1.6) * 0.55 * jewelGlowStrength;
+                haloOpacity.set(Math.max(haloOpacity.get(), jewelGlow));
+                state.jewelFlare = Math.max(state.jewelFlare, jewelGlow);
             }
             const shake = resolvePendoloShake(state, Math.random);
             if (drumHits) {

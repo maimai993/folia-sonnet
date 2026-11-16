@@ -29,6 +29,8 @@ import { useVisualizerStyleAssets } from './useVisualizerStyleAssets';
 import { useVisualizerTunings } from './useVisualizerTunings';
 import { useVisualizerSongHandoff } from './useVisualizerSongHandoff';
 import { useShownTheme } from './useShownTheme';
+import { THEME_BLEND_MS, useBlendedTheme } from './useBlendedTheme';
+import { useReducedMotionFor } from '../../hooks/useReducedMotionFor';
 import { NO_LYRIC_LINES } from '../../utils/lyrics/noLyricLines';
 import { selectLibraryPlayerBackdrop, useLibraryPlayerOcclusionStore } from '../../stores/useLibraryPlayerOcclusionStore';
 import { resolveVisualizerShowText } from '../app/presentation/playerVisualizerBackdrop';
@@ -121,6 +123,16 @@ export const useVisualizerRendererModel = ({
     // The theme too: the live one is the incoming song's once it comes (useShownTheme).
     const liveThemes = useMemo(() => ({ theme, subtitleTheme }), [theme, subtitleTheme]);
     const shownThemes = useShownTheme(liveThemes, usePlaybackStore(selectIsShowingTail), displaySong?.id);
+    // 切歌时每首歌各自的 AI 主题会整份替换配色：从画面上当前的颜色插值到新歌的颜色，
+    // 600ms 与样式切换的 softFocus 对齐，歌词 / 背景 / 和声叠层一处下发，不再同一帧硬切。
+    // 静态模式、OBS 浏览器源、降低动效时退化为 0ms，行为与以前完全一致。
+    // handoff 那套仍用 live 主题（新歌自己的颜色，跟着交接进度走），不做插值。
+    const reducedMotion = useReducedMotionFor('uiMicroMotion');
+    const blendedThemes = useBlendedTheme(
+        shownThemes.theme,
+        shownThemes.subtitleTheme,
+        staticMode || isObsBrowserSourceRendering || reducedMotion ? 0 : THEME_BLEND_MS,
+    );
     // A blend's incoming song, for the style that draws the hand-off; the others switch at the settle.
     const songHandoff = useVisualizerSongHandoff(getVisualizerRegistryEntry(visualizerMode).followsSongHandoff === true, liveThemes);
     const backgroundConfig = useVisualizerBackgroundConfig();
@@ -154,8 +166,8 @@ export const useVisualizerRendererModel = ({
         duration: Number.isFinite(displayDuration) ? displayDuration : 0,
         currentLineIndex,
         lines: displayLyrics?.lines || NO_LYRIC_LINES,
-        theme: shownThemes.theme,
-        subtitleTheme: shownThemes.subtitleTheme,
+        theme: blendedThemes.theme,
+        subtitleTheme: blendedThemes.subtitleTheme,
         isDaylight,
         audioPower,
         audioBands,

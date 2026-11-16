@@ -2172,7 +2172,7 @@ export type FoliumVisualizerTuning = Readonly<Record<string, FoliumTuningValue>>
  * `drums`: the drum hits (the drum stem); `stems`: the drum hits and the vocal together. Later minors may add
  * sources: read one you do not know as `beats`.
  */
-export type FoliumBeatEffectSource = 'beats' | 'drums' | 'stems';
+export type FoliumBeatEffectSource = 'beats' | 'drums' | 'stems' | 'envelopes';
 
 /** Folium 1.8: a part of a beat effect with its own strength in place of the one (`parts`). */
 export interface FoliumBeatEffectPartInfo {

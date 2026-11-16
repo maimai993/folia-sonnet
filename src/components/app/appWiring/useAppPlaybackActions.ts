@@ -148,6 +148,14 @@ export const useAppPlaybackActions = (model: Input) => {
      * the live song, queue-mode and blend state.
      */
     seekDuringTransitionRef.current = (time: number) => {
+        /*
+         * 原生接管时不存在「两块 Web deck 在混」这回事。
+         *
+         * automix 的 isTransitionAudible() 只看它自己的状态，原生路由下它仍可能认领
+         * 一次「过渡」，于是这里返回 true，把下面那条原生 seek 分支抢掉 —— 拖动只改到
+         * 一个空的 <audio> 元素上，歌词跳了、ExoPlayer 原地不动。先问清谁在出声。
+         */
+        if (nativePlaybackEngine.ownsPlayback() || nativeTakesRef.current) return false;
         const tailElement = cancelBlendToDisplayedTrack(true);
         if (!tailElement) return false;
         const seekTarget = Math.max(0, time);
@@ -169,6 +177,8 @@ export const useAppPlaybackActions = (model: Input) => {
      * wired far above the point where automix exists to write it.
      */
     pauseDuringTransitionRef.current = () => {
+        // 同 seek：原生在出声时，暂停归原生，别去停一块空 deck。
+        if (nativePlaybackEngine.ownsPlayback() || nativeTakesRef.current) return false;
         const tailElement = cancelBlendToDisplayedTrack(false);
         if (!tailElement) return false;
         tailElement.pause();
@@ -185,9 +195,16 @@ export const useAppPlaybackActions = (model: Input) => {
         if (seekDuringTransitionRef.current(time)) {
             return;
         }
-        // 原生播放（P1）：元素是空的，写它的 currentTime 没有意义，还会顺手把那个空元素
-        // 「播」起来。交给 ExoPlayer。
-        if (nativeTakesRef.current) {
+        /*
+         * 原生播放（P1）：元素是空的，写它的 currentTime 没有意义，还会顺手把那个空元素
+         * 「播」起来。交给 ExoPlayer。
+         *
+         * 判据统一到 ownsPlayback()：nativeTakesRef 只回答「这一首的地址原生吃不吃得下」，
+         * 认领中、通知栏起播、原生过渡接管那几秒里它可能是 false，而 ExoPlayer 明明在响。
+         * 那时写空的 <audio> 什么也不会发生，歌词时钟却被拖动的那一按改了 ——
+         * 用户看到的就是「拖进度条歌词变了，曲还在沿原来的进度播」。
+         */
+        if (nativePlaybackEngine.ownsPlayback() || nativeTakesRef.current) {
             void nativePlaybackEngine.seek(time);
             void publishStagePlayerPlaybackUpdate();
             return;

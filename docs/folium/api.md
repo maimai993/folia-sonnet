@@ -1553,7 +1553,7 @@ Folium 1.8: what a beat effect of 智能动感模式 plays on. `beats`: the beat
 sources: read one you do not know as `beats`.
 
 ```ts
-type FoliumBeatEffectSource = 'beats' | 'drums' | 'stems'
+type FoliumBeatEffectSource = 'beats' | 'drums' | 'stems' | 'envelopes'
 ```
 
 ### FoliumBeatEffectPartInfo

@@ -56,6 +56,12 @@ export default defineVisualizer({
             source: 'beats',
             retired: true,
         },
+            {
+            id: BEAT_EFFECT_IDS.pendoloJewelGlow,
+            nameKey: 'options.beatEffect_pendoloJewelGlow',
+            descKey: 'options.beatEffect_pendoloJewelGlowDesc',
+            source: 'envelopes',
+        },
     ],
     // The song-scoped seed resets Pendolo's lyric rail state before the next track starts.
     render: props => <VisualizerPendolo key={props.seed} {...props} />,

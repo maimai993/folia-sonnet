@@ -19,6 +19,11 @@ export const CACHE_ROWS = [
     { category: 'media', option: option(CACHES, 'cacheMedia', 'options.mediaFiles') },
     { category: 'analysis', option: option(CACHES, 'cacheAnalysis', 'options.analysisData') },
     { category: 'volumeBalance', option: option(CACHES, 'cacheVolumeBalance', 'options.volumeBalanceData') },
+    // B 站 MV：匹配到了哪条投稿，以及用户手动钉的那一条。只存结果不存直链（见 useBilibiliMvStore）。
+    { category: 'mvMatch', option: option(CACHES, 'cacheMvMatch', 'options.mvMatchData') },
+    // MV 的**音视频字节**（画面 + 音轨，见 mvMediaCache.ts）：与上面那行是两件事，
+    // 一个是几十字节的记录、一个是几十兆的媒体文件，所以分开量、分开清。
+    { category: 'mvMedia', option: option(CACHES, 'cacheMvMedia', 'options.mvMediaData') },
 ] as const;
 
 export const O = {

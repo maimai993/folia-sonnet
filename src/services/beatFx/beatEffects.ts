@@ -19,7 +19,13 @@ import type { BeatEffectSetting, SmartBeatSettings } from '../../types';
 // set it aside (2026-10-17: 时计's 齿轮随拍 and the Latent background's 潮汐脉动) rather than deleting
 // it, so it can come back by dropping `retired`.
 
-export type BeatEffectSource = 'beats' | 'drums' | 'stems';
+/**
+ * The analysis an effect listens to. 'beats' and 'drums' are what the models hand over directly;
+ * 'stems' is the vocal envelope the same htdemucs run reads; 'envelopes' is the four curves that run
+ * also gives (低频 / 人声 / 其余乐器 / 整体, analysis/musicEnvelope.ts) - one separation feeds all of
+ * them, so a picture may read any of these without costing another run.
+ */
+export type BeatEffectSource = 'beats' | 'drums' | 'stems' | 'envelopes';
 
 /** A part of an effect with its own slider: a stable key (stored) and the i18n key of its name. */
 export interface BeatEffectPart {
@@ -60,6 +66,37 @@ export const BEAT_EFFECT_IDS = {
     machiScreenFlash: 'machi.screenFlash',
     nebbiaDrizzleRide: 'nebbia.drizzleRide',
     nebbiaAquaBeat: 'nebbia.aquaBeat',
+    temperaBassSurge: 'tempera.bassSurge',
+    temperaVocalGlow: 'tempera.vocalGlow',
+    temperaEnergyDrift: 'tempera.energyDrift',
+    temperaMelodyShift: 'tempera.melodyShift',
+    // 每个歌词样式各自的智能动感：共享同一次分离的曲线，画面各写各的（各样式在自己的
+    // 渲染组件里用 useMusicMotion 读一条曲线，绑到自己画面的一个属性上）。
+    // source 都是 'envelopes'，所以不会为了某个样式再单独跑一遍 Beat This! 或再做一次分离。
+    classicPulseGlow: 'classic.pulseGlow',
+    classicVocalShine: 'classic.vocalShine',
+    cadenzaHaloBreath: 'cadenza.haloBreath',
+    cadenzaScatterDrift: 'cadenza.scatterDrift',
+    cappellaVoicePop: 'cappella.voicePop',
+    cappellaBubbleSway: 'cappella.bubbleSway',
+    claddaghRingTilt: 'claddagh.ringTilt',
+    claddaghBeadHop: 'claddagh.beadHop',
+    partitaStepTread: 'partita.stepTread',
+    partitaTierRise: 'partita.tierRise',
+    tiltLeanSway: 'tilt.leanSway',
+    tiltMainReveal: 'tilt.mainReveal',
+    monetBrushBloom: 'monet.brushBloom',
+    monetKeyGlow: 'monet.keyGlow',
+    fumeInkWeight: 'fume.inkWeight',
+    fumeVeilCalm: 'fume.veilCalm',
+    lumiereBeamWidth: 'lumiere.beamWidth',
+    lumiereLineSpark: 'lumiere.lineSpark',
+    promptTypePace: 'prompt.typePace',
+    promptBoxFly: 'prompt.boxFly',
+    machiNeonGlow: 'machi.neonGlow',
+    nebbiaFogDensity: 'nebbia.fogDensity',
+    pendoloJewelGlow: 'pendolo.jewelGlow',
+    temperaSeamPulse: 'tempera.seamPulse',
 } as const;
 
 /**
@@ -92,6 +129,38 @@ export const DRUM_BEAT_EFFECT_IDS: readonly string[] = [
 /** Whether any drum-hit effect is switched on, whichever picture is on screen. */
 export const anyDrumBeatEffectOn = (settings: SmartBeatSettings): boolean =>
     DRUM_BEAT_EFFECT_IDS.some(id => resolveBeatEffectSetting(settings, id).on);
+
+/**
+ * The effects that read the four music envelopes (`source: 'envelopes'`), on any picture. As with the
+ * drum hits, their declarations live on the registry entries, so the list is spelled out here.
+ */
+export const ENVELOPE_BEAT_EFFECT_IDS: readonly string[] = [
+    BEAT_EFFECT_IDS.temperaBassSurge,
+    BEAT_EFFECT_IDS.temperaVocalGlow,
+    BEAT_EFFECT_IDS.temperaEnergyDrift,
+    BEAT_EFFECT_IDS.temperaMelodyShift,
+    // 每个歌词样式各自的智能动感。都读同一次分离的四/十条曲线，画面各写各的；
+    // 这个列表只用来判断「屏幕上现在有没有开着吃包络的效果」和它的总强度。
+    BEAT_EFFECT_IDS.classicPulseGlow, BEAT_EFFECT_IDS.classicVocalShine,
+    BEAT_EFFECT_IDS.cadenzaHaloBreath, BEAT_EFFECT_IDS.cadenzaScatterDrift,
+    BEAT_EFFECT_IDS.cappellaVoicePop, BEAT_EFFECT_IDS.cappellaBubbleSway,
+    BEAT_EFFECT_IDS.claddaghRingTilt, BEAT_EFFECT_IDS.claddaghBeadHop,
+    BEAT_EFFECT_IDS.partitaStepTread, BEAT_EFFECT_IDS.partitaTierRise,
+    BEAT_EFFECT_IDS.tiltLeanSway, BEAT_EFFECT_IDS.tiltMainReveal,
+    BEAT_EFFECT_IDS.monetBrushBloom, BEAT_EFFECT_IDS.monetKeyGlow,
+    BEAT_EFFECT_IDS.fumeInkWeight, BEAT_EFFECT_IDS.fumeVeilCalm,
+    BEAT_EFFECT_IDS.lumiereBeamWidth, BEAT_EFFECT_IDS.lumiereLineSpark,
+    // 提示词的两条按分组定稿①已从 registry 摘掉（纯文字动画画面不做智能动感）；
+    // 花火/商籁/镜台那三条新增的「呼吸」效果也随三样式一起退回上游、不再登记。
+    // 没声明的效果不该再参与「有没有开着吃包络的效果」的判断。
+    BEAT_EFFECT_IDS.machiNeonGlow, BEAT_EFFECT_IDS.nebbiaFogDensity,
+    BEAT_EFFECT_IDS.pendoloJewelGlow,
+    BEAT_EFFECT_IDS.temperaSeamPulse,
+];
+
+/** Whether any envelope effect is switched on, whichever picture is on screen. */
+export const anyEnvelopeBeatEffectOn = (settings: SmartBeatSettings): boolean =>
+    ENVELOPE_BEAT_EFFECT_IDS.some(id => resolveBeatEffectSetting(settings, id).on);
 
 /** Whether the effects play at all: 智能动感模式 on, or on what is already stored (`cached`). */
 export const smartBeatActive = (settings: SmartBeatSettings): boolean => settings.mode !== 'off';

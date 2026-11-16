@@ -5,6 +5,7 @@ import { cycleValue, QuickControlChip, QuickControlToggle } from '../../shared/Q
 import { defineVisualizer, type VisualizerQuickControlsProps } from '../definition';
 import { FumeSettingsPanel } from '../settingsPanels';
 import { fumeBackgroundConfig } from './backgroundConfig';
+import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 
 const VisualizerFume = React.lazy(() => import('./VisualizerFume'));
 
@@ -18,6 +19,21 @@ const CAMERA_TRACKING_LABEL_KEYS: Record<FumeTuning['cameraTrackingMode'], strin
 
 export default defineVisualizer({
     mode: 'fume',
+    // 智能动感：这个样式自己的画面原子，共享同一次音轨分离的四条曲线。
+    beatEffects: [
+        {
+            id: BEAT_EFFECT_IDS.fumeInkWeight,
+            nameKey: 'options.beatEffect_fumeInkWeight',
+            descKey: 'options.beatEffect_fumeInkWeightDesc',
+            source: 'envelopes',
+        },
+        {
+            id: BEAT_EFFECT_IDS.fumeVeilCalm,
+            nameKey: 'options.beatEffect_fumeVeilCalm',
+            descKey: 'options.beatEffect_fumeVeilCalmDesc',
+            source: 'envelopes',
+        },
+    ],
     order: 60,
     labelKey: 'ui.visualizerFume',
     labelFallback: 'Fume',

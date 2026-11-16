@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LYRIC_EXPORT_COMMAND_ID } from '../../../command-palette/commands/lyricExportCommands';
 import ConfirmDialog from '../../../shared/ConfirmDialog';
 import { clearAllCaches } from '../../../../services/db';
+import { isCapacitorAndroid } from '../../../../platform/runtime';
+import { refreshInstrumentalStatus } from '../../../../services/playbackEngine/nativeEqualizer';
+import { nativePlayer } from '../../../../services/playbackEngine/nativePlayerPlugin';
 import { openCommandPaletteCommand } from '../../../../stores/useAppViewStore';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { closeSettings } from '../../../../stores/useSettingsModalStore';
@@ -24,6 +27,14 @@ export const OPTIONS: SettingsOptionDef[] = [...Object.values(O), ...CACHE_ROWS.
 // Zero is "no ceiling", which is a real answer rather than a missing one, so it gets a name.
 const CACHE_LIMITS_GB = [1, 2, 5, 10, 20, 50, 0];
 
+/** 分离缓存体积：过了 1G 用 G，否则用 M —— 「2.0 GB」比「2048 MB」好读。 */
+const formatCacheSize = (bytes: number): string => {
+    if (bytes <= 0) return '0 MB';
+    return bytes >= 1024 ** 3
+        ? `${(bytes / 1024 ** 3).toFixed(1)} GB`
+        : `${Math.round(bytes / 1024 ** 2)} MB`;
+};
+
 const StoragePage: React.FC = () => {
     const { t } = useTranslation();
     const { isElectron, viewProps } = useSettingsPage();
@@ -33,7 +44,17 @@ const StoragePage: React.FC = () => {
     const setMediaCacheEnabled = useAudioSettingsStore(state => state.handleToggleMediaCache);
     const cacheLimitGb = useAudioSettingsStore(state => state.mediaCacheLimitGb);
     const setCacheLimitGb = useAudioSettingsStore(state => state.handleSetMediaCacheLimitGb);
+    // 总开关：开了才预先拆两轨、提前分析下一首；关着只正常给智能动感供数据。
+    const prebuildTracksEnabled = useAudioSettingsStore(state => state.prebuildTracksEnabled);
+    const setPrebuildTracksEnabled = useAudioSettingsStore(state => state.handleTogglePrebuildTracks);
     const [clearingAll, setClearingAll] = useState<'no' | 'asking' | 'running'>('no');
+    const [clearingSeparation, setClearingSeparation] = useState(false);
+    // 分离出来的伴奏 / 清唱落在原生缓存里，用量同样上报到这个 store；
+    // 进存储页问一次，和其余缓存一起量。
+    const vocalCacheBytes = useAudioSettingsStore(state => state.vocalCancelCacheBytes);
+    useEffect(() => {
+        if (isCapacitorAndroid()) refreshInstrumentalStatus();
+    }, []);
 
     // Every cache listed below goes; the local library and its hand-made merges, splits and
     // assignments stay, because a rescan cannot bring those back. Reload so nothing in memory keeps
@@ -42,6 +63,29 @@ const StoragePage: React.FC = () => {
         setClearingAll('running');
         await clearAllCaches();
         window.location.reload();
+    };
+
+    /*
+     * 「删除人声分离缓存」：清的是原生 cacheDir/instrumental 下那两轨 m4a 文件。
+     *
+     * 之前这一行叫「分析缓存」，点下去清的其实是 IndexedDB 里的整曲曲线
+     * （clearMusicEnvelopeCache + onClear('analysis')）—— 用户要清的分离音轨文件
+     * 一个没删，反而把智能动感的数据删了。两件事现在各归各：分析数据在下面
+     * CACHES 组的 analysis 分类里清，这里只清原生分离结果。
+     */
+    const clearSeparationCache = async () => {
+        if (!isCapacitorAndroid()) return;
+        setClearingSeparation(true);
+        try {
+            await nativePlayer.clearSeparationCache();
+            // 原生已经把模式退回「全部」并落盘；界面这边同步一次，选中态不能还停在人声 / 伴奏。
+            useAudioSettingsStore.getState().handleSetVocalMode('off');
+            refreshInstrumentalStatus();
+        } catch (error) {
+            console.warn('[Storage] 删除人声分离缓存失败', error);
+        } finally {
+            setClearingSeparation(false);
+        }
     };
 
     return (
@@ -76,6 +120,11 @@ const StoragePage: React.FC = () => {
                 <Row label={t('options.cachedSongsCount')}>
                     <Value>{mediaCount} · {cacheSizes.media}</Value>
                 </Row>
+                {isCapacitorAndroid() && (
+                    <Row label={t('options.prebuildTracks')} hint={t('options.prebuildTracksDesc')}>
+                        <Toggle checked={prebuildTracksEnabled} onChange={setPrebuildTracksEnabled} />
+                    </Row>
+                )}
             </Group>
 
             <Group
@@ -86,6 +135,20 @@ const StoragePage: React.FC = () => {
                     </Button>
                 )}
             >
+                {/*
+                 * 分离出来的伴奏 / 清唱单独一行，和上面那些缓存项摆在一起 ——
+                 * 它本来就是「缓存详情」里的一份，放在媒体缓存那一组反而看不出归谁管。
+                 *
+                 * 只报大小：存了几首是个会变的数，用户看这一行只想知道占了多少地方。
+                 */}
+                {isCapacitorAndroid() && (
+                    <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
+                        <Value>{formatCacheSize(vocalCacheBytes)}</Value>
+                        <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
+                            {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
+                        </Button>
+                    </Row>
+                )}
                 {CACHE_ROWS.map(({ category, option }) => (
                     <Row key={category} option={option}>
                         <Value>{cacheSizes[category]}</Value>

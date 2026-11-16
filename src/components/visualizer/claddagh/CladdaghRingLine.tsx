@@ -24,6 +24,7 @@ import {
     normalizeReadableAngle,
 } from './claddaghLayout';
 import { buildCladdaghGlowFilter } from './claddaghGlow';
+import { musicVocals } from '../../../stores/motionSignals';
 
 // src/components/visualizer/claddagh/CladdaghRingLine.tsx
 // 投影到 3D 椭圆环上的一行歌词：在 useLayoutEffect 里直接写每个字素 span 的变换与样式。
@@ -120,7 +121,6 @@ export const RingLine: React.FC<RingLineProps> = ({
     lyricsFontScale = 1.0,
     Rx,
     Ry,
-    audioPower,
     containerWidth,
     containerHeight,
     activeSpacingInfo,
@@ -230,7 +230,14 @@ export const RingLine: React.FC<RingLineProps> = ({
             if (mvsLength === 0) return;
 
             const curLineOffset = lineOffset.get();
-            const power = normalizePower(audioPower.get());
+            /*
+             * 逐字缩放读**人声**，不读 audioPower。
+             *
+             * audioPower 是整混音的能量，底鼓每一下都会把它顶高一格 —— 环上每个字就跟着
+             * 一张一缩，看起来正是「歌词在震动」。这一套的字应该跟着唱句走，所以换成
+             * 分离后的 vocalBody/vocalAir 总线（不是整条 vocals：那条还带着低频）。
+             */
+            const power = normalizePower(musicVocals.get());
             const intensity = theme.animationIntensity || 'normal';
             let intensityMultiplier = 0.25;
             let maxScale = 1.25;
@@ -627,7 +634,7 @@ export const RingLine: React.FC<RingLineProps> = ({
             unsubscribeTime();
             unsubscribeOffset();
         };
-    }, [spacingInfo, translationSpacingInfo, translationFontPx, lineIndex, centerLineIndex, lineOffset, Rx, Ry, audioPower, currentTime, containerWidth, containerHeight, activeSpacingInfo, renderBaseIndex, highlightColor, baseColor, focusScaleRatio, ellipseTiltDeg, lines, line]);
+    }, [spacingInfo, translationSpacingInfo, translationFontPx, lineIndex, centerLineIndex, lineOffset, Rx, Ry, currentTime, containerWidth, containerHeight, activeSpacingInfo, renderBaseIndex, highlightColor, baseColor, focusScaleRatio, ellipseTiltDeg, lines, line]);
 
     return (
         <div className="absolute inset-0 pointer-events-none w-full h-full">

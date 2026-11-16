@@ -105,6 +105,17 @@ export const MIX_WITH_OTHER_AUDIO_KEY = 'folia_mix_with_other_audio';
  * 从没发布过，是这次新加的，所以名字现在定下来就不改了（见 AGENTS.md「存下来的数据」）。
  */
 export const VOCAL_CANCEL_KEY = 'folia_vocal_cancel';
+export const VOCAL_ONLY_KEY = 'folia_vocal_only';
+
+/**
+ * 「设置 → 存储」里「预先拆分音轨」总开关。
+ *
+ * 开：默认把当前歌与下一首的两轨（伴奏 / 清唱）提前拆好，拨「人声 / 伴奏」秒切；
+ * 关（默认）：不预先跑 SCNet，只正常给智能动感提供整曲曲线数据。
+ * 原生存一份（FoliaSettingsStore 的 prebuildTracks）：通知栏起播时 WebView 还没起来，
+ * 装源那条路得自己知道要不要预拆。
+ */
+export const PREBUILD_TRACKS_KEY = 'folia_prebuild_tracks';
 
 /*
  * 原来的 `folia_native_playback`（原生播放开关）已经删掉：安卓上原生播放恒开，
@@ -126,9 +137,24 @@ export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 
 export type AudioQuality = AudioQualityPreference;
 
-export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
-    saved === 'standard' || saved === 'ultra' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
-);
+/**
+ * 没有存过时用哪一档。
+ *
+ * `ultra` = 1080P（B 站）/ 超高音质（音乐平台）。以前默认是 `high`（720P），
+ * 在 B 站上就是「默认给 720P」—— 而视频站的曲目几乎都是 1080P 源，
+ * 默认看得清比默认省一点流量更重要。
+ *
+ * 只影响**没选过**的人：存过的那一档原样尊重。
+ */
+export const DEFAULT_AUDIO_QUALITY: AudioQuality = 'ultra';
+
+export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => {
+    // 上一代网易云的那档叫 exhigh，含义就是现在的 high：迁移过来，不是回退到默认。
+    if (saved === 'exhigh') return 'high';
+    return saved === 'standard' || saved === 'high' || saved === 'ultra' || saved === 'lossless' || saved === 'hires'
+        ? saved
+        : DEFAULT_AUDIO_QUALITY;
+};
 
 /**
  * Reads the media cache toggle from the v2 key: default **on**.
@@ -136,61 +162,85 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
  * 旧 key（folia_enable_media_cache / enable_media_cache）不再参与：那是上一代
  * 默认关的开关，新 key 一换，这一版的语义是「默认缓存，除非用户亲手关」。
  */
-export const readStoredEnableMediaCache = (): boolean => {
+/*
+ * 取得到就用 localStorage，取不到就 null。
+ *
+ * 这些 read* 大多在模块求值时就跑（store 的初始 state 用它们），所以拿不到存储不能抛，
+ * 只能当「没存过」。只判 `typeof window === 'undefined'` 不够：`window` 在、存储不在的
+ * 环境是有的（无痕/受限的 WebView、被裁掉存储的沙箱、测试里只为别的事 stub 的 window）。
+ */
+const storageOrNull = (): Storage | null => {
     if (typeof window === 'undefined') {
+        return null;
+    }
+    try {
+        return window.localStorage ?? null;
+    } catch {
+        return null;
+    }
+};
+
+export const readStoredEnableMediaCache = (): boolean => {
+    const storage = storageOrNull();
+    if (!storage) {
         return true;
     }
 
-    const stored = localStorage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
+    const stored = storage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
     return stored === null ? true : stored === 'true';
 };
 
 export const readStoredMediaCacheLimitGb = (): number => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return DEFAULT_MEDIA_CACHE_LIMIT_GB;
     }
 
-    const saved = localStorage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
+    const saved = storage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
     const parsed = saved === null ? NaN : Number(saved);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEDIA_CACHE_LIMIT_GB;
 };
 
 const readStoredAudioQuality = (): AudioQuality => {
-    if (typeof window === 'undefined') {
-        return 'high';
+    const storage = storageOrNull();
+    if (!storage) {
+        return DEFAULT_AUDIO_QUALITY;
     }
 
-    const saved = localStorage.getItem('default_audio_quality');
+    const saved = storage.getItem('default_audio_quality');
     const quality = resolveStoredAudioQuality(saved);
     if (saved === 'exhigh') {
-        localStorage.setItem('default_audio_quality', 'high');
+        storage.setItem('default_audio_quality', 'high');
     }
     return quality;
 };
 
 const readStoredQueueAddBehavior = (): QueueAddBehavior => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'append';
     }
 
-    const saved = localStorage.getItem('queue_add_behavior');
+    const saved = storage.getItem('queue_add_behavior');
     return saved === 'next' ? 'next' : 'append';
 };
 
 const readStoredAudioOutputDeviceId = (): string => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return '';
     }
 
-    return localStorage.getItem('audio_output_device_id') ?? '';
+    return storage.getItem('audio_output_device_id') ?? '';
 };
 
 const readStoredLoopMode = (): 'off' | 'all' | 'one' | 'shuffle' => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'off';
     }
 
-    const saved = localStorage.getItem('player_loop_mode');
+    const saved = storage.getItem('player_loop_mode');
     return saved === 'all' || saved === 'one' || saved === 'shuffle' ? saved : 'off';
 };
 
@@ -237,11 +287,12 @@ const COMMAND_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'command' };
 const HOST_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'host' };
 
 const readStoredVolume = () => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 1;
     }
 
-    const saved = localStorage.getItem('player_volume');
+    const saved = storage.getItem('player_volume');
     const parsed = saved !== null ? parseFloat(saved) : 1;
     return Number.isFinite(parsed) ? parsed : 1;
 };
@@ -277,6 +328,24 @@ export type AudioSettingsState = {
      * 桌面端没有这条链路，开关不出现。
      */
     vocalCancelEnabled: boolean;
+    /** 只留人声（清唱轨）。与 vocalCancelEnabled 互斥，同时最多一个为真。 */
+    vocalOnlyEnabled: boolean;
+    /**
+     * 「关闭人声」此刻实际走到哪一步（原生上报，不落盘）。
+     *
+     * 开关只是意图；真正的实现是「离线分离出伴奏、再切过去播」，
+     * 那件事要几十秒，所以界面必须能说出「还在生成」而不是让用户以为开关没反应。
+     */
+    vocalCancelState: 'idle' | 'building' | 'ready' | 'failed';
+    vocalCancelPercent: number;
+    /** 伴奏缓存：已缓存首数、占用字节、当前上限（上限跟着磁盘剩余走）。 */
+    vocalCancelCachedCount: number;
+    vocalCancelCacheBytes: number;
+    vocalCancelCacheLimit: number;
+    /** 原生此刻真正生效的模式：两个开关的意图可能被互斥改写，界面以它为准。 */
+    vocalTrackMode: 'instrumental' | 'vocal' | 'off';
+    /** 「设置 → 存储」里的总开关：是否预先拆分音轨、提前分析下一首。默认关。 */
+    prebuildTracksEnabled: boolean;
     audioOutputDeviceId: string;
     /** The listener's own sound, always: a mod's curve is never written into it. */
     audioEqualizerSettings: AudioEqualizerSettings;
@@ -307,6 +376,18 @@ export type AudioSettingsState = {
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleToggleMixWithOtherAudio: (enable: boolean) => void;
     handleToggleVocalCancel: (enable: boolean) => void;
+    /** 只留人声；打开时自动关掉「关闭人声」。 */
+    handleToggleVocalOnly: (enable: boolean) => void;
+    /** 三态「全部 / 人声 / 伴奏」：一次原子写两个键，避免切换时留下「两个都开」的中间态。 */
+    handleSetVocalMode: (mode: 'off' | 'vocal' | 'instrumental') => void;
+    /** 总开关：预先拆分音轨 + 提前分析下一首。同时推给原生，冷启动也能读到。 */
+    handleTogglePrebuildTracks: (enable: boolean) => void;
+    /** 原生上报的生成进度。界面只读，不参与持久化。 */
+    handleSetVocalCancelStatus: (state: 'idle' | 'building' | 'ready' | 'failed', percent: number) => void;
+    /** 原生报回来的缓存用量。界面只读，不参与持久化。 */
+    handleSetVocalCancelCache: (count: number, bytes: number, limit: number) => void;
+    /** 原生报回来的当前模式。 */
+    handleSetVocalTrackMode: (mode: 'instrumental' | 'vocal' | 'off') => void;
     handleSetAudioOutputDeviceId: (deviceId: string) => void;
     /*
      * The equalizer actions below return whether anything changed: the listener's settings they leave
@@ -402,6 +483,16 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     mixWithOtherAudio: getStoredBoolean(MIX_WITH_OTHER_AUDIO_KEY, false),
     // 默认关：它改变的是这首歌本来的样子，该由用户自己拨。
     vocalCancelEnabled: getStoredBoolean(VOCAL_CANCEL_KEY, false),
+    vocalOnlyEnabled: getStoredBoolean(VOCAL_ONLY_KEY, false),
+    vocalCancelState: 'idle',
+    vocalCancelPercent: 0,
+    vocalCancelCachedCount: 0,
+    vocalCancelCacheBytes: 0,
+    vocalCancelCacheLimit: 0,
+    vocalTrackMode: 'off',
+    // 默认关：预拆两轨是几十秒的推理，不替用户决定要不要占这份负载。
+    // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
+    prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
     audioEqualizerModCurve: readStoredAudioEqualizerModCurve(initialAudioEqualizerSettings),
@@ -413,7 +504,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     loopMode: readStoredLoopMode(),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('default_audio_quality', quality);
+            storageOrNull()?.setItem('default_audio_quality', quality);
         }
         set({ audioQuality: quality });
     },
@@ -424,13 +515,13 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleSetMediaCacheLimitGb: (gigabytes) => {
         const next = Number.isFinite(gigabytes) && gigabytes >= 0 ? gigabytes : DEFAULT_MEDIA_CACHE_LIMIT_GB;
         if (typeof window !== 'undefined') {
-            localStorage.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
+            storageOrNull()?.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
         }
         set({ mediaCacheLimitGb: next });
     },
     handleSetQueueAddBehavior: (behavior) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('queue_add_behavior', behavior);
+            storageOrNull()?.setItem('queue_add_behavior', behavior);
         }
         set({ queueAddBehavior: behavior });
         setStatusMessage({
@@ -509,16 +600,124 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     },
     handleToggleVocalCancel: (enable) => {
         setStoredBoolean(VOCAL_CANCEL_KEY, enable);
-        set({ vocalCancelEnabled: enable });
+        if (enable) setStoredBoolean(VOCAL_ONLY_KEY, false);
+        /*
+         * 打开就先按「正在准备」显示：原生那边第一件事是查缓存，
+         * 命中会立刻回 ready，没命中才是几十秒的分离 —— 两种都不会让开关
+         * 看起来像没反应。关掉则立刻回到 idle（原生会把音源切回原曲）。
+         */
+        set({
+            vocalCancelEnabled: enable,
+            vocalOnlyEnabled: enable ? false : get().vocalOnlyEnabled,
+            vocalCancelState: enable ? 'building' : 'idle',
+            vocalCancelPercent: enable ? 0 : 0,
+        });
         /*
          * 立刻推给原生：处理器每帧读 NativeEqualizerState.vocalCancelEnabled，
          * 所以拨过去正在响的这首当场就变，不用等下一次播放。
          *
          * 只落在安卓：桌面端没有 AudioSink 那条链，也没有这个插件方法。
-         * 失败就忽略 —— 开关状态已经存下了，下次播放时会重新推一次。
+         * 失败就忽略 —— 开关状态已经存下了，下次启动会对表一次
+         * （nativeEqualizer.ts 的 pushNativeVocalCancel），原生侧自己也会落盘。
          */
         if (!isCapacitorAndroid()) return;
         void nativePlayer.setVocalCancelEnabled(enable).catch(() => undefined);
+    },
+    handleToggleVocalOnly: (enable) => {
+        setStoredBoolean(VOCAL_ONLY_KEY, enable);
+        if (enable) setStoredBoolean(VOCAL_CANCEL_KEY, false);
+        set({
+            vocalOnlyEnabled: enable,
+            vocalCancelEnabled: enable ? false : get().vocalCancelEnabled,
+            // 与伴奏共用同一套进度状态：同一时刻只有一轨在切。
+            vocalCancelState: enable ? 'building' : 'idle',
+            vocalCancelPercent: 0,
+        });
+        if (!isCapacitorAndroid()) return;
+        /*
+         * 顺序要紧：先把另一个关掉，再打开这个。原生那边两个 setter 都会写盘，
+         * 反过来会在中间留下「两个都开」的一瞬，换源逻辑会摇摆。
+         */
+        void (async () => {
+            if (enable) {
+                await nativePlayer.setVocalCancelEnabled(false).catch(() => undefined);
+            }
+            await nativePlayer.setVocalOnlyEnabled(enable).catch(() => undefined);
+        })();
+    },
+    /*
+     * 三态切换（全部 / 人声 / 伴奏）。两个旧 handler 保留：命令面板与冷启动对表
+     * 各自只拨一个开关。这里专供界面那条三选一。
+     *
+     * ⚠️ 必须走**一次原子调用**（setVocalTrackMode），不能把一次切换拆成两条独立的
+     * 桥命令：每条都会各自触发一次原生 reconcile，中间态会被当成真的意图去换源 ——
+     * 切「全部」时先关伴奏的那一发里清唱还开着，播放器当场被换到清唱轨；两条命令
+     * 在桥上再乱序一次就停在错轨。用户反馈的「切人声放的是全部、切全部放的是人声、
+     * 有时切了不生效」正是这条路径。原生侧两个布尔一次落定、只 reconcile 一次。
+     *
+     * 旧包没有这个插件方法时降级到两个旧 setter，顺序刻意排成「先关掉不是目标的
+     * 那一路，再开目标」，让降级路径也不会先闪一下清唱。
+     */
+    handleSetVocalMode: (mode) => {
+        const cancel = mode === 'instrumental';
+        const only = mode === 'vocal';
+        setStoredBoolean(VOCAL_CANCEL_KEY, cancel);
+        setStoredBoolean(VOCAL_ONLY_KEY, only);
+        set({
+            vocalCancelEnabled: cancel,
+            vocalOnlyEnabled: only,
+            // 打开任一路先按「正在准备」显示，命中缓存会立刻回 ready；全关则回 idle。
+            vocalCancelState: (cancel || only) ? 'building' : 'idle',
+            vocalCancelPercent: 0,
+        });
+        if (!isCapacitorAndroid()) return;
+        // Promise.resolve().then 包一层：旧包的代理可能直接把「方法不存在」同步抛出来，
+        // 不包这一层 .catch() 接不住，降级路径就断了。
+        void Promise.resolve()
+            .then(() => nativePlayer.setVocalTrackMode(mode))
+            .catch(() => {
+                void (async () => {
+                    if (mode === 'off') {
+                        await nativePlayer.setVocalOnlyEnabled(false).catch(() => undefined);
+                        await nativePlayer.setVocalCancelEnabled(false).catch(() => undefined);
+                    } else if (mode === 'vocal') {
+                        await nativePlayer.setVocalCancelEnabled(false).catch(() => undefined);
+                        await nativePlayer.setVocalOnlyEnabled(true).catch(() => undefined);
+                    } else {
+                        await nativePlayer.setVocalOnlyEnabled(false).catch(() => undefined);
+                        await nativePlayer.setVocalCancelEnabled(true).catch(() => undefined);
+                    }
+                })();
+            });
+    },
+    handleTogglePrebuildTracks: (enable) => {
+        if (get().prebuildTracksEnabled === enable) return;
+        setStoredBoolean(PREBUILD_TRACKS_KEY, enable);
+        set({ prebuildTracksEnabled: enable });
+        // 原生存一份：通知栏 / 锁屏先把播放拉起来时 WebView 还没起来，
+        // 装源那条路得自己知道要不要预拆。失败不抛，下次启动对表会再推。
+        if (!isCapacitorAndroid()) return;
+        void nativePlayer.setPrebuildTracksEnabled(enable).catch(() => undefined);
+    },
+    handleSetVocalTrackMode: (mode) => {
+        if (get().vocalTrackMode === mode) return;
+        set({ vocalTrackMode: mode });
+    },
+    handleSetVocalCancelCache: (count, bytes, limit) => {
+        const current = get();
+        if (
+            current.vocalCancelCachedCount === count
+            && current.vocalCancelCacheBytes === bytes
+            && current.vocalCancelCacheLimit === limit
+        ) {
+            return;
+        }
+        set({ vocalCancelCachedCount: count, vocalCancelCacheBytes: bytes, vocalCancelCacheLimit: limit });
+    },
+    handleSetVocalCancelStatus: (state, percent) => {
+        const current = get();
+        if (current.vocalCancelState === state && current.vocalCancelPercent === percent) return;
+        set({ vocalCancelState: state, vocalCancelPercent: percent });
     },
     handleSetAudioOutputDeviceId: (deviceId) => {
         set({ audioOutputDeviceId: deviceId });
@@ -527,9 +726,9 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         }
 
         if (deviceId) {
-            localStorage.setItem('audio_output_device_id', deviceId);
+            storageOrNull()?.setItem('audio_output_device_id', deviceId);
         } else {
-            localStorage.removeItem('audio_output_device_id');
+            storageOrNull()?.removeItem('audio_output_device_id');
         }
     },
     handleSetAudioEqualizerSettings: (settings, origin = USER_ORIGIN) => (
@@ -599,7 +798,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     closeAudioEqualizer: () => set({ isAudioEqualizerOpen: false }),
     handleSetVolume: (val) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_volume', String(val));
+            storageOrNull()?.setItem('player_volume', String(val));
         }
         set({ volume: val });
     },
@@ -620,7 +819,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             return;
         }
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_loop_mode', mode);
+            storageOrNull()?.setItem('player_loop_mode', mode);
         }
         set({ loopMode: mode });
         /*
