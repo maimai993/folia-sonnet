@@ -10,7 +10,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { Grid3DSlider, type Grid3DSliderItem } from '../../../library/suites/grid/home/Grid3DSlider';
+import { VideoCardFlow } from './VideoCardFlow';
 import { useVideoSettingsStore } from '../../../stores/useVideoSettingsStore';
 import { VideoPlayer, type VideoEpisode } from './VideoPlayer';
 import {
@@ -173,22 +173,18 @@ const EpisodePanel: React.FC<{
                 {episodesList.length === 0 ? (
                     <p className="py-10 text-center text-[13px] text-[color:var(--st-t3)]">这条线路没有集数</p>
                 ) : (
-                    <Grid3DSlider
+                    <VideoCardFlow
                         items={episodesList.map((episode, index) => ({
                             id: `${index}-${episode.name}`,
                             name: episode.name || `第 ${index + 1} 集`,
                             coverUrl: video.pic,
                             description: `第 ${index + 1} 集`,
-                            type: 'video',
                         }))}
                         focusedIndex={Math.min(epFocus, episodesList.length - 1)}
                         onFocusedIndexChange={setEpFocus}
-                        onSelect={(_item: Grid3DSliderItem, index: number) => {
+                        onSelect={(_item, index: number) => {
                             onPlay(lines, Math.min(lineIndex, lines.length - 1), index);
                         }}
-                        isDaylight={false}
-                        hasFloatingPlayer={false}
-                        openOnAnyCardClick
                     />
                 )}
             </div>
@@ -527,23 +523,19 @@ export const VideoWorkspace: React.FC = () => {
                         <p className="py-8 text-center text-[13px] text-[color:var(--st-t3)]">没有结果</p>
                     ) : (
                         <div className="min-h-0 flex-1">
-                            <Grid3DSlider
+                            <VideoCardFlow
                                 items={searchHits.map(hit => ({
                                     id: `${hit.siteKey}-${hit.id}`,
                                     name: hit.name,
                                     coverUrl: hit.pic,
                                     description: hit.remarks || [hit.typeName, hit.year, hit.area].filter(Boolean).join(' · ') || '影视',
-                                    type: 'video',
-                                }))}
+                                        }))}
                                 focusedIndex={focusIndex}
                                 onFocusedIndexChange={setFocusIndex}
-                                onSelect={(_item: Grid3DSliderItem, index: number) => {
+                                onSelect={(_item, index: number) => {
                                     const hit = searchHits[index];
                                     if (hit) void openDetail(hit.siteKey, hit);
                                 }}
-                                isDaylight={false}
-                                hasFloatingPlayer={false}
-                                openOnAnyCardClick
                             />
                         </div>
                     )}
@@ -573,23 +565,19 @@ export const VideoWorkspace: React.FC = () => {
                         ) : videos.length === 0 ? (
                             <p className="py-8 text-center text-[13px] text-[color:var(--st-t3)]">这个站点没有返回列表</p>
                         ) : (
-                            <Grid3DSlider
+                            <VideoCardFlow
                                 items={videos.map(video => ({
                                     id: video.id,
                                     name: video.name,
                                     coverUrl: video.pic,
                                     description: video.remarks || [video.typeName, video.year, video.area].filter(Boolean).join(' · ') || '影视',
-                                    type: 'video',
-                                }))}
+                                        }))}
                                 focusedIndex={focusIndex}
                                 onFocusedIndexChange={setFocusIndex}
-                                onSelect={(_item: Grid3DSliderItem, index: number) => {
+                                onSelect={(_item, index: number) => {
                                     const video = videos[index];
                                     if (video) void openDetail(activeSite?.key ?? '', video);
                                 }}
-                                isDaylight={false}
-                                hasFloatingPlayer={false}
-                                openOnAnyCardClick
                             />
                         )}
                     </div>
