@@ -1,6 +1,6 @@
 import type { SongResult } from '../types';
 import { getPlaybackSongKey } from './appPlaybackGuards';
-import { getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
+import { getProviderSongMetadata, getSongAlbumLabel, getSongArtistLabel, getSongCoverUrl } from '../services/onlineMusic/songMetadata';
 
 // src/utils/queueMirrorEntry.ts
 //
@@ -122,6 +122,23 @@ export type QueueMirrorEntry = {
     canLike: boolean;
 };
 
+/** `blob:` / `data:` 只活在 WebView 进程里，原生下不动。 */
+const isWebViewOnlyUrl = (url: string): boolean => /^(blob:|data:)/i.test(url);
+
+/**
+ * 镜像里的封面地址：必须是原生 `fetchArtwork()` 下得动的。
+ *
+ * 界面用的 `getSongCoverUrl` 会把封面换成字节兜底的 `blob:`（见 onlineCoverFallback），
+ * 原生直接丢弃，后台兜底切歌那首就没有封面（#336）。所以先取界面那份（要登录态的封面
+ * 换成的回环代理地址，原生是下得动的），是 `blob:` / `data:` 就退回 provider 的原始地址，再不行就留空。
+ */
+const nativeMirrorArtworkUrl = (song: SongResult): string => {
+    const ui = String(getSongCoverUrl(song) || '').trim();
+    if (ui && !isWebViewOnlyUrl(ui)) return ui;
+    const raw = String(getProviderSongMetadata(song).coverUrl || '').trim();
+    return raw && !isWebViewOnlyUrl(raw) ? raw : '';
+};
+
 /** 把一条歌转成镜像条目（与 FoliaPlaybackService 的镜像解析字段一一对应）。 */
 export const buildQueueMirrorEntry = (
     song: SongResult,
@@ -134,7 +151,7 @@ export const buildQueueMirrorEntry = (
         title: song.name || '',
         artist: getSongArtistLabel(song) || '',
         album: getSongAlbumLabel(song) || '',
-        artworkUrl: getSongCoverUrl(song) || '',
+        artworkUrl: nativeMirrorArtworkUrl(song),
         durationMs: getMirrorDurationMs(song),
         providerId: identity.providerId,
         serverSongId: identity.serverSongId,
