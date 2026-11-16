@@ -252,7 +252,10 @@ class NativePlaybackEngine {
         const sourceGeneration = this.sourceGenerationVersion;
         await this.sourceReadyPromise;
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
-        await this.enqueueNativeCommand(() => nativePlayer.play());
+        await this.enqueueNativeCommand(
+            () => nativePlayer.play(),
+            () => intentGeneration === this.playIntentVersion && sourceGeneration === this.sourceGenerationVersion,
+        );
         if (intentGeneration !== this.playIntentVersion || sourceGeneration !== this.sourceGenerationVersion) return;
         // 播放意图先记下：等 `playing` 事件回来之前，进度条不该停在原地不动。
         // 从暂停那一帧的位置接着走，而不是从更旧的采样值重新追。
