@@ -10,7 +10,8 @@ import {
 import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 
 // 封面兜底会把渲染过的封面换成 WebView 内的 blob: 地址；这里只需要控制它的返回值。
-vi.mock('../../../src/services/onlineMusic/onlineCoverFallback', () => ({
+vi.mock('../../../src/services/onlineMusic/onlineCoverFallback', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../src/services/onlineMusic/onlineCoverFallback')>()),
     resolveProxiedSongCover: vi.fn((_song: unknown, url: string) => url),
     requestSongCoverFallback: vi.fn(),
 }));
@@ -154,6 +155,16 @@ describe('buildQueueMirrorEntry', () => {
             vi.mocked(resolveProxiedSongCover).mockImplementation((_song, url) => url);
             expect(buildQueueMirrorEntry(withCover('blob:https://localhost/abc')).artworkUrl).toBe('');
             expect(buildQueueMirrorEntry(withCover('DATA:image/png;base64,AAAA')).artworkUrl).toBe('');
+        });
+
+        it('ignores leading whitespace and letter case when spotting a blob: url', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation(() => '  BLOB:https://localhost/abc');
+            expect(buildQueueMirrorEntry(withCover('https://img.example/c.jpg')).artworkUrl).toBe('https://img.example/c.jpg');
+        });
+
+        it('is empty when the song has no cover at all', () => {
+            vi.mocked(resolveProxiedSongCover).mockImplementation((_song, url) => url);
+            expect(buildQueueMirrorEntry(online('netease', '1')).artworkUrl).toBe('');
         });
 
         it('keeps a loopback proxy url (cookie-gated covers) that native can download', () => {
