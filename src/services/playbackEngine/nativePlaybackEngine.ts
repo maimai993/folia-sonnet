@@ -110,6 +110,7 @@ class NativePlaybackEngine {
     private songKey: string | null = null;
     private sourceReadyPromise: Promise<void> = Promise.resolve();
     private sourceReadyFailure: unknown = null;
+    private sourceReadyGeneration = 0;
 
     /** Returns the current source preparation failure, if one has already been observed. */
     sourceReadyError(): unknown {
@@ -214,6 +215,7 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
         if (typeof options.repeatMode === 'number') this.repeatMode = options.repeatMode;
+        const sourceReadyGeneration = ++this.sourceReadyGeneration;
         this.sourceReadyFailure = null;
         const sourceReady = (async () => {
             await nativePlayer.prepare({
@@ -225,7 +227,7 @@ class NativePlaybackEngine {
             await nativePlayer.setVolume(this.volume);
         })();
         this.sourceReadyPromise = sourceReady.catch(error => {
-            this.sourceReadyFailure = error;
+            if (sourceReadyGeneration === this.sourceReadyGeneration) this.sourceReadyFailure = error;
             throw error;
         });
         await this.sourceReadyPromise;
@@ -279,6 +281,7 @@ class NativePlaybackEngine {
         this.durationMs = 0;
         this.lastDeliveredMs = 0;
         this.currentUrl = null;
+        this.sourceReadyGeneration++;
         this.sourceReadyPromise = Promise.resolve();
         this.sourceReadyFailure = null;
         this.songKey = null;
