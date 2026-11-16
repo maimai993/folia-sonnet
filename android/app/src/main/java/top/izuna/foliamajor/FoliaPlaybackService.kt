@@ -2179,6 +2179,13 @@ class FoliaPlaybackService : android.app.Service() {
     private var pendingArtworkUrl: String? = null
 
     /**
+     * 最近一次被判为「图本身不可用」的封面地址（超限 / 不是图片 / 4xx）。
+     * 同一地址不再下载、不再重试；换成别的地址自然不受影响，所以只需记一个。
+     */
+    @Volatile
+    private var permanentlyFailedArtworkUrl: String? = null
+
+    /**
      * 当前这首歌的封面地址，和已经试过几次。
      *
      * 重试要能判断「还是不是那张图」：切歌之后 `pendingArtworkUrl` 会被新歌占住，
@@ -2200,6 +2207,8 @@ class FoliaPlaybackService : android.app.Service() {
         if (cachedArtwork != null) return
         val url = retriedUrl ?: return
         if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) return
+        // 这张图本身不可用（超限 / 不是图片）：回前台也不再下载一遍。
+        if (url == permanentlyFailedArtworkUrl) return
         if (pendingArtworkUrl != null) return
         artworkRetries = 0
         pendingArtworkUrl = url
@@ -2219,6 +2228,11 @@ class FoliaPlaybackService : android.app.Service() {
         if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
             return
         }
+        // 这张图已经判过「本身不可用」：Web 每次 update 都会把同一个地址再推一遍，别每次都重新下载。
+        if (url == permanentlyFailedArtworkUrl) {
+            pendingArtworkUrl = null
+            return
+        }
         // 换了一张图就从头数重试次数。重试自己调过来时（retry = true）不清零，
         // 否则每次走到这里都把计数抹成 0，退避永远退不上去。
         if (!retry && retriedUrl != url) {
@@ -2226,10 +2240,22 @@ class FoliaPlaybackService : android.app.Service() {
             artworkRetries = 0
         }
         BackgroundWork.io("artwork") {
-            val bitmap = downloadBitmap(url)
+            val load = downloadBitmap(url)
+            val bitmap = (load as? ArtworkLoad.Loaded)?.bitmap
             // 下载期间可能已经切歌了：pendingArtworkUrl 已经换成新歌的地址，这张晚到的图要丢掉，
             // 否则会把上一首的封面贴到当前歌上。
             if (url != pendingArtworkUrl) {
+                return@io
+            }
+            /*
+             * 永久失败（图本身不可用：超限 / 不是图片 / 4xx）：记下这个地址，不重试，
+             * 回前台也不再重新下载（#352 审查）。**不占着 pendingArtworkUrl**，以免挡住下一首。
+             * 临时失败（网络 / 5xx）才走下面的退避重试。
+             */
+            if (load is ArtworkLoad.Permanent) {
+                permanentlyFailedArtworkUrl = url
+                if (pendingArtworkUrl == url) pendingArtworkUrl = null
+                Log.i(TAG, "Artwork is unusable, not retrying: ${load.reason}")
                 return@io
             }
             /*
@@ -2485,7 +2511,8 @@ class FoliaPlaybackService : android.app.Service() {
             val comma = base64.indexOf(',')
             val payload = if (comma >= 0) base64.substring(comma + 1) else base64
             val bytes = Base64.decode(payload, Base64.DEFAULT)
-            return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            // 同样按目标尺寸采样解码（#352）：Web 交下来的 data URL 也可能是超大原图。
+            return (ArtworkDecoder.decodeSampled(bytes) as? ArtworkLoad.Loaded)?.bitmap
         } catch (error: Throwable) {
             // 封面解析失败不该影响播放与通知，退回默认图标即可。
             Log.w(TAG, "Failed to decode artwork", error)
@@ -3112,7 +3139,26 @@ class FoliaPlaybackService : android.app.Service() {
             return if (info.durationMs > 0L) Math.min(advanced, info.durationMs) else advanced
         }
 
-        private fun downloadBitmap(url: String): Bitmap? {
+        /** 最多读 [limit] 字节；超过返回 null（不把半截数据当图）。 */
+        private fun readAtMost(stream: java.io.InputStream, limit: Int): ByteArray? {
+            val out = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(16 * 1024)
+            var total = 0
+            while (true) {
+                val read = stream.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > limit) return null
+                out.write(buffer, 0, read)
+            }
+            return out.toByteArray()
+        }
+
+        /** 日志里只留主机名：封面地址常带签名参数，不进日志（AGENTS：凭据不进日志）。 */
+        private fun coverHost(url: String): String =
+            try { java.net.URL(url).host } catch (ignored: Throwable) { "?" }
+
+        private fun downloadBitmap(url: String): ArtworkLoad {
             /*
              * blob: / data: 只有 WebView 自己认，原生这里没有这条协议。
              *
@@ -3120,43 +3166,47 @@ class FoliaPlaybackService : android.app.Service() {
              * 直接丢给 java.net.URL 就是一次 MalformedURLException：日志里刷一条
              * "unknown protocol: blob"，封面照样拿不到，只是把「没图」伪装成「下载失败」。
              * 这两种地址本来就不可能从原生这条路过，看到就安静返回，免得掩盖真正的网络错误。
+             * 它们也不可能重试成功，按永久失败处理。
              */
             if (url.startsWith("blob:", ignoreCase = true) || url.startsWith("data:", ignoreCase = true)) {
-                return null
+                return ArtworkLoad.Permanent("local-only scheme")
             }
+            var connection: java.net.HttpURLConnection? = null
             var stream: java.io.InputStream? = null
             try {
-                val connection =
-                        java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
                 connection.setConnectTimeout(6000)
                 connection.setReadTimeout(10000)
                 connection.setInstanceFollowRedirects(true)
                 connection.setRequestProperty("User-Agent", "Mozilla/5.0")
                 val code = connection.getResponseCode()
                 if (code < 200 || code >= 300) {
-                    connection.disconnect()
-                    return null
+                    // 4xx（除了 408 / 429）是地址本身的问题：重试没有意义；5xx / 超时 / 限流才值得退避。
+                    val permanent = code in 400..499 && code != 408 && code != 429
+                    Log.w(TAG, "Cover request failed: HTTP $code from ${coverHost(url)}")
+                    return if (permanent) ArtworkLoad.Permanent("HTTP $code") else ArtworkLoad.Transient
+                }
+                // 声明的长度已经超限就不读了（#352）：省掉一次必败的下载。
+                val declared = connection.getContentLengthLong()
+                if (declared > ArtworkSampling.MAX_ARTWORK_BYTES) {
+                    val reason = "declared size $declared exceeds ${ArtworkSampling.MAX_ARTWORK_BYTES}"
+                    Log.w(TAG, "Cover skipped: $reason (${coverHost(url)})")
+                    return ArtworkLoad.Permanent(reason)
                 }
                 stream = connection.getInputStream()
-                val decoded = android.graphics.BitmapFactory.decodeStream(stream)
-                connection.disconnect()
-                if (decoded == null) {
-                    return null
+                // 先把字节读进内存（带上限），再按目标尺寸采样解码：通知栏只要一张小图，
+                // 整张解码再缩放的峰值是整图像素的好几倍，超大封面会 OOM 并被当成「没有封面」。
+                val bytes = readAtMost(stream, ArtworkSampling.MAX_ARTWORK_BYTES)
+                if (bytes == null) {
+                    val reason = "body exceeds ${ArtworkSampling.MAX_ARTWORK_BYTES} bytes"
+                    Log.w(TAG, "Cover skipped: $reason (${coverHost(url)})")
+                    return ArtworkLoad.Permanent(reason)
                 }
-                // 通知栏只需要一张小图，顺手压到 512，避免大图白占内存。
-                val edge = Math.max(decoded.getWidth(), decoded.getHeight())
-                if (edge > 512) {
-                    val ratio = 512f / edge
-                    val scaled = android.graphics.Bitmap.createScaledBitmap(decoded,
-                            Math.round(decoded.getWidth() * ratio),
-                            Math.round(decoded.getHeight() * ratio), true)
-                    decoded.recycle()
-                    return scaled
-                }
-                return decoded
+                return ArtworkDecoder.decodeSampled(bytes)
             } catch (error: Throwable) {
-                Log.w(TAG, "Failed to download the cover", error)
-                return null
+                // 网络层的异常（超时、断线、DNS）：临时失败，走退避重试。
+                Log.w(TAG, "Failed to download the cover from ${coverHost(url)}", error)
+                return ArtworkLoad.Transient
             } finally {
                 if (stream != null) {
                     try {
@@ -3164,6 +3214,12 @@ class FoliaPlaybackService : android.app.Service() {
                     } catch (ignored: java.io.IOException) {
                         // 关闭失败不影响结果。
                     }
+                }
+                // 任何路径（含读取中途抛异常）都收掉连接，不留半开的 socket。
+                try {
+                    connection?.disconnect()
+                } catch (ignored: Throwable) {
+                    // 已经断开就算了。
                 }
             }
         }
