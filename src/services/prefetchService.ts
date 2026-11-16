@@ -558,6 +558,15 @@ export const warmupSongAudio = (
     // 不带 requiredQuality 读：音质不同只表示这次要重新要地址，不能先把缓存里另一音质的
     // 地址与 ReplayGain 抹掉 —— 这次预热失败时，原有音源还要照常可用。
     const cached = getPrefetchedData(song);
+    /*
+     * `CACHED_IN_DB` 只说明「缓存里有这份」，不说明它**能读出来**。
+     *
+     * 以前这里见到哨兵就直接原样返回，调用方（分析、预听）一律判死 —— 于是一份写坏的
+     * 缓存（旧版本落下的、写到一半断的）会把这首歌的分析永远挡住，而歌本身照样在放。
+     * 现在只把「缓存命中」当成**乐观结论**：真正要读的那一刻会去问回环地址，读不出来
+     * 就重新要一次平台地址（见 beatFxSource 的 resolveStreamUrl / resolveNativeAudioUrl）。
+     * 这里照旧返回哨兵，那正是「先看缓存」的意思。
+     */
     if (cached?.audioUrl === 'CACHED_IN_DB') {
         return Promise.resolve({ audioUrl: 'CACHED_IN_DB' });
     }

@@ -59,6 +59,8 @@ export const matchesCategory = (key: string, category: CacheCategory): boolean =
   // 智能平衡's own readings of each song (services/volumeBalance/balanceRecords.ts): a feature of its own,
   // so cleared on its own, without throwing away automix's analyses or being thrown away with them.
   if (category === 'volumeBalance') return key.startsWith('volume_balance_');
+  // MV 匹配结果不在 IndexedDB 里，量它的是 useBilibiliMvStore.readMvMatchCacheBytes()。
+  if (category === 'mvMatch') return false;
   // A track's ReplayGain describes the audio and arrives with it, so it is cleared with it. It is
   // counted here but NOT in mediaCount below, which means "songs cached" and would otherwise
   // double for every track that has both. The level the audio was fetched at (`audioLevel_`)

@@ -1012,11 +1012,38 @@ class LocalAudioServer(context: Context) {
             connection.connectTimeout = 8000
             connection.readTimeout = 15000
             connection.instanceFollowRedirects = true
+            // 先给个兜底 UA，平台自己那份随后覆盖 —— 有的 CDN 对太短的 UA 直接回 403，
+            // 而播放器和这里用不同 UA 就会出现「播得动却存不下来」（分离会因此退回 WebView）。
             connection.setRequestProperty("User-Agent", "Mozilla/5.0")
             // 飞牛这类「要会话 Cookie 才给字节」的源：网关认识自己的 URL，
             // 要带什么头由它说（见 MusicGateway.headersForPlaybackUrl）。
-            for ((key, headerValue) in top.izuna.foliamajor.online.MusicGateway.headersForPlaybackUrl(audioUrl)) {
+            // 视频站的 CDN 防盗链也走这里：它会给回 Referer / Origin / UA。
+            val platformHeaders =
+                top.izuna.foliamajor.online.MusicGateway.headersForPlaybackUrl(audioUrl)
+            for ((key, headerValue) in platformHeaders) {
                 connection.setRequestProperty(key, headerValue)
+            }
+            /*
+             * 中转地址要跟到真实的那条。
+             *
+             * 视频站的音频是**经过本机中转**才到播放器的（VideoStreamProxy 里有几条候选
+             * 地址，一台回 403 换下一台）。缓存这一侧如果直接把中转地址拿来当下载地址，
+             * 下到的可能是「中转找不到这条流」的 404 文本 —— 于是缓存里躺着一份放不出来
+             * 的东西，而清单上写着它已经缓存好了。这里先把中转地址换回真实地址。
+             */
+            val directUrl = VideoStreamProxy.directUrlFor(audioUrl)
+            if (directUrl != null && directUrl != audioUrl) {
+                connection.disconnect()
+                connection = java.net.URL(directUrl).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 8000
+                connection.readTimeout = 15000
+                connection.instanceFollowRedirects = true
+                connection.setRequestProperty("User-Agent", "Mozilla/5.0")
+                val directHeaders =
+                    top.izuna.foliamajor.online.MusicGateway.headersForPlaybackUrl(directUrl)
+                for ((key, headerValue) in directHeaders) {
+                    connection.setRequestProperty(key, headerValue)
+                }
             }
             val code = connection.responseCode
             if (code < 200 || code >= 300) {
@@ -1041,8 +1068,33 @@ class LocalAudioServer(context: Context) {
                 return 0L
             }
             val durationUs = probeMediaDuration(part)
-            if (minDurationMs > 0L && durationUs > 0L && durationUs < minDurationMs * 500L) {
-                // 试听片段：不存，也别让调用方把它当成整首歌的副本。
+            /*
+             * 试听片段的门槛：**不够歌长的一半**就不存。
+             *
+             * minDurationMs 是毫秒，durationUs 是微秒，所以要乘 1000；这里早先写的是
+             * 500，等于要求「文件时长不得少于歌长的一半」，一旦探测出来的时长偏短就
+             * 一律被判成试听片段删掉 —— 而视频站的音频是 DASH 分片（.m4s），它没有
+             * 完整文件那种时长元数据，probeMediaDuration 探出来常常只有几十秒。
+             * 结果就是：分离永远拿不到音频，退回 WebView 那条只分析混音的路
+             * （鼓点、人声分离全部失效），而且**一点错都不报**。
+             *
+             * 探测不出时长（<= 0）时放行：宁可存一份可能不完整的副本，也别让整首歌
+             * 的分析因为探测不到元数据而彻底没有文件可读。
+             */
+            /*
+             * 只有「探测出来的时长明显偏短」才当试听片段 —— 但 DASH 分片会误伤。
+             *
+             * 视频站的音频是 .m4s 分片：它的 mvhd 里没有完整文件的时长，探出来常常
+             * 只有几十秒，于是整首正常的歌被判成试听片段删掉，分离拿不到音频、
+             * 悄悄退回 WebView（鼓点 / 人声分离全部失效，且不报错）。
+             *
+             * 所以给这一档单独放宽：地址带 ttl / deadline 这类取流签名的，一定是我们
+             * 刚从 CDN 完整下载的那一份（分片不会有这种参数），跳过时长判定。
+             */
+            val signedStream = audioUrl.contains("deadline=") || audioUrl.contains("upsig=") ||
+                audioUrl.contains("expires=")
+            if (!signedStream && minDurationMs > 0L && durationUs > 0L &&
+                durationUs < minDurationMs * 500L) {
                 Log.i(TAG, "media cache refused a clip (" + (durationUs / 1000) + "ms of " +
                         minDurationMs + "ms): " + cacheKey)
                 part.delete()

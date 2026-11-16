@@ -6,6 +6,7 @@ import { handleSetVisualizerMode } from '../../../stores/useVisualizerSettingsSt
 import { handleSetVolume, handleToggleMute, setAudioQuality } from '../../../stores/useAudioSettingsStore';
 import { openSettings } from '../../../stores/useSettingsModalStore';
 import { handleToggleCoverColorBg } from '../../../stores/useThemeSettingsStore';
+import { useBilibiliMvStore, type MvVideoQuality } from '../../../stores/useBilibiliMvStore';
 
 // src/components/app/player-panel/buildPlayerPanelModel.ts
 
@@ -280,7 +281,23 @@ export const buildPlayerPanelModel = ({
         account: {
             accountController,
             audioQuality,
-            onAudioQualityChange: setAudioQuality,
+            /*
+             * B 站这一家的「画质」有两半：音频那条流由 audioQuality 决定，
+             * 画面（MV 背景）由 MV store 自己的 quality 决定 —— 两个值各管各的。
+             * 所以从播放页改画质时两边一起写，否则用户会看到「面板上改了、画面还是
+             * 原来那一档」，而进设置页的 MV 子选项里改却是好的。
+             *
+             * 档位名对得上：standard / high / ultra / lossless / hires，MV 只认前三档，
+             * 更高的那两档落到 ultra（有 1080P+ 就够，MV 背景要的是流畅）。
+             */
+            onAudioQualityChange: quality => {
+                setAudioQuality(quality);
+                if (quality === 'standard' || quality === 'high' || quality === 'ultra') {
+                    useBilibiliMvStore.getState().setQuality(quality as MvVideoQuality);
+                } else {
+                    useBilibiliMvStore.getState().setQuality('ultra');
+                }
+            },
             onSyncData: handleSyncData,
             isSyncing,
             useCoverColorBg,

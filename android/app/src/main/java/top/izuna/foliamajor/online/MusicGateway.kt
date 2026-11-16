@@ -1043,6 +1043,11 @@ class MusicGateway private constructor() {
          * 取流 / 缓存下载时要附带的请求头：目前只有飞牛要带会话 Cookie
          * （它的音频流认 music-token，不认就不给字节）。其余平台回空表。
          */
+        /** 和 FoliaBilibiliPlugin 里那一份保持一致：同一个站，不该因为入口不同而回不同结果。 */
+        private const val BILIBILI_USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
+                "Chrome/120.0.0.0 Mobile Safari/537.36"
+
         @JvmStatic
         fun headersForPlaybackUrl(url: String?): Map<String, String> {
             if (url != null) {
@@ -1052,6 +1057,16 @@ class MusicGateway private constructor() {
                     val headers = HashMap<String, String>()
                     headers["Referer"] = "https://www.bilibili.com/"
                     headers["Origin"] = "https://www.bilibili.com"
+                    /*
+                     * UA 也要给。
+                     *
+                     * 缓存下载（LocalAudioServer.storeMediaCacheFromUrl）默认只带一个
+                     * "Mozilla/5.0"，而这一站的 CDN 对太短的 UA 有时直接回 403；
+                     * 播放器那条路（FoliaBilibiliPlugin）带的是完整那一串，于是
+                     * 出现过「播得动、却怎么都存不下来」—— 分离因此一直退回 WebView。
+                     * 两条路用同一个 UA，别让它们看出区别。
+                     */
+                    headers["User-Agent"] = BILIBILI_USER_AGENT
                     return headers
                 }
             }
@@ -1062,10 +1077,24 @@ class MusicGateway private constructor() {
             return Collections.singletonMap("Cookie", feiniuCookieValue(creds))
         }
 
-        /** 这个地址是不是那个视频站的取流 CDN（防盗链只认 Referer，别的都不用带）。 */
-        private fun isVideoCdnUrl(url: String): Boolean =
-            url.contains("bilivideo.com") || url.contains("bilivideo.cn") ||
-                url.contains("akamaized.net") && url.contains("bilivideo")
+        /**
+         * 这个地址是不是那个视频站的取流 CDN（防盗链只认 Referer，别的都不用带）。
+         *
+         * 主机名是站上**动态下发**的，换一轮调度就换一批，所以这里按后缀认个大概就够，
+         * 认不出来的代价只是少带一个 Referer、下载回 403 —— 也就是分离悄悄退回 WebView。
+         * 见过的主机：upos-sz-mirror*-、cn-*-、*.mcdn.、*.szbdyd. 加上 bilivideo 的
+         * .com / .cn / .net 三个后缀，以及落在 akamai 上的那批。
+         */
+        private fun isVideoCdnUrl(url: String): Boolean {
+            val host = try {
+                java.net.URI(url).host?.lowercase(java.util.Locale.ROOT) ?: return false
+            } catch (error: Exception) {
+                return false
+            }
+            // 只看主机：查询串里带着 upos 之类的字样不算。
+            return host.contains("bilivideo") || host.contains("biliapi") ||
+                (host.contains("akamaized") && host.contains("bili"))
+        }
 
         // ==================== 网易云（weapi 直连） ====================
 

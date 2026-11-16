@@ -140,7 +140,7 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
         for (const folder of folders.list ?? []) {
             const folderId = folder.id;
             if (typeof folderId !== 'number') continue;
-            shelves.push({
+            const shelf: BilibiliShelf = {
                 id: `fav:${folderId}`,
                 title: folder.title ?? '',
                 coverUrl: https(folder.cover),
@@ -162,9 +162,17 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
                         all.push(...items);
                         if (items.length === 0 || page.has_more === false) break;
                     }
+                    /*
+                     * 收藏夹自己没有封面图（`fav/folder/created/list-all` 回的字段里就没有
+                     * cover 这一项），只能用夹内第一条的图当封面 —— 站内列表也是这么做的。
+                     * 不回填的话卡片永远摆一个渐变色块，点进去再返回才「突然有了图」
+                     * （那一次是缓存里已经有条目了）。
+                     */
+                    if (!shelf.coverUrl && all[0]?.coverUrl) shelf.coverUrl = all[0].coverUrl;
                     return all;
                 },
-            });
+            };
+            shelves.push(shelf);
         }
     } catch {
         // 这个分类取不到就不摆它，别把整个歌单页判成失败。
@@ -235,31 +243,18 @@ export const listBilibiliShelves = async (): Promise<BilibiliShelf[]> => {
      * 「我的收藏」是这一站的总收藏 —— 它本身不是一个能翻的列表，站内也是把各个收藏夹
      * 汇总起来看的；这里用同一份收藏夹数据摊平，避免摆一个点进去什么都没有的入口。
      */
-    const recommend: BilibiliShelf = {
-        id: 'recommend',
-        title: 'shelfRecommend',
-        coverUrl: undefined,
-        load: async () => {
-            try {
-                const feed = await fetchBilibiliZoneFeed(0, 30);
-                const list = feed
-                    .filter(hit => hit.bvid)
-                    .map(hit => toItem({
-                        bvid: hit.bvid,
-                        title: hit.title,
-                        author: hit.author,
-                        pic: hit.coverUrl,
-                        duration: hit.durationSec,
-                    }));
-                // 封面用推荐流第一条（这一栏本来也没有自己的封面图）。
-                if (!recommend.coverUrl && list[0]?.coverUrl) recommend.coverUrl = list[0].coverUrl;
-                return list;
-            } catch {
-                return [];
-            }
-        },
-    };
-    shelves.push(recommend);
+    /*
+     * 「我的关注」和「我的粉丝」**不再是歌单**。
+     *
+     * 这里原来把两者的名单摊平成投稿流（每个人拉一页，拼成一个大列表）挂在「歌单」
+     * 页签下。问题很直接：那个列表既不是用户存的歌单，也不是任何一家的收藏 ——
+     * 它是「这些人最近发了什么」，而且只取前 12 个人、每人一页，剩下的根本看不到；
+     * 人数一变排序就跟着变，同一个入口点两次内容不一样。
+     *
+     * 正确的归属是首页那两个**内容入口**：「推荐」和「专辑」两栏的入口改成这两个
+     * 名单（见 bilibiliProvider 的 explore / shelves 描述），点进去是**人**，
+     * 点某个人再进他的投稿页 —— 和站内一致，也不会把「人」硬塞成「歌」。
+     */
 
     /*
      * 「我的收藏」：把上面那些收藏夹摊平成一个入口。

@@ -51,9 +51,7 @@ const StoragePage: React.FC = () => {
     const [clearingSeparation, setClearingSeparation] = useState(false);
     // 分离出来的伴奏 / 清唱落在原生缓存里，用量同样上报到这个 store；
     // 进存储页问一次，和其余缓存一起量。
-    const vocalCachedCount = useAudioSettingsStore(state => state.vocalCancelCachedCount);
     const vocalCacheBytes = useAudioSettingsStore(state => state.vocalCancelCacheBytes);
-    const vocalCacheLimit = useAudioSettingsStore(state => state.vocalCancelCacheLimit);
     useEffect(() => {
         if (isCapacitorAndroid()) refreshInstrumentalStatus();
     }, []);
@@ -127,20 +125,6 @@ const StoragePage: React.FC = () => {
                         <Toggle checked={prebuildTracksEnabled} onChange={setPrebuildTracksEnabled} />
                     </Row>
                 )}
-                {isCapacitorAndroid() && (
-                    <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
-                        {vocalCachedCount > 0 && (
-                            <Value>{t('account.vocalCancelCache', {
-                                count: vocalCachedCount,
-                                used: formatCacheSize(vocalCacheBytes),
-                                limit: formatCacheSize(vocalCacheLimit),
-                            })}</Value>
-                        )}
-                        <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
-                            {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
-                        </Button>
-                    </Row>
-                )}
             </Group>
 
             <Group
@@ -151,6 +135,20 @@ const StoragePage: React.FC = () => {
                     </Button>
                 )}
             >
+                {/*
+                 * 分离出来的伴奏 / 清唱单独一行，和上面那些缓存项摆在一起 ——
+                 * 它本来就是「缓存详情」里的一份，放在媒体缓存那一组反而看不出归谁管。
+                 *
+                 * 只报大小：存了几首是个会变的数，用户看这一行只想知道占了多少地方。
+                 */}
+                {isCapacitorAndroid() && (
+                    <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
+                        <Value>{formatCacheSize(vocalCacheBytes)}</Value>
+                        <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
+                            {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
+                        </Button>
+                    </Row>
+                )}
                 {CACHE_ROWS.map(({ category, option }) => (
                     <Row key={category} option={option}>
                         <Value>{cacheSizes[category]}</Value>

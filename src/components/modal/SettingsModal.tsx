@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db';
+import { cacheSizeLabels } from './settings/useCacheUsagePanel';
+
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
@@ -382,7 +384,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         cover: '0 B',
         media: '0 B',
         analysis: '0 B',
-        volumeBalance: '0 B'
+        volumeBalance: '0 B',
+        mvMatch: '0 B'
     });
     const [mediaCount, setMediaCount] = useState(0);
     const [isCleaning, setIsCleaning] = useState<CacheCategory | null>(null);
@@ -813,23 +816,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         refreshServerProfile(config);
     };
 
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
-
     const applyCacheUsage = (usage: Awaited<ReturnType<typeof getCacheUsageByCategory>>) => {
-        setCacheSizes({
-            playlist: formatBytes(usage.playlist),
-            lyrics: formatBytes(usage.lyrics),
-            cover: formatBytes(usage.cover),
-            media: formatBytes(usage.media),
-            analysis: formatBytes(usage.analysis),
-            volumeBalance: formatBytes(usage.volumeBalance)
-        });
+        setCacheSizes(cacheSizeLabels(usage));
         setMediaCount(usage.mediaCount);
     };
 

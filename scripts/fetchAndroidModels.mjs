@@ -39,14 +39,14 @@ const MODELS = [
         /*
          * 从 SCNet 官方权重（starrytong/SCNet, MIT）导出的 ONNX，int8 量化后 12.9MB。
          *
-         * 它不在镜像上：导出要 torch + 量化校准，不是「下载一个文件」能得到的，
-         * 所以这里只校验、不下载。缺失时直接报出来源，比悄悄去镜像取一个同名的
-         * 别的文件安全 —— 分轨结果全错的 APK 比打不出来更难查。
+         * 它不能靠「去上游下载」得到 —— 导出要 torch + 量化校准 —— 所以这份成品
+         * 放在自家仓库里（yue784/folia-models），下面 MIRRORS 的第三条能取到。
+         * 大小与 sha256 照样校验：镜像上换了文件、或哪天真被同名文件顶掉，都在这里挡住。
          */
         file: 'scnet.int8.onnx',
         bytes: 12900277,
         sha256: '98228931494151762a1c4ab1ec7899a894b1f81fd4a509921a9d2f9bacc50845',
-        from: 'local',
+        from: 'mirror',
     },
 ];
 
@@ -59,6 +59,11 @@ const MODELS = [
 const MIRRORS = [
     'https://hf-mirror.com/HUAI4236/folia-models/resolve/main/{file}',
     'https://huggingface.co/HUAI4236/folia-models/resolve/main/{file}',
+    /*
+     * 自家仓库，放那些「下载不到、只能自己导出」的成品（目前是 scnet）。
+     * 排在最后：前面两个是原站镜像，取不到才来这里，别让 GitHub 的出口拖慢国内构建。
+     */
+    'https://raw.githubusercontent.com/yue784/folia-models/main/{file}',
 ];
 
 /** 首字节的等待上限；传输本身另有预算。 */

@@ -115,9 +115,17 @@ const resolveStreamUrl = (song: SongResult): Promise<{ url: string | null; why?:
         if (omni.canPlayExternally(song)) {
             return { url: null, why: 'this track is played by its own app, so there is no audio here to analyse' };
         }
-        if (getPrefetchedData(song)?.audioUrl === 'CACHED_IN_DB') {
-            return { url: null, why: 'the copy in the media cache cannot be read' };
-        }
+        /*
+         * 缓存里有、但读不出来时**仍旧去要一个新地址**。
+         *
+         * 以前这里直接判死（`the copy in the media cache cannot be read`）：那份缓存
+         * 可能是「缓存开关打开之前写的」「写到一半断的」，或者是**旧版本写坏的**（视频站
+         * 那条 DASH 音轨曾经被时长判定误杀，落下一份读不出来的东西）。一旦判死，这首歌
+         * 的分析就永远是空的 —— 鼓点、人声分离全都不跑，而歌本身照样在放。
+         *
+         * 现在把那一句当**注释**而不是结论：接着往下要一次地址，拿得到就照常分析、
+         * 顺带把缓存写成新的那一份。
+         */
         try {
             const warmed = await warmupSongAudio(song, useAudioSettingsStore.getState().audioQuality);
             if (warmed?.audioUrl && warmed.audioUrl !== 'CACHED_IN_DB') return { url: warmed.audioUrl };
@@ -277,6 +285,14 @@ export const resolveNativeAudioUrl = async (song: SongResult): Promise<string | 
     const cachedUrl = await readNativeMediaCacheUrl(cacheKey);
     if (cachedUrl) return cachedUrl;
     if (getPlaybackSourceRef(song).kind !== 'online') return null;
+    /*
+     * 缓存里那份读不出来（`CACHED_IN_DB` 但回环地址拿不到），或者压根没缓存：
+     * 都要**从平台重新要一个地址**再落盘。
+     *
+     * `resolveStreamUrl` 现在会自己处理「缓存里有一份读不出来的」这种情况 ——
+     * 以前这里先把缓存判死、再也没去问平台，于是视频站的曲目只有第一次能分析，
+     * 之后那份坏缓存一直挡在前面（见 resolveStreamUrl 里的注释）。
+     */
     const { url, why } = await resolveStreamUrl(song);
     if (!url) {
         console.warn(`[BeatFx] native: no audio source for this track (${why ?? 'no stream URL'})`);

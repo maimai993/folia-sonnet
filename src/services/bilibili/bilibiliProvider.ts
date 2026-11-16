@@ -7,6 +7,7 @@ import {
     searchBilibiliUsers,
 } from './library';
 import { listBangumiEpisodes, listBangumiSeasons, searchBangumiSeasons, type BangumiSeason } from './bangumi';
+import { listBilibiliFans, listBilibiliFollowings } from './account';
 import type { BilibiliSearchHit } from '../../types/bilibili';
 import QRCode from 'qrcode';
 import {
@@ -15,7 +16,7 @@ import {
     fetchBilibiliZoneFeed,
     fetchBilibiliRecommendations,
     fetchBilibiliPlayUrl,
-    fetchBilibiliVideoInfo,
+    fetchBilibiliVideoInfo, fetchBilibiliEpisodeCid,
     fetchBilibiliPages,
     fetchBilibiliSubtitle,
     fetchBilibiliSubtitles,
@@ -115,6 +116,119 @@ const shelfTitle = (title: string): string => {
     return text === key ? title : text;
 };
 
+/**
+ * 「我的关注」「我的粉丝」这两个入口的 id。
+ *
+ * 它们**不是歌单**（见 library.ts：以前它们被摊平成投稿流挂在歌单页签下，点开是
+ * 一堆不相干 UP 主的投稿）。现在它们只出现在首页「推荐」那一栏，点开是**人**。
+ *
+ * id 沿用原来的两个值（`followings` / `fans`）：存下来的收藏、最近打开之类的记录
+ * 里可能已经有它们，换名就等于把那些记录变成死链。
+ */
+export const BILIBILI_FOLLOWINGS_ID = 'followings';
+export const BILIBILI_FANS_ID = 'fans';
+
+/** 这两份名单分页时一页多少人（和 account.ts 的 PAGE_SIZE 一致）。 */
+const RELATION_PAGE_SIZE = 30;
+
+/**
+ * 把一页「人」变成一条条**可以直接放的曲目单**。
+ *
+ * 以前这里是 `type: 'artist'`：点开进的是「歌手页」，页面上只有一个大播放键和一张
+ * 作品列表 —— 用户的原话是「里面是人，它显示的是播放按钮，你怎么播放他的视频呢？
+ * 怎么挑选他的视频呢？」。也就是说这条路要用户多点一次才能看见投稿，而且那个播放
+ * 键的语义也不清楚（它放的是整份歌单还是随机一首？）。
+ *
+ * 现在用 `type: 'playlist'`：点开就是他的投稿列表，一首一首都在，播放键的意思
+ * 「放这份列表」也就成立了。id 仍然是 `user:<mid>`，getPlaylistTracks 认得它
+ * （见那里的 artistMid 分支），所以内容就是这个人自己的投稿。
+ */
+const relationUsersToEntries = (
+    users: ReadonlyArray<{ mid: number; name: string; avatarUrl: string; sign: string }>,
+): ProviderCollection[] => users.map(user => ({
+    providerId: 'bilibili' as const,
+    id: bilibiliArtistId(user.mid),
+    name: user.name,
+    type: 'playlist' as const,
+    coverUrl: user.avatarUrl || undefined,
+    description: user.sign || undefined,
+}));
+
+/**
+ * 这两条 id 点开时的内容：一页人。
+ *
+ * 回 null 表示「不是这两条」—— 调用方接着按歌单那套去认。
+ * 分页按 offset 走：一页 30 个人，滚到底再要下一页（见 BilibiliAccountRows 之外的
+ * 歌单页也照这个 read）。
+ */
+const readRelationPageAsCollections = async (
+    id: string,
+    offset: number,
+): Promise<{ items: ProviderCollection[]; hasMore: boolean; nextOffset: number } | null> => {
+    const kind = id === BILIBILI_FOLLOWINGS_ID ? 'followings' : id === BILIBILI_FANS_ID ? 'fans' : '';
+    if (!kind) return null;
+    const page = Math.floor(Math.max(0, offset) / RELATION_PAGE_SIZE) + 1;
+    const result = kind === 'followings'
+        ? await listBilibiliFollowings(page)
+        : await listBilibiliFans(page);
+    return {
+        items: relationUsersToEntries(result.users),
+        hasMore: result.hasMore,
+        nextOffset: Math.max(0, offset) + result.users.length,
+    };
+};
+
+/**
+ * 「我的关注 / 我的粉丝」两张卡。
+ *
+ * 首页「推荐」和「专辑」两栏都摆（用户报的就是「注册在首页的专辑和推荐」）；
+ * id 只有两个，合并视图里按 id 去重，不会变成四张。
+ *
+ * 没登录、或者两份名单都没读到，就一张都不摆 —— 摆一张点开必然空着的卡比不摆更糟。
+ */
+const readBilibiliRelationEntries = async (): Promise<ProviderCollection[]> => {
+    if (!isBilibiliAvailable()) return [];
+    // 没登录时这两份名单都是空的（接口要 Cookie 才给全），不必问。
+    if (!useBilibiliAuthStore.getState().signedIn) return [];
+    const [followings, fans] = await Promise.all([
+        listBilibiliFollowings(1).catch(() => null),
+        listBilibiliFans(1).catch(() => null),
+    ]);
+    const entries: ProviderCollection[] = [];
+    if (followings) {
+        entries.push({
+            providerId: 'bilibili' as const,
+            id: BILIBILI_FOLLOWINGS_ID,
+            name: shelfTitle('shelfFollowings'),
+            /*
+             * 这两张卡是**可以直接放的列表**，不是歌手页（见 relationUsersToEntries 的注释：
+             * 点开就是里面那个人的投稿列表）。类型跟着改，否则首页按 artist 那套去画，
+             * 点进去又只有一个播放键。
+             */
+            type: 'playlist' as const,
+            /*
+             * 封顶：这一栏自己没有图，拿名单里第一个人那张头像当封面。
+             * 不是新算的图，只是把「这些人」里的第一张摆出来。
+             */
+            coverUrl: followings.users.find(user => user.avatarUrl)?.avatarUrl,
+            description: i18n.t('home.shelfFollowingsDescription'),
+            trackCount: followings.total || followings.users.length,
+        });
+    }
+    if (fans) {
+        entries.push({
+            providerId: 'bilibili' as const,
+            id: BILIBILI_FANS_ID,
+            name: shelfTitle('shelfFans'),
+            type: 'playlist' as const,
+            coverUrl: fans.users.find(user => user.avatarUrl)?.avatarUrl,
+            description: i18n.t('home.shelfFansDescription'),
+            trackCount: fans.total || fans.users.length,
+        });
+    }
+    return entries;
+};
+
 export const bilibiliProvider: OnlineMusicProvider = {
     id: 'bilibili',
     displayName: 'Bilibili',
@@ -141,11 +255,21 @@ export const bilibiliProvider: OnlineMusicProvider = {
         // playlists），用户看到的就是一排灰页签点不动。
         playlists: true,
         albums: true,
+        /*
+         * 「我的专辑」这一栏放的是我的关注 / 我的粉丝（平台真有的「专辑」是番剧季，
+         * 那是搜索与探索那边的事，不在账号这一栏里）。见 library.getUserAlbums。
+         */
+        userAlbums: true,
         // UP 主按歌手注册：歌手页、封面上的歌手、搜索跳转都用已有的那一套。
         artists: true,
-        // 推荐就是首页那一屏。
-        // 不提供「推荐」：这一家的首页就是分区，多一个推荐页只会让人多点一次。
-        recommendations: false,
+        /*
+         * 「推荐」这一栏要有内容 —— 它放的是**我的关注 / 我的粉丝**两个入口。
+         *
+         * 这两个名单是「人」不是歌单，所以以前被塞进歌单页签到首页，结果是点开一个
+         * 歌单看到的是一堆不相干 UP 主的投稿。现在它们回到「推荐」这一栏：卡片点开是
+         * 人，点某个人再进他的投稿页（见 recommendations.getRecommendedCollections）。
+         */
+        recommendations: true,
         mutations: false,
         // 这两条让界面上的红心 / 收藏入口自动消失。
         likes: false,
@@ -343,10 +467,18 @@ export const bilibiliProvider: OnlineMusicProvider = {
                 // 字幕不在取流里，得单独问 player/v2（见 fetchBilibiliSubtitles）。
                 const cid = bilibiliCidOf(song) ?? (await fetchBilibiliVideoInfo(bvid)).cid;
                 const tracks = await fetchBilibiliSubtitles(bvid, cid);
+                /*
+                 * 这几行数据是「字幕只显示一句 / 对不上视频」这类反馈的唯一证据来源：
+                 * 轨有几条、挑中的是哪条、拿到多少句、时间轴是不是空的。用户报问题时
+                 * 没有这些就只能靠猜，所以留一行（一条一次，不刷屏）。
+                 */
+                console.info('[Bilibili] subtitle tracks', bvid, cid, tracks.map(track => track.lan));
                 if (tracks.length === 0) return empty;
                 const { primary, secondary } = pickSubtitleTracks(tracks);
                 if (!primary?.subtitle_url) return empty;
                 const primaryCues = await fetchBilibiliSubtitle(primary.subtitle_url);
+                console.info('[Bilibili] subtitle cues', bvid, primary.lan, primaryCues.length,
+                    primaryCues[0] ? `first={${primaryCues[0].from}..${primaryCues[0].to}}` : 'none');
                 if (primaryCues.length === 0) return empty;
                 const secondaryCues = secondary?.subtitle_url
                     ? await fetchBilibiliSubtitle(secondary.subtitle_url).catch(() => [])
@@ -419,16 +551,38 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const epId = bilibiliEpIdOf(song);
             const bvid = bilibiliBvidOf(song);
             if (!bvid && !epId) return null;
-            // 多P 投稿的每一集都有自己的 cid，取流要用那一集的。
-            const cid = bilibiliCidOf(song) ?? (bvid ? (await fetchBilibiliVideoInfo(bvid)).cid : 0);
+            /*
+             * 多P 投稿的每一集都有自己的 cid，取流要用那一集的。
+             *
+             * ★ 番剧分集没有 cid 时**必须去查**，不能直接 return null。
+             *
+             * 搜索出来的「番剧 / 电影」条目是按 season 拼的，手上只有 epId，没有 cid
+             * （见 search.ts 的 media_bangumi / media_ft 两个分支 —— 它们给的是
+             * season 级的 id，cid 要打开分集才知道）。以前这里一句 `if (!cid) return null`
+             * 就把这类条目全判死了：用户点开搜索里的番剧或电影，什么都不会响，
+             * 日志里只有一句「no-audio」。
+             *
+             * 所以补上这一趟：按 epId 问一集自己的 cid（不缓存，点一次问一次，
+             * 这条路上没有「同一集反复取流」的热度）。
+             */
+            const cid = bilibiliCidOf(song)
+                ?? (bvid
+                    ? (await fetchBilibiliVideoInfo(bvid)).cid
+                    : (await fetchBilibiliEpisodeCid(epId!)));
             if (!cid) return null;
             /*
              * 这一家的「音质」其实是**画质**（画面和声音是一起取的）。
              *
-             * 通用那个音质偏好是给音乐平台听的，默认 high，放到这一站就是 1080P 的
-             * DASH —— 在手机上一放就卡。没单独选过的话按 720P 走，选过的照选。
+             * ★ 不要在这里把 high 压成 standard。
+             *
+             * 以前这里写着 `quality === 'high' ? 'standard' : quality`，理由是「1080P 在
+             * 手机上一放就卡」。但它把**用户在播放页明确选的那一档**也一起改掉了：
+             * 面板上写着 1080P、日志里请求的却是 720P，而画面那边（BilibiliVideoStage）
+             * 拿的又是原样的 quality —— 于是「换画质画面不变」和「音画是两档」同时出现。
+             *
+             * 选哪一档是用户的事；编解码扛不住由原生那边换编码去解决，不在这里偷改参数。
              */
-            const track = await fetchBilibiliPlayUrl(bvid, cid, quality === 'high' ? 'standard' : quality, epId);
+            const track = await fetchBilibiliPlayUrl(bvid, cid, quality, epId);
             // 拿不到独立音轨（老投稿只有 durl）时退回那条合成流，画面和声音在一起。
             const candidates = track.audioUrls.length > 0 ? track.audioUrls : track.urls;
             /*
@@ -527,12 +681,43 @@ export const bilibiliProvider: OnlineMusicProvider = {
     },
 
     /**
-     * 账号自己的歌单：收藏夹、稍后再看、投稿、追番追剧、投币、点赞。
+     * 「推荐」这一栏放什么。
      *
-     * 每个收藏夹单独一个 —— B 站自己就是这个粒度，合成一个反而找不到东西。
-     * 没登录时回空表（这些本来就属于某个人），界面据此显示「先登录」。
+     * 这一家没有独立的推荐页（推荐就是分区那一屏，见 explore），所以「推荐」这一栏
+     * 腾出来给**账号自己的两份名单**：我的关注、我的粉丝。
+     *
+     * 以前这两份名单被当成歌单塞进「歌单」页签，而且是**摊平成一堆投稿**的：
+     * 点开看到的既不是谁关注了谁，也不是哪个人发了什么，而是一锅混在一起的视频。
+     * 现在它们是**两张人卡**（`type: 'artist'`）：点进去看到的是人（头像墙），
+     * 点某一个人再进他的投稿页 —— 和站内一致，也不会把「人」硬塞成「歌」。
+     *
+     * 没登录就不摆：这两份名单都是「我」的，没有登录时点开必然空着。
+     */
+    recommendations: {
+        async getRecommendedCollections() {
+            return readBilibiliRelationEntries();
+        },
+    },
+
+    /**
+     * 「专辑」这一栏也留一份。
+     *
+     * 两份名单在语义上既不是歌单也不是专辑，而首页这两栏是「我自己的东西」的两个
+     * 出口。用户报的原话是「注册在首页的专辑和推荐」，所以两栏都摆 —— 每栏各两张
+     * 卡，id 相同，点开是同一份人名单。合并视图（「全部」）里按 id 去重，不会重复。
      */
     library: {
+        /**
+         * 「专辑」这一栏给这两份名单（它们是「我自己的东西」，不是谁的歌单）。
+         *
+         * 这一家没有真正的「我的专辑」——专辑在站上就是番剧季（见 catalog.getAlbumDetail），
+         * 而番剧季不在这一栏。以前这里什么都没有，于是「专辑」页签一直是灰的。
+         */
+        async getUserAlbums() {
+            const entries = await readBilibiliRelationEntries();
+            return { items: entries, hasMore: false, nextOffset: entries.length };
+        },
+
         async getUserPlaylists() {
             const shelves = await listBilibiliShelves();
             return {
@@ -589,18 +774,36 @@ export const bilibiliProvider: OnlineMusicProvider = {
         },
 
         /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */
-        async getPlaylistTracks(id) {
+        async getPlaylistTracks(id, limit: number, offset: number, collection?: ProviderCollection) {
+            const raw = String(id);
             /*
              * 「点了歌单没反应」先分清两头：卡片点的动作有没有走到这里、走到了
              * 这里数据给没给出来。这条日志就是给设备上抓现场用的 —— id 是什么、
              * 有没有匹配到 shelf，一眼可判。
              */
-            console.info('[Bilibili] getPlaylistTracks asked', String(id));
+            console.info('[Bilibili] getPlaylistTracks asked', raw);
+            /*
+             * 「我的关注 / 我的粉丝」：这两条**不是歌单**，是两份人的名单。
+             *
+             * 它们现在挂在首页「推荐」那一栏（见 recommendations.getRecommendedCollections），
+             * 点开要的是**人**，不是投稿流 —— 以前正是把它摊平成投稿拼成一个歌单，
+             * 才会出现「歌单内容是所有粉丝的投稿」这种谁也没存过的东西。
+             *
+             * 所以这里改走 explore 那一侧的读法：曲目表拿到的是一条条按歌手注册的
+             * 集合（`type: 'artist'`），点一个人进他的投稿页。歌单页本身这时显示的
+             * 是「这份名单里有谁」，和站内的头像墙一致。
+             */
+            const relationPage = await readRelationPageAsCollections(raw, offset);
+            /*
+             * 这两条回的是「人」，不是歌 —— 类型上曲目表只收 UnifiedSong，所以这里
+             * 交出去的每一条都是一份 `type: 'artist'` 的集合：上层按 kind 分派时，
+             * 看到的就是「点开某个人」这一件事（见 ProviderExploreItem 的 collection 分支）。
+             */
+            if (relationPage) return relationPage as unknown as ProviderPage<never>;
             /*
              * 「用户」那一档点开的是**某个人的投稿**（id 形如 `user:<mid>`）。
              * 它不在账号自己的歌单列表里（那是自己名下的），所以先认这个前缀。
              */
-            const raw = String(id);
             const artistMid = bilibiliMidOfArtistId(raw);
             if (artistMid) {
                 const videos = await loadBilibiliUserUploads(artistMid);
