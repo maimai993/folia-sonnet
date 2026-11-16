@@ -12,6 +12,7 @@ import { getStoredString, setStoredString } from './storagePrimitives';
 import { isAiTargetConfigured } from '../services/aiCompletion';
 import { isBilibiliAvailable, proxyBilibiliStream } from '../services/bilibili/transport';
 import { warmStreamCache } from '../services/bilibili/streamPrefetch';
+import { dropCachedMvMedia, readCachedMvMedia, readMvMediaCacheBytes as mvMediaCacheBytes, writeCachedMvMedia } from '../services/bilibili/mvMediaCache';
 import { hasRealLyrics, stripPlaceholderLines } from '../services/bilibili/subtitleFilter';
 import { buildLyricsFromCues, pickSubtitleTracks } from '../services/bilibili/bilibiliLyrics';
 import { fetchBilibiliSubtitle, type PlayUrlSubtitle } from '../services/bilibili/api';
@@ -287,6 +288,30 @@ export const readMvMatchCacheBytes = (): number => {
     }
 };
 
+/**
+ * MV 的**音视频字节**缓存占了多少（存储页那一行用）。
+ *
+ * 与上面那个分开：那个量的是 localStorage 里的匹配记录（几百字节），这个量的是盘上
+ * 画面 + 音轨的两个媒体文件（几十兆），量法也不同 —— 要问原生，所以是异步的。
+ */
+export const readMvMediaCacheBytes = mvMediaCacheBytes;
+
+/**
+ * 存储页那两行 MV 缓存用的**平台无关**入口。
+ *
+ * 设置页不该认识「B 站」这个名字（见 omniArchitecture 那条边界）：它只知道
+ * 「有一份 MV 匹配记录」和「有一份 MV 音视频字节」，怎么清、量多少由这个 store 决定。
+ * 两行与两个入口一一对应，正好让界面不必 import 这个 store 就能干活。
+ */
+export const clearMvMatchCache = (): void => {
+    useBilibiliMvStore.getState().clear();
+};
+
+/** 只清盘上的音视频字节，保留「配了哪条投稿」的记录。 */
+export const clearMvMediaCacheBytes = async (): Promise<void> => {
+    await useBilibiliMvStore.getState().clearBytesCache();
+};
+
 const initialState: BilibiliMvState = {
     enabled: readStoredEnabled(),
     useAiMatch: readStoredUseAi(),
@@ -325,6 +350,14 @@ interface BilibiliMvActions {
     invalidate: (songKey: string) => void;
     /** 清空全部缓存（设置里「重新匹配」用）。 */
     clear: () => void;
+    /**
+     * 把 MV 的**字节**缓存（音轨 + 画面 + 绑定）整份删掉。
+     *
+     * 与 [clear] 分开：那个清的是「哪条投稿配哪首歌」（localStorage 里的小记录），
+     * 这个清的是盘上几十兆的媒体文件。存储页的「清除缓存」两样一起清，但它不该知道
+     * 这份字节缓存是怎么落的 —— 那是这个平台自己的事。
+     */
+    clearBytesCache: () => Promise<void>;
     /**
      * 用户从搜索结果里手动挑一条 BV 钉给这首歌。
      *
@@ -402,15 +435,24 @@ const pickBest = async (
 };
 
 /**
- * 按一条 bvid 取回「能放的那一份」：画面 / 声音的本地中转地址 + 这一条投稿的字幕。
+ * 按一条 bvid 取回「能放的那一份」：画面 / 声音的地中转地址 + 这一条投稿的字幕。
  *
  * 两条路共用：自动匹配挑中一条之后，以及**从磁盘恢复**那条已经定好的投稿
  * （见 resolveForSong 里的 bvid 分支 —— 落盘的记录只有 bvid / cid，直链故意不存）。
  * 抽成一处，是为了这两条路不会各自演化成不一样的取流方式。
+ *
+ * ★ 取流之前先问一句缓存（mvMediaCache.ts）。
+ *
+ * 缓存里的画面与声音是**同一条投稿、同一档**的一整份，绑定对得上就直接用本机回环
+ * 地址，一个字节都不过网 —— 这正是「切回来不用重新下载一遍」要的效果。绑定对不上
+ * （换了投稿 / 换了清晰度 / 换了歌）时那次读会自己把旧的一份丢掉，这里照常取流。
+ *
+ * `songKey` 是这首歌的身份：绑定时要连它一起记，换歌之后即便 bvid 撞了也不复用。
  */
 const loadStreamForBvid = async (
     bvid: string,
     quality: MvVideoQuality,
+    songKey: string,
 ): Promise<BilibiliMvStream> => {
     const info = await fetchBilibiliVideoInfo(bvid);
     const track = await fetchBilibiliPlayUrl(bvid, info.cid, quality);
@@ -418,6 +460,32 @@ const loadStreamForBvid = async (
         Referer: 'https://www.bilibili.com/',
         Origin: 'https://www.bilibili.com',
     };
+    /*
+     * 先按「这一次要放的这一条」建一个壳：缓存查找用的是它的身份
+     * （bvid + cid + 清晰度），与下面取回来的流是同一套字段。
+     */
+    const identityShell: BilibiliMvStream = {
+        bvid,
+        cid: info.cid,
+        title: info.title,
+        author: info.author,
+        durationSec: info.durationSec,
+        // 这两个字段只用来表明「要不要声音」：老投稿没有独立音轨时不该要求它命中。
+        videoUrl: 'pending',
+        audioUrl: track.audioUrl || (track.audioUrls[0] ?? ''),
+        quality: track.height,
+        subtitles: null,
+    };
+    const cached = await readCachedMvMedia(identityShell, songKey);
+    if (cached) {
+        return {
+            ...identityShell,
+            videoUrl: cached.videoUrl,
+            audioUrl: cached.audioUrl,
+            // 字幕不进缓存（很小，但要跟着这一次的解析走）：命中缓存这一趟也要拿到。
+            subtitles: await resolveMvSubtitles(track.subtitles, bvid),
+        };
+    }
     const [localVideo, localAudio] = await Promise.all([
         proxyBilibiliStream(track.urls.length > 0 ? track.urls : [track.url], streamHeaders),
         track.audioUrls.length > 0 || track.audioUrl
@@ -438,6 +506,24 @@ const loadStreamForBvid = async (
     // 画面地址到手就预热开头，切过去时立刻有一帧。
     void warmStreamCache(stream.videoUrl);
     if (stream.audioUrl) void warmStreamCache(stream.audioUrl);
+    /*
+     * 落盘：**给的是原始 CDN 地址**，不是上面那条本机中转地址。
+     *
+     * 中转是给播放器流式读的（一路转发、带多地址容错），拿它当下载源会下到
+     * 「中转找不到这条流」的 404 文本，缓存里于是躺着一份放不出来的东西。
+     * 下载一律用 track 里那几条真实地址，由原生带 Referer / Origin 去取。
+     */
+    void writeCachedMvMedia(stream, songKey, {
+        videoUrl: track.urls[0] ?? track.url,
+        audioUrl: track.audioUrls[0] ?? track.audioUrl ?? '',
+    }, {
+        /*
+         * 这条路径只给「别的平台的歌配一条 MV」用（见文件头），所以这里永远是 false。
+         * 仍然显式传出来，是为了让准入条件在调用点也读得见 —— B 站投稿当歌听的那条路
+         * （BilibiliVideoStage）根本不经过这里，它不该被缓存。
+         */
+        songIsBilibiliPost: false,
+    });
     return stream;
 };
 
@@ -583,7 +669,7 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
              * 取一次地址比搜一遍快，也不会因为搜索排序变了而换了视频。
              */
             if (cached?.stream?.bvid) {
-                const restored = await loadStreamForBvid(cached.stream.bvid, get().quality);
+                const restored = await loadStreamForBvid(cached.stream.bvid, get().quality, songKey);
                 finish({ state: 'ready', stream: restored, keyword: cached.keyword, manual: cached.manual });
                 return;
             }
@@ -600,7 +686,7 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
                 return;
             }
 
-            const stream = await loadStreamForBvid(best.bvid, get().quality);
+            const stream = await loadStreamForBvid(best.bvid, get().quality, songKey);
             finish({ state: 'ready', stream, keyword, manual: false });
         } catch (error) {
             const message = error instanceof BilibiliApiError
@@ -645,6 +731,16 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
     clear: () => {
         writeStoredResolutions({});
         set({ bySongKey: {}, inflight: {} });
+        /*
+         * 盘上的字节缓存也一起清：匹配记录一没，那份音轨 / 画面就成了没人认领的
+         * 几十兆文件，绑定也指向空。这里不 await（clear 是同步接口，界面不等删文件），
+         * 删失败不影响下一次读取 —— 绑定已经清掉，下次一定走重新取流那条路。
+         */
+        void dropCachedMvMedia();
+    },
+
+    clearBytesCache: async () => {
+        await dropCachedMvMedia();
     },
 
     pinBv: async (songKey, bvid) => {
@@ -681,7 +777,7 @@ export const useBilibiliMvStore = create<BilibiliMvStore>()((set, get) => ({
             // 打开画面是「用户点了这条就该看到」的意思：这里顺手把开关写上（与注释
             // 里 pinBv 的语义一致 —— 不该还要再回设置里开一次）。
             if (!get().enabled) get().setEnabled(true);
-            const stream = await loadStreamForBvid(clean, get().quality);
+            const stream = await loadStreamForBvid(clean, get().quality, songKey);
             finish({ state: 'ready', stream, keyword: clean, manual: true });
         } catch (error) {
             const message = error instanceof BilibiliApiError
