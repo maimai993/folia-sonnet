@@ -162,61 +162,85 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
  * 旧 key（folia_enable_media_cache / enable_media_cache）不再参与：那是上一代
  * 默认关的开关，新 key 一换，这一版的语义是「默认缓存，除非用户亲手关」。
  */
-export const readStoredEnableMediaCache = (): boolean => {
+/*
+ * 取得到就用 localStorage，取不到就 null。
+ *
+ * 这些 read* 大多在模块求值时就跑（store 的初始 state 用它们），所以拿不到存储不能抛，
+ * 只能当「没存过」。只判 `typeof window === 'undefined'` 不够：`window` 在、存储不在的
+ * 环境是有的（无痕/受限的 WebView、被裁掉存储的沙箱、测试里只为别的事 stub 的 window）。
+ */
+const storageOrNull = (): Storage | null => {
     if (typeof window === 'undefined') {
+        return null;
+    }
+    try {
+        return window.localStorage ?? null;
+    } catch {
+        return null;
+    }
+};
+
+export const readStoredEnableMediaCache = (): boolean => {
+    const storage = storageOrNull();
+    if (!storage) {
         return true;
     }
 
-    const stored = localStorage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
+    const stored = storage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
     return stored === null ? true : stored === 'true';
 };
 
 export const readStoredMediaCacheLimitGb = (): number => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return DEFAULT_MEDIA_CACHE_LIMIT_GB;
     }
 
-    const saved = localStorage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
+    const saved = storage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
     const parsed = saved === null ? NaN : Number(saved);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEDIA_CACHE_LIMIT_GB;
 };
 
 const readStoredAudioQuality = (): AudioQuality => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return DEFAULT_AUDIO_QUALITY;
     }
 
-    const saved = localStorage.getItem('default_audio_quality');
+    const saved = storage.getItem('default_audio_quality');
     const quality = resolveStoredAudioQuality(saved);
     if (saved === 'exhigh') {
-        localStorage.setItem('default_audio_quality', 'high');
+        storage.setItem('default_audio_quality', 'high');
     }
     return quality;
 };
 
 const readStoredQueueAddBehavior = (): QueueAddBehavior => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'append';
     }
 
-    const saved = localStorage.getItem('queue_add_behavior');
+    const saved = storage.getItem('queue_add_behavior');
     return saved === 'next' ? 'next' : 'append';
 };
 
 const readStoredAudioOutputDeviceId = (): string => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return '';
     }
 
-    return localStorage.getItem('audio_output_device_id') ?? '';
+    return storage.getItem('audio_output_device_id') ?? '';
 };
 
 const readStoredLoopMode = (): 'off' | 'all' | 'one' | 'shuffle' => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'off';
     }
 
-    const saved = localStorage.getItem('player_loop_mode');
+    const saved = storage.getItem('player_loop_mode');
     return saved === 'all' || saved === 'one' || saved === 'shuffle' ? saved : 'off';
 };
 
@@ -263,11 +287,12 @@ const COMMAND_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'command' };
 const HOST_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'host' };
 
 const readStoredVolume = () => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 1;
     }
 
-    const saved = localStorage.getItem('player_volume');
+    const saved = storage.getItem('player_volume');
     const parsed = saved !== null ? parseFloat(saved) : 1;
     return Number.isFinite(parsed) ? parsed : 1;
 };
@@ -479,7 +504,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     loopMode: readStoredLoopMode(),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('default_audio_quality', quality);
+            storageOrNull()?.setItem('default_audio_quality', quality);
         }
         set({ audioQuality: quality });
     },
@@ -490,13 +515,13 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleSetMediaCacheLimitGb: (gigabytes) => {
         const next = Number.isFinite(gigabytes) && gigabytes >= 0 ? gigabytes : DEFAULT_MEDIA_CACHE_LIMIT_GB;
         if (typeof window !== 'undefined') {
-            localStorage.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
+            storageOrNull()?.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
         }
         set({ mediaCacheLimitGb: next });
     },
     handleSetQueueAddBehavior: (behavior) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('queue_add_behavior', behavior);
+            storageOrNull()?.setItem('queue_add_behavior', behavior);
         }
         set({ queueAddBehavior: behavior });
         setStatusMessage({
@@ -701,9 +726,9 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         }
 
         if (deviceId) {
-            localStorage.setItem('audio_output_device_id', deviceId);
+            storageOrNull()?.setItem('audio_output_device_id', deviceId);
         } else {
-            localStorage.removeItem('audio_output_device_id');
+            storageOrNull()?.removeItem('audio_output_device_id');
         }
     },
     handleSetAudioEqualizerSettings: (settings, origin = USER_ORIGIN) => (
@@ -773,7 +798,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     closeAudioEqualizer: () => set({ isAudioEqualizerOpen: false }),
     handleSetVolume: (val) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_volume', String(val));
+            storageOrNull()?.setItem('player_volume', String(val));
         }
         set({ volume: val });
     },
@@ -794,7 +819,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             return;
         }
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_loop_mode', mode);
+            storageOrNull()?.setItem('player_loop_mode', mode);
         }
         set({ loopMode: mode });
         /*
