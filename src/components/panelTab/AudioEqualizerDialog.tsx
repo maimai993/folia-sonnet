@@ -19,7 +19,7 @@ import HifiBypassNotice from '../hifi/HifiBypassNotice';
 import ExternalPlayerNotice, { useIsExternalPlayerRoute } from './ExternalPlayerNotice';
 import { useIsHifiRoute } from '../hifi/useHifiSignalPath';
 import ModCurveNotice from './equalizer/ModCurveNotice';
-import ConsoleTabs from './console/ConsoleTabs';
+import ConsoleTabs, { type ConsoleTabGroup } from './console/ConsoleTabs';
 import ProfileBar from './console/ProfileBar';
 import EqualizerPane from './console/EqualizerPane';
 import CompressorPane from './console/CompressorPane';
@@ -53,6 +53,15 @@ type AudioEqualizerDialogProps = {
 type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'studio';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
+
+// 两级导航的大类划分。一级是大类，二级是大类下的页签；顺序按信号处理流程排。
+// t() 在组件里调用，所以这里只放 id 与页签归属，label 在渲染处拼。
+const CONSOLE_GROUP_DEFS: ReadonlyArray<{ id: string; tabs: ConsoleTabId[]; labelKey: string }> = [
+    { id: 'base', tabs: ['equalizer', 'repair', 'compressor'], labelKey: 'ui.consoleGroupBase' },
+    { id: 'color', tabs: ['reverb', 'saturation'], labelKey: 'ui.consoleGroupColor' },
+    { id: 'master', tabs: ['mastering', 'postEq'], labelKey: 'ui.consoleGroupMaster' },
+    { id: 'smart', tabs: ['studio'], labelKey: 'ui.consoleGroupSmart' },
+];
 
 const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight }) => {
     const { t } = useTranslation();
@@ -238,6 +247,11 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     <ProfileBar isDaylight={isDaylight} />
                     <ConsoleTabs
                         tab={tab}
+                        groups={CONSOLE_GROUP_DEFS.map(group => ({
+                            id: group.id,
+                            label: t(group.labelKey),
+                            tabs: group.tabs,
+                        }))}
                         options={[
                             { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
                             { value: 'repair', label: t('ui.consoleTabRepair') },
