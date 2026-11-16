@@ -408,8 +408,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     */}
                     <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1 min-w-0">
                         <div
-                            className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain`}
-                            style={{ scrollbarWidth: 'none' }}
+                            className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain hide-scrollbar`}
                         >
                             <div className="inline-flex items-center gap-0">
                                 {homeTabs.map((tab) => {
