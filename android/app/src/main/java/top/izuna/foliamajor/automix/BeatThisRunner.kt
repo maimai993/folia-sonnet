@@ -7,7 +7,6 @@ import java.io.File
 import java.nio.FloatBuffer
 import kotlin.math.cos
 import kotlin.math.exp
-import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -37,9 +36,9 @@ object BeatThisRunner {
     const val SAMPLE_RATE = 22050
     private const val N_FFT = 1024
     private const val HOP = 441
-    private const val N_MELS = 128
-    private const val F_MIN = 30.0
-    private const val F_MAX = 11000.0
+    const val N_MELS = 128
+    const val F_MIN = 30.0
+    const val F_MAX = 11000.0
     private const val LOG_MULTIPLIER = 1000.0
     private const val AMIN = 1e-10
 
@@ -254,18 +253,11 @@ object BeatThisRunner {
     private var filterbank: Array<MelBand>? = null
     private var hann: FloatArray? = null
 
-    private fun hzToMel(hz: Double): Double {
-        val fSp = 200.0 / 3.0
-        if (hz < 1000.0) return hz / fSp
-        return 1000.0 / fSp + ln(hz / 1000.0) / (ln(6.4) / 27.0)
-    }
+    // Slaney mel 的两个换算只留一份（DrumBandEdges，JVM 单测与 Web 的 melBandCentresHz 逐点对账）：
+    // 滤波器组与鼓点频带归属用的是同一套公式，不会各改各的而悄悄漂移。
+    private fun hzToMel(hz: Double): Double = DrumBandEdges.hzToMel(hz)
 
-    private fun melToHz(mel: Double): Double {
-        val fSp = 200.0 / 3.0
-        val minLogMel = 1000.0 / fSp
-        if (mel < minLogMel) return fSp * mel
-        return 1000.0 * exp((ln(6.4) / 27.0) * (mel - minLogMel))
-    }
+    private fun melToHz(mel: Double): Double = DrumBandEdges.melToHz(mel)
 
     private fun buildFilterbank(): Array<MelBand> {
         val bins = N_FFT / 2 + 1
@@ -306,15 +298,16 @@ object BeatThisRunner {
      * 「正在从混音里读鼓点…」。鼓点是靠 mel 的起音挑的，不需要神经网络，所以这里只到 mel 为止，
      * 挑点仍然在 Web 侧（`pickBandHits`），两边算法只有一份。
      *
-     * 频带划分与 Web 侧 `drumBandTracks` 一致：中心频率落在 [0,150) / [150,4000) / [6000,∞)。
+     * 频带划分与 Web 侧 `drumBandTracks` 一致：中心频率落在 [0,150) / [150,4000) / [6000,∞)
+     * （边界在 DrumBandEdges，JVM 单测与 Web 的数值对账；4000–6000 Hz 是三条带都不要的空档）。
      */
     fun drumBands(mono: FloatArray, cancelled: (() -> Boolean)? = null): Array<FloatArray> {
         val mel = melSpectrogram(mono)
         if (mel.frames <= 0) return Array(3) { FloatArray(0) }
         val centres = melBandCentres()
-        val edges = doubleArrayOf(0.0, 150.0, 4000.0, Double.MAX_VALUE)
+        // 边界见 DrumBandEdges：与 Web 一致，snare（<4000）与 hat（>=6000）之间的 4–6 kHz 不属于任何一条带。
         return Array(3) { kind ->
-            val picked = (0 until N_MELS).filter { centres[it] >= edges[kind] && centres[it] < edges[kind + 1] }
+            val picked = DrumBandEdges.pickBands(centres, kind)
             val track = FloatArray(mel.frames)
             if (picked.isNotEmpty()) {
                 for (frame in 0 until mel.frames) {
@@ -333,11 +326,7 @@ object BeatThisRunner {
     }
 
     /** 每个 mel 带的中心频率，与 Web 侧 `melBandCentresHz()` 同一条公式。 */
-    private fun melBandCentres(): DoubleArray {
-        val melMin = hzToMel(F_MIN)
-        val melMax = hzToMel(F_MAX)
-        return DoubleArray(N_MELS) { melToHz(melMin + (melMax - melMin) * (it + 1) / (N_MELS + 1)) }
-    }
+    private fun melBandCentres(): DoubleArray = DrumBandEdges.melBandCentres(N_MELS, F_MIN, F_MAX)
 
     private fun melSpectrogram(mono: FloatArray, onProgress: ((Float) -> Unit)? = null): Mel {
         if (mono.isEmpty()) return Mel(FloatArray(0), 0)
