@@ -85,6 +85,9 @@ export const useNativePlaybackRuntime = ({
         }).catch(error => {
             if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration) return;
             if (nativePlaybackEngine.activeUrl() !== audioSrc) return;
+            // 同一条装源失败只报一次：setSource 已经把它记成可重试状态了（#368）。
+            const sourceError = nativePlaybackEngine.sourceReadyError();
+            if (sourceError && sourceError !== error) return;
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
@@ -114,11 +117,15 @@ export const useNativePlaybackRuntime = ({
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
         const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
         const sourceGeneration = nativePlaybackEngine.sourceGeneration();
-        void nativePlaybackEngine.play().then(() => {
-            // 只让当前起播意图同步状态，避免迟到的结果覆盖暂停、换歌或 ABA 换源。
+        const songKey = nativePlaybackEngine.currentSongKey();
+        void nativePlaybackEngine.play().then(applied => {
+            // 只让当前 source 的起播意图同步状态，避免迟到的结果覆盖恢复、换歌或 ABA 换源。
+            // applied === false：这次 play 被原生判为已被取代（例如同一瞬间通知栏暂停），不能写 PLAYING。
             if (
-                nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
+                applied !== false
+                && nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
                 && nativePlaybackEngine.sourceGeneration() === sourceGeneration
+                && nativePlaybackEngine.currentSongKey() === songKey
             ) {
                 setPlayerState(PlayerState.PLAYING);
             }
@@ -126,7 +133,10 @@ export const useNativePlaybackRuntime = ({
             if (
                 nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
                 || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
+                || nativePlaybackEngine.currentSongKey() !== songKey
             ) return;
+            // 装源失败由 setSource() 那边报，这里不再重复报同一条（#368）。
+            if (nativePlaybackEngine.sourceReadyError() === error) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });
