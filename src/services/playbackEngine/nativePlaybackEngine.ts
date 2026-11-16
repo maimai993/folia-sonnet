@@ -269,7 +269,10 @@ class NativePlaybackEngine {
         this.ensureSubscription();
         this.playIntentVersion++;
         const sourceGeneration = this.sourceGenerationVersion;
-        await this.enqueueNativeCommand(() => nativePlayer.pause());
+        await this.enqueueNativeCommand(
+            () => nativePlayer.pause(),
+            () => sourceGeneration === this.sourceGenerationVersion,
+        );
         if (sourceGeneration !== this.sourceGenerationVersion) return;
         // 冻在听众正看着的那一帧，别退回最后一次采样值。
         this.positionMs = this.getPositionSec() * 1000;
@@ -291,7 +294,11 @@ class NativePlaybackEngine {
         // seek 是位置意图，不是缓冲结束：保留 stalled，等待原生实际播放状态（#168）。
         // 跳是唯一允许「往回走」的动作，所以这里必须把只进不退的基准一起复位。
         this.lastDeliveredMs = targetMs;
-        await nativePlayer.seek(targetMs);
+        const sourceGeneration = this.sourceGenerationVersion;
+        await this.enqueueNativeCommand(
+            () => nativePlayer.seek(targetMs),
+            () => sourceGeneration === this.sourceGenerationVersion,
+        );
     }
 
     async stop(): Promise<void> {
