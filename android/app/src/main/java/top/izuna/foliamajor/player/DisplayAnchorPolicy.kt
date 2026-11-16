@@ -85,4 +85,3 @@ internal fun extrapolatedDisplayPositionMs(
     val elapsed = (nowMs - sampleAtMs).coerceIn(0L, DISPLAY_POSITION_EXTRAPOLATE_MAX_MS)
     return cachedPositionMs + (elapsed * speed).toLong()
 }
-}

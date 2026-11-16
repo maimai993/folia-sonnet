@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>冰隙微光</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #04070a; overflow: hidden; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #scrim {
+    position: fixed; inset: 0; pointer-events: none;
+    background: radial-gradient(120% 88% at 12% 88%, rgba(2,6,9,.74) 0%, rgba(2,6,9,.46) 36%, rgba(2,6,9,0) 74%);
+  }
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  #meta { position: absolute; left: 8vw; top: 8vh; opacity: .5; }
+  #song {
+    font: 300 12px/1.4 "Microsoft YaHei Light", "Microsoft YaHei", "PingFang SC", sans-serif;
+    letter-spacing: .24em; color: #a9cfdf; text-transform: uppercase;
+  }
+  #artist {
+    margin-top: .5em; font: 300 10px/1.4 "Microsoft YaHei Light", "PingFang SC", sans-serif;
+    letter-spacing: .18em; color: #6f9cb2;
+  }
+  #lyrics { position: absolute; left: 8vw; bottom: 13vh; width: min(58ch, 58vw); }
+  .row {
+    font-family: "Microsoft YaHei Light", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    font-weight: 300; letter-spacing: .05em; color: #eaf6fc;
+  }
+  .prev, .next {
+    font-size: clamp(13px, 1.45vw, 21px); line-height: 1.55;
+    color: rgba(146, 186, 208, .40);
+  }
+  .prev { margin-bottom: .7em; }
+  .next { margin-top: .7em; }
+  .cur {
+    font-size: clamp(24px, 3.9vw, 58px); line-height: 1.42;
+    color: #f2fbff; text-shadow: 0 2px 30px rgba(2, 7, 11, .92), 0 0 2px rgba(210, 240, 255, .35);
+    min-height: 1.4em; overflow-wrap: anywhere; word-break: break-word;
+  }
+  .ch {
+    white-space: pre; display: inline-block;
+    color: #a8c9da; opacity: .44;
+    transition: opacity .26s linear, color .26s linear, text-shadow .34s linear;
+  }
+  .ch.lit {
+    color: #f6fdff; opacity: 1;
+    text-shadow: 0 0 26px rgba(186, 230, 250, .40), 0 2px 26px rgba(2, 7, 11, .85);
+  }
+  @keyframes riseIn {
+    from { opacity: 0; transform: translateY(16px); filter: blur(7px); }
+    to { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+  .cur.rise { animation: riseIn .62s cubic-bezier(.18, .72, .2, 1) both; }
+  #empty { position: absolute; left: 8vw; bottom: 15vh; display: none; }
+  .empty-mark {
+    font: 300 clamp(30px, 3.6vw, 54px)/1.2 "Microsoft YaHei Light", "PingFang SC", serif;
+    letter-spacing: .38em; color: rgba(228, 243, 250, .82);
+  }
+  .empty-note {
+    margin-top: 1.1em; font: 300 clamp(11px, 1.2vw, 14px)/1.6 "Microsoft YaHei Light", "PingFang SC", sans-serif;
+    letter-spacing: .2em; color: rgba(130, 172, 195, .55);
+  }
+  @media (max-width: 760px) {
+    #lyrics { left: 7vw; width: 86vw; bottom: 15vh; }
+    #meta { left: 7vw; top: 6vh; }
+    #empty { left: 7vw; bottom: 17vh; }
+    .prev, .next { font-size: clamp(12px, 3.2vw, 16px); }
+    .empty-mark { letter-spacing: .28em; }
+  }
+  @media (max-height: 520px) {
+    #lyrics { bottom: 9vh; }
+    .prev { margin-bottom: .35em; }
+    .next { margin-top: .35em; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="scrim"></div>
+<div id="hud">
+  <div id="meta"><div id="song"></div><div id="artist"></div></div>
+  <div id="lyrics">
+    <div class="row prev" id="rowPrev"></div>
+    <div class="row cur" id="rowCur"></div>
+    <div class="row next" id="rowNext"></div>
+  </div>
+  <div id="empty"><div class="empty-mark">无 词</div><div class="empty-note">只剩冰川底部的电流</div></div>
+</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '冰隙微光',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+/* ---------- contract probe: outermost, unconditional ---------- */
+window.__stage = function () {
+  try {
+    return {
+      lines: state.count, idx: state.idx, t: state.t, playing: state.playing,
+      frames: state.frames, js: state.js, err: "", text: state.text || "",
+      gl: false, rm: state.rm
+    };
+  } catch (err) {
+    return { lines: 0, idx: -1, t: 0, playing: false, frames: 0, js: 0, err: "", text: "", gl: false, rm: false };
+  }
+};
+
+var state = {
+  lines: [], count: 0, idx: -1, text: "", t: 0, playing: true,
+  frames: 0, js: 0, rm: false, gl: false,
+  songName: "", artists: "无", accent: [122, 168, 190], duration: 0,
+  beat: 0, bass: 0, mid: 0, treble: 0, level: 0,
+  charTimes: [], litCount: -1, forceLine: false, hasInit: false,
+  width: 1440, height: 900
+};
+
+var lastErrorAt = 0;
+function reportError(where, err) {
+  var now = Date.now();
+  if (now - lastErrorAt < 1000) { return; }
+  lastErrorAt = now;
+  var message = err && err.message ? err.message : String(err);
+  console.error("[stage406] " + where + ": " + message);
+}
+
+/* ---------- ready: scheduled before any boot work ---------- */
+var readySent = false;
+function sendReady() {
+  if (readySent) { return; }
+  readySent = true;
+  try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); }
+  catch (err) { reportError("ready", err); }
+}
+requestAnimationFrame(function () { sendReady(); stageStart(); });
+setTimeout(sendReady, 600);
+
+/* ---------- boot ---------- */
+var canvasEl = null, ctx = null, dpr = 1, width = 0, height = 0;
+var hudSong = null, hudArtist = null, rowPrev = null, rowCur = null, rowNext = null, emptyEl = null, lyricWrap = null;
+var loopStarted = false, lastFrameAt = 0;
+
+function isNum(value) { return typeof value === "number" && isFinite(value); }
+function clamp01(value) { return value < 0 ? 0 : (value > 1 ? 1 : value); }
+
+function readViewport() {
+  var w = window.innerWidth, h = window.innerHeight;
+  if (!isNum(w) || w <= 0) { w = 1440; }
+  if (!isNum(h) || h <= 0) { h = 900; }
+  return { w: Math.max(320, Math.round(w)), h: Math.max(320, Math.round(h)) };
+}
+
+function stageStart() {
+  try { bootStage(); }
+  catch (err) { reportError("boot", err); }
+}
+
+function bootStage() {
+  canvasEl = document.getElementById("scene");
+  hudSong = document.getElementById("song");
+  hudArtist = document.getElementById("artist");
+  rowPrev = document.getElementById("rowPrev");
+  rowCur = document.getElementById("rowCur");
+  rowNext = document.getElementById("rowNext");
+  emptyEl = document.getElementById("empty");
+  lyricWrap = document.getElementById("lyrics");
+  if (canvasEl) { ctx = canvasEl.getContext("2d", { alpha: false }); }
+  try {
+    var media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    state.rm = !!(media && media.matches);
+  } catch (err) { state.rm = false; }
+  resizeStage(true);
+  window.addEventListener("resize", onWindowResize, { passive: true });
+  window.addEventListener("message", onStageMessage, false);
+  startLoop();
+}
+
+var bakeTimer = 0;
+function scheduleBakeSoon() {
+  if (bakeTimer) { clearTimeout(bakeTimer); }
+  bakeTimer = setTimeout(function () {
+    bakeTimer = 0;
+    try { scheduleBake(); }
+    catch (err) { reportError("bakeSchedule", err); }
+  }, 150);
+}
+
+function onWindowResize() {
+  try { resizeStage(false); }
+  catch (err) { reportError("resize", err); }
+}
+
+function resizeStage(immediate) {
+  var box = readViewport();
+  width = box.w; height = box.h;
+  state.width = width; state.height = height;
+  dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  if (!isNum(dpr) || dpr <= 0) { dpr = 1; }
+  if (canvasEl) {
+    canvasEl.width = Math.max(1, Math.round(width * dpr));
+    canvasEl.height = Math.max(1, Math.round(height * dpr));
+    canvasEl.style.width = width + "px";
+    canvasEl.style.height = height + "px";
+  }
+  if (ctx) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  if (immediate) { scheduleBake(); } else { scheduleBakeSoon(); }
+  buildCrackPath();
+  buildVignette();
+  buildBloom();
+  applyFontSize();
+  if (state.count > 0) { fitCurrentLine(); }
+}
+
+function startLoop() {
+  if (loopStarted) { return; }
+  loopStarted = true;
+  requestAnimationFrame(frameLoop);
+}
+
+function frameLoop(now) {
+  var began = performance.now();
+  state.frames += 1;
+  try { renderFrame(typeof now === "number" ? now : began); }
+  catch (err) { reportError("frame", err); }
+  state.js = Math.max(0, Math.round((performance.now() - began) * 100) / 100);
+  requestAnimationFrame(frameLoop);
+}
+
+function renderFrame(now) {
+  if (!ctx) { return; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "#04070a";
+  ctx.fillRect(0, 0, width, height);
+  drawLayers(now);
+  drawBloom();
+  drawWarmPulse(now);
+  drawFoam(now);
+  drawAccentWash();
+  drawVignette();
+  pumpBake(11);
+  state.beat *= 0.935;
+  lastFrameAt = now;
+  syncLyric();
+}
+
+/* ---------- messages ---------- */
+function onStageMessage(event) {
+  var data = event && event.data;
+  if (!data || data.__c100 !== 1) { return; }
+  try {
+    if (data.type === "init") { onInit(data.payload || {}); }
+    else if (data.type === "tick") { onTick(data.payload || {}); }
+    else if (data.type === "beat") { onBeat(data.payload || {}); }
+    else if (data.type === "live") { onLive(data.payload || {}); }
+  } catch (err) { reportError("message:" + String(data.type), err); }
+}
+
+function onInit(payload) {
+  var song = payload.song || {};
+  state.songName = typeof song.name === "string" ? song.name : "";
+  state.artists = readArtists(song.artists);
+  state.accent = readAccent(payload.accent);
+  state.duration = isNum(payload.duration) && payload.duration > 0 ? payload.duration : 0;
+  state.lines = readLines(payload.lines);
+  state.count = state.lines.length;
+  state.idx = -1;
+  state.text = "";
+  state.playing = typeof payload.playing === "boolean" ? payload.playing : true;
+  if (hudSong) { hudSong.textContent = state.songName || "无名"; }
+  if (hudArtist) { hudArtist.textContent = state.artists; }
+  if (!state.hasInit) { state.hasInit = true; state.t = 0; }
+  applyFontSize();
+  applyEmptyState();
+  if (state.count > 0) {
+    state.forceLine = true;
+    syncLyric();
+  }
+}
+
+function readArtists(value) {
+  if (typeof value === "string") { return value.trim() || "无"; }
+  if (Array.isArray(value)) {
+    var kept = [];
+    for (var i = 0; i < value.length && kept.length < 8; i++) {
+      if (typeof value[i] === "string" && value[i].trim()) { kept.push(value[i].trim()); }
+    }
+    return kept.length ? kept.join(" / ") : "无";
+  }
+  return "无";
+}
+
+function readAccent(value) {
+  var fallback = [122, 168, 190];
+  if (!Array.isArray(value) || value.length < 3) { return fallback; }
+  var out = [];
+  for (var i = 0; i < 3; i++) {
+    var channel = Number(value[i]);
+    if (!isNum(channel)) { return fallback; }
+    out.push(Math.max(0, Math.min(255, Math.round(channel))));
+  }
+  return out;
+}
+
+function readLines(value) {
+  if (!Array.isArray(value)) { return []; }
+  var out = [];
+  for (var i = 0; i < value.length && i < 400; i++) {
+    var raw = value[i];
+    if (!raw || typeof raw !== "object") { continue; }
+    var text = typeof raw.text === "string" ? raw.text : "";
+    var start = isNum(raw.t) ? raw.t : 0;
+    var dur = isNum(raw.dur) && raw.dur > 0 ? raw.dur : 0;
+    out.push({ t: start, dur: dur, text: text, chars: readChars(raw.chars) });
+  }
+  out.sort(function (first, second) { return first.t - second.t; });
+  return out;
+}
+
+function readChars(value) {
+  if (!Array.isArray(value) || !value.length) { return null; }
+  var out = [];
+  for (var i = 0; i < value.length && i < 300; i++) {
+    var raw = value[i];
+    if (!raw || typeof raw !== "object") { continue; }
+    var at = isNum(raw.t) ? raw.t : null;
+    if (at === null) { continue; }
+    out.push(at);
+  }
+  return out.length ? out : null;
+}
+
+function onTick(payload) {
+  var next = Number(payload.time);
+  if (isNum(next)) { state.t = next; }
+  if (typeof payload.playing === "boolean") { state.playing = payload.playing; }
+}
+
+function onBeat(payload) {
+  var level = isNum(payload.level) ? payload.level : 0.5;
+  state.beat = Math.min(1.4, state.beat + clamp01(level) * 0.9);
+}
+
+function onLive(payload) {
+  if (isNum(payload.bass)) { state.bass = clamp01(payload.bass); }
+  if (isNum(payload.mid)) { state.mid = clamp01(payload.mid); }
+  if (isNum(payload.treble)) { state.treble = clamp01(payload.treble); }
+  if (isNum(payload.level)) { state.level = clamp01(payload.level); }
+  if (typeof payload.playing === "boolean") { state.playing = payload.playing; }
+}
+
+/* ================= glacial terrain ================= */
+var HERO = { angle: 0.86, cx: 0.62, cy: 0.50, span: 0.72, wander: 0.075 };
+
+var ICE_STOPS = [
+  [0.000, 3, 6, 9],
+  [0.070, 7, 16, 22],
+  [0.135, 30, 62, 78],
+  [0.168, 178, 212, 228],
+  [0.200, 46, 90, 112],
+  [0.260, 22, 50, 66],
+  [0.330, 70, 124, 148],
+  [0.400, 40, 84, 106],
+  [0.470, 92, 146, 168],
+  [0.545, 56, 102, 124],
+  [0.620, 108, 158, 180],
+  [0.700, 74, 120, 142],
+  [0.780, 140, 182, 202],
+  [0.860, 104, 150, 172],
+  [0.930, 180, 210, 224],
+  [1.000, 224, 238, 246]
+];
+
+var layers = [
+  { key: "far", canvas: null, alpha: 0.45, driftX: 7, driftY: 5, driftSpeed: 0.050, phase: 0.4,
+    spec: { seed: 1301, scale: 0.24, bands: 16, gap: 0.036, steps: 42, fractures: 26, angleJitter: 0.055, offX: 0.035, offY: -0.025, lightLow: "#242e37" } },
+  { key: "mid", canvas: null, alpha: 0.60, driftX: 12, driftY: 8, driftSpeed: 0.034, phase: 2.1,
+    spec: { seed: 2207, scale: 0.48, bands: 19, gap: 0.030, steps: 54, fractures: 36, angleJitter: -0.028, offX: -0.018, offY: 0.016, lightLow: "#202a33" } },
+  { key: "near", canvas: null, alpha: 0.88, driftX: 19, driftY: 12, driftSpeed: 0.021, phase: 4.7,
+    spec: { seed: 3313, scale: 0.74, bands: 22, gap: 0.024, steps: 62, fractures: 46, angleJitter: 0, offX: 0, offY: 0, lightLow: "#28343f" } }
+];
+
+var bakeQueue = [];
+var grainTile = null;
+var vignetteGrad = null;
+var bloomGrad = null;
+
+function buildBloom() {
+  bloomGrad = null;
+  if (!ctx || typeof ctx.createRadialGradient !== "function") { return; }
+  var grad = null;
+  try {
+    grad = ctx.createRadialGradient(
+      width * 0.84, height * 0.01, Math.max(8, Math.min(width, height) * 0.02),
+      width * 0.84, height * 0.01, Math.max(width, height) * 0.70
+    );
+    grad.addColorStop(0, "rgba(238,248,253,0.30)");
+    grad.addColorStop(0.40, "rgba(206,230,242,0.12)");
+    grad.addColorStop(1, "rgba(190,220,236,0)");
+  } catch (err) { reportError("bloom", err); return; }
+  bloomGrad = grad;
+}
+
+function drawBloom() {
+  if (!bloomGrad || !ctx) { return; }
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = bloomGrad;
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function hash2(ix, iy, seed) {
+  var h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263) ^ Math.imul(seed | 0, 69069);
+  h = Math.imul(h ^ (h >>> 15), 2246822507);
+  h = Math.imul(h ^ (h >>> 13), 3266489909);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+
+function valueNoise(x, y, seed) {
+  var xi = Math.floor(x), yi = Math.floor(y);
+  var xf = x - xi, yf = y - yi;
+  var u = xf * xf * (3 - 2 * xf);
+  var v = yf * yf * (3 - 2 * yf);
+  var n00 = hash2(xi, yi, seed);
+  var n10 = hash2(xi + 1, yi, seed);
+  var n01 = hash2(xi, yi + 1, seed);
+  var n11 = hash2(xi + 1, yi + 1, seed);
+  var top = n00 * (1 - u) + n10 * u;
+  var bottom = n01 * (1 - u) + n11 * u;
+  return top * (1 - v) + bottom * v;
+}
+
+function fbm2(x, y, seed, octaves) {
+  var total = 0, amp = 1, norm = 0, fx = x, fy = y;
+  var count = Math.max(1, Math.min(5, octaves | 0));
+  for (var i = 0; i < count; i++) {
+    total += valueNoise(fx, fy, seed + i * 101) * amp;
+    norm += amp;
+    amp *= 0.5;
+    fx *= 2.03;
+    fy *= 2.03;
+  }
+  return norm > 0 ? total / norm : 0.5;
+}
+
+function iceRamp(t) {
+  var stops = ICE_STOPS;
+  if (!(t > stops[0][0])) { return [stops[0][1], stops[0][2], stops[0][3]]; }
+  for (var i = 1; i < stops.length; i++) {
+    if (t <= stops[i][0]) {
+      var lowStop = stops[i - 1], highStop = stops[i];
+      var span = highStop[0] - lowStop[0];
+      var f = span > 0.0001 ? (t - lowStop[0]) / span : 0;
+      return [
+        Math.round(lowStop[1] + (highStop[1] - lowStop[1]) * f),
+        Math.round(lowStop[2] + (highStop[2] - lowStop[2]) * f),
+        Math.round(lowStop[3] + (highStop[3] - lowStop[3]) * f)
+      ];
+    }
+  }
+  var last = stops[stops.length - 1];
+  return [last[1], last[2], last[3]];
+}
+
+function channelSafe(value) {
+  if (typeof value !== "number" || !isFinite(value)) { return 0; }
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function rgbaOf(rgb, alpha) {
+  var r = channelSafe(rgb[0]), g = channelSafe(rgb[1]), b = channelSafe(rgb[2]);
+  var a = typeof alpha === "number" && isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 1;
+  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+}
+
+function toneForDistance(distance, maxDim) {
+  var norm = distance / (0.78 * maxDim);
+  if (!(norm > 0)) { return 0.03; }
+  if (norm > 1) { norm = 1; }
+  return 0.03 + 0.97 * Math.pow(norm, 0.58);
+}
+
+function buildSpineConfig(spec) {
+  return {
+    seed: spec.seed,
+    angle: HERO.angle + spec.angleJitter,
+    cx: HERO.cx + spec.offX,
+    cy: HERO.cy + spec.offY,
+    span: HERO.span,
+    wander: HERO.wander
+  };
+}
+
+function fillRibbon(g, innerX, innerY, outerX, outerY, count) {
+  if (!g || typeof g.beginPath !== "function") { return; }
+  g.beginPath();
+  g.moveTo(innerX[0], innerY[0]);
+  for (var i = 0; i < count; i++) { g.lineTo(outerX[i], outerY[i]); }
+  for (var k = count - 1; k >= 0; k--) { g.lineTo(innerX[k], innerY[k]); }
+  g.closePath();
+  g.fill();
+}
+
+function strokeBoundary(g, lineX, lineY, count, rgb, alpha, lineWidth) {
+  if (!g || typeof g.beginPath !== "function") { return; }
+  g.beginPath();
+  g.moveTo(lineX[0], lineY[0]);
+  for (var i = 1; i < count; i++) { g.lineTo(lineX[i], lineY[i]); }
+  g.strokeStyle = rgbaOf(rgb, alpha);
+  g.lineWidth = lineWidth;
+  g.stroke();
+}
+
+function paintSpine(g, w, h, cfg, bandCount, gap, steps) {
+  if (!g || typeof g.beginPath !== "function" || !(w > 0) || !(h > 0)) { return; }
+  var maxDim = Math.max(w, h);
+  var ax = Math.cos(cfg.angle), ay = Math.sin(cfg.angle);
+  var nx = -ay, ny = ax;
+  var cx = w * cfg.cx, cy = h * cfg.cy;
+  var half = maxDim * cfg.span;
+  var count = Math.max(8, Math.min(120, steps | 0));
+  var bands = Math.max(4, Math.min(40, bandCount | 0));
+  var centerX = new Array(count);
+  var centerY = new Array(count);
+  var step, index;
+  for (step = 0; step < count; step++) {
+    var u = count > 1 ? step / (count - 1) : 0;
+    var along = (u - 0.5) * 2 * half;
+    var wob = (fbm2(u * 2.65, cfg.seed * 0.017, cfg.seed, 3) - 0.5) * 2 * maxDim * cfg.wander;
+    centerX[step] = cx + ax * along + nx * wob;
+    centerY[step] = cy + ay * along + ny * wob;
+  }
+
+  /* cumulative boundary distances: strictly increasing, so ribbons never invert */
+  var pos = new Array(bands + 1);
+  var seg = new Array(bands + 1);
+  var baseGap = gap * maxDim;
+  var acc = baseGap;
+  pos[0] = acc;
+  seg[0] = baseGap;
+  for (index = 1; index <= bands; index++) {
+    var rawStep = (Math.pow(index + 1, 1.18) - Math.pow(index, 1.18)) * baseGap;
+    var jitter = 0.68 + 0.74 * fbm2(index * 0.53, cfg.seed * 0.011, cfg.seed + 3, 2);
+    var stepLen = Math.max(baseGap * 0.5, rawStep * jitter);
+    acc += stepLen;
+    pos[index] = acc;
+    seg[index] = stepLen;
+  }
+
+  var bounds = new Array(bands + 1);
+  for (index = 0; index <= bands; index++) {
+    var lx = new Array(count), ly = new Array(count);
+    var rx = new Array(count), ry = new Array(count);
+    var amp = seg[index] * 0.42;
+    for (step = 0; step < count; step++) {
+      var uu = count > 1 ? step / (count - 1) : 0;
+      var leftWob = (fbm2(uu * 3.05 + index * 0.17, index * 0.37, cfg.seed + 13, 3) - 0.5) * 2 * amp;
+      var rightWob = (fbm2(uu * 3.05 + index * 0.17 + 57.3, index * 0.37 + 9.1, cfg.seed + 29, 3) - 0.5) * 2 * amp;
+      var leftDist = pos[index] + leftWob;
+      var rightDist = pos[index] + rightWob;
+      lx[step] = centerX[step] + nx * leftDist;
+      ly[step] = centerY[step] + ny * leftDist;
+      rx[step] = centerX[step] - nx * rightDist;
+      ry[step] = centerY[step] - ny * rightDist;
+    }
+    bounds[index] = { lx: lx, ly: ly, rx: rx, ry: ry, pos: pos[index] };
+  }
+
+  for (var band = bands - 1; band >= 0; band--) {
+    var inner = bounds[band];
+    var outer = bounds[band + 1];
+    var tone = toneForDistance((inner.pos + outer.pos) * 0.5, maxDim);
+    var rgb = iceRamp(tone);
+    g.fillStyle = rgbaOf(rgb, 1);
+    fillRibbon(g, inner.lx, inner.ly, outer.lx, outer.ly, count);
+    fillRibbon(g, inner.rx, inner.ry, outer.rx, outer.ry, count);
+    if (tone > 0.145 && tone < 0.21) {
+      strokeBoundary(g, outer.lx, outer.ly, count, [222, 242, 250], 0.38, 1.2);
+      strokeBoundary(g, outer.rx, outer.ry, count, [222, 242, 250], 0.26, 1.2);
+    } else if (band % 4 === 2) {
+      strokeBoundary(g, outer.lx, outer.ly, count, [178, 220, 238], 0.11, 0.7);
+    }
+  }
+  g.globalAlpha = 1;
+}
+
+function paintFractures(g, w, h, seed, count, color) {
+  if (!g || typeof g.beginPath !== "function") { return; }
+  var maxDim = Math.max(w, h);
+  var total = Math.max(0, Math.min(120, count | 0));
+  for (var i = 0; i < total; i++) {
+    var startX = hash2(i, seed, 11) * w;
+    var startY = hash2(i, seed, 29) * h;
+    var angle = hash2(i, seed, 47) * Math.PI * 2;
+    var length = (0.015 + hash2(i, seed, 61) * 0.075) * maxDim;
+    var segments = 6;
+    g.beginPath();
+    g.moveTo(startX, startY);
+    var px = startX, py = startY;
+    for (var s = 0; s < segments; s++) {
+      angle += (hash2(i * 13 + s, seed, 83) - 0.5) * 0.85;
+      px += Math.cos(angle) * length / segments;
+      py += Math.sin(angle) * length / segments;
+      g.lineTo(px, py);
+    }
+    g.strokeStyle = color;
+    g.lineWidth = 0.5 + hash2(i, seed, 97) * 0.9;
+    g.globalAlpha = 0.05 + hash2(i, seed, 113) * 0.13;
+    g.stroke();
+  }
+  g.globalAlpha = 1;
+}
+
+function ensureGrainTile() {
+  if (grainTile) { return grainTile; }
+  var size = 128;
+  var tile = document.createElement("canvas");
+  tile.width = size; tile.height = size;
+  var tileCtx = tile.getContext("2d");
+  if (!tileCtx) { return null; }
+  var image = tileCtx.createImageData(size, size);
+  var data = image.data;
+  for (var i = 0; i < size * size; i++) {
+    var v = hash2(i % size, Math.floor(i / size), 4051);
+    var val = Math.round(v * 255);
+    data[i * 4] = val;
+    data[i * 4 + 1] = val;
+    data[i * 4 + 2] = val;
+    data[i * 4 + 3] = Math.round(14 + v * 26);
+  }
+  tileCtx.putImageData(image, 0, 0);
+  grainTile = tile;
+  return tile;
+}
+
+function applyLight(g, w, h, spec) {
+  var grad = null;
+  try { grad = g.createLinearGradient(w * 0.02, h * 1.02, w * 1.0, h * -0.02); }
+  catch (err) { reportError("lightGrad", err); return; }
+  try {
+    grad.addColorStop(0, spec.lightLow || "#101820");
+    grad.addColorStop(0.42, "#66798a");
+    grad.addColorStop(0.76, "#d2e2ea");
+    grad.addColorStop(1, "#ffffff");
+  } catch (err) { reportError("lightStops", err); }
+  g.save();
+  g.globalCompositeOperation = "multiply";
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  g.restore();
+}
+
+function applyGrain(g, w, h) {
+  var tile = ensureGrainTile();
+  if (!tile) { return; }
+  var pattern = null;
+  try { pattern = g.createPattern(tile, "repeat"); }
+  catch (err) { reportError("grain", err); return; }
+  if (!pattern) { return; }
+  g.save();
+  g.globalCompositeOperation = "overlay";
+  g.fillStyle = pattern;
+  g.fillRect(0, 0, w, h);
+  g.restore();
+}
+
+function bakeLayer(spec, w, h) {
+  var scale = Math.max(0.12, Math.min(1, spec.scale));
+  var bw = Math.max(8, Math.round(w * scale));
+  var bh = Math.max(8, Math.round(h * scale));
+  var layer = document.createElement("canvas");
+  layer.width = bw;
+  layer.height = bh;
+  var layerCtx = layer.getContext("2d");
+  if (!layerCtx) { return layer; }
+  layerCtx.fillStyle = "#04070a";
+  layerCtx.fillRect(0, 0, bw, bh);
+  var cfg = buildSpineConfig(spec);
+  paintSpine(layerCtx, bw, bh, cfg, spec.bands, spec.gap, spec.steps);
+  paintFractures(layerCtx, bw, bh, spec.seed + 5, spec.fractures, "rgba(196,226,240,0.9)");
+  applyLight(layerCtx, bw, bh, spec);
+  applyGrain(layerCtx, bw, bh);
+  layerCtx.globalAlpha = 1;
+  layerCtx.globalCompositeOperation = "source-over";
+  return layer;
+}
+
+function scheduleBake() {
+  bakeQueue = [];
+  for (var i = 0; i < layers.length; i++) {
+    bakeQueue.push(i);
+  }
+}
+
+function pumpBake(budgetMs) {
+  if (!bakeQueue.length) { return; }
+  var started = performance.now();
+  var guard = 0;
+  while (bakeQueue.length && guard < 6 && performance.now() - started < budgetMs) {
+    guard++;
+    var index = bakeQueue.shift();
+    try {
+      layers[index].canvas = bakeLayer(layers[index].spec, width, height);
+    } catch (err) { reportError("bake:" + layers[index].key, err); }
+  }
+}
+
+function drawLayers(nowMs) {
+  var seconds = nowMs * 0.001;
+  var damp = (state.rm ? 0.12 : 1) * (state.playing ? 1 : 0.42);
+  for (var i = 0; i < layers.length; i++) {
+    var layer = layers[i];
+    var source = layer.canvas;
+    if (!source || source.nodeName !== "CANVAS" || !(source.width > 0) || !(source.height > 0)) { continue; }
+    var dx = Math.sin(seconds * layer.driftSpeed + layer.phase) * layer.driftX * damp;
+    var dy = Math.cos(seconds * layer.driftSpeed * 0.77 + layer.phase) * layer.driftY * damp;
+    var zoom = 1 + Math.sin(seconds * 0.017 + layer.phase * 1.7) * 0.010 * damp;
+    var over = 26;
+    var drawW = (width + over * 2) * zoom;
+    var drawH = (height + over * 2) * zoom;
+    ctx.globalAlpha = layer.alpha;
+    ctx.drawImage(source,
+      dx - over + (width - drawW) * 0.5,
+      dy - over + (height - drawH) * 0.5,
+      drawW, drawH);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- the warm current inside the fissure ---------- */
+var crackPath = [];
+var foam = [];
+
+function pointOnPath(u) {
+  if (!crackPath.length) { return { x: width * 0.5, y: height * 0.5 }; }
+  var clamped = Math.max(0, Math.min(1, u));
+  var span = crackPath.length - 1;
+  var at = clamped * span;
+  var low = Math.floor(at);
+  var high = Math.min(span, low + 1);
+  var f = at - low;
+  var headPoint = crackPath[low], tailPoint = crackPath[high];
+  return { x: headPoint.x + (tailPoint.x - headPoint.x) * f, y: headPoint.y + (tailPoint.y - headPoint.y) * f };
+}
+function buildCrackPath() {
+  var count = 48;
+  var pts = [];
+  var maxDim = Math.max(width, height);
+  var ax = Math.cos(HERO.angle), ay = Math.sin(HERO.angle);
+  var nx = -ay, ny = ax;
+  var cx = width * HERO.cx, cy = height * HERO.cy;
+  var half = maxDim * HERO.span;
+  var seed = layers[2].spec.seed;
+  for (var i = 0; i < count; i++) {
+    var u = count > 1 ? i / (count - 1) : 0;
+    var along = (u - 0.5) * 2 * half;
+    var wob = (fbm2(u * 2.65, seed * 0.017, seed, 3) - 0.5) * 2 * maxDim * HERO.wander;
+    pts.push({ x: cx + ax * along + nx * wob, y: cy + ay * along + ny * wob, u: u });
+  }
+  crackPath = pts;
+  buildFoam();
+}
+
+function buildFoam() {
+  var list = [];
+  var count = 120;
+  var maxDim = Math.max(width, height);
+  var ax = Math.cos(HERO.angle), ay = Math.sin(HERO.angle);
+  var nx = -ay, ny = ax;
+  for (var i = 0; i < count; i++) {
+    var u = hash2(i, 17, 3);
+    var side = hash2(i, 17, 5) > 0.5 ? 1 : -1;
+    var lateral = (0.012 + Math.pow(hash2(i, 17, 7), 1.7) * 0.15) * maxDim * side;
+    var base = pointOnPath(u);
+    list.push({
+      x: base.x + nx * lateral,
+      y: base.y + ny * lateral,
+      phase: hash2(i, 17, 11) * Math.PI * 2,
+      speed: 0.30 + hash2(i, 17, 13) * 0.90,
+      size: 0.8 + hash2(i, 17, 19) * 1.9,
+      alpha: 0.10 + hash2(i, 17, 23) * 0.40
+    });
+  }
+  foam = list;
+}
+
+function warmRgba(alpha) {
+  var acc = state.accent;
+  var r = channelSafe(172 + acc[0] * 0.32);
+  var g = channelSafe(104 + acc[1] * 0.27);
+  var b = channelSafe(66 + acc[2] * 0.20);
+  var a = typeof alpha === "number" && isFinite(alpha) ? Math.max(0, Math.min(1, alpha)) : 0;
+  return "rgba(" + r + "," + g + "," + b + "," + a.toFixed(3) + ")";
+}
+
+function drawWarmPulse(nowMs) {
+  if (!crackPath.length || !ctx || typeof ctx.createRadialGradient !== "function") { return; }
+  var beatK = window.__liziShake === false ? 0 : state.beat;
+  var energy = clamp01(state.bass * 0.75 + state.level * 0.45 + beatK * 0.5) * (state.playing ? 1 : 0.55);
+  var travel = state.rm ? 0.3 : (nowMs * 0.000045) % 1;
+  var baseRadius = Math.max(46, Math.min(width, height) * (0.10 + 0.055 * energy));
+  ctx.globalCompositeOperation = "screen";
+  for (var i = 0; i < 6; i++) {
+    var u = (i / 6 + travel) % 1;
+    var point = pointOnPath(u);
+    var fade = Math.sin(u * Math.PI);
+    var radius = baseRadius * (0.78 + 0.44 * ((i % 3) / 2));
+    var alpha = (0.15 + 0.15 * energy) * fade;
+    if (alpha <= 0.003) { continue; }
+    var grad = null;
+    try {
+      grad = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+      grad.addColorStop(0, warmRgba(alpha));
+      grad.addColorStop(0.45, warmRgba(alpha * 0.42));
+      grad.addColorStop(1, warmRgba(0));
+    } catch (err) { reportError("glow", err); break; }
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+}
+
+function drawFoam(nowMs) {
+  if (!foam.length || !ctx) { return; }
+  var seconds = nowMs * 0.001;
+  var sparkle = 0.62 + state.treble * 0.95;
+  var damp = state.rm ? 0.28 : 1;
+  ctx.fillStyle = "#eaf6fc";
+  for (var i = 0; i < foam.length; i++) {
+    var flake = foam[i];
+    var ox = Math.sin(seconds * flake.speed + flake.phase) * (3 + 7 * state.beat) * damp;
+    var oy = Math.cos(seconds * flake.speed * 0.83 + flake.phase) * 2.6 * damp;
+    ctx.globalAlpha = Math.min(0.72, flake.alpha * sparkle);
+    ctx.fillRect(flake.x + ox, flake.y + oy, flake.size, flake.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawAccentWash() {
+  var acc = state.accent;
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = "rgba(" + channelSafe(acc[0]) + "," + channelSafe(acc[1]) + "," + channelSafe(acc[2]) + ",0.035)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.globalCompositeOperation = "source-over";
+}
+
+function buildVignette() {
+  vignetteGrad = null;
+  if (!ctx || typeof ctx.createRadialGradient !== "function") { return; }
+  var grad = null;
+  try {
+    grad = ctx.createRadialGradient(
+      width * 0.5, height * 0.42, Math.min(width, height) * 0.14,
+      width * 0.5, height * 0.5, Math.max(width, height) * 0.80
+    );
+    grad.addColorStop(0, "rgba(4,7,10,0)");
+    grad.addColorStop(0.58, "rgba(3,6,9,0.20)");
+    grad.addColorStop(1, "rgba(2,4,6,0.80)");
+  } catch (err) { reportError("vignette", err); return; }
+  vignetteGrad = grad;
+}
+
+function drawVignette() {
+  if (!vignetteGrad || !ctx) { return; }
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(0, 0, width, height);
+}
+
+/* ---------- lyrics ---------- */
+var CHAR_LIMIT = 240;
+var baseFontPx = 34;
+
+function computeFontPx() {
+  var byWidth = width < 760 ? width * 0.072 : width * 0.045;
+  var byHeight = height * 0.062;
+  var size = Math.min(byWidth, byHeight);
+  if (!isNum(size)) { size = 34; }
+  return Math.round(Math.max(20, Math.min(60, size)));
+}
+
+function applyFontSize() {
+  baseFontPx = computeFontPx();
+  if (rowCur) { rowCur.style.fontSize = baseFontPx + "px"; }
+}
+
+function applyEmptyState() {
+  var empty = state.count === 0;
+  if (emptyEl) { emptyEl.style.display = empty ? "block" : "none"; }
+  if (lyricWrap) { lyricWrap.style.display = empty ? "none" : "block"; }
+  if (empty) {
+    if (rowPrev) { rowPrev.textContent = ""; }
+    if (rowCur) { rowCur.textContent = ""; }
+    if (rowNext) { rowNext.textContent = ""; }
+    state.idx = -1;
+    state.text = "";
+  }
+}
+
+function findIndex(time) {
+  var idx = -1;
+  for (var i = 0; i < state.count; i++) {
+    if (state.lines[i].t <= time + 0.02) { idx = i; } else { break; }
+  }
+  return idx;
+}
+
+function lineSpan(line, index) {
+  var nextStart = index + 1 < state.count ? state.lines[index + 1].t : null;
+  var span = nextStart !== null ? nextStart - line.t : 0;
+  if (line.dur > 0.05) { return line.dur; }
+  if (span > 0.05) { return span; }
+  return 3.6;
+}
+
+function charTimesFor(line, index) {
+  var glyphs = Array.from(line.text);
+  var times = new Array(glyphs.length);
+  var provided = line.chars;
+  var duration = lineSpan(line, index);
+  var exact = provided && provided.length === glyphs.length;
+  for (var i = 0; i < glyphs.length; i++) {
+    if (exact) { times[i] = provided[i]; }
+    else { times[i] = line.t + duration * (i / Math.max(1, glyphs.length)); }
+  }
+  return times;
+}
+
+function renderRow(el, text, perChar) {
+  if (!el) { return; }
+  if (!perChar) {
+    el.textContent = text || "";
+    return;
+  }
+  var existing = el.childNodes.length;
+  for (var c = 0; c < existing && el.firstChild; c++) { el.removeChild(el.firstChild); }
+  var glyphs = Array.from(text || "");
+  if (glyphs.length > CHAR_LIMIT) {
+    el.textContent = text || "";
+    return;
+  }
+  for (var i = 0; i < glyphs.length; i++) {
+    var span = document.createElement("span");
+    span.className = "ch";
+    span.textContent = glyphs[i];
+    el.appendChild(span);
+  }
+}
+
+function fitCurrentLine() {
+  if (!rowCur) { return; }
+  var limit = Math.min(height * 0.40, 360);
+  var size = baseFontPx;
+  rowCur.style.fontSize = size + "px";
+  for (var i = 0; i < 6; i++) {
+    if (rowCur.scrollHeight <= limit) { break; }
+    size = size * 0.86;
+    rowCur.style.fontSize = Math.max(16, Math.round(size)) + "px";
+  }
+}
+
+function animateCurrentRow() {
+  if (!rowCur || state.rm) { return; }
+  rowCur.classList.remove("rise");
+  void rowCur.offsetWidth;
+  rowCur.classList.add("rise");
+}
+
+function switchLine(idx) {
+  state.idx = idx;
+  var line = idx >= 0 && idx < state.count ? state.lines[idx] : null;
+  state.text = line ? line.text : "";
+  state.charTimes = line ? charTimesFor(line, idx) : [];
+  state.litCount = -1;
+  renderRow(rowCur, state.text, true);
+  renderRow(rowPrev, idx > 0 ? state.lines[idx - 1].text : "", false);
+  renderRow(rowNext, idx + 1 < state.count ? state.lines[idx + 1].text : "", false);
+  fitCurrentLine();
+  animateCurrentRow();
+  updateChars();
+}
+
+function updateChars() {
+  if (!rowCur || !state.charTimes || !state.charTimes.length) { return; }
+  var times = state.charTimes;
+  var lit = 0;
+  for (var i = 0; i < times.length; i++) {
+    if (times[i] <= state.t + 0.001) { lit++; }
+  }
+  if (lit === state.litCount) { return; }
+  state.litCount = lit;
+  var spans = rowCur.children;
+  for (var k = 0; k < spans.length; k++) {
+    if (k < lit) { spans[k].classList.add("lit"); }
+    else { spans[k].classList.remove("lit"); }
+  }
+}
+
+function syncLyric() {
+  if (!state.count) { return; }
+  var idx = findIndex(state.t);
+  if (state.forceLine || idx !== state.idx) {
+    state.forceLine = false;
+    switchLine(idx);
+  }
+  updateChars();
+}
+</script>
+</body>
+</html>

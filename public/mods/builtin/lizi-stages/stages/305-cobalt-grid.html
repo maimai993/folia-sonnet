@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>305 · Cobalt Grid</title>
+<style>
+  :root{
+    --h:226;
+    --ink:#eef2ff;
+    --bright:#f4f7ff;
+    --ink-dim:rgba(238,242,255,.42);
+    --line:rgba(238,242,255,.16);
+    --line2:rgba(238,242,255,.34);
+    --bg0:#04070f;
+    --bg1:#0a1534;
+    --glow:#3f6bff;
+    --accent:#3f6bff;
+    --duo:#1f3fd6;
+    --wash1:rgba(60,100,255,.30);
+    --wash2:rgba(24,48,170,.40);
+    --wash3:rgba(40,70,200,.16);
+    --grain:none;
+    --sans:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,-apple-system,sans-serif;
+    --cjk:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC","Noto Sans CJK SC",var(--sans);
+    --p:0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--ink);
+    font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  #stage{position:fixed;inset:0;isolation:isolate;overflow:hidden}
+
+  .field{position:absolute;inset:0;z-index:0;
+    background:
+      radial-gradient(70% 55% at 12% 2%, var(--wash1), transparent 62%),
+      radial-gradient(95% 78% at 96% 100%, var(--wash2), transparent 68%),
+      radial-gradient(55% 45% at 55% 45%, var(--wash3), transparent 72%),
+      linear-gradient(172deg, var(--bg1), var(--bg0) 74%)}
+  .rack{position:absolute;inset:0;z-index:1;pointer-events:none;
+    background-image:linear-gradient(to right,var(--line) 0 1px,transparent 1px);
+    background-size:8.3333% 100%}
+  .rail{display:none}
+
+  /* ---- photographic plate: the album cover pushed into cobalt duotone ---- */
+  .plate{position:absolute;z-index:2;right:0;top:0;height:100%;width:37%;
+    overflow:hidden;background:var(--bg0);isolation:isolate}
+  .plate .shot{position:absolute;inset:-4%;width:108%;height:108%;object-fit:cover;
+    object-position:50% 42%;
+    filter:grayscale(1) contrast(1.62) brightness(.92);
+    transform:scale(calc(1.04 + var(--p,0) * .035));transform-origin:50% 45%;
+    will-change:transform;display:block}
+  .plate .duo{position:absolute;inset:0;background:var(--duo);
+    mix-blend-mode:color;opacity:.96}
+  .plate .ink{position:absolute;inset:0;
+    background:linear-gradient(200deg, rgba(2,6,18,.10), rgba(2,6,18,.58));
+    mix-blend-mode:multiply}
+  .plate .dot{position:absolute;inset:0;opacity:.38;mix-blend-mode:multiply;
+    background-image:radial-gradient(circle at 50% 50%, rgba(3,7,16,.85) 0 .9px, transparent 1.4px);
+    background-size:4px 4px}
+  .plate .glare{position:absolute;inset:0;mix-blend-mode:screen;
+    opacity:calc(.34 + var(--p,0) * .5);
+    background:radial-gradient(60% 45% at 28% 12%, var(--glow), transparent 70%)}
+  .plate .scrim{position:absolute;inset:0;
+    background:
+      linear-gradient(90deg, var(--bg0) 0%, transparent 26%),
+      linear-gradient(0deg, var(--bg0) 0%, transparent 30%)}
+  .plate .cap{position:absolute;left:10%;top:0;bottom:0;display:flex;align-items:center;
+    writing-mode:vertical-rl;transform:rotate(180deg);
+    font-size:clamp(7px,.72vw,10px);letter-spacing:.42em;text-transform:uppercase;
+    color:var(--bright);white-space:nowrap;opacity:.62}
+  .plate .mk{position:absolute;width:14px;height:14px;border:1px solid var(--bright);
+    opacity:.42;border-right:0;border-bottom:0}
+  .plate .mk.a{left:14px;top:14px}
+  .plate .mk.b{right:clamp(10px,1.4vw,22px);bottom:clamp(10px,1.6vh,20px);
+    transform:rotate(180deg)}
+  .plate.hide{display:none}
+
+  .grain{position:absolute;inset:-10%;z-index:6;pointer-events:none;
+    background-image:var(--grain);background-size:96px 96px;
+    opacity:.4;mix-blend-mode:overlay;will-change:transform;
+    transform:translate3d(calc(var(--jx,0) * 1px),calc(var(--jy,0) * 1px),0)}
+  #stage::after{content:"";position:absolute;inset:0;z-index:7;pointer-events:none;
+    background:radial-gradient(125% 105% at 48% 42%, transparent 44%, rgba(2,4,10,.6) 100%)}
+
+  /* ---- Swiss grid: vertical rail + metadata band ---- */
+  .edge{position:absolute;z-index:5;left:0;top:0;bottom:0;width:clamp(26px,3vw,44px);
+    border-right:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    pointer-events:none}
+  .edge span{writing-mode:vertical-rl;transform:rotate(180deg);
+    font-size:clamp(7.5px,.68vw,10px);letter-spacing:.42em;text-transform:uppercase;
+    color:var(--ink-dim);white-space:nowrap}
+
+  .meta{position:absolute;z-index:5;
+    left:calc(clamp(26px,3vw,44px) + clamp(16px,2.4vw,50px));
+    right:calc(37% + clamp(16px,2.4vw,50px));
+    top:clamp(14px,2.8vh,40px);
+    display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
+    column-gap:clamp(8px,1vw,18px);row-gap:clamp(6px,.9vh,14px);align-items:end;
+    border-bottom:1px solid var(--line2);padding-bottom:.85em}
+  .meta::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+    background:var(--accent);opacity:calc(var(--p,0) * .75)}
+  .mi{display:flex;flex-direction:column;gap:.42em;min-width:0}
+  .mi .k{font-size:clamp(7px,.64vw,9px);letter-spacing:.34em;text-transform:uppercase;
+    color:var(--ink-dim)}
+  .mi b{font-weight:700;font-size:clamp(17px,2.45vw,42px);letter-spacing:-.032em;line-height:.95;
+    text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mi span.v,.mi .art{font-size:clamp(9px,.86vw,12.5px);letter-spacing:.06em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .mi.c .v{text-transform:uppercase;letter-spacing:.16em;color:var(--ink-dim)}
+  .mi.a{grid-column:1 / span 8}
+  .mi.b{grid-column:1 / span 6}
+  .mi.c{grid-column:9 / span 4}
+  .mi.d{grid-column:10 / span 3}
+  .sw{display:flex;gap:3px;align-items:center}
+  .sw i{display:block;width:clamp(8px,1vw,13px);height:clamp(8px,1vw,13px);background:var(--ink-dim)}
+  .sw i:nth-child(1){background:hsla(var(--h),88%,74%,.95)}
+  .sw i:nth-child(2){background:hsla(var(--h),92%,52%,.95)}
+  .sw i:nth-child(3){background:hsla(var(--h),88%,30%,.95)}
+
+  /* ---- lyric ledger ---- */
+  .lyr{position:absolute;z-index:4;
+    left:calc(clamp(26px,3vw,44px) + clamp(16px,2.4vw,50px));
+    right:calc(37% + clamp(14px,1.8vw,36px));
+    top:50%;transform:translateY(-50%);
+    --lyric-fs:clamp(26px,4.4vw,68px)}
+  .lyr-head{display:flex;align-items:baseline;gap:.5em;position:relative;
+    border-bottom:1px solid var(--line2);padding-bottom:.45em}
+  .lyr-head::before{content:"";position:absolute;left:0;right:0;top:-8px;height:5px;
+    background-image:linear-gradient(to right,var(--line2) 0 1px,transparent 1px);
+    background-size:8.3333% 100%;opacity:.85}
+  .idx{font-size:clamp(12px,1.5vw,21px);font-weight:700;letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .tot{font-size:clamp(7.5px,.8vw,11px);letter-spacing:.16em;color:var(--ink-dim)}
+  .cue{margin-left:auto;align-self:center;
+    font-size:clamp(7px,.66vw,9.5px);letter-spacing:.26em;text-transform:uppercase;
+    color:var(--bg0);background:var(--accent);padding:.55em .7em .5em;line-height:1;
+    white-space:nowrap;opacity:.97}
+
+  .ghost{position:absolute;right:-.04em;bottom:-.3em;z-index:-1;pointer-events:none;
+    font-size:clamp(110px,16vw,280px);font-weight:700;line-height:.7;letter-spacing:-.05em;
+    color:transparent;-webkit-text-stroke:1px var(--line2);user-select:none;
+    opacity:calc(.30 + var(--p,0) * .34)}
+
+  .row{display:grid;grid-template-columns:4.4em minmax(0,1fr);
+    column-gap:clamp(8px,.9vw,15px);align-items:baseline;
+    border-bottom:1px solid var(--line);padding:clamp(5px,.85vh,11px) 0;position:relative}
+  .tc{font-size:clamp(7.5px,.68vw,10px);letter-spacing:.08em;color:var(--ink-dim);
+    font-variant-numeric:tabular-nums;padding-right:.5em;border-right:1px solid var(--line);
+    text-align:right;white-space:nowrap;align-self:start;line-height:1.6}
+  .tx{font-family:var(--cjk);font-weight:700;letter-spacing:.005em;line-height:1.18;
+    min-width:0;overflow-wrap:break-word;word-break:normal}
+  .row--cur{padding:clamp(7px,1.1vh,15px) 0 clamp(9px,1.3vh,17px)}
+  .row--cur .tc{line-height:1.25}
+  .row--cur .tx{font-size:calc(var(--lyric-fs) * var(--k,1));letter-spacing:-.012em;
+    line-height:1.13;color:var(--bright);display:block}
+  .row--prev .tx,.row--next .tx{font-size:clamp(11px,1.25vw,18px);color:var(--ink-dim);
+    letter-spacing:.02em;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row--prev .tx{opacity:.7}
+  .row--next .tx{opacity:.55}
+
+  /* ink falling onto the page, character by character */
+  .ch{opacity:.3;transition:opacity .18s linear}
+  .ch.on{opacity:1;transition:opacity .08s linear}
+  .ch.act{text-decoration:underline;text-decoration-color:var(--accent);
+    text-decoration-thickness:.048em;text-underline-offset:.17em}
+
+  @keyframes lnIn{from{opacity:.12;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .tx.in{animation:lnIn .22s cubic-bezier(.2,.7,.3,1) both}
+
+  /* ---- footer measure ---- */
+  .bar{position:absolute;z-index:5;bottom:clamp(10px,2.2vh,30px);
+    left:calc(clamp(26px,3vw,44px) + clamp(16px,2.4vw,50px));
+    right:clamp(16px,2.4vw,50px);
+    display:grid;grid-template-columns:auto minmax(0,1fr) auto auto 3.4em;
+    gap:clamp(8px,1.1vw,18px);align-items:center;
+    border-top:1px solid var(--line2);padding-top:.72em;
+    font-size:clamp(7.5px,.78vw,11px);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--ink-dim);font-variant-numeric:tabular-nums}
+  .bar .t{color:var(--ink)}
+  .prog{position:relative;height:1px;background:var(--line)}
+  .prog i{position:absolute;left:0;top:-1px;height:3px;width:100%;background:var(--accent);
+    transform:scaleX(0);transform-origin:0 50%;will-change:transform}
+  .prog b{position:absolute;top:-5px;left:0;width:1px;height:11px;background:var(--bright);
+    opacity:.9}
+  .bar .bpm{color:var(--ink);letter-spacing:.1em}
+  .sig{display:flex;gap:3px;align-items:flex-end;justify-content:flex-end;height:12px}
+  .sig i{display:block;width:2px;height:100%;background:var(--accent);opacity:.8;
+    transform:scaleY(.12);transform-origin:50% 100%}
+
+  /* ---- honest empty state: the file simply has no vocal line ---- */
+  .row--empty{display:none}
+  .no-lyr .row--prev,.no-lyr .row--next,.no-lyr .row--cur,.no-lyr .ghost{display:none}
+  .no-lyr .row--empty{display:grid}
+  .row--empty .tx b{display:block;font-weight:700;line-height:1.08;letter-spacing:-.01em;
+    font-size:calc(var(--lyric-fs) * .46);color:var(--bright)}
+  .row--empty .tx b span{display:inline-block;margin-left:.5em;vertical-align:.18em;
+    font-size:.36em;letter-spacing:.24em;color:var(--ink-dim);font-weight:700}
+  .row--empty .tx em{display:block;font-style:normal;margin-top:.7em;
+    font-size:clamp(11px,1.05vw,15px);letter-spacing:.05em;color:var(--ink-dim)}
+
+  /* ---- no cover: the grid runs full width ---- */
+  @media (min-width:861px){
+    #stage.noplate .lyr,#stage.noplate .meta{
+      right:calc(clamp(26px,3vw,44px) + clamp(16px,2.4vw,50px))}
+    #stage.noplate .lyr{--lyric-fs:clamp(28px,5.2vw,80px)}
+  }
+
+  @media (max-width:1100px){
+    .lyr{right:calc(35% + 18px)}
+    .meta{right:calc(35% + 18px)}
+    .mi.c{display:none}
+    .mi.a{grid-column:1 / span 7}
+    .mi.b{grid-column:1 / span 5}
+    .mi.d{grid-column:9 / span 4}
+  }
+
+  /* portrait / narrow: the plate becomes a top band, the type runs full width */
+  @media (max-width:860px){
+    .plate{width:100%;height:38vh;top:0;left:0}
+    .plate .scrim{background:linear-gradient(0deg,var(--bg0) 0%,transparent 48%)}
+    .plate .cap{left:12px;top:auto;bottom:12px;writing-mode:horizontal-tb;
+      transform:none;letter-spacing:.3em}
+    .edge{display:none}
+    .meta{left:clamp(14px,4vw,24px);right:clamp(14px,4vw,24px);
+      top:calc(38vh + 12px);grid-template-columns:repeat(6,minmax(0,1fr))}
+    .mi.a{grid-column:1 / span 6}
+    .mi.b{grid-column:1 / span 4}
+    .mi.d{grid-column:5 / span 2}
+    .mi b{font-size:clamp(15px,5vw,26px)}
+    .lyr{left:clamp(14px,4vw,24px);right:clamp(14px,4vw,24px);
+      top:calc(38vh + 74px);bottom:clamp(46px,7vh,72px);transform:none;
+      display:flex;flex-direction:column;justify-content:center;
+      --lyric-fs:clamp(20px,6.6vw,38px)}
+    .row{grid-template-columns:3em minmax(0,1fr)}
+    .tc{font-size:7.5px;letter-spacing:.03em}
+    .ghost{font-size:clamp(80px,28vw,150px);bottom:auto;top:-.24em}
+    .bar{left:clamp(14px,4vw,24px);right:clamp(14px,4vw,24px);
+      grid-template-columns:auto minmax(0,1fr) auto auto;gap:8px}
+    .bar .sig{display:none}
+    .row--prev .tx,.row--next .tx{font-size:clamp(11px,3.2vw,15px)}
+    .row--empty .tx b{font-size:calc(var(--lyric-fs) * .62)}
+    #stage.noplate .meta{top:clamp(12px,3vh,28px)}
+    #stage.noplate .lyr{top:calc(clamp(12px,3vh,28px) + 74px)}
+  }
+
+  /* phone held sideways: back to a side plate, current line only */
+  @media (orientation:landscape) and (max-height:600px){
+    .plate{width:32%;height:100%}
+    .plate .scrim{background:
+      linear-gradient(90deg,var(--bg0) 0%,transparent 34%),
+      linear-gradient(0deg,var(--bg0) 0%,transparent 34%)}
+    .edge{display:none}
+    .meta{left:16px;right:calc(32% + 16px);top:8px;
+      grid-template-columns:repeat(12,minmax(0,1fr))}
+    .mi.a{grid-column:1 / span 8}
+    .mi.b{grid-column:1 / span 5}
+    .mi.d{grid-column:10 / span 3}
+    .mi.c{display:none}
+    .mi b{font-size:clamp(12px,1.7vw,20px)}
+    .lyr{left:16px;right:calc(32% + 16px);top:calc(50% + 10px);bottom:auto;
+      transform:translateY(-50%);display:block;
+      --lyric-fs:clamp(16px,3vw,32px)}
+    .row--prev,.row--next{display:none}
+    .ghost{display:none}
+    .bar{left:16px;right:16px;bottom:6px;padding-top:.5em}
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .tx.in{animation:none}
+    .ch,.ch.on{transition:none}
+    .grain{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="field" aria-hidden="true"></div>
+  <div class="rack" aria-hidden="true"></div>
+
+  <div class="plate hide" id="plate">
+    <img class="shot" id="cover" alt="">
+    <div class="duo"></div>
+    <div class="ink"></div>
+    <div class="dot"></div>
+    <div class="glare"></div>
+    <div class="scrim"></div>
+    <div class="mk a"></div>
+    <div class="mk b"></div>
+    <div class="cap" id="pcap">plate 01 — studio study / mono</div>
+  </div>
+  <div class="grain" id="grain" aria-hidden="true"></div>
+
+  <div class="edge" aria-hidden="true"><span>studio session &nbsp;·&nbsp; monochrome cobalt &nbsp;·&nbsp; no.305</span></div>
+
+  <header class="meta">
+    <div class="mi a"><span class="k">track</span><b id="tName">—</b></div>
+    <div class="mi b"><span class="k">artist</span><span class="art" id="tArtist">—</span></div>
+    <div class="mi c"><span class="k">ref</span><span class="v">no.305 / cobalt grid</span></div>
+    <div class="mi d"><span class="k">palette</span><span class="sw"><i></i><i></i><i></i></span></div>
+  </header>
+
+  <main class="lyr" id="lyr">
+    <div class="ghost" id="ghost">00</div>
+    <div class="lyr-head">
+      <span class="idx" id="lnNum">00</span>
+      <span class="tot" id="lnTot">/ 00</span>
+      <span class="cue" id="lnCue">standby</span>
+    </div>
+    <div class="row row--prev" id="rPrev"><span class="tc" id="tcPrev">--:--</span><span class="tx" id="lnPrev"></span></div>
+    <div class="row row--cur" id="rCur"><span class="tc" id="tcCur">--:--</span><span class="tx" id="lnCur"></span></div>
+    <div class="row row--next" id="rNext"><span class="tc" id="tcNext">--:--</span><span class="tx" id="lnNext"></span></div>
+    <div class="row row--empty" id="rEmpty">
+      <span class="tc">—:—</span>
+      <span class="tx"><b>纯音乐<span>instrumental</span></b><em>这首歌没有歌词，只有声音。</em></span>
+    </div>
+  </main>
+
+  <footer class="bar">
+    <span class="t" id="tNow">0:00</span>
+    <div class="prog"><i id="progBar"></i><b id="progHead"></b></div>
+    <span class="t r" id="tDur">0:00</span>
+    <span class="bpm" id="tBpm">— bpm</span>
+    <span class="sig" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+  </footer>
+</div>
+
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '钴蓝网格',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+(function(){
+  'use strict';
+  var $=function(id){return document.getElementById(id)};
+  var elPrev=$('lnPrev'), elCur=$('lnCur'), elNext=$('lnNext');
+  var elCover=$('cover'), elPlate=$('plate');
+  var elName=$('tName'), elArtist=$('tArtist'), elNow=$('tNow'), elDur=$('tDur'), elBpm=$('tBpm');
+  var elProg=$('progBar'), elHead=$('progHead'), elNum=$('lnNum'), elTot=$('lnTot'), elCue=$('lnCue');
+  var elGhost=$('ghost'), elRCur=$('rCur'), elRPrev=$('rPrev'), elRNext=$('rNext');
+  var elLyr=$('lyr');
+  var tcPrev=$('tcPrev'), tcCur=$('tcCur'), tcNext=$('tcNext');
+  var elGrain=$('grain'), elPcap=$('pcap'), elStage=$('stage');
+  var sigs=document.querySelectorAll('.sig i');
+
+  var S={
+    lines:[], idx:-1, t:0, target:0, playing:true, duration:0,
+    song:{name:'',artists:'',cover:''}, songId:'', accent:null,
+    bpm:0, level:0, bass:0, mid:0, treble:0, pulse:0,
+    frames:0, js:0, err:'', gl:false, rm:false, ready:false
+  };
+  try{ S.rm = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){}
+
+  /* ---------- cobalt palette derived from the cover accent ---------- */
+  var ROOT=document.documentElement.style;
+  function rgb2hsl(r,g,b){
+    r=(r|0)/255; g=(g|0)/255; b=(b|0)/255;
+    var mx=Math.max(r,g,b), mn=Math.min(r,g,b), l=(mx+mn)/2, d=mx-mn, h=0, s=0;
+    if(d>0.0001){
+      s = l>0.5 ? d/(2-mx-mn) : d/(mx+mn);
+      if(mx===r) h=((g-b)/d+(g<b?6:0));
+      else if(mx===g) h=((b-r)/d+2);
+      else h=((r-g)/d+4);
+      h*=60;
+    }
+    return [h,s,l];
+  }
+  function hs(h,s,l){ return 'hsl('+h.toFixed(1)+','+s.toFixed(1)+'%,'+l.toFixed(1)+'%)'; }
+  function hsa(h,s,l,a){ return 'hsla('+h.toFixed(1)+','+s.toFixed(1)+'%,'+l.toFixed(1)+'%,'+a+')'; }
+
+  function applyPalette(acc){
+    var h=226, sat=76;
+    if(acc && acc.length>=3){
+      var r=+acc[0], g=+acc[1], b=+acc[2];
+      if(isFinite(r)&&isFinite(g)&&isFinite(b)){
+        var q=rgb2hsl(r,g,b), ah=q[0], as=q[1];
+        /* keep the whole frame inside the cobalt / indigo band, borrow the album's intensity */
+        if(isFinite(ah)&&ah>=186&&ah<=282) h=Math.min(268,Math.max(200,ah));
+        if(isFinite(as)) sat=Math.min(92,Math.max(48,as*96));
+      }
+    }
+    if(!isFinite(h)) h=226;
+    if(!isFinite(sat)) sat=76;
+    ROOT.setProperty('--h',h.toFixed(1));
+    ROOT.setProperty('--bg0',hs(h,sat*0.55,3.0));
+    ROOT.setProperty('--bg1',hs(h,sat*0.78,9.5));
+    ROOT.setProperty('--ink',hs(h,30,96));
+    ROOT.setProperty('--bright',hs(h,26,97.5));
+    ROOT.setProperty('--ink-dim',hsa(h,45,88,.44));
+    ROOT.setProperty('--line',hsa(h,60,80,.17));
+    ROOT.setProperty('--line2',hsa(h,60,84,.36));
+    ROOT.setProperty('--glow',hs(h,94,60));
+    ROOT.setProperty('--accent',hs(h,96,64));
+    ROOT.setProperty('--duo',hs(h,88,44));
+    ROOT.setProperty('--wash1',hsa(h,95,48,.32));
+    ROOT.setProperty('--wash2',hsa(h,92,34,.42));
+    ROOT.setProperty('--wash3',hsa(h,88,52,.14));
+  }
+
+  /* film grain: generated once, never fetched */
+  (function makeGrain(){
+    try{
+      var c=document.createElement('canvas'); c.width=c.height=96;
+      var x=c.getContext('2d'), im=x.createImageData(96,96), d=im.data;
+      for(var i=0;i<d.length;i+=4){
+        var v=(Math.random()*255)|0;
+        d[i]=d[i+1]=d[i+2]=v; d[i+3]=255;
+      }
+      x.putImageData(im,0,0);
+      ROOT.setProperty('--grain','url('+c.toDataURL('image/png')+')');
+    }catch(e){}
+  })();
+
+  function artistsText(a){
+    if(!a) return '';
+    if(Object.prototype.toString.call(a)==='[object Array]') return a.filter(Boolean).join(' / ');
+    return String(a);
+  }
+  function pad2(n){ n=Math.max(0,Math.floor(n||0)); return (n<10?'0':'')+n; }
+  function mmss(s){ s=Math.max(0,Math.floor(s||0)); return Math.floor(s/60)+':'+pad2(s%60); }
+
+  var A_ARR=function(v){ return Object.prototype.toString.call(v)==='[object Array]'; };
+  function num(v, dflt){
+    var n=(typeof v==='number')?v:parseFloat(v);
+    return (typeof n==='number'&&isFinite(n))?n:dflt;
+  }
+  /* every field may arrive dirty: normalise once so the render loop stays simple */
+  function normalizeLines(src){
+    if(!A_ARR(src)) return [];
+    var out=[], i, l;
+    for(i=0;i<src.length;i++){
+      l=src[i];
+      if(!l||typeof l!=='object') continue;
+      out.push({
+        t: num(l.t,0),
+        dur: (num(l.dur,0)>0)?num(l.dur,0):0,
+        text: (typeof l.text==='string')?l.text:(l.text==null?'':String(l.text)),
+        chars: (A_ARR(l.chars)&&l.chars.length)?l.chars:null
+      });
+    }
+    out.sort(function(a,b){ return a.t-b.t; });
+    return out;
+  }
+
+  /* ---------- init ---------- */
+  function onInit(p){
+    p=p||{};
+    S.song = {
+      name: (p.song&&p.song.name)?String(p.song.name):'',
+      artists: artistsText(p.song&&p.song.artists),
+      cover: (p.song&&p.song.cover)?String(p.song.cover):''
+    };
+    S.accent = (p.accent&&p.accent.length>=3)?p.accent.slice(0,3):null;
+    S.lines = normalizeLines(p.lines);
+    S.duration = (typeof p.duration==='number'&&isFinite(p.duration)&&p.duration>0)?p.duration:0;
+    S.playing = (typeof p.playing==='boolean')?p.playing:true;
+    S.idx = -1; S.lastIdx = -1;
+    var nid = (p.song && p.song.id!=null) ? String(p.song.id) : '';
+    if(nid!==S.songId){ S.songId=nid; if(!S.playing){ S.t=0; S.target=0; } }
+
+    applyPalette(S.accent);
+    if(S.song.cover){
+      elPlate.classList.remove('hide');
+      if(elCover.getAttribute('src')!==S.song.cover) elCover.setAttribute('src',S.song.cover);
+      elStage.classList.remove('noplate');
+    } else {
+      elPlate.classList.add('hide');
+      elCover.removeAttribute('src');
+      elStage.classList.add('noplate');
+    }
+    elPcap.textContent = 'fig. 01 — ' + (S.song.name ? S.song.name.slice(0,26) : 'cover study');
+
+    elName.textContent = S.song.name || 'untitled';
+    elArtist.textContent = S.song.artists || '—';
+    elDur.textContent = mmss(S.duration);
+    elTot.textContent = '/ ' + pad2(S.lines.length);
+    lastIdx = -99; lastText = ''; lastEmpty = null;
+    if(elCur._line) { elCur._line = null; elCur._r = null; elCur.textContent=''; }
+    paint();
+  }
+
+  /* ---------- render ---------- */
+  var lastIdx=-99, lastText='', lastCue='', lastEmpty=null, lastSec=-1, shownText='';
+  function lineText(l){ return (l&&typeof l.text==='string'&&l.text!=='')?l.text:'…'; }
+
+  function kFor(tx){
+    var n=Array.from(tx).length, k=1;
+    if(n>10)k=.95; if(n>15)k=.87; if(n>22)k=.77;
+    if(n>32)k=.67; if(n>46)k=.57; if(n>64)k=.48;
+    return k;
+  }
+
+  /* timing per character: YRC wins when its length matches the text, otherwise
+     the line duration is divided evenly across the printed characters */
+  function charTimes(line, arr, i){
+    var n=arr.length, t0=(typeof line.t==='number'&&isFinite(line.t))?line.t:0, out=[], j;
+    var dur=(typeof line.dur==='number'&&isFinite(line.dur)&&line.dur>0)?line.dur:0;
+    if(!dur){
+      var nx=S.lines[i+1];
+      dur=(nx&&typeof nx.t==='number'&&nx.t>t0)?Math.max(.9,Math.min(9,nx.t-t0)):2.4;
+    }
+    if(line.chars && line.chars.length===n){
+      for(j=0;j<n;j++){
+        var c=line.chars[j];
+        out[j]=(c&&typeof c.t==='number'&&isFinite(c.t))?c.t:(t0+dur*(j/n));
+      }
+      return out;
+    }
+    var span=dur*0.94;
+    for(j=0;j<n;j++) out[j]=t0+span*(j/Math.max(1,n));
+    return out;
+  }
+
+  var CJK=/[\u2E80-\u303F\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\uAC00-\uD7AF]/;
+  var WORD=/[A-Za-z0-9\u00C0-\u024F'’_@&\-]/;
+  /* latin runs stay whole words (no mid-word breaks), CJK reveals character by character */
+  function tokenize(arr){
+    var out=[], i=0, n=arr.length;
+    while(i<n){
+      var c=arr[i], s=i;
+      if(CJK.test(c)) i++;
+      else if(WORD.test(c)){ while(i<n && WORD.test(arr[i])) i++; }
+      else if(/\s/.test(c)){ while(i<n && /\s/.test(arr[i])) i++; }
+      else i++;
+      out.push({s:arr.slice(s,i).join(''), i0:s});
+    }
+    return out;
+  }
+
+  function buildCur(line, i, tx){
+    var arr=Array.from(tx||''), toks=tokenize(arr), times=charTimes(line, arr, i);
+    var frag=document.createDocumentFragment(), spans=[], tArr=[];
+    for(var j=0;j<toks.length;j++){
+      var sp=document.createElement('span');
+      sp.className='ch';
+      sp.textContent=toks[j].s;
+      spans.push(sp); tArr.push(times[toks[j].i0]||0);
+      frag.appendChild(sp);
+    }
+    elCur.textContent='';
+    elCur.appendChild(frag);
+    elCur._r={spans:spans, times:tArr, lit:0};
+    elCur._line=line; elCur._sig=tx+'|'+(line&&line.chars?line.chars.length:0);
+  }
+
+  function updateReveal(r, t){
+    var n=r.times.length, target=0, i;
+    while(target<n && r.times[target]<=t+0.005) target++;
+    if(target===r.lit) return;
+    if(target>r.lit){ for(i=r.lit;i<target;i++) r.spans[i].classList.add('on'); }
+    else { for(i=r.lit-1;i>=target;i--) r.spans[i].classList.remove('on','act'); }
+    if(r.lit>0 && r.spans[r.lit-1]) r.spans[r.lit-1].classList.remove('act');
+    if(target>0 && r.spans[target-1]) r.spans[target-1].classList.add('act');
+    r.lit=target;
+  }
+
+  function paint(){
+    var L=S.lines, n=L.length, i=S.idx, tx='', empty=(n===0);
+    var cur, prev, next;
+    if(i<0){ cur = n?L[0]:null; prev = null; next = n>1?L[1]:null; }
+    else { cur = L[i]; prev = i>0?L[i-1]:null; next = i+1<n?L[i+1]:null; }
+
+    if(lastEmpty!==empty){
+      lastEmpty=empty;
+      elLyr.classList.toggle('no-lyr',empty);
+      if(empty){ elNum.textContent='—'; elGhost.textContent='—'; }
+    }
+
+    if(lastIdx!==i){
+      lastIdx=i;
+      elPrev.textContent = prev?lineText(prev):'';
+      elNext.textContent = next?lineText(next):'';
+      tcPrev.textContent = prev?mmss(prev.t):'--:--';
+      tcNext.textContent = next?mmss(next.t):'--:--';
+      if(!empty){
+        var num = (i<0?'00':pad2(i+1));
+        elNum.textContent = num;
+        elGhost.textContent = num;
+      }
+      elRPrev.style.opacity = prev?1:0;
+      elRNext.style.opacity = next?1:0;
+    }
+
+    tx = cur?lineText(cur):'';
+    var sig = tx+'|'+(cur&&cur.chars?cur.chars.length:0);
+    if(!cur){
+      if(elCur._line!==null){ elCur.textContent=''; elCur._line=null; elCur._r=null; lastText=''; }
+    } else if(elCur._line!==cur || elCur._sig!==sig){
+      lastText=tx;
+      buildCur(cur, i<0?0:i, tx);
+      elRCur.style.setProperty('--k', kFor(tx));
+      elCur.classList.remove('in');
+      void elCur.offsetWidth;
+      elCur.classList.add('in');
+      tcCur.textContent = mmss(cur.t);
+    }
+    if(elCur._r) updateReveal(elCur._r, S.t);
+
+    var cue = empty ? 'no vocal' : (!S.playing ? 'paused' : (i<0 ? 'standby' : 'mono / on air'));
+    if(cue!==lastCue){ lastCue=cue; elCue.textContent=cue; }
+    var sec = S.t<0?0:Math.floor(S.t);
+    if(sec!==lastSec){ lastSec=sec; elNow.textContent=mmss(sec); }
+    shownText = (i>=0 && !empty) ? tx : '';
+  }
+
+  var lastPg=-1, lastP=-1;
+  function frame(){
+    S.frames++;
+    var t0=performance.now();
+    if(S.playing){
+      /* follow the 15 Hz tick clock, smoothed so the playhead does not stair-step */
+      var d=S.target-S.t;
+      S.t += Math.abs(d)<0.004?d:d*0.26;
+    }
+    var L=S.lines, i=-1;
+    for(var k=0;k<L.length;k++){ if(S.t+0.02>=L[k].t){ i=k; } else break; }
+    S.idx=i;
+    paint();
+    if(S.duration>0){
+      var pg=S.t/S.duration;
+      pg = pg<0?0:(pg>1?1:pg);
+      elProg.style.transform='scaleX('+pg.toFixed(4)+')';
+      if(Math.abs(pg-lastPg)>0.0015){ lastPg=pg; elHead.style.left=(pg*100).toFixed(2)+'%'; }
+    }
+    if(S.pulse>0.001) S.pulse*=0.93; else S.pulse=0;
+    var pv = (S.rm || window.__liziShake === false) ? 0 : S.pulse;
+    if(pv!==lastP){ lastP=pv; elStage.style.setProperty('--p',pv.toFixed(3)); }
+    if(!S.ready){ S.ready=true; post({__c100:1,type:'ready'}); }
+    S.js=performance.now()-t0;
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- messages ---------- */
+  function post(m){ try{ parent.postMessage(m,'*'); }catch(e){} }
+  window.addEventListener('message', function(ev){
+    var d=ev.data;
+    if(!d||d.__c100!==1) return;
+    if(!S.ready){ S.ready=true; post({__c100:1,type:'ready'}); }
+    var p=d.payload||{};
+    if(d.type==='init') onInit(p);
+    else if(d.type==='tick'){
+      if(typeof p.time==='number'&&isFinite(p.time)) S.target=p.time;
+      if(typeof p.playing==='boolean') S.playing=p.playing;
+      if(S.target!==undefined&&Math.abs(S.t-S.target)>1.2) S.t=S.target;
+    }
+    else if(d.type==='beat'){
+      var lv=(typeof p.level==='number'&&isFinite(p.level))?p.level:.5;
+      S.pulse=Math.min(1,Math.max(.06,lv));
+      if(!S.rm){
+        if(window.__liziShake === false){
+          elStage.style.setProperty('--jx','0');
+          elStage.style.setProperty('--jy','0');
+        } else {
+          elStage.style.setProperty('--jx',((Math.random()*5-2.5)).toFixed(1));
+          elStage.style.setProperty('--jy',((Math.random()*5-2.5)).toFixed(1));
+        }
+      }
+    }
+    else if(d.type==='live'){
+      if(typeof p.bpm==='number'&&p.bpm>0&&p.bpm!==S.bpm){ S.bpm=p.bpm;
+        elBpm.textContent=Math.round(S.bpm)+' bpm'; }
+      if(typeof p.level==='number') S.level=p.level;
+      if(typeof p.bass==='number') S.bass=p.bass;
+      if(typeof p.mid==='number') S.mid=p.mid;
+      if(typeof p.treble==='number') S.treble=p.treble;
+      var v=[S.bass,S.mid,S.treble,S.level];
+      for(var si=0;si<sigs.length;si++){
+        var q=v[si]; q=(typeof q==='number'&&isFinite(q))?q:0;
+        sigs[si].style.transform='scaleY('+Math.max(.08,Math.min(1,q)).toFixed(2)+')';
+      }
+    }
+  });
+
+  window.__stage=function(){ return {
+    lines:S.lines.length, idx:S.idx, t:+S.t.toFixed(3), playing:!!S.playing,
+    frames:S.frames, js:+S.js.toFixed(2), err:S.err, text:shownText, gl:S.gl, rm:!!S.rm
+  }; };
+
+  elCover.addEventListener('error', function(){
+    elPlate.classList.add('hide');
+    elStage.classList.add('noplate');
+    S.coverFailed=true;
+  });
+  applyPalette(null);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

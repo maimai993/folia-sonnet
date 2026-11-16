@@ -114,10 +114,26 @@ const BilibiliVideoStage: React.FC = () => {
         const store = useVideoLayerSettingsStore.getState();
         // 先把上一条注入的摘掉（用户自己的不动）。
         if (isInjectedVideoUrl(store.injectedUrl)) store.setInjectedUrl(null);
-        if (!videoUrl) return undefined;
+        /*
+         * 没有地址时**只做清理、不早退**。
+         *
+         * 这里早先写的是 `if (!videoUrl) return undefined;` —— 于是「地址还在 ->
+         * 地址变空」这一次依赖变化，React 先跑上一轮的清理（把注入槽位清成 null），
+         * 再跑这一轮的 body，body 一进来就 return，**没有任何人把槽位写回去**。
+         * 视频层于是落在「有 MV 背景、但没有源」的状态：整个画面是黑的，切到
+         * 别的背景也回不来（槽位一直是 null，组件以为已经卸干净了）。
+         */
+        if (!videoUrl) {
+            return () => {
+                const current = useVideoLayerSettingsStore.getState();
+                if (isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
+            };
+        }
 
         const frame = requestAnimationFrame(() => {
-            useVideoLayerSettingsStore.getState().setInjectedUrl(withInjectPrefix(videoUrl));
+            const current = useVideoLayerSettingsStore.getState();
+            const next = withInjectPrefix(videoUrl);
+            if (current.injectedUrl !== next) current.setInjectedUrl(next);
         });
         return () => {
             cancelAnimationFrame(frame);

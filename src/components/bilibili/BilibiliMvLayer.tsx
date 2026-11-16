@@ -63,9 +63,20 @@ const BilibiliMvLayer: React.FC = () => {
      * 读持久化的模式选择就没有这个问题：开关跟着设置走，跟当前画的是哪款歌词样式无关。
      */
     const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
+    /*
+     * ★ 先无条件把 hook 调出来，再参与布尔运算。
+     *
+     * 原来第三个 hook 直接写在 `||` 短路链里。背景一切到 MV，前两项命中短路，
+     * 这个 hook 就不被调用了 —— hook 数量从 N 变 N-1，React 抛
+     * "Rendered fewer hooks than expected"，整棵 React 树被卸载，#root 变空，
+     * 露出 WebView 的 #09090b 底色：用户看到的就是「整个应用黑屏，只能杀进程」。
+     * 切出去时方向相反（hooks 变多），一样崩。这跟视频源、流中转都无关，
+     * 之前修 early-return / LRU 自然都不见效。
+     */
+    const forcedByStyle = useBilibiliMvStore(state => state.forcedByStyle);
     const enabled = backgroundMode === 'mv'
         || visualizerBackgroundMode === 'mv'
-        || useBilibiliMvStore(state => state.forcedByStyle);
+        || forcedByStyle;
     /*
      * 背景样式要求画面时从这里进来（见 services/mvRequirement）。
      *
@@ -190,7 +201,10 @@ const BilibiliMvLayer: React.FC = () => {
         // 一帧之后再写：让 <video> 先把上一条彻底卸掉。写的这一条带上前缀，
         // 之后才分得清「这条是注入的」和「用户自己选的」。
         const frame = requestAnimationFrame(() => {
-            useVideoLayerSettingsStore.getState().setInjectedUrl(withInjectPrefix(videoUrl));
+            const current = useVideoLayerSettingsStore.getState();
+            const next = withInjectPrefix(videoUrl);
+            // 值没变就别 setState：高频回调里无条件写会连带把整条订阅链重渲染一遍。
+            if (current.injectedUrl !== next) current.setInjectedUrl(next);
         });
         return () => {
             cancelAnimationFrame(frame);

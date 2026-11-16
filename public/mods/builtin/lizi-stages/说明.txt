@@ -1,0 +1,23 @@
+LIZI 68 个可视化歌词舞台 · 文件包
+=================================
+
+一、里面有什么
+- stages/            68 个 HTML，每个就是一套独立动画舞台
+                     （001-particle-lyrics.html … 631-…，文件名前缀即舞台编号）
+- stages/assets/     部分舞台用到的字体与素材，必须和 stages/ 保持同样的目录层级
+- stages/segdict.bin 歌词切词用的词典
+- data.mjs           舞台清单（编号 / 文件名 / 名称 / 描述）
+- gallery.html       画廊页，逐个翻看 68 个舞台
+- client.mjs / host.mjs / mod.json / preview.png
+                     在 Folia 里装载这些舞台用的适配文件
+
+二、怎么打开看
+1) 直接打开 gallery.html：部分手机浏览器不允许本地页面里再嵌本地页面，若一片空白，用第 2 种方式。
+2) 电脑上解压到任意目录，在该目录执行  python3 -m http.server 8000
+   浏览器打开 http://localhost:8000/gallery.html 即可逐个翻看。
+3) 单独打开 stages/ 里的某个 HTML：能看到场面动画，但歌词数据原本由 Folia 的歌词引擎推送，
+   脱离 Folia 时不一定有歌词。想在手机上换着用，直接装 Folia 定制版，
+   在「设置 → 歌词样式」里就能左右切换到这 68 个效果。
+
+三、来源
+这些页面来自 LIZI 桌面版的可视化歌词舞台，已内嵌进 Folia 定制版（v0.8.28.6）。

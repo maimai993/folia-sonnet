@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>光行洞穴歌词</title>
+<style>
+  html,body{margin:0;height:100%;background:#04080b;overflow:hidden}
+  #gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2;
+        font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(130,225,240,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="gl"></canvas>
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+/* ============================================================================
+   012 · 光行洞穴歌词 —— 每句词是一条在洞里向你飞来的弧面字带
+   ----------------------------------------------------------------------------
+   和已有 10 个的区别：
+   002 是三个槽位同时在场、相机沿 z 飞过一句句词（字是贴在相机平面上的）；
+   006 把字形轮廓当轨道（字是二维曲线）；010 是驻留点亮（字是横带）。
+   这里字**真的住在三维洞穴里**：它是一张曲率半径 Rs 的弧面板，
+   圆心钉在洞轴上，边缘往远处卷、被雾吞掉；板心跟着洞穴中线的蜿蜒走。
+   未到焦点之前，粒子并不在字上 —— 它们**贴在洞壁上**（按径向投影钉在
+   R(z) 的岩面），越靠近焦点越从岩壁里"剥"下来，落到弧面上成形。
+        f   = smoothstep((ZF+1.7 - z_rel)/1.7)      // 剥离度
+        pos = lerp(wallPoint, sheetPoint, f)
+   所以字不是飞过来的，是**从岩壁里渗出来、聚到洞中央，再被甩到身后**。
+   投影和背景的 WebGL 光线行进用同一套相机（同 fw/rt/up、同 FOV 0.95/0.72），
+   连洞穴中线与半径的公式都是同一份 —— 前景的字和背景的岩壁严丝合缝。
+
+   本版新增（PARALLEL.md §8 复用 004）：
+   ① 回正：字形画布的 y 轴向下，以前直接当世界 +y 用，整句是上下翻转的。
+      现在 sheetY = -gy*k，字才是正的。
+   ② 分词：一句切成 2~3 字的"团"（词典法 + 双向最大匹配），团与团之间留一道
+      亮度柔化缝；拉丁行按整词成团。
+   ③ YRC：每颗粒子记住自己那个字的绝对秒（chars[ci].t），到点才从岩壁剥落；
+      没登录 / 没 YRC 时按团的时间均分，形态照样能跑。
+      团的时间 = 团内首字时间，换句前最后一团会被夹到句尾之前 0.14 倍处。
+   ========================================================================== */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const glc = document.getElementById('gl');
+let W = 1, H = 1, MN = 1, DPR = 1;
+
+let gl = null;
+try {
+  gl = glc.getContext('webgl', { antialias: false, alpha: false, depth: false, powerPreference: 'high-performance' })
+    || glc.getContext('experimental-webgl', { antialias: false, alpha: false, depth: false });
+} catch (_) { gl = null; }
+
+/* ---------------------------- 宿主设置面板 ---------------------------- */
+/* 面板必须在 ready 前同步挂上（宿主靠它渲染开关）；已存值会在 ready 后逐条推来。
+   这里只声明默认值与取色状态，效果分别在 beat 突进与背景 uniform 处消费。 */
+const SET = { teleport: true, coverTint: false, tintAmt: 0.6 };
+window.__stagePanel = {
+  title: '光行洞穴',
+  items: [
+    { key: 'teleport', label: '歌词震动瞬移', type: 'switch', def: true },
+    { key: 'coverTint', label: '背景随封面取色', type: 'switch', def: false },
+    { key: 'tintAmt', label: '取色强度', type: 'range', min: 0, max: 1, step: 0.05, def: 0.6 }
+  ]
+};
+
+/* ---- 统一「震动」开关：宿主在 ready 后同步读取 ---- */
+window.__liziShake = true;
+if (!window.__stagePanel.items.some(function (it) { return it.key === 'shake'; })) {
+  window.__stagePanel.items.push({ key: 'shake', label: '震动', type: 'switch', def: true });
+}
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+/* 宿主下发的主色（0~255，宿主已从封面取好，这里不再取色）。
+   归一化只保留色相比例，亮度仍走着色器原来的公式 —— 否则深色封面会把整屏压黑、
+   浅色封面会把岩壁洗白。没有 accent 时 tintAmt 保持 0，配色与原来完全一致。 */
+let accentRGB = null, tintRGB = [0, 0, 0], tintAmt = 0, fallbackBg = '#04080b';
+function refreshTint() {
+  const c = accentRGB;
+  if (!SET.coverTint || !c || SET.tintAmt <= 0) { tintAmt = 0; fallbackBg = '#04080b'; return; }
+  const m = Math.max(c[0], c[1], c[2]) || 1;
+  tintRGB[0] = c[0] / m; tintRGB[1] = c[1] / m; tintRGB[2] = c[2] / m;
+  tintAmt = SET.tintAmt;
+  /* 无 WebGL 时按着色器同一条雾色映射兜底，开关在两条渲染路径下表现一致 */
+  const f = [0.008, 0.026, 0.042];
+  fallbackBg = 'rgb(' + f.map((v, i) => Math.round(255 * (v * (1 - tintAmt) + tintRGB[i] * 0.022 * tintAmt))).join(',') + ')';
+}
+const accentOf = (a) => {
+  if (!Array.isArray(a) || a.length < 3) return null;
+  const r = Math.round(Number(a[0])), g = Math.round(Number(a[1])), b = Math.round(Number(a[2]));
+  if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return null;
+  if (r + g + b < 26) return null;          // 近黑封面取不出色：当作没有主色
+  return [Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b))];
+};
+
+const BG = 0.5;                       // 背景按半分辨率光线行进
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(1, window.innerWidth);
+  H = Math.max(1, window.innerHeight);
+  MN = Math.min(W, H);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (gl) {
+    const s = Math.min(BG, 900 / W, 560 / H);
+    glc.width = Math.max(1, Math.round(W * s));
+    glc.height = Math.max(1, Math.round(H * s));
+    gl.viewport(0, 0, glc.width, glc.height);
+  }
+}
+
+/* ---------------------------- 背景：光线行进洞穴 ---------------------------- */
+const VS = 'attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }';
+const FS = [
+  '#ifdef GL_FRAGMENT_PRECISION_HIGH',
+  'precision highp float;',
+  '#else',
+  'precision mediump float;',
+  '#endif',
+  'uniform vec2 u_res;',
+  'uniform float u_time;',
+  'uniform float u_camZ;',
+  'uniform float u_yaw;',
+  'uniform float u_pitch;',
+  'uniform float u_glow;',
+  'uniform vec3 u_tint;',
+  'uniform float u_tintAmt;',
+  'float hash13(vec3 p){ p = fract(p*0.1031); p += dot(p, p.yzx + 33.33); return fract((p.x+p.y)*p.z); }',
+  /* 便宜的三维起伏：叠三层 sin，比 8 次 hash 的三线性插值省一个数量级，
+     而这里只需要一层低频扰动（岩壁的凹凸本来就被雾吃掉大半）。 */
+  'float rockNoise(vec3 p){',
+  '  float n = sin(p.x*2.1 + sin(p.y*1.7 + sin(p.z*1.3)*1.4));',
+  '  n += 0.5*sin(p.z*3.3 + sin(p.x*2.7)*1.1);',
+  '  return n*0.34;',
+  '}',
+  'vec2 caveCenter(float z){',
+  '  return vec2(0.30*sin(z*0.085) + 0.09*sin(z*0.21+1.3),',
+  '              0.24*sin(z*0.11+2.0) + 0.07*cos(z*0.27));',
+  '}',
+  'float caveRadius(float z){ return 0.86 + 0.17*sin(z*0.14+0.6) + 0.09*sin(z*0.31-1.0); }',
+  'float map(vec3 p){',
+  '  vec2 c = caveCenter(p.z);',
+  '  vec2 q = p.xy - c;',
+  '  float d = caveRadius(p.z) - length(q);',
+  '  d += rockNoise(vec3(q*3.2, p.z*1.4))*0.16;',
+  '  d += 0.03*sin(p.z*3.6 + q.x*3.0 + q.y*2.0);',
+  '  return d*0.8;',
+  '}',
+  'void main(){',
+  '  float mn = min(u_res.x, u_res.y);',
+  '  vec2 uv = (gl_FragCoord.xy*2.0 - u_res)/mn;',
+  '  float camZ = u_camZ;',
+  '  vec2 c0 = caveCenter(camZ);',
+  '  vec3 ro = vec3(c0.x + 0.10*sin(camZ*0.4), c0.y + 0.09*sin(camZ*0.33+1.0), camZ);',
+  '  vec2 c1 = caveCenter(camZ + 0.08);',
+  '  vec3 fw = normalize(vec3(c1.x-c0.x, c1.y-c0.y, 0.08));',
+  '  vec3 rt = normalize(cross(vec3(0.0,1.0,0.0), fw));',
+  '  vec3 up = cross(fw, rt);',
+  '  vec3 rd = normalize(fw + rt*(uv.x*0.95 + u_yaw) + up*(uv.y*0.72 + u_pitch));',
+  '  float tRay = 0.03, hit = 0.0, glow = 0.0;',
+  '  vec3 pos = ro;',
+  '  for (int i = 0; i < 44; i++){',
+  '    pos = ro + rd*tRay;',
+  '    float d = map(pos);',
+  '    glow += exp(-abs(d)*14.0)*0.014;',
+  '    if (d < 0.002){ hit = 1.0; break; }',
+  '    tRay += max(0.02, d*0.85);',
+  '    if (tRay > 26.0) break;',
+  '  }',
+  '  glow = min(glow, 0.32);',
+  '  vec3 fogCol = mix(vec3(0.008,0.026,0.042), u_tint*0.022, u_tintAmt);',
+  '  vec3 col = fogCol;',
+  '  if (hit > 0.5){',
+  '    vec2 cc = caveCenter(pos.z);',
+  '    vec3 o = normalize(vec3(pos.x-cc.x, pos.y-cc.y, 0.0));',
+  '    float side = max(dot(-o, normalize(vec3(0.45,0.75,-0.35))), 0.0);',
+  '    float ang = atan(pos.y-cc.y, pos.x-cc.x);',
+  '    float strata = 0.5 + 0.5*sin(pos.z*1.9 + ang*2.0 + sin(pos.z*0.6)*2.0);',
+  '    float vein = smoothstep(0.55, 0.86, 0.5 + 0.5*sin(pos.z*2.7 + ang*3.1 + rockNoise(pos*2.0)*3.4));',
+  '    float ridge = 0.5 + 0.5*sin(pos.z*4.5 + ang*3.0);',
+  '    vec3 base = mix(vec3(0.02,0.11,0.14), vec3(0.05,0.27,0.28), strata);',
+  '    base = mix(base, u_tint*(0.10 + 0.22*strata), u_tintAmt);',
+  '    vec3 lit = mix(vec3(0.35,0.95,0.95), u_tint*0.85 + vec3(0.10), u_tintAmt);',
+  '    col = base*(0.34 + side*1.25);',
+  '    col += lit*vein*0.80;',
+  '    col += lit*ridge*0.06;',
+  '    col += lit*pow(side, 3.0)*0.10;',
+  '    float fog = exp(-tRay*0.16);',
+  '    col = mix(fogCol, col, fog);',
+  '    col += lit*glow*0.30;',
+  '  } else {',
+  '    col = fogCol*0.72 + mix(vec3(0.0,0.045,0.055), u_tint*0.05, u_tintAmt)*glow;',
+  '  }',
+  '  float fwd = max(dot(rd, fw), 0.0);',
+  '  col += mix(vec3(0.08,0.50,0.55), u_tint*0.55, u_tintAmt)*pow(fwd, 26.0)*(0.35 + glow*2.0);',
+  '  col += mix(vec3(0.03,0.22,0.28), u_tint*0.16, u_tintAmt)*glow;',
+  '  float vd = length(uv*vec2(0.55,0.62));',
+  '  col *= 0.55 + 0.45*(1.0 - smoothstep(0.25, 1.05, vd));',
+  '  col *= 0.78 + u_glow*0.34;',
+  '  col += (hash13(vec3(gl_FragCoord.xy, u_time)) - 0.5)*0.012;',
+  '  gl_FragColor = vec4(col, 1.0);',
+  '}'
+].join('\n');
+
+let uRes = null, uTime = null, uCamZ = null, uYaw = null, uPitch = null, uGlow = null;
+let uTint = null, uTintAmt = null;
+if (gl) {
+  const mk = (type, src) => {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    return s;
+  };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, mk(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+    gl = null;
+  } else {
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'a');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    uRes = gl.getUniformLocation(prog, 'u_res');
+    uTime = gl.getUniformLocation(prog, 'u_time');
+    uCamZ = gl.getUniformLocation(prog, 'u_camZ');
+    uYaw = gl.getUniformLocation(prog, 'u_yaw');
+    uPitch = gl.getUniformLocation(prog, 'u_pitch');
+    uGlow = gl.getUniformLocation(prog, 'u_glow');
+    uTint = gl.getUniformLocation(prog, 'u_tint');
+    uTintAmt = gl.getUniformLocation(prog, 'u_tintAmt');
+    gl.clearColor(0.008, 0.026, 0.042, 1);
+  }
+}
+
+/* ---------------------------- 洞穴几何（和着色器同一份公式） ---------------------------- */
+const caveCX = (z) => 0.30 * Math.sin(z * 0.085) + 0.09 * Math.sin(z * 0.21 + 1.3);
+const caveCY = (z) => 0.24 * Math.sin(z * 0.11 + 2.0) + 0.07 * Math.cos(z * 0.27);
+const caveR = (z) => 0.86 + 0.17 * Math.sin(z * 0.14 + 0.6) + 0.09 * Math.sin(z * 0.31 - 1.0);
+
+const SPEED = 1.15;      // 洞/秒
+const ZF = 1.15;         // 焦点深度（字带最清楚的地方）
+const RS = 1.60;         // 字带弧面的曲率半径：圆心在洞轴上，边缘向远处卷
+const YAW_K = 0.95, PITCH_K = 0.72;
+
+/* ---------------------------- 字形采样 ---------------------------- */
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+function glyphPoints(text, wantMax) {
+  const F = 96;
+  const maxW = Math.min(W * 0.78, 1300);
+  const font = (s) => '800 ' + s + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  octx.font = font(F);
+  let w = Math.ceil(octx.measureText(text).width) + 8;
+  const fs = w > maxW ? F * (maxW / w) : F;
+  octx.font = font(fs);
+  const tw = octx.measureText(text).width;
+  w = Math.ceil(tw) + 8;
+  const h = Math.ceil(fs * 1.35);
+  off.width = Math.max(8, w); off.height = Math.max(8, h);
+  octx.clearRect(0, 0, off.width, off.height);
+  octx.font = font(fs);
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+  octx.fillText(text, off.width / 2, off.height / 2);
+  const d = octx.getImageData(0, 0, off.width, off.height).data;
+  const ox = off.width, oy = off.height;
+  const rawX = [], rawY = [];
+  for (let y = 0; y < oy; y += 2)
+    for (let x = 0; x < ox; x += 2)
+      if (d[(y * ox + x) * 4 + 3] > 128) { rawX.push(x); rawY.push(y); }
+  const pc0 = rawX.length;
+  if (!pc0) return { pts: new Float32Array(0), pc: 0, w: ox, h: oy, tw: tw, xs: new Float32Array(text.length + 1) };
+  /* 步长 ≤ 颗粒直径；点比粒子还多就抽稀，宁可稀一点也不能断笔画 */
+  let f = Math.ceil(Math.sqrt(pc0 / Math.max(1, wantMax)));
+  if (f < 1) f = 1;
+  const step = 2 * f;
+  const out = [];
+  for (let i = 0; i < pc0; i++) {
+    if (f > 1 && ((rawX[i] % step) !== 0 || (rawY[i] % step) !== 0)) continue;
+    out.push(rawX[i] - ox / 2, rawY[i] - oy / 2);
+  }
+  if (out.length < 2) for (let i = 0; i < pc0; i++) out.push(rawX[i] - ox / 2, rawY[i] - oy / 2);
+  /* 逐字前缀宽度（局部坐标，0 在整行中心）：判断"这颗粒子属于哪个字"用。
+     量前缀而不是每团自己量 —— 累积误差会让字距越走越偏（004 的老经验）。
+     注意 fillText 是 textAlign:center 画在 ox/2，所以字行左端正好是 -tw/2。 */
+  const xs = new Float32Array(text.length + 1);
+  xs[0] = -tw / 2;
+  for (let i = 1; i <= text.length; i++) xs[i] = -tw / 2 + octx.measureText(text.substr(0, i)).width;
+  return { pts: new Float32Array(out), pc: out.length / 2, w: ox, h: oy, tw: tw, xs: xs };
+}
+
+/* ============================================================================
+   分词（CWS）—— 直接复用 004-sand-lyrics.html 的一组纯函数（PARALLEL.md §8）：
+   词典法 + 双向最大匹配。词典 /segdict.bin 是 33 万个 2~4 字词的 32 位哈希，
+   只用二分查找、不存原文；拿不到词典就退回"标点收尾 + 最多 3 字硬切"。
+   它在这里的用途：决定"哪几个字一起从岩壁里剥下来"，以及团与团之间的那道缝。
+   ========================================================================== */
+let DICT = null;
+fetch('segdict.bin')
+  .then((r) => (r.ok ? r.arrayBuffer() : null))
+  .then((b) => { if (b) DICT = new Uint32Array(b); })
+  .catch(() => {});
+
+const fnv = (s) => {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+};
+
+function isWord(s, i, L) {
+  const h = fnv(s.substr(i, L));
+  let lo = 0, hi = DICT.length - 1;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1, v = DICT[m];
+    if (v === h) return true;
+    if (v < h) lo = m + 1; else hi = m - 1;
+  }
+  return false;
+}
+
+/* 正向/逆向各切一遍，取词数少的那个（只用正向会偏爱长词） */
+function segWords(text) {
+  const fwd = [];
+  for (let i = 0; i < text.length;) {
+    let hit = 0;
+    for (let L = Math.min(4, text.length - i); L >= 2; L--) if (isWord(text, i, L)) { hit = L; break; }
+    if (hit) { fwd.push(text.substr(i, hit)); i += hit; } else { fwd.push(text[i]); i++; }
+  }
+  const bwd = [];
+  for (let j = text.length; j > 0;) {
+    let hit = 0;
+    for (let L = Math.min(4, j); L >= 2; L--) if (isWord(text, j - L, L)) { hit = L; break; }
+    if (hit) { bwd.unshift(text.substr(j - hit, hit)); j -= hit; } else { bwd.unshift(text[j - 1]); j--; }
+  }
+  return fwd.length <= bwd.length ? fwd : bwd;
+}
+
+const MAXG = 3;    // 中文一团最多 3 个字
+
+/* 标点表**不含**撇号、连字符、空格：don't / well-known 里的符号是词的一部分 */
+const PUNCT = /[，。！？、；：,.!?;:…—~·「」『』（）()《》【】"]/;
+const SPACE = /\s/;
+
+function isLatin(text) {
+  let la = 0, cjk = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) la++;
+    else if (c >= '\u4e00' && c <= '\u9fff') cjk++;
+  }
+  return la > cjk;
+}
+
+/* 拉丁：一个词一团，词内标点原样保留 */
+function latinSpans(text) {
+  const out = [];
+  let i = 0;
+  while (i < text.length) {
+    if (SPACE.test(text[i])) { i++; continue; }
+    let j = i;
+    while (j < text.length && !SPACE.test(text[j])) j++;
+    out.push({ i0: i, i1: j });
+    i = j;
+  }
+  return out;
+}
+
+/* 虚词方向：的/了/着 挂前面的词，但/还/就 留给后面的词 */
+const SUFFIX = /^[的了着过地得吗呢吧啊嘛]$/;
+const PREFIX = /^[但还就才又也都把被在从向对和与而却很不没最更将已曾让给]$/;
+
+function countChars(s) {
+  let n = 0;
+  for (let i = 0; i < s.length; i++) if (!PUNCT.test(s[i]) && !SPACE.test(s[i])) n++;
+  return n;
+}
+
+/* 中文：词 → 团。贪心填到 MAXG 个汉字，标点并进本团并收尾 */
+function groupByWords(text) {
+  const words = segWords(text);
+  const out = [];
+  let cur = '', start = 0, chars = 0, pos = 0;
+  const flush = (end) => { if (cur) { out.push({ i0: start, i1: end }); cur = ''; chars = 0; } };
+  for (const w of words) {
+    const at = pos;
+    pos += w.length;
+    const isP = PUNCT.test(w);
+    if (!cur) { cur = w; start = at; chars = isP ? 0 : w.length; continue; }
+    if (isP) { cur += w; if (chars >= 2) flush(pos); continue; }
+
+    const single = w.length === 1;
+    if (single && SUFFIX.test(w)) {
+      cur += w; chars++;
+      if (chars >= MAXG) flush(pos);
+      continue;
+    }
+    if (single && PREFIX.test(w) && chars >= 2) {
+      flush(at); cur = w; start = at; chars = 1;
+      continue;
+    }
+    if (chars + w.length <= MAXG) { cur += w; chars += w.length; }
+    else { flush(at); cur = w; start = at; chars = w.length; }
+  }
+  flush(text.length);
+  /* 只有一个汉字的孤儿并到邻居，别让它自己落一团 */
+  for (let k = 0; k < out.length; k++) {
+    const g = out[k];
+    if (countChars(text.slice(g.i0, g.i1)) > 1) continue;
+    const prev = out[k - 1], next = out[k + 1];
+    if (prev && prev.i1 === g.i0 && countChars(text.slice(prev.i0, prev.i1)) < MAXG) { prev.i1 = g.i1; out.splice(k, 1); k--; }
+    else if (next && next.i0 === g.i1 && countChars(text.slice(next.i0, next.i1)) < MAXG) { next.i0 = g.i0; out.splice(k, 1); k--; }
+  }
+  return out;
+}
+
+/* 没词典时的兜底：不管词，按标点收尾 + MAXG 个汉字硬切 */
+function groupByRule(text) {
+  const out = [];
+  let start = 0, chars = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const sep = PUNCT.test(c) || SPACE.test(c);
+    if (!sep) chars++;
+    if (sep && chars >= 2) { out.push({ i0: start, i1: i + 1 }); start = i + 1; chars = 0; continue; }
+    if (!sep && chars > MAXG) { out.push({ i0: start, i1: i }); start = i; chars = 1; }
+  }
+  if (start < text.length) out.push({ i0: start, i1: text.length });
+  return out;
+}
+
+function spansForLine(text) {
+  if (isLatin(text)) return latinSpans(text);
+  return DICT ? groupByWords(text) : groupByRule(text);
+}
+
+/* ---------------------------- 字带（ring） ---------------------------- */
+/* 每个 ring = 一句词 + 它在洞里的绝对深度 z。
+   只有 curIdx 那条会被"吸"在焦点上；被释放之后 z 冻结，镜头就飞过它，
+   它退到身后被雾吃掉 —— 句与句之间不需要任何过渡动画。 */
+let rings = [];
+let prep = null;                       // 已经算好字形点、还没上场的那条
+const RING_MAX = 3400;
+const EM = 0.34;                       // 一个字从岩壁剥到弧面要多久（秒）
+const GHOST = 0.85;                    // 释放前多久开始在岩壁上留预告（秒）
+
+function prepare(i) {
+  if (i < 0 || !lines[i]) return null;
+  const line = lines[i];
+  const text = line.text || '';
+  if (!text) return null;
+  const g = glyphPoints(text, RING_MAX);
+  if (!g.pc) return null;
+  /* px → 世界：字高固定 0.30，但整幅宽度不许超过 1.66（否则两端卷出视野） */
+  const k = Math.min(0.30 / Math.max(1, g.h), 1.66 / Math.max(1, g.w));
+
+  /* ---- 分词：整句切成团（拉丁按整词，中文 2~3 字） ---- */
+  let spans = spansForLine(text);
+  if (!spans.length) spans = [{ i0: 0, i1: text.length }];
+  const spanOf = new Uint8Array(text.length);
+  for (let q = 0; q < spans.length; q++)
+    for (let c = Math.max(0, spans[q].i0); c < Math.min(text.length, spans[q].i1); c++) spanOf[c] = q;
+
+  const dur = lineDur(i);
+  const latin = isLatin(text);
+  /* YRC 的 chars 是逐字绝对秒；只有和正文逐字对齐时才敢用（004 同款判断） */
+  const chs = line.chars && line.chars.length === text.length ? line.chars : null;
+
+  /* 团的时间 = 团内首字的 YRC 秒；没有 YRC 就按字数比例铺开。
+     末团最晚在句尾前 14% 出现，否则换句时它还没唱到。 */
+  const tEnd = line.t + Math.max(0.7, dur) * 0.86;
+  const spanT = new Float32Array(spans.length);
+  for (let q = 0; q < spans.length; q++) {
+    const s = spans[q];
+    let t = chs && chs[s.i0] && isFinite(+chs[s.i0].t)
+      ? +chs[s.i0].t
+      : line.t + Math.max(0.7, dur) * 0.62 * (s.i0 / Math.max(1, text.length));
+    if (t > tEnd) t = tEnd;
+    spanT[q] = t;
+  }
+  for (let q = 1; q < spans.length; q++) if (spanT[q] < spanT[q - 1]) spanT[q] = spanT[q - 1];
+
+  /* ---- 逐字时间：中文按字释放（YRC 的招牌），拉丁整词同时出现（别拆成打字机） ---- */
+  const ct = new Float32Array(text.length);
+  for (let c = 0; c < text.length; c++) {
+    const q = spanOf[c] || 0;
+    let t = spanT[q];
+    if (chs && !latin && isFinite(+chs[c].t)) t = +chs[c].t;
+    if (t > tEnd) t = tEnd;
+    ct[c] = t;
+  }
+  for (let c = 1; c < text.length; c++) if (ct[c] < ct[c - 1]) ct[c] = ct[c - 1];
+
+  const pc = g.pc, pts = g.pts, xs = g.xs;
+  /* 每颗粒子的静态量：弧面角、弧面坐标、径向单位向量、释放时间、团缝 */
+  const th = new Float32Array(pc), sx = new Float32Array(pc), sy = new Float32Array(pc), dz = new Float32Array(pc);
+  const rx = new Float32Array(pc), ry = new Float32Array(pc);
+  const rt = new Float32Array(pc), ef = new Float32Array(pc);
+
+  for (let m = 0; m < pc; m++) {
+    const x = pts[m * 2], y = pts[m * 2 + 1];
+    /* 这颗粒子属于哪个字：xs 是逐字前缀宽度（单调），二分找最后一个 xs[ci] <= x */
+    let lo = 0, hi = text.length - 1, ci = 0;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (xs[mid] <= x) { ci = mid; lo = mid + 1; } else hi = mid - 1; }
+    rt[m] = ct[ci];
+
+    const q = spanOf[ci] || 0;
+    const dd = Math.min(x - xs[spans[q].i0], xs[spans[q].i1] - x);
+    /* 团边缘压暗一点：团与团之间就有一道眼睛能看见的缝 */
+    ef[m] = 0.40 + 0.60 * Math.min(1, Math.max(0, (dd - 1.5) / 6));
+
+    /* 弧面：圆心钉在洞轴上，边缘往远处卷 */
+    const ang = x * k / RS;
+    const sn = Math.sin(ang), cs = Math.cos(ang);
+    th[m] = ang;
+    sx[m] = sn * RS;
+    sy[m] = -y * k;                  /* ← 回正：画布 y 向下，世界 y 向上 */
+    dz[m] = (1 - cs) * RS;
+    const olen = Math.sqrt(sx[m] * sx[m] + sy[m] * sy[m]) + 1e-4;
+    rx[m] = sx[m] / olen;            /* 还没成形时贴到洞壁上：径向单位向量 */
+    ry[m] = sy[m] / olen;
+  }
+
+  return {
+    i: i, pc: pc, k: k, z: null,
+    th: th, sx: sx, sy: sy, dz: dz, rx: rx, ry: ry, rt: rt, ef: ef,
+    spans: spans.length, yrc: !!chs, t0: line.t,
+    /* 长句会被压小：颗粒也得跟着细，否则一颗 3.4px 的方块就盖住整个笔画 */
+    sz: Math.min(1, Math.max(0.5, k / 0.0021)),
+  };
+}
+function pruneRings() {
+  const lo = curIdx - 1, hi = curIdx + 2;
+  const out = [];
+  for (let j = 0; j < rings.length; j++) {
+    const r = rings[j];
+    if (r && r.i >= lo && r.i <= hi) out.push(r);   // 其余的整条释放（坑③）
+  }
+  rings = out;
+}
+function ringOf(i) {
+  for (let j = 0; j < rings.length; j++) if (rings[j].i === i) return rings[j];
+  return null;
+}
+
+/* ---------------------------- 节奏 ---------------------------- */
+let lines = [];
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+/* ================= 节奏：1-10 的教训固化在这里 =================
+   ① 显示与酝酿分离 —— curIdx 只在句首切换，brewIdx 提前 lead 秒准备
+   ② 索引单调不回退 —— 时钟在 tick 之间外推、tick 一来会往回缩一点，
+      不锁单调的话句边界来回跳、同一句被反复重建
+   ③ 提前量自适应 —— 快歌早开始，慢歌不提前太多
+   ④ 只有拖进度条（时间明显倒退）才允许重置
+   ================================================================ */
+let curIdx = -1, brewIdx = -1, lastT = -1;
+const LEAD = 1.3;
+const hint = document.getElementById('hint');
+let camZ = 0, glow = 0;
+
+function lineDur(i) {
+  if (!lines[i]) return 4;
+  const d = lines[i].dur;
+  if (d && d > 0.2) return d;
+  const nx = lines[i + 1];
+  const g = nx ? nx.t - lines[i].t : 4;
+  return g > 0.4 ? g : 4;
+}
+
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) {
+    curIdx = -1; brewIdx = -1; prep = null;
+    rings = [];                               // 拖了进度条：整条走廊重排
+  }
+  lastT = T;
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    brewIdx = -1;
+    const r = prep && prep.i === ci ? prep : prepare(ci);
+    prep = null;
+    if (r) {
+      if (r.z === null) r.z = camZ + ZF;      // 没酝酿过（刚 init 就开唱）
+      const old = ringOf(ci);
+      if (!old) rings.push(r);
+      else {
+        /* 之前就在走廊里（例如 init 时已经备好）：原地换点，z 保持连续，不闪 */
+        r.z = old.z;
+        rings[rings.indexOf(old)] = r;
+      }
+    }
+    pruneRings();
+    hint.style.opacity = lines.length ? (ci >= 0 ? '0' : '1') : '0.5';
+  }
+  const nx = curIdx + 1;
+  if (nx < lines.length && brewIdx !== nx) {
+    const gap = lines[nx].t - (curIdx >= 0 ? lines[curIdx].t : lines[nx].t - 4);
+    const lead = Math.min(LEAD, Math.max(0.45, gap * 0.55));
+    if (T >= lines[nx].t - lead) {
+      brewIdx = nx;
+      const r = prepare(nx);                  // 只算字形点（坑①）
+      if (r) {
+        /* 排深度：让它在 nx 开唱的那一刻正好落到焦点上 */
+        r.z = camZ + SPEED * Math.max(0, lines[nx].t - T) + ZF;
+        const prev = ringOf(curIdx);
+        if (prev && r.z < prev.z + 0.72) r.z = prev.z + 0.72;
+        rings.push(r);
+      }
+    }
+  }
+}
+
+/* ---------------------------- 输入 ---------------------------- */
+const mouse = { x: 0.5, y: 0.5, sx: 0.5, sy: 0.5 };
+addEventListener('pointermove', (e) => {
+  mouse.x = e.clientX / Math.max(1, window.innerWidth);
+  mouse.y = e.clientY / Math.max(1, window.innerHeight);
+}, { passive: true });
+
+/* ---------------------------- 绘制列表 ---------------------------- */
+const MAXD = 22000;
+const dbx = new Float32Array(MAXD), dby = new Float32Array(MAXD);
+const dbs = new Float32Array(MAXD), dbb = new Uint8Array(MAXD);
+let dbn = 0;
+
+/* ---------------------------- 主循环 ---------------------------- */
+let last = performance.now();
+let t0 = 0, dtEma = 16, bgTick = 0;
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  dtEma += (dt * 1000 - dtEma) * 0.05;
+  timing(now());
+
+  mouse.sx += (mouse.x - mouse.sx) * Math.min(1, dt * 2.0);
+  mouse.sy += (mouse.y - mouse.sy) * Math.min(1, dt * 2.0);
+  const yaw = (mouse.sx - 0.5) * 1.0;
+  const pitch = -(mouse.sy - 0.5) * 0.7;
+
+  glow *= Math.exp(-dt * 2.4);
+  camZ += dt * SPEED * (1 + glow * 0.55);
+
+  /* 当前句那条：吸在焦点上，随着这句的进度缓缓贴近（读的时候字在往前挪） */
+  for (let j = 0; j < rings.length; j++) {
+    const r = rings[j];
+    if (!r || r.i !== curIdx || r.z === null) continue;
+    const p = lines[curIdx] ? Math.min(1, Math.max(0, (now() - lines[curIdx].t) / lineDur(curIdx))) : 0;
+    const tz = camZ + ZF - 0.42 * p;
+    r.z += (tz - r.z) * Math.min(1, dt * 3.2);
+  }
+
+  /* ---- 相机基（和着色器逐字一致） ---- */
+  const cz = camZ;
+  const c0x = caveCX(cz), c0y = caveCY(cz);
+  const rox = c0x + 0.10 * Math.sin(cz * 0.4);
+  const roy = c0y + 0.09 * Math.sin(cz * 0.33 + 1.0);
+  const roz = cz;
+  const c1x = caveCX(cz + 0.08), c1y = caveCY(cz + 0.08);
+  let fwx = c1x - c0x, fwy = c1y - c0y, fwz = 0.08;
+  const fl = Math.sqrt(fwx * fwx + fwy * fwy + fwz * fwz) || 1;
+  fwx /= fl; fwy /= fl; fwz /= fl;
+  let rtx = fwz, rty = 0, rtz = -fwx;
+  const rl = Math.sqrt(rtx * rtx + rtz * rtz) || 1;
+  rtx /= rl; rtz /= rl;
+  const upx = fwy * rtz - fwz * rty;
+  const upy = fwz * rtx - fwx * rtz;
+  const upz = fwx * rty - fwy * rtx;
+  const half = MN / 2, cxp = W / 2, cyp = H / 2;
+
+  /* ---- 投影：把洞里的字带拍成一张绘制清单 ---- */
+  const T = now();
+  dbn = 0;
+  for (let j = 0; j < rings.length && dbn < MAXD; j++) {
+    const r = rings[j];
+    if (!r || !r.pc || r.z === null) continue;
+    const d0 = r.z - cz;
+    if (d0 < 0.16 || d0 > 9.0) continue;
+    /* 剥离度：越靠近焦点，越从岩壁里剥下来落到弧面上 */
+    let f = 1 - (d0 - ZF) / 1.7;
+    f = f < 0 ? 0 : f > 1 ? 1 : f;
+    f = f * f * (3 - 2 * f);
+    const fog = Math.exp(-Math.max(0, d0 - ZF) * 0.44);
+    const near = Math.min(1, Math.max(0, (d0 - 0.16) / 0.5));
+    const base = f * fog * near;
+    if (base < 0.025) continue;
+
+    const pc = r.pc;
+    const thA = r.th, sxA = r.sx, syA = r.sy, dzA = r.dz;
+    const rxA = r.rx, ryA = r.ry, rtA = r.rt, efA = r.ef;
+    const rz = r.z, szm = r.sz || 1;
+
+    for (let m = 0; m < pc; m++) {
+      /* 逐字亮度：YRC 到点前只有 22% 的"预告"，到点后用 0.34s 亮起来 + 一次落地脉冲。
+         中文按字、拉丁按整词 —— rt 在 prepare 里已经按这个规则铺好了。 */
+      let em = (T - rtA[m]) * (1 / EM);
+      em = em < 0 ? 0 : em > 1 ? 1 : em;
+      em = em * em * (3 - 2 * em);
+      const pulse = em * (1 - em) * 4;                 // 0→1→0
+
+      /* 位置完全不动：只在亮度上做"逐字唱到"，长句也不会朝灭点收缩 */
+      const wz = rz + dzA[m];
+      const ccx = caveCX(wz), ccy = caveCY(wz);
+      let wx = ccx + sxA[m], wy = ccy + syA[m];
+      if (f < 1) {
+        /* 整环还没到焦点：径向投影钉到洞壁上 */
+        const R = caveR(wz);
+        const wallX = ccx + rxA[m] * R, wallY = ccy + ryA[m] * R;
+        wx = wallX + (wx - wallX) * f;
+        wy = wallY + (wy - wallY) * f;
+      }
+      const ddx = wx - rox, ddy = wy - roy, ddz = wz - roz;
+      const cden = ddx * fwx + ddy * fwy + ddz * fwz;
+      if (cden < 0.18) continue;
+      const aa = ddx * rtx + ddy * rty + ddz * rtz;
+      const bb = ddx * upx + ddy * upy + ddz * upz;
+      const uvx = (aa / cden - yaw) / YAW_K;
+      const uvy = (bb / cden - pitch) / PITCH_K;
+      const sxp = cxp + uvx * half, syp = cyp - uvy * half;
+      if (sxp < -24 || sxp > W + 24 || syp < -24 || syp > H + 24) continue;
+      let br = base * (0.22 + 0.78 * em) * (1 + 0.32 * pulse) * efA[m];
+      if (d0 < ZF) br *= 0.55 + 0.45 * f;
+      let bd = (br * 6) | 0;
+      if (bd > 5) bd = 5;
+      if (bd === 0 && br < 0.06) continue;
+      dbx[dbn] = sxp; dby[dbn] = syp;
+      dbs[dbn] = Math.min(1.7, ZF / cden) * (1 + 0.14 * pulse) * szm;
+      dbb[dbn] = bd;
+      dbn++;
+      if (dbn >= MAXD) break;
+    }
+  }
+
+  /* ---- 背景（帧时偏高时隔帧画：洞穴是慢雾，看不出来） ---- */
+  bgTick++;
+  const skipBg = dtEma > 21 && (bgTick & 1);
+  if (gl && !skipBg) {
+    gl.uniform2f(uRes, glc.width, glc.height);
+    gl.uniform1f(uTime, t0);
+    gl.uniform1f(uCamZ, camZ);
+    gl.uniform1f(uYaw, yaw);
+    gl.uniform1f(uPitch, pitch);
+    gl.uniform1f(uGlow, glow);
+    gl.uniform3f(uTint, tintRGB[0], tintRGB[1], tintRGB[2]);
+    gl.uniform1f(uTintAmt, tintAmt);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    ctx.clearRect(0, 0, W, H);
+  } else if (!gl) {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = fallbackBg;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.clearRect(0, 0, W, H);
+  }
+
+  /* ---- 字带：按亮度分 6 档互斥合批（坑⑨⑩） ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  for (let b = 0; b < 6; b++) {
+    const q = b / 5;
+    const rr = Math.round(60 + q * 140);
+    const gg = Math.round(150 + q * 100);
+    const bb = Math.round(160 + q * 95);
+    const al = (0.09 + Math.pow(q, 1.15) * 0.80).toFixed(3);
+    ctx.fillStyle = 'rgba(' + rr + ',' + gg + ',' + bb + ',' + al + ')';
+    const sz0 = 1.4 + q * 2.0;
+    for (let m = 0; m < dbn; m++) {
+      if (dbb[m] !== b) continue;
+      const sz = sz0 * dbs[m];
+      if (sz < 0.7) continue;
+      const h2 = sz / 2;
+      ctx.fillRect(dbx[m] - h2, dby[m] - h2, sz, sz);
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+
+  requestAnimationFrame(frame);
+}
+resize();
+requestAnimationFrame(frame);
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+/* ---------------------------- 宿主设置 ---------------------------- */
+/* 宿主 ready 后会逐条推送已存值；这里只改状态，效果在下一帧/下一次 beat 生效。 */
+function applySetting(key, value) {
+  if (!key) return;
+  switch (key) {
+    case 'teleport':
+      SET.teleport = !!value;
+      break;
+    case 'coverTint':
+      SET.coverTint = !!value;
+      refreshTint();
+      break;
+    case 'tintAmt': {
+      const v = Number(value);
+      if (isFinite(v)) { SET.tintAmt = Math.max(0, Math.min(1, v)); refreshTint(); }
+      break;
+    }
+  }
+}
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    accentRGB = accentOf(p.accent);       // 主色由宿主下发，这里只存不算
+    refreshTint();
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; brewIdx = -1; lastT = -1;
+    rings = []; prep = null;
+    camZ = 0; glow = 0;
+    clockT = 0; clockAt = performance.now();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 相干：整条洞穴一起往前窜一下 + 背景泛光，
+       不做逐颗随机扰动，否则字带会散掉。
+       开关关掉时整段不生效：beat 仍照常被消费，镜头前进与节奏时钟不受影响。 */
+    if (SET.teleport && window.__liziShake !== false) {
+      const lv = d.payload.level || 0;
+      glow = Math.min(0.8, glow + 0.18 + lv * 0.4);
+      camZ += 0.05 + lv * 0.10;
+    }
+  } else if (d.type === 'setting') {
+    const sp = d.payload || {};
+    applySetting(sp.key, sp.value);
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+window.__stage = () => {
+  const r = ringOf(curIdx);
+  return {
+    lines: lines.length, curIdx, brewIdx, rings: rings.length, drawn: dbn,
+    camZ: +camZ.toFixed(2), gl: !!gl, t: +now().toFixed(2),
+    /* 自检用：当前句分了几团、有没有 YRC、每团首字时间 */
+    seg: r ? r.spans : 0, yrc: r ? r.yrc : false,
+    lineT: r ? +r.t0.toFixed(2) : null,
+  };
+};
+/* 分词自检：__seg('当自我磨平了轮廓') → { dict, spans:[...] } */
+window.__seg = (t) => ({ dict: !!DICT, spans: spansForLine(t).map((s) => t.slice(s.i0, s.i1)) });
+</script>
+</body>
+</html>

@@ -31,6 +31,14 @@ type Notice = { kind: 'ok' | 'error'; text: string };
 /** Where mods are published; linked from the toolbar and from the switched-off placeholder. */
 export const MOD_MARKET_URL = 'https://folium-compound.cielaniska.top/';
 
+/**
+ * 随包内置、作为「歌词动画样式」直接提供给用户的模组：它们没有需要用户管理的内容，
+ * 在样式选择器里已经是几十个可选项，再在模组面板里列一行只会让人困惑（还带一个
+ * 打开/关闭开关和删不掉的删除按钮）。这里只从**管理面板**隐藏，不影响 clientLoader
+ * 激活 —— 模组仍然照常默认启用，样式照常可用。
+ */
+const HIDDEN_MOD_IDS = new Set(['lizi-stages']);
+
 /** On desktop a plain link would open inside the app window; hand it to the system browser instead. */
 const openLinkExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (!opensThroughDesktopApp()) return;
@@ -55,7 +63,9 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
     const startSkipped = useModsStore((state) => state.startSkipped);
     const modSystemEnabled = useDesktopSettingsStore((state) => state.modSystemEnabled);
     // Read on a slow timer for as long as this list is on screen, and not at all otherwise.
-    const costs = useModCosts(mods.map((mod) => mod.id));
+    // 只把面板里真正显示的那几份交给成本统计，隐藏的内置模组不必读。
+    const visibleMods = React.useMemo(() => mods.filter((mod) => !HIDDEN_MOD_IDS.has(mod.id)), [mods]);
+    const costs = useModCosts(visibleMods.map((mod) => mod.id));
 
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -308,7 +318,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
 
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs opacity-50" style={{ color: 'var(--text-secondary)' }}>
-                    {t('mods.count', { count: mods.length })}
+                    {t('mods.count', { count: visibleMods.length })}
                 </span>
                 <div className="flex flex-wrap items-center gap-1.5">
                     {marketLink}
@@ -340,7 +350,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                     </Button>
                     <Button
                         onClick={() => (selectionMode ? exitSelectionMode() : setSelectionMode(true))}
-                        disabled={mods.length === 0}
+                        disabled={visibleMods.length === 0}
                         className={`${toolbarButtonClass} ${selectionMode ? classes.activeButton : classes.ghostButton}`}
                         style={{ color: 'var(--text-primary)' }}
                     >
@@ -432,7 +442,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
             </AnimatePresence>
 
             <div className={`rounded-xl border overflow-hidden ${classes.card}`}>
-                {mods.map((mod, index) => (
+                {visibleMods.map((mod, index) => (
                     <ModListItem
                         key={mod.id}
                         mod={mod}
@@ -440,7 +450,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                         expanded={selectedModId === mod.id && !selectionMode}
                         selected={selectedIds.has(mod.id)}
                         selectionMode={selectionMode}
-                        isLast={index === mods.length - 1}
+                        isLast={index === visibleMods.length - 1}
                         isDaylight={isDaylight}
                         theme={theme ?? DEFAULT_THEME}
                         classes={classes}
@@ -451,7 +461,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                         onNotice={setNotice}
                     />
                 ))}
-                {mods.length === 0 ? (
+                {visibleMods.length === 0 ? (
                     <div className="px-4 py-8 flex flex-col items-center gap-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                         <Upload size={22} className="opacity-50" />
                         <span className="text-sm opacity-70">{t('mods.empty')}</span>

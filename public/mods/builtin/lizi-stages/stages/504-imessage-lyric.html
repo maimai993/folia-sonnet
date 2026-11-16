@@ -1,0 +1,1414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>504 · 已发送</title>
+<script src="assets/custom-bg.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+html,body{margin:0;height:100%;overflow:hidden;background:#000}
+body{font-family:"SF Pro Text",-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+     -webkit-user-select:none;user-select:none;cursor:default}
+
+/* ================= 背景：黑 ================= */
+.bg{position:fixed;inset:0;
+    background:radial-gradient(118% 88% at 66% 40%,#141418 0%,#0b0b0e 42%,#050507 72%,#000 100%)}
+.glow{position:fixed;inset:-25%;pointer-events:none;
+      background:radial-gradient(circle at 64% 44%,rgba(var(--ac),.20),rgba(var(--ac),.07) 30%,rgba(var(--ac),0) 56%);
+      transition:background 1.6s ease}
+#grain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.4;mix-blend-mode:overlay}
+
+/* ================= 舞台 ================= */
+.stage{position:fixed;inset:0}
+.anchor{position:absolute;left:63%;top:50%;transform:translate(-50%,-50%);
+        perspective:1250px;perspective-origin:48% 44%}
+
+/* 摄影机：机械臂。每次换句由 JS 重设 transform（时长/曲线逐镜不同） */
+.tilt{position:relative;transform-style:preserve-3d;will-change:transform;
+      transform:rotateX(11deg) rotateY(23deg) rotateZ(-1.3deg)}
+/* 视差：鼠标带着转一点点，挂在摄影机里侧，不参与运镜 */
+.par{transform-style:preserve-3d;transition:transform .5s cubic-bezier(.22,.75,.28,1)}
+.float{transform-style:preserve-3d;animation:float 12s ease-in-out infinite alternate}
+@keyframes float{
+  from{transform:translateY(-7px)}
+  to  {transform:translateY(8px)}
+}
+.box{position:relative;transform-style:preserve-3d;transform:scale(calc(var(--k,1) * 0.5))}
+
+/* 机身厚度：40 层实心片沿 z 轴挤出（约 44px），转起来是一条金属侧壁 */
+.layers{position:absolute;inset:0;transform-style:preserve-3d;pointer-events:none}
+.layers i{position:absolute;inset:0;border-radius:112px;background:#2a2a30;
+          -webkit-backface-visibility:hidden;backface-visibility:hidden}
+
+/* 机身周围的一圈冷光，把手机从黑里托起来 */
+.halo{position:absolute;left:50%;top:50%;width:760px;height:1060px;pointer-events:none;
+      transform:translate(-50%,-50%) scale(var(--k,1));
+      background:radial-gradient(46% 44% at 50% 50%,rgba(150,165,255,.11),rgba(120,130,190,.05) 42%,rgba(0,0,0,0) 70%)}
+
+.phone{position:relative;width:390px;height:844px;border-radius:56px;transform-origin:50% 50%;
+       zoom:2;
+       background:linear-gradient(146deg,#3d3d45 0%,#17171b 15%,#4e4e58 29%,#0d0d11 47%,
+                  #36363e 63%,#101014 81%,#2e2e35 100%);
+       box-shadow:
+         0 0 0 .8px rgba(255,255,255,.20) inset,
+         0 1.5px 2px rgba(255,255,255,.26) inset,
+         0 -2px 5px rgba(0,0,0,.92) inset,
+         0 0 60px -6px rgba(150,165,255,.10),
+         0 40px 90px -30px rgba(0,0,0,.95)}
+
+/* ================= 屏幕 ================= */
+.screen{position:absolute;inset:6px;border-radius:50px;overflow:hidden;background:#fff;
+        isolation:isolate;display:flex;flex-direction:column}
+
+/* --- 灵动岛 --- */
+.island{position:absolute;top:11px;left:50%;z-index:60;transform:translateX(-50%);
+        width:124px;height:36px;border-radius:19px;background:#060608;
+        display:flex;align-items:center;padding:0 10px;gap:10px;overflow:hidden;
+        box-shadow:0 1px 2px rgba(0,0,0,.3);
+        transition:width .58s cubic-bezier(.22,1.2,.36,1),
+                   height .58s cubic-bezier(.22,1.2,.36,1),
+                   border-radius .45s ease,padding .45s ease,gap .45s ease}
+.island.open{width:212px;height:60px;border-radius:22px;padding:0 13px;gap:10px}
+.island__art{width:16px;height:16px;border-radius:5px;flex:none;overflow:hidden;position:relative;
+             background:linear-gradient(140deg,rgba(var(--ac),.85),rgba(var(--ac),1));
+             display:grid;place-items:center;
+             transition:width .45s cubic-bezier(.22,1.2,.36,1),height .45s cubic-bezier(.22,1.2,.36,1),border-radius .45s}
+.island__art b{font-size:9px;font-weight:600;color:rgba(255,255,255,.95);line-height:1;
+               transition:font-size .4s ease}
+.island.open .island__art{width:38px;height:38px;border-radius:10px}
+.island.open .island__art b{font-size:16px}
+.island__art img{width:100%;height:100%;object-fit:cover;display:none;position:absolute;inset:0}
+.island__meta{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;
+              opacity:0;transform:translateX(-5px);transition:opacity .28s ease,transform .38s ease}
+.island.open .island__meta{opacity:1;transform:none;transition-delay:.13s}
+.island__n{font-size:12.5px;font-weight:600;color:#fff;letter-spacing:-.1px;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.island__a{font-size:10.5px;color:rgba(255,255,255,.5);letter-spacing:.1px;
+           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.island__wave{flex:none;display:flex;align-items:center;gap:2px;height:11px;
+              transition:height .45s ease}
+.island.open .island__wave{height:17px;gap:2.5px}
+.island__wave i{width:2.5px;height:100%;border-radius:2px;background:rgba(255,255,255,.88);
+                transform:scaleY(.24);transform-origin:center;transition:transform .12s linear}
+
+/* --- 状态栏 --- */
+.sbar{height:54px;flex:none;display:flex;align-items:center;justify-content:space-between;
+      padding:0 30px;position:relative;z-index:10}
+.sbar__t{font-size:15px;font-weight:600;color:#000;letter-spacing:-.2px;
+         font-variant-numeric:tabular-nums}
+.sbar__i{display:flex;align-items:center;gap:5px;transition:opacity .4s ease}
+.screen.island-open .sbar__i{opacity:.16}
+.sbar__i svg{display:block}
+
+/* --- 导航条 --- */
+.nav{height:42px;flex:none;display:flex;align-items:center;padding:0 8px 0 6px;gap:2px;position:relative;z-index:10}
+.nav__b{width:26px;height:26px;display:grid;place-items:center;flex:none}
+.nav__n{font-size:13px;font-weight:600;color:#000;letter-spacing:-.1px;
+        max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.88}
+
+/* --- 会话头 --- */
+.hd{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:2px 0 15px}
+.hd__av{width:70px;height:70px;border-radius:50%;overflow:hidden;position:relative;
+        background:linear-gradient(142deg,rgba(var(--ac),.55),rgba(var(--ac),.92));
+        display:grid;place-items:center;
+        box-shadow:0 5px 16px -8px rgba(30,34,54,.5),0 0 0 .5px rgba(0,0,0,.05) inset}
+.hd__av::after{content:'';position:absolute;inset:0;border-radius:50%;
+               background:linear-gradient(160deg,rgba(255,255,255,.30),rgba(255,255,255,0) 46%)}
+.hd__av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;z-index:1}
+.hd__av b{font-size:27px;font-weight:500;color:rgba(255,255,255,.94);position:relative;z-index:1}
+.hd__n{font-size:15.5px;font-weight:600;color:#000;letter-spacing:-.2px;max-width:82%;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd__s{font-size:11px;color:#9c9ca4;letter-spacing:.35px}
+
+/* --- 对话 --- */
+.chat{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;
+      background:radial-gradient(130% 85% at 48% 26%,#ffffff 0%,#fdfdfe 52%,#f7f7fa 84%,#f2f2f6 100%)}
+.chat::before{content:'';position:absolute;left:0;right:0;top:0;height:54px;z-index:6;pointer-events:none;
+              background:linear-gradient(#fff 22%,rgba(255,255,255,0))}
+.thread{position:absolute;left:0;right:0;top:0;height:0;
+        transition:transform .56s cubic-bezier(.24,.86,.3,1)}
+.stamp{position:absolute;left:0;right:0;top:10px;z-index:5;text-align:center;
+       font-size:10.5px;font-weight:500;color:#b6b6be;letter-spacing:.5px;pointer-events:none;
+       transition:opacity .4s ease}
+
+.bub{position:absolute;max-width:var(--bw,272px);padding:8px 14px;border-radius:19px;
+     font-size:16px;line-height:22px;letter-spacing:0;word-break:break-word;
+     z-index:1;transition:opacity .55s ease,transform .55s cubic-bezier(.2,.9,.3,1),
+       box-shadow .5s ease}
+.bub.cur{box-shadow:0 3px 14px -6px rgba(40,44,70,.30)}
+.bub span{opacity:.34;transition:opacity .32s ease}
+.bub span.on{opacity:1}
+.bub.r{right:12px;background:#0b84ff;color:#fff;border-bottom-right-radius:0}
+.bub.l{left:12px;background:#e9e9eb;color:#000;border-bottom-left-radius:0}
+/* 气泡尾巴：向内压 2px 与本体重叠，消除接缝 */
+.bub::after{content:'';position:absolute;bottom:0;width:9px;height:16px;
+            background-repeat:no-repeat;background-size:9px 16px;pointer-events:none}
+.bub.r::after{right:-5px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='9' height='16'><path d='M3 0 C3.3 7.4 5.2 12 9 16 L3 16 Z' fill='%230b84ff'/></svg>")}
+.bub.l::after{left:-5px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='9' height='16'><path d='M6 0 C5.7 7.4 3.8 12 0 16 L6 16 Z' fill='%23e9e9eb'/></svg>")}
+
+/* 正在输入… */
+.typing{position:absolute;height:33px;padding:0 15px;border-radius:19px;display:flex;align-items:center;
+        gap:4.5px;z-index:2;pointer-events:none;opacity:0;
+        transform:scale(.9) translateY(6px);transform-origin:0 100%;
+        transition:opacity .3s ease,transform .36s cubic-bezier(.2,1.2,.4,1)}
+.typing.on{opacity:1;transform:none}
+.typing.l{left:12px;background:#e9e9eb;transform-origin:0 100%}
+.typing.r{right:12px;background:#0b84ff;transform-origin:100% 100%}
+.typing i{width:6px;height:6px;border-radius:50%;display:block;animation:dot 1.15s ease-in-out infinite}
+.typing.l i{background:#9c9ca3}
+.typing.r i{background:rgba(255,255,255,.94)}
+.typing i:nth-child(2){animation-delay:.16s}
+.typing i:nth-child(3){animation-delay:.32s}
+@keyframes dot{0%,62%,100%{transform:translateY(0);opacity:.4}32%{transform:translateY(-3.4px);opacity:1}}
+
+/* --- 语音消息气泡 --- */
+.rec{flex:none;display:flex;padding:2px 12px 10px;justify-content:flex-start}
+.rec__b{display:flex;align-items:center;gap:9px;height:38px;padding:0 15px;border-radius:19px;
+        background:#e9e9eb;border-bottom-left-radius:3px;position:relative;max-width:78%}
+.rec__b::after{content:'';position:absolute;left:-4px;bottom:0;width:8px;height:16px;
+               background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='16'><path d='M6 0 C5.7 7.2 3.8 11.8 0 15.8 L0 16 L6 16 Z' fill='%23e9e9eb'/></svg>") no-repeat;
+               background-size:8px 16px;pointer-events:none}
+.rec__i{width:0;height:0;border-left:9px solid #8e8e93;border-top:6px solid transparent;
+        border-bottom:6px solid transparent;flex:none;margin-left:1px}
+.rec__w{position:relative;flex:0 1 auto;height:18px;min-width:100px}
+.rec__w i{position:absolute;top:0;bottom:0;width:2px;background:#b0b0b7;border-radius:1px;
+          transform:scaleY(.18);transform-origin:center;transition:transform .13s linear,background .3s ease}
+.rec__w i.ps{background:#0b84ff}
+.rec__t{font-size:12px;color:#8e8e93;font-variant-numeric:tabular-nums;flex:none;letter-spacing:.2px}
+
+/* --- 输入条 --- */
+.bar{flex:none;height:54px;display:flex;align-items:center;gap:10px;padding:0 12px 6px}
+.bar__p{width:31px;height:31px;border-radius:50%;background:#f1f1f4;flex:none;
+        display:grid;place-items:center;color:#8a8a90;font-size:20px;font-weight:300;line-height:1;
+        padding-bottom:2px}
+.bar__in{flex:1 1 auto;height:35px;border-radius:18px;border:1px solid #e4e4e8;
+         display:flex;align-items:center;padding:0 13px;color:#c5c5cb;font-size:15px;letter-spacing:-.1px}
+.bar__m{width:31px;height:31px;border-radius:50%;background:#f1f1f4;flex:none;
+        display:grid;place-items:center}
+.home{flex:none;height:24px;display:grid;place-items:center}
+.home i{width:134px;height:5px;border-radius:3px;background:#0a0a0d;display:block;opacity:.9}
+
+.glass{position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:80;
+       background:
+         linear-gradient(116deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,0) 20%,
+            rgba(255,255,255,0) 62%,rgba(60,64,92,.055) 82%,rgba(60,64,92,.11) 100%)}
+
+/* 空歌词 */
+.empty{position:absolute;left:0;right:0;top:34%;text-align:center;opacity:0;
+       transition:opacity .7s ease;pointer-events:none;z-index:4}
+.empty.on{opacity:1}
+.empty__i{width:36px;height:36px;margin:0 auto 13px;border-radius:50%;
+          border:1.4px solid #e4e4e9;display:grid;place-items:center}
+.empty__t{font-size:13px;color:#b8b8c0;letter-spacing:.4px}
+
+/* ================= 左侧曲目信息 ================= */
+.meta{position:fixed;left:7vw;top:50%;transform:translateY(-50%);
+      color:#8a8a96;pointer-events:none;opacity:0;transition:opacity 1s ease}
+.meta.on{opacity:1}
+.meta__k{display:flex;align-items:center;gap:7px;font-size:9.5px;font-weight:600;
+         letter-spacing:2.2px;color:#5a5a66;margin-bottom:16px}
+.meta__dot{width:5px;height:5px;border-radius:50%;background:rgb(var(--ac));flex:none;
+           box-shadow:0 0 8px 1px rgba(var(--ac),.7)}
+.meta__n{font-size:clamp(19px,1.35vw,23px);font-weight:600;color:#ededf2;letter-spacing:-.4px;
+         line-height:1.32;max-width:min(30vw,330px);margin-bottom:9px}
+.meta__a{font-size:12.5px;color:#84848f;letter-spacing:.35px;
+         max-width:min(30vw,330px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta__p{width:min(19vw,240px);height:1.5px;background:rgba(255,255,255,.10);margin-top:22px;
+         position:relative;overflow:hidden;border-radius:1px}
+.meta__p i{position:absolute;left:0;top:0;height:100%;width:100%;background:#cfcfda;border-radius:1px;
+           transform:scaleX(0);transform-origin:left center;transition:transform .28s linear}
+.meta__t{margin-top:10px;font-size:10px;letter-spacing:1px;color:#5e5e6a;
+         font-variant-numeric:tabular-nums;display:flex;gap:9px}
+.meta__t b{font-weight:500;color:#9a9aa6}
+
+/* ================= 适配 ================= */
+@media (max-width:1100px){
+  .meta{left:5vw}
+  .meta__n{font-size:17px}
+}
+@media (max-aspect-ratio: 9/10){
+  .anchor{left:50%;top:50%;perspective:none}
+  .halo{display:none}
+  .tilt{transform:none;transition:none}
+  .float{animation:none}
+  .box{transform:scale(var(--k,1))}
+  .layers{display:none}
+  .phone{border-radius:44px;box-shadow:none}
+  .screen{inset:5px;border-radius:40px}
+  .meta{display:none}
+  .glass{display:none}
+}
+@media (prefers-reduced-motion: reduce){
+  .phone{animation:none}
+  .rec__w i{transition:none}
+  .typing i{animation:none;opacity:.6}
+  .island{transition:none}
+  .island.open .island__meta{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="glow" id="glow"></div>
+<canvas id="grain"></canvas>
+
+<div class="stage">
+  <div class="anchor" id="anchor">
+    <div class="halo"></div>
+    <div class="tilt" id="tilt">
+    <div class="par" id="par">
+    <div class="float">
+    <div class="box" id="box">
+      <div class="layers" id="layers"></div>
+      <div class="phone" id="phone">
+
+      <div class="screen">
+
+        <!-- 灵动岛 -->
+        <div class="island" id="island">
+          <div class="island__art" id="islArt"><b id="islCh">♪</b><img id="islImg" alt=""></div>
+          <div class="island__meta">
+            <div class="island__n" id="islN">—</div>
+            <div class="island__a" id="islA">—</div>
+          </div>
+          <div class="island__wave" id="islWave"></div>
+        </div>
+
+        <!-- 状态栏 -->
+        <div class="sbar">
+          <div class="sbar__t" id="clock">9:41</div>
+          <div class="sbar__i">
+            <svg width="17" height="11" viewBox="0 0 17 11" fill="#000"><rect x="0" y="7.5" width="3" height="3.5" rx="1"/><rect x="4.5" y="5.2" width="3" height="5.8" rx="1"/><rect x="9" y="2.6" width="3" height="8.4" rx="1"/><rect x="13.5" y="0" width="3" height="11" rx="1"/></svg>
+            <svg width="16" height="11" viewBox="0 0 16 11" fill="none"><path d="M8 10.2 5.7 7.7a3.3 3.3 0 0 1 4.6 0L8 10.2Z" fill="#000"/><path d="M3.6 5.4a6.4 6.4 0 0 1 8.8 0" stroke="#000" stroke-width="1.5" stroke-linecap="round"/><path d="M1.2 2.6a9.9 9.9 0 0 1 13.6 0" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="none"><rect x=".5" y=".5" width="21" height="11" rx="3.2" stroke="#000" stroke-opacity=".32"/><rect x="2" y="2" width="16.5" height="8" rx="2" fill="#000"/><path d="M23 4.2v3.6a2 2 0 0 0 0-3.6Z" fill="#000" fill-opacity=".38"/></svg>
+          </div>
+        </div>
+
+        <!-- 导航 -->
+        <div class="nav">
+          <div class="nav__b">
+            <svg width="12" height="21" viewBox="0 0 12 21" fill="none"><path d="M10.4 1.6 2 10.5l8.4 8.9" stroke="#0b84ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="nav__n" id="navN">—</div>
+        </div>
+
+        <!-- 会话头 -->
+        <div class="hd">
+          <div class="hd__av" id="av"><b id="avCh">♪</b><img id="avImg" alt=""></div>
+          <div class="hd__n" id="hdN">—</div>
+          <div class="hd__s">正在播放</div>
+        </div>
+
+        <!-- 对话 -->
+        <div class="chat" id="chat">
+          <div class="stamp" id="stamp">今天</div>
+          <div class="thread" id="thread">
+            <div class="typing l" id="typing"><i></i><i></i><i></i></div>
+          </div>
+          <div class="empty" id="empty">
+            <div class="empty__i">
+              <svg width="15" height="11" viewBox="0 0 15 11" fill="#d6d6dc"><path d="M1.2 1h12.6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4.8L2 11V9H1.2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1Z"/></svg>
+            </div>
+            <div class="empty__t">还没有歌词</div>
+          </div>
+        </div>
+
+        <!-- 语音消息 -->
+        <div class="rec">
+          <div class="rec__b">
+            <span class="rec__i"></span>
+            <div class="rec__w" id="recWave"></div>
+            <span class="rec__t" id="recT">0:00</span>
+          </div>
+        </div>
+
+        <!-- 输入条 -->
+        <div class="bar">
+          <div class="bar__p">+</div>
+          <div class="bar__in">iMessage</div>
+          <div class="bar__m">
+            <svg width="14" height="18" viewBox="0 0 14 18" fill="none"><rect x="4.6" y="1" width="4.8" height="9.4" rx="2.4" stroke="#8a8a90" stroke-width="1.5"/><path d="M1.6 8.2a5.4 5.4 0 0 0 10.8 0" stroke="#8a8a90" stroke-width="1.5" stroke-linecap="round"/><path d="M7 13.9V16.6" stroke="#8a8a90" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+        </div>
+
+        <div class="home"><i></i></div>
+        <div class="glass"></div>
+      </div>
+    </div>
+      </div>
+    </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<div class="meta" id="meta">
+  <div class="meta__k"><span class="meta__dot"></span>NOW PLAYING</div>
+  <div class="meta__n" id="mN">—</div>
+  <div class="meta__a" id="mA">—</div>
+  <div class="meta__p"><i id="mBar"></i></div>
+  <div class="meta__t"><b id="mCur">0:00</b><span>/</span><span id="mDur">0:00</span></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* 可选背景：DOM 形态走挂载层。背景层插在 .bg 之后，.glow/#grain/.stage 仍在它上面；
+   选自定义并加载成功后模块才隐藏原生 .bg，失败则原生背景照常显示。 */
+if (window.LIZI_BG) {
+  try { LIZI_BG.mountDOM(document.body, document.querySelector(".bg")); } catch (e) {}
+}
+
+/* ==========================================================
+   1) 自检口 —— 最外层、无条件、直接算
+   ========================================================== */
+var S = { lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: "" };
+var RM = false;
+try { RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches); } catch(e){}
+
+window.__stage = function(){
+  var i = S.idx;
+  return {
+    lines:   S.lines.length,
+    idx:     i,
+    t:       S.t,
+    playing: S.playing,
+    frames:  S.frames,
+    js:      Math.round(S.js * 100) / 100,
+    err:     S.err,
+    text:    (i >= 0 && S.lines[i] && S.lines[i].text) ? String(S.lines[i].text) : "",
+    gl:      false,
+    rm:      RM
+  };
+};
+
+var lastErrAt = 0;
+function fail(e){
+  try { S.err = String((e && e.message) || e); } catch(_){ S.err = 'error'; }
+  var n = performance.now();
+  if (n - lastErrAt > 1000){ lastErrAt = n; try { console.error(e); } catch(_){} }
+}
+
+/* ==========================================================
+   1.5) 设置面板（宿主画 UI，这里只声明）
+   ========================================================== */
+window.__stagePanel = {
+  title: '已发送',
+  hint: '调完自动记住，切歌不变。「自由视角」可以直接拖手机、滚轮缩放。',
+  items: [
+    { key:'mode',  label:'镜头', type:'segment', def:'auto',
+      options:[{v:'auto',t:'自动运镜'},{v:'hold',t:'固定视角'},{v:'free',t:'自由视角'}] },
+    { key:'shot',  label:'固定在哪', type:'select', def:'0',
+      options:[
+        {v:'0',t:'① 近景·偏左'}, {v:'1',t:'② 近景·偏右'},
+        {v:'2',t:'③ 中景·左倾'}, {v:'3',t:'④ 特写'   },
+        {v:'4',t:'⑤ 仰拍'     }, {v:'5',t:'⑥ 全景'   },
+        {v:'6',t:'⑦ 微距'     }, {v:'7',t:'⑧ 侧移'   }
+      ] },
+    { key:'every', label:'几句换一次镜', type:'select', def:'1',
+      options:[{v:'1',t:'每句都换'},{v:'2',t:'2 句'},{v:'3',t:'3 句'},{v:'4',t:'4 句'}] },
+    /* 用户要求默认关闭左侧歌曲信息（2026-11-09）：只影响没有历史存储的情况，
+       宿主若已经存过 meta=true，仍以宿主推来的值为准。 */
+    { key:'meta',  label:'左侧歌曲信息', type:'switch', def:false }
+  ]
+};
+
+/* meta 默认 false 与 __stagePanel 的 def 保持一致：首次进形态不显示左侧曲目信息 */
+var P = { mode:'auto', shot:'0', every:'1', meta:false };
+
+/* ==========================================================
+   2) ready —— 第一个 rAF 无条件发，全局只发一次
+   ========================================================== */
+var readySent = false;
+function sendReady(){
+  if (readySent) return;
+  readySent = true;
+  try { parent.postMessage({ __c100:1, type:"ready" }, "*"); } catch(e){ console.error(e); }
+}
+requestAnimationFrame(sendReady);
+setTimeout(sendReady, 800);
+
+/* ==========================================================
+   3) 工具
+   ========================================================== */
+function $(id){ return document.getElementById(id); }
+function clamp(v,a,b){ return v < a ? a : (v > b ? b : v); }
+function pad2(n){ return (n < 10 ? '0' : '') + n; }
+function mmss(s){
+  if (!isFinite(s) || s < 0) s = 0;
+  return Math.floor(s/60) + ':' + pad2(Math.floor(s%60));
+}
+function toRGB(a){
+  if (!Array.isArray(a) || a.length < 3) return null;
+  var r = Math.round(Number(a[0])), g = Math.round(Number(a[1])), b = Math.round(Number(a[2]));
+  if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return null;
+  r = clamp(r,0,255)|0; g = clamp(g,0,255)|0; b = clamp(b,0,255)|0;
+  if (r + g + b < 26) return null;
+  return [r,g,b];
+}
+
+/* ==========================================================
+   4) DOM
+   ========================================================== */
+var root    = document.documentElement;
+var anchor  = $('anchor'), phone = $('phone');
+var chat    = $('chat'), thread = $('thread'), stamp = $('stamp'), typing = $('typing');
+var emptyEl = $('empty');
+var island  = $('island'), islWave = $('islWave'), islArt = $('islArt'), islCh = $('islCh');
+var islImg  = $('islImg'), avImg = $('avImg'), avCh = $('avCh');
+var recWave = $('recWave'), recT = $('recT');
+var glow    = $('glow'), metaEl = $('meta');
+var mBar    = $('mBar'), mCur = $('mCur'), mDur = $('mDur');
+
+/* ==========================================================
+   5) 尺寸
+   ========================================================== */
+var CW = 350, CH = 470, TW = 272, GAP = 9;
+var songDur = 0;
+var SMAX = 1.5, PORTRAIT = false;
+
+function fit(){
+  var W = innerWidth || 1440, H = innerHeight || 900;
+  if (!isFinite(W) || W <= 0) W = 1440;
+  if (!isFinite(H) || H <= 0) H = 900;
+
+  var portrait = (W / H) < 0.9;
+  PORTRAIT = portrait;
+  var k;
+  if (portrait){
+    k = Math.min(W / 390, H / 844);
+    root.style.setProperty('--k', String(k));
+    K = k;
+    SMAX = 1;
+  } else {
+    /* 基础机位留白，给运镜留出推近的余量 */
+    k = Math.min((H * 0.82) / 844, (W * 0.46) / 390, 1.26);
+    root.style.setProperty('--k', String(k));
+    K = k;
+    anchor.style.left = W > 1180 ? '62%' : '56%';
+    SMAX = Math.min(1.40, (H * 1.00) / (844 * k), (W * 0.84) / (390 * k));
+  }
+  buildLayers();   /* 机身挤层随 K 重建（安卓按实际缩放自适应层距） */
+
+  var cw = chat.clientWidth || 350;
+  var ch = chat.clientHeight || 470;
+  var changed = (cw !== CW || ch !== CH);
+  CW = cw; CH = ch;
+  TW = Math.max(120, Math.round((CW - 24) * 0.76));
+  root.style.setProperty('--bw', TW + 'px');
+  if (changed) layout();
+
+  /* 运镜要用的两个基准 */
+  try {
+    chatTopLocal = 6 + chat.offsetTop;
+    anchorPx = (W > 1180 ? 0.62 : 0.56) * W;
+  } catch(e){}
+}
+
+/* ==========================================================
+   6) 颗粒（prefers-reduced-motion 下也保留，成本极低）
+   ========================================================== */
+var grainDone = false;
+function grain(){
+  if (grainDone) return;
+  grainDone = true;
+  try {
+    var c = $('grain');
+    var W = innerWidth || 1440, H = innerHeight || 900;
+    if (!isFinite(W) || W <= 0) W = 1440;
+    if (!isFinite(H) || H <= 0) H = 900;
+    c.width = W; c.height = H;
+    var g = c.getContext('2d');
+    var t = document.createElement('canvas'); t.width = t.height = 96;
+    var tg = t.getContext('2d');
+    var id = tg.createImageData(96, 96), d = id.data;
+    for (var i = 0; i < d.length; i += 4){
+      var v = 100 + (Math.random() * 150 | 0);
+      d[i] = v; d[i+1] = v; d[i+2] = v; d[i+3] = 12;
+    }
+    tg.putImageData(id, 0, 0);
+    g.fillStyle = g.createPattern(t, 'repeat');
+    g.fillRect(0, 0, W, H);
+  } catch(e){ /* 颗粒是可选的，失败不报 */ }
+}
+
+/* ==========================================================
+   7) 时间轴
+   ========================================================== */
+function lineTimes(line){
+  var arr = Array.from(line.text || ''), n = arr.length, out = [], i;
+  var cs = line.chars;
+  if (cs && cs.length){
+    var c0 = cs[0];
+    var rel = !!(c0 && isFinite(Number(c0.t)) && Number(c0.t) < line.t - 0.08);
+    for (i = 0; i < n; i++){
+      var j = cs.length === n ? i : Math.min(cs.length - 1, Math.floor(i * cs.length / n));
+      var rec = cs[j];
+      var ct = (rec && typeof rec === 'object') ? Number(rec.t) : NaN;
+      out.push(isFinite(ct) ? (rel ? line.t + ct : ct) : null);
+    }
+    return out;
+  }
+  var d = line.dur > 0 ? line.dur : 3.4;
+  for (i = 0; i < n; i++) out.push(line.t + d * 0.9 * i / Math.max(1, n));
+  return out;
+}
+
+function idxAt(t){
+  var a = S.lines, lo = 0, hi = a.length - 1, best = -1;
+  while (lo <= hi){
+    var m = (lo + hi) >> 1;
+    if (a[m].t <= t + 0.02){ best = m; lo = m + 1; } else hi = m - 1;
+  }
+  return best;
+}
+
+/* 估算气泡高度（不量 DOM，避免每帧 reflow） */
+function charW(cp){
+  if (cp >= 0x2E80) return 16;
+  if (cp === 32) return 4.6;
+  if (cp >= 65 && cp <= 90) return 10.4;
+  if (cp === 105 || cp === 108 || cp === 106 || cp === 116 || cp === 102 || cp === 114 ||
+      cp === 46 || cp === 44 || cp === 58 || cp === 59 || cp === 39 || cp === 33 || cp === 124) return 5.2;
+  return 8.9;
+}
+function estH(text, tw){
+  if (!text) return 0;
+  var w = 0, n = 1, arr = Array.from(text), i, cw;
+  for (i = 0; i < arr.length; i++){
+    cw = charW(arr[i].codePointAt(0));
+    if (w + cw > tw && w > 0){ n++; w = cw; } else w += cw;
+  }
+  return n * 22 + 16;
+}
+
+/* ==========================================================
+   8) 对话布局
+   ========================================================== */
+var offs = [], hgt = [], bubbles = {}, curIdx = -2, TEXTW = 240;
+
+function clearBubbles(){
+  var keys = Object.keys(bubbles), b;
+  for (var n = 0; n < keys.length; n++){
+    b = bubbles[keys[n]];
+    if (b && b.el && b.el.parentNode) b.el.parentNode.removeChild(b.el);
+  }
+  bubbles = {};
+}
+
+function layout(){
+  TEXTW = Math.max(80, TW - 28);
+  clearBubbles();
+  offs = []; hgt = [];
+  var y = 0;
+  for (var i = 0; i < S.lines.length; i++){
+    var txt = S.lines[i].text || '';
+    var h = txt ? estH(txt, TEXTW) : 0;
+    hgt.push(h);
+    offs.push(y);
+    if (h > 0) y += h + GAP;
+  }
+  stamp.style.opacity = S.lines.length ? '1' : '0';
+  emptyEl.classList.toggle('on', S.lines.length === 0);
+  curIdx = -2;
+}
+
+function fadeFor(j){
+  if (curIdx < 0) return 1;
+  return clamp(1 - Math.abs(j - curIdx) * 0.10, 0.44, 1);
+}
+
+function makeBubble(i){
+  var line = S.lines[i];
+  var el = document.createElement('div');
+  el.className = 'bub ' + (i % 2 === 0 ? 'r' : 'l');
+  el.style.top = offs[i] + 'px';
+  var chars = Array.from(line.text || '');
+  var times = lineTimes(line);
+  var spans = [];
+  for (var k = 0; k < chars.length; k++){
+    var sp = document.createElement('span');
+    sp.textContent = chars[k] === ' ' ? '\u00A0' : chars[k];
+    el.appendChild(sp);
+    spans.push({ el: sp, t: times[k], on: false });
+    if (times[k] != null && S.t >= times[k]){ sp.className = 'on'; spans[k].on = true; }
+  }
+  /* 入场：从下方轻轻升起 */
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(15px) scale(.94)';
+  var target = fadeFor(i);
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      el.style.opacity = String(target);
+      el.style.transform = 'none';
+    });
+  });
+  return { el: el, spans: spans, want: target };
+}
+
+function windowRange(i){
+  var base = i < 0 ? 0 : i;
+  return [Math.max(0, base - 8), Math.min(S.lines.length - 1, base + 1)];
+}
+
+function paintWindow(i){
+  var r = windowRange(i), lo = r[0], hi = r[1], k, j, n;
+  var keys = Object.keys(bubbles);
+  for (n = 0; n < keys.length; n++){
+    k = +keys[n];
+    if (k < lo || k > hi){
+      if (bubbles[k] && bubbles[k].el.parentNode) bubbles[k].el.parentNode.removeChild(bubbles[k].el);
+      delete bubbles[k];
+    }
+  }
+  for (j = lo; j <= hi; j++){
+    if (bubbles[j]) continue;
+    if (!S.lines[j] || !S.lines[j].text) continue;
+    if (S.lines[j].t > S.t + 0.02) continue;   /* 还没到点 = 还没发出去 */
+    bubbles[j] = makeBubble(j);
+    thread.appendChild(bubbles[j].el);
+  }
+}
+
+function ensureBubble(j){
+  if (j < 0 || j >= S.lines.length) return;
+  if (bubbles[j]) return;
+  if (!S.lines[j] || !S.lines[j].text) return;
+  var lo = curIdx < 0 ? 0 : curIdx - 8;
+  if (j < lo || j > curIdx + 1) return;
+  bubbles[j] = makeBubble(j);
+  thread.appendChild(bubbles[j].el);
+}
+
+function restyle(){
+  var keys = Object.keys(bubbles), b, k, f;
+  for (var n = 0; n < keys.length; n++){
+    k = +keys[n];
+    b = bubbles[k];
+    if (!b) continue;
+    f = fadeFor(k);
+    b.want = f;
+    b.el.style.opacity = String(f);
+    var cur = (k === curIdx);
+    if (b.__cur !== cur){
+      b.__cur = cur;
+      b.el.className = 'bub ' + (k % 2 === 0 ? 'r' : 'l') + (cur ? ' cur' : '');
+    }
+  }
+}
+
+function setIdx(i){
+  var prev = curIdx;
+  curIdx = i; S.idx = i;
+  var h = (i >= 0 && hgt[i]) ? hgt[i] : 0;
+  var ty = CH * 0.72 - h - (i >= 0 ? (offs[i] || 0) : 0);
+  var jump = Math.abs(i - prev) > 3 || prev === -2 || i < prev;
+  threadTY = ty;
+  thread.style.transitionDuration = jump ? '0s' : '.56s';
+  thread.style.transform = 'translate3d(0,' + (Math.round(ty * 10) / 10) + 'px,0)';
+  paintWindow(i);
+  restyle();
+  if (i >= 0) applyShot(i);      /* 换句 = 切镜 */
+}
+
+function reveal(b, t){
+  if (!b) return;
+  var sp = b.spans;
+  for (var k = 0; k < sp.length; k++){
+    var on = sp[k].t != null && t >= sp[k].t;
+    if (on !== sp[k].on){
+      sp[k].on = on;
+      sp[k].el.className = on ? 'on' : '';
+    }
+  }
+}
+
+/* 正在输入… */
+var typingAt = -99, typingOn = false;
+function updateTyping(){
+  var nxt = curIdx + 1, show = false, gap;
+  if (S.playing && nxt >= 0 && nxt < S.lines.length && S.lines[nxt].text){
+    gap = S.lines[nxt].t - S.t;
+    if (gap > 0.2 && gap < 2.6) show = true;
+  }
+  if (show){
+    /* 落在「下一句即将出现」的位置，气泡一到就被替换 */
+    if (typingAt !== nxt){
+      typingAt = nxt;
+      typing.style.top = (offs[nxt] || 0) + 'px';
+      typing.className = 'typing ' + (nxt % 2 === 0 ? 'r' : 'l');
+    }
+    if (!typingOn){ typingOn = true; typing.classList.add('on'); }
+  } else if (typingOn || typingAt !== -99){
+    typingOn = false;
+    typingAt = -99;
+    typing.classList.remove('on');
+  }
+}
+
+/* ==========================================================
+   9) 机械臂运镜
+   ----------------------------------------------------------
+   每一镜 = 一个机位。换句时切镜，时长与缓动逐镜不同（这就是"非线性"）：
+   有的先慢后快砸到位，有的带一点伺服回弹，有的长推。
+   抖动极小、落位极准 —— 像一台运动控制摄影机，不像人手持。
+   ========================================================== */
+var SHOTS = [
+  /* n          俯仰   偏摆   滚转   距离   横移%(屏)  时长   曲线 */
+  { n:'tight-l', rx:  5, ry: -7, rz:-1.4, s:1.95, ox:-4.0, d:1150, e:'cubic-bezier(.62,.02,.18,1)' },
+  { n:'tight-r', rx:  2, ry:  8, rz: 1.1, s:1.70, ox: 4.0, d: 900, e:'cubic-bezier(.72,0,.14,1)' },
+  { n:'angle',   rx: 10, ry:  5, rz:-2.2, s:1.46, ox: 0.0, d:1320, e:'cubic-bezier(.25,1.06,.32,1)' },
+  { n:'extreme', rx:  1, ry: -4, rz: 0.7, s:2.15, ox:-2.0, d:1520, e:'cubic-bezier(.38,1.08,.30,1)' },
+  { n:'low',     rx: -9, ry:  6, rz: 1.6, s:1.60, ox: 2.5, d:1200, e:'cubic-bezier(.30,.92,.26,1)' },
+  { n:'breathe', rx:  7, ry:-10, rz:-1.0, s:1.18, ox: 0.0, d:1440, e:'cubic-bezier(.58,.02,.20,1)' },
+  { n:'macro',   rx:  0, ry: 11, rz: 2.0, s:2.05, ox:-3.0, d:1660, e:'cubic-bezier(.50,0,.12,1)' },
+  { n:'drift',   rx:  4, ry: -6, rz:-2.6, s:1.52, ox: 3.0, d:1780, e:'cubic-bezier(.55,0,.20,1)' }
+];
+var K = 1;              /* 基础缩放（fit 里算） */
+var shotIdx = -1;
+var lastBucket = -9999; /* 当前在第几个"换镜组" */
+var tiltEl = $('tilt');
+var settleTimer = 0, settleToken = 0;
+var chatTopLocal = 222; /* 对话区顶边在手机本地坐标里的 y */
+var threadTY = 0;       /* 对话区当前的上滚量 */
+var anchorPx = 0;       /* 手机中心在屏幕上的 x */
+
+var metaZoomHide = false;
+/* 左侧曲目信息：用户关掉就永远不显示；没关时镜头贴太近也会让位 */
+function syncMeta(){
+  var want = !(P.meta === false || P.meta === 'false' || P.meta === 0 || P.meta === '0');
+  metaEl.style.opacity = (want && !metaZoomHide) ? '1' : '0';
+}
+
+function shotTransform(sh, s, px, py){
+  return 'translate3d(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px,0) ' +
+    'rotateX(' + sh.rx + 'deg) rotateY(' + sh.ry + 'deg) rotateZ(' + sh.rz + 'deg) ' +
+    'scale(' + s + ')';
+}
+
+/* 用户改了设置：立刻按新规则重新落镜 */
+function rezoom(){
+  if (curIdx >= 0) applyShot(curIdx, true);
+}
+
+function applyShot(i, force){
+  if (RM || !tiltEl) return;
+  if (i < 0) return;
+  /* 竖屏是"真手机"模式，不做运镜 */
+  if (PORTRAIT){ tiltEl.style.transform = ''; return; }
+  /* 自由视角：镜头归用户，这里什么都不做 */
+  if (P.mode === 'free') return;
+
+  var si, sh, dur, ease;
+  if (P.mode === 'hold'){
+    si = clamp(parseInt(P.shot, 10) || 0, 0, SHOTS.length - 1);
+  } else {
+    var ev = Math.max(1, parseInt(P.every, 10) || 1);
+    var bucket = Math.floor(i / ev);
+    if (!force && bucket === lastBucket){ si = shotIdx; }   /* 同一组：不换镜 */
+    else {
+      if (bucket !== lastBucket) lastBucket = bucket;
+      si = ((bucket % SHOTS.length) + SHOTS.length) % SHOTS.length;
+    }
+  }
+  sh = SHOTS[si];
+  /* 同镜位、只是跟着歌词平移 —— 用更柔的曲线，不要做出"切镜"的错觉 */
+  var same = (si === shotIdx) && !force;
+  dur  = same ? 780 : sh.d;
+  ease = same ? 'cubic-bezier(.33,.7,.3,1)' : sh.e;
+
+  var s = sh.s;
+  var W = innerWidth || 1440, H = innerHeight || 900;
+
+  /* 这句话在手机本地坐标里的中心 —— 镜头就是奔它去的 */
+  var bh = (hgt[i] > 0) ? hgt[i] : 44;
+  var by = chatTopLocal + threadTY + (offs[i] || 0) + bh * 0.5;
+  var dy = by - 422;                       /* 相对手机中心（844/2） */
+
+  /* 固定视角：机位真的不动，手机居中摆好，不跟歌词晃 */
+  if (P.mode === 'hold'){
+    tiltEl.style.transition = 'transform ' + (force ? 900 : 420) + 'ms cubic-bezier(.33,.72,.28,1)';
+    tiltEl.style.transform = shotTransform(sh, s, W * 0.5 - anchorPx, 0);
+    shotIdx = si;
+    metaZoomHide = (s > 1.55); syncMeta();
+    return;
+  }
+
+  /* 把手机中心拉到屏幕中心，再把这句话拉到偏上一点的位置 */
+  var px = (W * 0.5 - anchorPx) + (sh.ox || 0) * W / 100;
+  var py = (H * 0.58 - H * 0.5) - dy * K * s;
+
+  tiltEl.style.transition = 'transform ' + dur + 'ms ' + ease;
+  tiltEl.style.transform = shotTransform(sh, s, px, py);
+  shotIdx = si;
+
+  /* 贴近拍的时候，左边那块曲目信息就该让位 */
+  metaZoomHide = (s > 1.55); syncMeta();
+
+  /* 伺服回弹：主运动落位后，再收一记不到 2px 的修正 */
+  var tok = ++settleToken;
+  if (settleTimer) clearTimeout(settleTimer);
+  if (same) return;
+  settleTimer = setTimeout(function(){
+    if (tok !== settleToken || P.mode === 'free') return;
+    var dx = (si % 2 ? 1.4 : -1.4), dy2 = (si % 3 ? -1.1 : 1.1);
+    tiltEl.style.transition = 'transform 300ms cubic-bezier(.28,.9,.36,1)';
+    tiltEl.style.transform = shotTransform(sh, s, px + dx, py + dy2);
+  }, Math.max(200, dur - 140));
+}
+
+/* ==========================================================
+   10) 自由视角：拖动环绕 + 滚轮缩放（不许转到背面）
+   ========================================================== */
+var freeRX = 9, freeRY = 22, freeS = 1.35;
+var freeDrag = null;
+var freeResetToken = 0;   /* 离开自由视角后延迟恢复基础分层的令牌 */
+
+function applyFree(){
+  if (!tiltEl) return;
+  var W = innerWidth || 1440;
+  var px = W * 0.5 - anchorPx;
+  /* 安卓不能再用 90ms 缓动：缓动期间相机角度落后于 freeRX/freeRY 目标值，
+     往回缩的那几帧真实角度仍接近侧视，层距会低于守卫值又闪一下。
+     桌面深度精度够，保留原来的 90ms 手感。 */
+  tiltEl.style.transition = ANDROID ? 'none' : 'transform 90ms linear';
+  tiltEl.style.transform =
+    'translate3d(' + px.toFixed(1) + 'px,0,0) ' +
+    'rotateX(' + freeRX.toFixed(2) + 'deg) ' +
+    'rotateY(' + freeRY.toFixed(2) + 'deg) rotateZ(0deg) ' +
+    'scale(' + freeS.toFixed(3) + ')';
+  freeDepthUpdate();   /* 安卓自由视角：按当前 freeS/角度重排层距（不重建 DOM） */
+  metaZoomHide = (freeS > 1.55); syncMeta();
+}
+
+/* 从当前机位接管，不跳一下 */
+function enterFree(){
+  var sh = SHOTS[clamp(shotIdx < 0 ? 0 : shotIdx, 0, SHOTS.length - 1)];
+  freeRX = sh.rx; freeRY = sh.ry; freeS = sh.s;
+  applyFree();
+}
+
+addEventListener('pointerdown', function(e){
+  if (P.mode !== 'free' || PORTRAIT) return;
+  if (e.button !== undefined && e.button !== 0) return;
+  freeDrag = { x: e.clientX, y: e.clientY, rx: freeRX, ry: freeRY };
+  document.body.style.cursor = 'grabbing';
+  try { e.target.setPointerCapture && e.target.setPointerCapture(e.pointerId); } catch(_){}
+}, { passive: true });
+
+addEventListener('pointermove', function(e){
+  if (!freeDrag) return;
+  var dx = e.clientX - freeDrag.x;
+  var dy = e.clientY - freeDrag.y;
+  /* ±62° 就够看到侧面了，再转就是背面 —— 卡住 */
+  freeRY = clamp(freeDrag.ry + dx * 0.26, -62, 62);
+  freeRX = clamp(freeDrag.rx - dy * 0.20, -34, 34);
+  applyFree();
+}, { passive: true });
+
+function endDrag(){
+  if (!freeDrag) return;
+  freeDrag = null;
+  document.body.style.cursor = '';
+}
+addEventListener('pointerup', endDrag, { passive: true });
+addEventListener('pointercancel', endDrag, { passive: true });
+addEventListener('blur', endDrag);
+
+addEventListener('wheel', function(e){
+  if (P.mode !== 'free' || PORTRAIT) return;
+  e.preventDefault();
+  freeS = clamp(freeS * (e.deltaY > 0 ? 0.93 : 1.075), 0.80, 2.60);
+  applyFree();
+}, { passive: false });
+
+/* ==========================================================
+   11) 灵动岛
+   ========================================================== */
+var islandTimer = 0;
+var islandDone = false;
+var screenEl = null;
+/* 只在进全屏时展开一次（2 秒），之后永远收起 */
+function expandIslandOnce(){
+  if (RM || islandDone) return;
+  islandDone = true;
+  if (!screenEl) screenEl = document.querySelector('.screen');
+  island.classList.add('open');
+  if (screenEl) screenEl.classList.add('island-open');
+  if (islandTimer) clearTimeout(islandTimer);
+  islandTimer = setTimeout(function(){
+    islandTimer = 0;
+    island.classList.remove('open');
+    if (screenEl) screenEl.classList.remove('island-open');
+  }, 2000);
+}
+
+var barsRec = [], barsIsl = [], noiseSeed = 0;
+
+function mkBars(host, n){
+  host.innerHTML = '';
+  var out = [], i, b;
+  for (i = 0; i < n; i++){
+    b = document.createElement('i');
+    host.appendChild(b);
+    out.push(b);
+  }
+  return out;
+}
+
+function setBars(bars, amp, phase){
+  var i, n = bars.length, x, env, wob, v, s;
+  for (i = 0; i < n; i++){
+    x = n > 1 ? i / (n - 1) : 0;
+    env = 0.42 + 0.58 * Math.sin(Math.PI * (0.12 + 0.78 * x));
+    wob = 0.4 + 0.6 * Math.abs(Math.sin(i * 1.9 + phase * 1.7));
+    v = amp * env * wob;
+    s = clamp(v * 1.75 + 0.18, 0.18, 1);
+    bars[i].style.transform = 'scaleY(' + s.toFixed(2) + ')';
+  }
+}
+
+/* 语音条播放头：唱过的那一段变蓝 */
+var recProgress = -1;
+function setRecProgress(p){
+  p = clamp(p, 0, 1);
+  if (Math.abs(p - recProgress) < 0.012 && recProgress >= 0) return;
+  recProgress = p;
+  var lim = Math.round(p * barsRec.length), i;
+  for (i = 0; i < barsRec.length; i++){
+    var on = i < lim;
+    if (barsRec[i].__ps !== on){
+      barsRec[i].__ps = on;
+      barsRec[i].className = on ? 'ps' : '';
+    }
+  }
+}
+
+/* ==========================================================
+   10) 宿主消息
+   ========================================================== */
+function setAccent(a){
+  var c = toRGB(a) || [150, 165, 255];
+  root.style.setProperty('--ac', c[0] + ',' + c[1] + ',' + c[2]);
+}
+
+function setArt(url, name){
+  var initial = (name && name.length) ? Array.from(name)[0] : '♪';
+  avCh.textContent = initial;
+  islCh.textContent = initial;
+
+  var ok = !!(url && typeof url === 'string' && url.length > 4);
+  avImg.style.display = 'none';
+  islImg.style.display = 'none';
+  if (!ok) return;
+
+  avImg.onload  = function(){ avImg.style.display = 'block'; };
+  avImg.onerror = function(){ avImg.style.display = 'none'; };
+  avImg.src = url;
+  islImg.onload  = function(){ islImg.style.display = 'block'; };
+  islImg.onerror = function(){ islImg.style.display = 'none'; };
+  islImg.src = url;
+}
+
+function onInit(p){
+  p = (p && typeof p === 'object') ? p : {};
+  var song = (p.song && typeof p.song === 'object') ? p.song : {};
+
+  var name = (song.name == null) ? '' : String(song.name).trim();
+  if (!name) name = '未知歌曲';
+
+  var ar = song.artists;
+  if (Array.isArray(ar)){
+    ar = ar.filter(function(x){ return x != null && String(x).trim(); })
+           .map(function(x){ return String(x).trim(); }).join(' / ');
+  } else {
+    ar = (ar == null) ? '' : String(ar).trim();
+  }
+  if (!ar) ar = '未知歌手';
+
+  setAccent(p.accent);
+  setArt(song.cover, name);
+
+  $('hdN').textContent = name;
+  $('navN').textContent = ar;
+  $('mN').textContent  = name;
+  $('mA').textContent  = ar;
+  $('islN').textContent = name;
+  $('islA').textContent = ar;
+  metaEl.classList.add('on');
+  syncMeta();
+
+  var dur = Number(p.duration);
+  songDur = (isFinite(dur) && dur > 0) ? dur : 0;
+  $('mDur').textContent = songDur ? mmss(songDur) : '—';
+
+  /* 歌词：每次 init 都必须生效 */
+  var arr = Array.isArray(p.lines) ? p.lines : [];
+  S.lines = arr.filter(function(l){ return l && typeof l === 'object'; })
+    .map(function(l){
+      var t = Number(l.t), du = Number(l.dur);
+      return {
+        t: isFinite(t) ? t : 0,
+        dur: isFinite(du) ? du : 0,
+        text: (l.text == null) ? '' : String(l.text),
+        chars: (Array.isArray(l.chars) && l.chars.length) ? l.chars : null
+      };
+    })
+    .sort(function(a, b){ return a.t - b.t; });
+
+  S.playing = (typeof p.playing === 'boolean') ? p.playing : true;
+
+  typingOn = false;
+  typingAt = -99;
+  typing.classList.remove('on');
+
+  /* 换歌 = 重新开机位：清掉上一首的镜头状态，第一句一定回到开场机位 */
+  lastBucket = -9999;
+  shotIdx = -1;
+  settleToken++;
+  if (settleTimer){ clearTimeout(settleTimer); settleTimer = 0; }
+
+  layout();
+  var first = idxAt(S.t);
+  setIdx(first >= 0 ? first : -1);
+  /* 开场这一下用短一点的时间落位，不要拖着上一首的机位慢慢摇过来 */
+  if (first >= 0 && P.mode !== 'free'){
+    tiltEl.style.transitionDuration = '620ms';
+    applyShot(first, true);
+  }
+  S.err = '';
+  /* 首次拿到歌（= 已进全屏）时，灵动岛展开一次就永远收起 */
+  setTimeout(expandIslandOnce, 260);
+}
+
+var liveAmp = 0.1;
+
+function onLive(p){
+  var lv = Number(p.level), ba = Number(p.bass), mi = Number(p.mid), tr = Number(p.treble);
+  if (!isFinite(lv)) lv = 0;  if (!isFinite(ba)) ba = 0;
+  if (!isFinite(mi)) mi = 0;  if (!isFinite(tr)) tr = 0;
+  lv = clamp(lv,0,1); ba = clamp(ba,0,1); mi = clamp(mi,0,1); tr = clamp(tr,0,1);
+  liveAmp = clamp(ba * 0.5 + mi * 0.28 + tr * 0.22 + lv * 0.26 + 0.04, 0.03, 1);
+  noiseSeed += 0.7;
+  setBars(barsRec, S.playing ? liveAmp : 0.02, noiseSeed);
+  setBars(barsIsl, S.playing ? liveAmp * 0.9 : 0.06, noiseSeed + 1.3);
+}
+
+function onBeat(p){
+  var lv = Number(p.level);
+  if (!isFinite(lv)) lv = 0.5;
+  lv = clamp(lv, 0, 1);
+  if (!S.playing) return;
+  noiseSeed += 0.5;
+  setBars(barsRec, clamp(lv * 0.9 + 0.16, 0, 1), noiseSeed + 0.4);
+  setBars(barsIsl, clamp(lv * 0.85 + 0.2, 0, 1), noiseSeed + 1.7);
+}
+
+/* 设置项变更：宿主在 ready 后会把已存的值逐条推一遍 */
+function onSetting(p){
+  if (!p || typeof p.key !== 'string') return;
+  var k = p.key, v = p.value;
+  if (!(k in P)) return;
+  P[k] = v;
+
+  if (k === 'mode'){
+    endDrag();
+    var modeTok = ++freeResetToken;
+    if (P.mode === 'free'){ enterFree(); }
+    else {
+      /* 离开自由视角不能立刻把层距改回基础值：自由机位可能停在 0.80/侧视，
+         镜头要 0.8–1.8s 才摇回固定机位，过渡前半段仍很极端，立刻重建又会闪。
+         等镜头落位（最长 1780ms）后再恢复基础分层；期间沿用自由视角的大层距。 */
+      if (ANDROID){
+        setTimeout(function(){
+          if (modeTok !== freeResetToken) return;   /* 期间又切过模式，作废 */
+          if (P.mode !== 'free') buildLayers();
+        }, 1900);
+      }
+      lastBucket = -9999; rezoom();
+    }
+  } else if (k === 'shot'){
+    if (P.mode === 'hold'){ lastBucket = -9999; rezoom(); }
+  } else if (k === 'every'){
+    lastBucket = -9999;
+    if (P.mode === 'auto') rezoom();
+  } else if (k === 'meta'){
+    syncMeta();
+  }
+}
+
+/* ==========================================================
+   11) 消息总线
+   ========================================================== */
+addEventListener("message", function(ev){
+  var d = ev.data;
+  if (!d || d.__c100 !== 1) return;
+  var p = d.payload || {};
+  try {
+    if (d.type === "init"){
+      onInit(p);
+    } else if (d.type === "tick"){
+      var t = Number(p.time);
+      if (isFinite(t)) S.t = t;                        /* 无条件采纳，只挡 NaN/Infinity */
+      if (typeof p.playing === 'boolean') S.playing = p.playing;
+    } else if (d.type === "beat"){
+      onBeat(p);
+    } else if (d.type === "live"){
+      onLive(p);
+    } else if (d.type === "setting"){
+      onSetting(p);
+    }
+  } catch(e){ fail(e); }
+});
+
+// 鼠标视差：手机跟着鼠标转一点点，静止时缓慢回到原位
+// 注意：不用 lerp 追随（高刷屏上会变成持续 DOM 写入），直接缓动到目标
+var tiltEl = $('tilt');
+var tiltX = 0, tiltY = 0, tiltTX = 0, tiltTY = 0, tiltOn = false;
+var tiltPX = -99, tiltPY = -99;
+var parEl = $('par');
+addEventListener('mousemove', function(e){
+  if (RM) return;
+  tiltOn = true;
+  var nx = (e.clientX / (innerWidth || 1)) - 0.5;
+  var ny = (e.clientY / (innerHeight || 1)) - 0.5;
+  tiltTX = clamp(nx, -0.5, 0.5) * 5.4;
+  tiltTY = clamp(ny, -0.5, 0.5) * -3.6;
+}, { passive:true });
+
+var lastAct = 0;
+addEventListener("mousemove", function(){
+  var n = performance.now();
+  if (n - lastAct < 320) return;
+  lastAct = n;
+  try { parent.postMessage({ __c100:1, type:'activity' }, '*'); } catch(e){}
+}, { passive:true });
+
+addEventListener("keydown", function(e){
+  if (e.code === 'Space' || e.key === ' '){
+    e.preventDefault();
+    try { parent.postMessage({ __c100:1, type:'key', payload:{ key:'Space' } }, '*'); } catch(_){}
+  }
+});
+
+/* ==========================================================
+   12) 主循环
+   ========================================================== */
+var lastNow = performance.now();
+var lastRecT = 0, lastBar = -1;
+
+function frame(now){
+  var js0 = performance.now();
+  try {
+    var dt = (now - lastNow) / 1000;
+    lastNow = now;
+    if (!isFinite(dt) || dt < 0) dt = 0;
+    if (dt > 0.05) dt = 0.05;
+    if (S.playing) S.t += dt;
+
+    var i = idxAt(S.t);
+    if (i !== curIdx) setIdx(i);
+
+    if (i >= 0){
+      ensureBubble(i);
+      var nx = i + 1;
+      if (nx < S.lines.length && S.lines[nx].t <= S.t + 0.02) ensureBubble(nx);
+    }
+
+    var b = bubbles[curIdx];
+    if (b) reveal(b, S.t);
+
+    updateTyping();
+
+    if (songDur > 0){
+      var pr = clamp(S.t / songDur, 0, 1);
+      if (Math.abs(pr - lastBar) > 0.0012){
+        lastBar = pr;
+        mBar.style.transform = 'scaleX(' + pr.toFixed(4) + ')';
+        setRecProgress(pr);
+      }
+    }
+
+    if (now - lastRecT > 260){
+      lastRecT = now;
+      recT.textContent = mmss(S.t);
+      mCur.textContent = mmss(S.t);
+    }
+
+    /* 视差：只在有鼠标活动时跟随，静止时缓慢归位 */
+    /* 视差：只在有鼠标活动时跟随，静止时缓慢归位（挂在 .par，不碰摄影机） */
+    if (tiltOn && parEl && !RM){
+      tiltX += (tiltTX - tiltX) * 0.055;
+      tiltY += (tiltTY - tiltY) * 0.055;
+      if (Math.abs(tiltX - tiltPX) > 0.02 || Math.abs(tiltY - tiltPY) > 0.02){
+        tiltPX = tiltX; tiltPY = tiltY;
+        parEl.style.transform = 'rotateY(' + tiltX.toFixed(2) + 'deg) rotateX(' +
+          (-tiltY).toFixed(2) + 'deg)';
+      }
+      /* 安卓自由视角：视差也会改变实际视角，层距守卫跟着走（层数没变时内部直接 return） */
+      if (ANDROID && P.mode === 'free') freeDepthUpdate();
+    }
+
+    S.frames++;
+  } catch(e){ fail(e); }
+  S.js = performance.now() - js0;
+  requestAnimationFrame(frame);
+}
+
+/* 时钟 */
+function tickClock(){
+  try {
+    var d = new Date();
+    $('clock').textContent = d.getHours() + ':' + pad2(d.getMinutes());
+    stamp.textContent = '今天 ' + d.getHours() + ':' + pad2(d.getMinutes());
+  } catch(e){}
+}
+tickClock();
+setInterval(tickClock, 15000);
+
+/* ==========================================================
+   13) 启动
+   ========================================================== */
+try {
+  barsRec = mkBars(recWave, 40);
+  barsIsl = mkBars(islWave, 4);
+  var wn = $('recWave');
+  for (var wq = 0; wq < barsRec.length; wq++){
+    barsRec[wq].style.left = (wq * 2.5 + 0.5).toFixed(1) + 'px';
+  }
+  wn.style.width = (barsRec.length * 2.5) + 'px';
+  wn.style.minWidth = (barsRec.length * 2.5) + 'px';
+} catch(e){ fail(e); }
+
+/* 机身厚度：沿 z 轴挤层（亮度连续爬升消除层纹），总厚保持约 58.8px。
+   桌面固定 40 层、层距 1.47px。
+   ⚠ 安卓 WebView 深度缓冲精度不足：层距 <2.4px 时 3D 排序会翻，侧壁整块闪到前面。
+   页面整体还要乘 --k 缩放，运镜再叠加 scale(s)，实际层距 = gap × K × s；
+   所以安卓按当前 K 动态分层，保证最广镜头（s=1.18）下实际层距 ≥2.6px。
+   自由视角还会再乘 freeS(0.80–2.60) 和视角余弦，固定层距不够用；
+   进入 free 后由 freeDepthUpdate() 按需减层、放大 gap（见下）。
+   桌面 GPU 深度精度足够，整套守卫只在 ANDROID 分支生效。 */
+var ANDROID = /Android/i.test(navigator.userAgent || '');
+var layerEls = null, layerBack = null, layerBaseN = 0, layerCurN = 0, layerCurGap = 0;
+function buildLayers(){
+  var lyEl = $('layers'), NL, gap, i, t, li, lum, zz, need, kk, back;
+  if (!lyEl) return;
+
+  /* 清空后重建；fit() 每次算出新的 K 都会调用 */
+  while (lyEl.firstChild) lyEl.removeChild(lyEl.firstChild);
+
+  if (ANDROID){
+    kk = K;
+    if (!isFinite(kk) || kk <= 0) kk = 0.56;           /* K 异常时按 1280×576 实测值 */
+    need = 2.6 / (kk * 1.18);                          /* 局部坐标下最广镜头仍 ≥2.6px */
+    NL = Math.min(20, Math.max(8, Math.floor(58.8 / need)));
+    gap = 58.8 / NL;                                   /* 总厚保持约 58.8，层数随 K 自适应 */
+  } else {
+    NL = 40;
+    gap = 1.47;
+  }
+
+  for (i = 0; i < NL; i++){
+    t = i / (NL - 1);                                  /* 0 = 最深（背板）  1 = 最亮（贴屏幕） */
+    zz = -(i + 1) * gap;
+    li = document.createElement('i');
+    /* 机身是黑的：越靠屏幕越亮一点，侧面仍有金属的明暗 */
+    lum = 0.28 + 0.72 * Math.pow(t, 0.75);
+    li.style.transform = 'translateZ(' + zz.toFixed(2) + 'px)';
+    li.style.background = 'rgb(' + Math.round(10 + 74 * lum) + ',' +
+      Math.round(10 + 74 * lum) + ',' + Math.round(13 + 82 * lum) + ')';
+    lyEl.appendChild(li);
+  }
+
+  /* 背板：安卓与最深层至少隔 2 个 gap —— 只隔 1 个时它和挤层也贴太近，同样会翻 */
+  back = document.createElement('i');
+  back.style.transform = ANDROID
+    ? 'translateZ(' + (-((NL + 2) * gap)).toFixed(2) + 'px)'
+    : 'translateZ(-60px)';
+  back.style.background = 'radial-gradient(72% 50% at 32% 30%,#2a2a33,#0e0e12 72%)';
+  lyEl.appendChild(back);
+
+  /* 安卓：记住层片引用与基础层数，自由视角守卫只改这些元素的 style，不再建 DOM */
+  if (ANDROID){
+    layerEls = [];
+    for (i = 0; i < lyEl.children.length - 1; i++) layerEls.push(lyEl.children[i]);
+    layerBack = lyEl.children[lyEl.children.length - 1];
+    layerBaseN = NL; layerCurN = NL; layerCurGap = gap;
+    if (P.mode === 'free' && !PORTRAIT) freeDepthUpdate(true);   /* 尺寸变化后按新 K 重排 */
+  }
+}
+
+/* ==========================================================
+   自由视角层距守卫（仅安卓）
+   ----------------------------------------------------------
+   安卓 WebView 的 3D 排序在投影层距 <2.4px 时会翻，实测 2.42px 起稳定。
+   自由视角的投影层距 = gap × K × freeS × cos(rx) × cos(ry)，
+   再被 perspective:1250 轻微缩小；而 buildLayers 的 gap 只按 s=1.18 算。
+   所以缩到 0.80 或转到 ±34°/±62° 时，层距会掉到 0.7–1.8px（见验收数据），
+   深色层片就会翻到屏幕前面 = 整屏闪。
+
+   这里不放大机身：总厚基本仍按 58.8 算，只把层数 n 减少、gap 放大成 58.8/n
+   （只有极小 K 的兜底会略超），保证最深层那一对的投影层距 ≥2.75px（含透视余量）。
+   层数只在跨阈值时变，改的是已有 <i> 的 transform/背景，拖动时不会重建 DOM。
+   桌面（!ANDROID）不调用、数值与分支都不变。 */
+var FREE_DEPTH_MIN = 2.75;
+function freeDepthUpdate(force){
+  if (!ANDROID || !layerEls || !layerEls.length) return;
+  if (P.mode !== 'free' || PORTRAIT) return;
+  var k = K;
+  if (!isFinite(k) || k <= 0) k = 0.56;                    /* 与 buildLayers 的兜底一致 */
+  var s = freeS;
+  if (!isFinite(s) || s <= 0) s = 1;
+  /* .par 的鼠标视差还会再叠 ±5.4°/±3.6°，按最坏方向一起算进视角余弦 */
+  var prx = Math.abs(freeRX) + Math.abs(tiltY);
+  var pry = Math.abs(freeRY) + Math.abs(tiltX);
+  var c = Math.abs(Math.cos(prx * Math.PI / 180) * Math.cos(pry * Math.PI / 180));
+  if (c < 0.28) c = 0.28;                                  /* 兜底，正常 ±34°/±62° 不会触发 */
+  var kz = 58.8 * k * s;                                   /* 整叠层片的相机空间深度 */
+  var persp = 1250 / (1250 + kz);                          /* 最深层被透视缩小的比例 */
+  var need = FREE_DEPTH_MIN / (k * s * c * persp * persp); /* 局部坐标下需要的层距 */
+  var n = Math.floor(58.8 / need + 1e-9);
+  if (n > layerBaseN) n = layerBaseN;
+  if (n < 3) n = 3;                                        /* 至少 3 层，侧壁才不至于只剩两块板 */
+  /* 迟滞 4%：角度停在阈值上时不让层数来回跳（少层=大 gap 永远安全，所以只迟滞“增层”） */
+  if (n > layerCurN && need > (58.8 / n) * 0.96) n = layerCurN;
+  var gap = 58.8 / n;
+  if (gap < need) gap = need;                              /* 极小 K 时宁可略厚，也不破阈值 */
+  if (!force && n === layerCurN && Math.abs(gap - layerCurGap) < 0.01) return;
+  layerCurN = n; layerCurGap = gap;
+
+  var i, li, t, lum;
+  for (i = 0; i < layerEls.length; i++){
+    li = layerEls[i];
+    if (i >= n){ li.style.visibility = 'hidden'; continue; }
+    li.style.visibility = '';
+    li.style.transform = 'translateZ(' + (-(i + 1) * gap).toFixed(2) + 'px)';
+    t = (n > 1) ? i / (n - 1) : 1;
+    lum = 0.28 + 0.72 * Math.pow(t, 0.75);
+    li.style.background = 'rgb(' + Math.round(10 + 74 * lum) + ',' +
+      Math.round(10 + 74 * lum) + ',' + Math.round(13 + 82 * lum) + ')';
+  }
+  /* 背板退到「最深层再往后 2 个 gap」；n=3 且 gap=need 时总厚会略超 58.8，不能写死 58.8 */
+  if (layerBack) layerBack.style.transform =
+    'translateZ(' + (-((n + 2) * gap)).toFixed(2) + 'px)';
+}
+
+fit();
+addEventListener("resize", function(){
+  fit();
+  if (grainDone){ grainDone = false; grain(); }
+});
+addEventListener("load", function(){ fit(); setTimeout(grain, 220); });
+setTimeout(grain, 900);
+
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

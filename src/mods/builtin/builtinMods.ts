@@ -68,6 +68,18 @@ const BUILTIN_SOURCES: readonly BuiltinModSource[] = [
         // 原始包带 index.cjs 作为 Node 入口（archive.* 由它回答）。
         hasMain: true,
     },
+    {
+        // LIZI 的 68 个可视化歌词舞台：每个单文件页面各自注册成一个歌词动画模式，
+        // 在样式选择器里各自占一项（名字去掉了编号，只留舞台名）。页面跑在 iframe 里，
+        // 靠 host.mjs 把 Folium 的歌词 / 音频上下文翻成页面原本吃的 __c100 协议。
+        id: 'lizi-stages',
+        name: 'LIZI 舞台 · 68 形态',
+        version: '1.0.1',
+        author: 'LIZI',
+        description: 'LIZI 粒子播放器的 68 个可视化歌词舞台，每个都是独立的歌词动画样式，可在样式选择器里直接切换。',
+        permissions: [],
+        folia: '>=0.7.22',
+    },
 ];
 
 /** 内置模组的清单项：字段与主进程给的 `ModRuntimeInfo` 同形，只是客户端地址是同源静态地址。 */

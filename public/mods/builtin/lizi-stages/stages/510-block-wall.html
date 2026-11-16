@@ -1,0 +1,1586 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>510 · 积木字墙</title>
+<style>
+  html,body{margin:0;height:100%;background:#04060b;overflow:hidden}
+  #cv{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #empty{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+    pointer-events:none;color:#7d8cab;letter-spacing:.5em;text-indent:.5em;
+    font:400 clamp(13px,1.05vw,17px)/1.8 "PingFang SC","Microsoft YaHei",sans-serif}
+  #empty.on{display:flex}
+  #errBox{position:fixed;left:16px;bottom:16px;max-width:72vw;color:#ff9d9d;
+    font:12px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap;display:none}
+  #freeHint{position:fixed;left:50%;bottom:8.5vh;transform:translateX(-50%);padding:7px 14px;
+    border-radius:999px;background:rgba(10,14,26,.55);border:1px solid rgba(160,180,255,.16);
+    color:rgba(214,224,255,.72);font:500 clamp(11px,.9vw,13px)/1.5 "PingFang SC","Microsoft YaHei",sans-serif;
+    letter-spacing:.12em;pointer-events:none;opacity:0;transition:opacity .35s}
+  #freeHint.on{opacity:1}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="empty"></div>
+<div id="errBox"></div>
+<div id="freeHint">拖动旋转 · 滚轮拉近拉远</div>
+<script>
+window.__stagePanel = {
+  title: "积木字墙",
+  hint: "镜头、字效和未到字样式都可以自己调，改完自动记住。",
+  items: [
+    { key: "camMode", label: "镜头模式", type: "select", def: "auto", options: [
+      { v: "auto", t: "自动运镜" }, { v: "lock", t: "固定镜头" }, { v: "free", t: "自由拖拽" }
+    ] },
+    { key: "shot", label: "固定机位", type: "select", def: "front", options: [
+      { v: "front", t: "正面全景" }, { v: "side", t: "侧翼斜看" }, { v: "high", t: "高空俯视" },
+      { v: "close", t: "近景特写" }, { v: "low", t: "低位仰视" }, { v: "orbit", t: "斜侧环绕" }
+    ] },
+    { key: "intro", label: "字出现动画", type: "select", def: "fly", options: [
+      { v: "fly", t: "飞入" }, { v: "back", t: "墙后弹出" }, { v: "rise", t: "升起" },
+      { v: "drop", t: "坠落" }, { v: "pop", t: "原地弹出" }, { v: "spin", t: "旋转落位" }
+    ] },
+    { key: "ghost", label: "未到的字", type: "select", def: "hidden", options: [
+      { v: "dim", t: "暗字常显" }, { v: "blank", t: "空方块" }, { v: "hidden", t: "到点才出现" }
+    ] },
+    { key: "blur", label: "动态模糊", type: "range", min: 0, max: 1.6, step: 0.1, def: 1 },
+    { key: "drift", label: "运镜幅度", type: "range", min: 0.3, max: 1.4, step: 0.1, def: 1 }
+  ]
+};
+(function () {
+  "use strict";
+
+  var P = { camMode: "auto", shot: "front", intro: "fly", ghost: "hidden", blur: 1, drift: 1 };
+
+  var S = {
+    lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: "",
+    duration: 0, accent: [150, 165, 255], song: null, reduce: false, gl: false
+  };
+
+  var RM = false;
+  try { RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) {}
+  S.reduce = RM;
+
+  window.__stage = function () {
+    var i = S.idx;
+    var line = (i >= 0 && S.lines[i]) ? S.lines[i] : null;
+    return {
+      lines: S.lines.length,
+      idx: i,
+      t: S.t,
+      playing: S.playing,
+      frames: S.frames,
+      js: Math.round(S.js * 100) / 100,
+      err: S.err,
+      text: (line && line.text != null) ? String(line.text) : "",
+      gl: S.gl,
+      rm: RM
+    };
+  };
+
+  function logErr(e) {
+    try { console.error(e); } catch (_) {}
+  }
+
+  var lastErrAt = 0;
+  function errThrottled(e) {
+    var n = performance.now();
+    if (n - lastErrAt > 1000) { lastErrAt = n; logErr(e); }
+  }
+
+  var readySent = false;
+  function sendReady() {
+    if (readySent) return;
+    readySent = true;
+    try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); } catch (e) { logErr(e); }
+  }
+  requestAnimationFrame(function () {
+    sendReady();
+    setTimeout(initEngine, 0);
+  });
+  setTimeout(sendReady, 800);
+
+  var emptyEl = document.getElementById("empty");
+  var errEl = document.getElementById("errBox");
+  var hasInit = false;
+
+  function updateEmpty() {
+    if (!emptyEl) return;
+    var on = hasInit && S.lines.length === 0;
+    emptyEl.classList.toggle("on", on);
+    emptyEl.textContent = on ? "这首歌没有歌词" : "";
+  }
+
+  function showError(msg) {
+    if (!errEl) return;
+    errEl.style.display = "block";
+    errEl.textContent = "舞台渲染异常：" + msg;
+  }
+
+  function num(v, d) {
+    var n = Number(v);
+    return isFinite(n) ? n : d;
+  }
+
+  function normAccent(a) {
+    if (!Array.isArray(a) || a.length < 3) return [150, 165, 255];
+    var r = Math.max(0, Math.min(255, Math.round(num(a[0], 150))));
+    var g = Math.max(0, Math.min(255, Math.round(num(a[1], 165))));
+    var b = Math.max(0, Math.min(255, Math.round(num(a[2], 255))));
+    if (r + g + b < 30) return [150, 165, 255];
+    return [r, g, b];
+  }
+
+  function normalizeLines(raw) {
+    if (!Array.isArray(raw)) return [];
+    var out = [];
+    for (var i = 0; i < raw.length && i < 1500; i++) {
+      var l = raw[i];
+      if (!l || typeof l !== "object") continue;
+      var text = (l.text == null) ? "" : String(l.text);
+      var chars = null;
+      if (Array.isArray(l.chars) && l.chars.length) {
+        chars = [];
+        for (var k = 0; k < l.chars.length && k < 4000; k++) {
+          var c = l.chars[k];
+          if (!c || typeof c !== "object") { chars.push(null); continue; }
+          chars.push({ c: (c.c == null ? "" : String(c.c)), t: Number(c.t) });
+        }
+      }
+      out.push({ t: num(l.t, 0), dur: num(l.dur, 0), text: text, chars: chars });
+    }
+    out.sort(function (a, b) { return a.t - b.t; });
+    return out;
+  }
+
+  function lineTimes(line) {
+    var chars = Array.from(line.text || "");
+    var n = chars.length;
+    var out = new Array(n);
+    var cs = line.chars;
+    if (cs && cs.length) {
+      var first = cs[0];
+      var rel = !!(first && isFinite(first.t) && first.t < line.t - 0.08);
+      for (var i = 0; i < n; i++) {
+        var j = (cs.length === n) ? i : Math.min(cs.length - 1, Math.floor(i * cs.length / n));
+        var rec = cs[j];
+        var ct = rec ? Number(rec.t) : NaN;
+        if (isFinite(ct)) out[i] = rel ? line.t + ct : ct;
+        else out[i] = null;
+      }
+      return out;
+    }
+    var d = line.dur > 0 ? line.dur : 3.4;
+    for (var k = 0; k < n; k++) out[k] = line.t + d * 0.88 * k / Math.max(1, n);
+    return out;
+  }
+
+  var baseT = 0;
+  var baseAt = performance.now();
+
+  function acceptInit(p) {
+    p = p || {};
+    hasInit = true;
+    var song = (p.song && typeof p.song === "object") ? p.song : {};
+    var artists = song.artists;
+    if (Array.isArray(artists)) artists = artists.filter(Boolean).join(" / ");
+    else if (artists == null) artists = "";
+    S.song = { name: String(song.name || ""), artists: String(artists), cover: String(song.cover || "") };
+    S.accent = normAccent(p.accent);
+    S.lines = normalizeLines(p.lines);
+    S.duration = num(p.duration, 0);
+    S.playing = (typeof p.playing === "boolean") ? p.playing : true;
+    S.idx = -1;
+    baseT = S.t;
+    baseAt = performance.now();
+    cam.surges.length = 0;
+    if (gl) rebuildWall();
+    updateEmpty();
+  }
+
+  function acceptTick(p) {
+    p = p || {};
+    var now = performance.now();
+    var t = Number(p.time);
+    if (typeof p.playing === "boolean") S.playing = p.playing;
+    if (isFinite(t)) {
+      baseT = t;
+      baseAt = now;
+      S.t = t;
+    }
+  }
+
+  addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.__c100 !== 1) return;
+    var p = d.payload || {};
+    try {
+      if (d.type === "init") acceptInit(p);
+      else if (d.type === "tick") acceptTick(p);
+      else if (d.type === "beat") {
+        var lv = num(p.level, 0.5);
+        beatPulse = Math.min(1.4, beatPulse + 0.35 + lv * 0.55);
+        beatIndex = num(p.index, 0);
+      } else if (d.type === "live") {
+        liveLevel = Math.max(0, Math.min(1, num(p.level, 0)));
+        liveBass = Math.max(0, Math.min(1, num(p.bass, 0)));
+        liveBpm = num(p.bpm, 0);
+        if (p.playing === false) S.playing = false;
+      } else if (d.type === "setting") {
+        applySetting(p.key, p.value);
+      }
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      errThrottled(e);
+    }
+  });
+
+  var lastAct = 0;
+  function activity() {
+    var n = performance.now();
+    if (n - lastAct < 320) return;
+    lastAct = n;
+    try { parent.postMessage({ __c100: 1, type: "activity" }, "*"); } catch (e) {}
+  }
+  addEventListener("pointermove", activity, { passive: true });
+  addEventListener("pointerdown", activity, { passive: true });
+
+  var freeHintEl = document.getElementById("freeHint");
+  var freeHintTimer = 0;
+  function showFreeHint() {
+    if (!freeHintEl) return;
+    freeHintEl.classList.add("on");
+    if (freeHintTimer) clearTimeout(freeHintTimer);
+    freeHintTimer = setTimeout(function () { freeHintEl.classList.remove("on"); }, 4200);
+  }
+
+  function applySetting(key, val) {
+    if (!key || !(key in P)) return;
+    if (key === "camMode") {
+      var m = (val === "lock" || val === "free") ? val : "auto";
+      if (m === "free") {
+        free.yaw = cam.angle;
+        free.height = cam.height;
+        free.dist = cam.radius;
+        free.drag = false;
+        showFreeHint();
+      } else {
+        free.drag = false;
+      }
+      if (m !== "auto") cam.surges.length = 0;
+      P.camMode = m;
+      setCursor(m === "free" ? "grab" : "");
+    } else if (key === "shot" || key === "intro" || key === "ghost") {
+      P[key] = String(val);
+    } else if (key === "blur") {
+      P.blur = clamp(num(val, 1), 0, 2);
+    } else if (key === "drift") {
+      P.drift = clamp(num(val, 1), 0.2, 1.5);
+    }
+  }
+
+  function setCursor(c) {
+    try { document.body.style.cursor = c; } catch (e) {}
+  }
+
+  addEventListener("pointerdown", function (e) {
+    if (P.camMode !== "free") return;
+    free.drag = true;
+    free.lx = e.clientX; free.ly = e.clientY;
+    setCursor("grabbing");
+    try { if (e.target && e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId); } catch (x) {}
+  });
+
+  addEventListener("pointermove", function (e) {
+    if (!free.drag || P.camMode !== "free") return;
+    var dx = e.clientX - free.lx, dy = e.clientY - free.ly;
+    free.lx = e.clientX; free.ly = e.clientY;
+    var wh = wall ? wall.h : 14;
+    free.yaw = clamp(free.yaw + dx * 0.0045, -1.15, 1.15);
+    free.height = clamp(free.height + dy * 0.012, -wh * 0.8, wh * 0.9);
+  });
+
+  function endDrag() {
+    if (!free.drag) return;
+    free.drag = false;
+    setCursor(P.camMode === "free" ? "grab" : "");
+  }
+  addEventListener("pointerup", endDrag);
+  addEventListener("pointercancel", endDrag);
+
+  addEventListener("wheel", function (e) {
+    if (P.camMode !== "free") return;
+    e.preventDefault();
+    var ww = wall ? wall.w : 17;
+    free.dist = clamp(free.dist * (1 + e.deltaY * 0.0011), 3.6, ww * 1.7);
+  }, { passive: false });
+
+  addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.key === " ") {
+      e.preventDefault();
+      activity();
+      try { parent.postMessage({ __c100: 1, type: "key", payload: { key: "Space" } }, "*"); } catch (x) {}
+    }
+  });
+
+  addEventListener("error", function (e) {
+    try { S.err = String(e && e.message ? e.message : e); } catch (x) {}
+  });
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function easeOutCubic(x) { var f = 1 - x; return 1 - f * f * f; }
+  function easeInOut(x) { return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; }
+  function easeOutBack(x) { var c1 = 1.70158, c3 = c1 + 1, u = x - 1; return 1 + c3 * u * u * u + c1 * u * u; }
+  function hash(n) { var s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); }
+
+  function matPerspective(fovy, asp, near, far) {
+    var f = 1 / Math.tan(fovy / 2);
+    var nf = 1 / (near - far);
+    var o = new Float32Array(16);
+    o[0] = f / asp; o[5] = f;
+    o[10] = (far + near) * nf; o[11] = -1;
+    o[14] = 2 * far * near * nf;
+    return o;
+  }
+
+  function matView(eye, tgt, roll) {
+    var fx = tgt.x - eye.x, fy = tgt.y - eye.y, fz = tgt.z - eye.z;
+    var fl = Math.sqrt(fx * fx + fy * fy + fz * fz) || 1;
+    fx /= fl; fy /= fl; fz /= fl;
+    var ux = 0, uy = 1, uz = 0;
+    if (Math.abs(fy) > 0.94) { ux = 0; uy = 0; uz = 1; }
+    var rx = fy * uz - fz * uy, ry = fz * ux - fx * uz, rz = fx * uy - fy * ux;
+    var rl = Math.sqrt(rx * rx + ry * ry + rz * rz) || 1;
+    rx /= rl; ry /= rl; rz /= rl;
+    var ux0 = ry * fz - rz * fy, uy0 = rz * fx - rx * fz, uz0 = rx * fy - ry * fx;
+    var cs = Math.cos(roll), sn = Math.sin(roll);
+    var ux2 = ux0 * cs + rx * sn, uy2 = uy0 * cs + ry * sn, uz2 = uz0 * cs + rz * sn;
+    var o = new Float32Array(16);
+    o[0] = rx; o[1] = ux2; o[2] = -fx; o[3] = 0;
+    o[4] = ry; o[5] = uy2; o[6] = -fy; o[7] = 0;
+    o[8] = rz; o[9] = uz2; o[10] = -fz; o[11] = 0;
+    o[12] = -(rx * eye.x + ry * eye.y + rz * eye.z);
+    o[13] = -(ux2 * eye.x + uy2 * eye.y + uz2 * eye.z);
+    o[14] = (fx * eye.x + fy * eye.y + fz * eye.z);
+    o[15] = 1;
+    return o;
+  }
+
+  function matMul(a, b) {
+    var o = new Float32Array(16);
+    for (var c = 0; c < 4; c++) {
+      for (var r = 0; r < 4; r++) {
+        o[c * 4 + r] =
+          a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] +
+          a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+      }
+    }
+    return o;
+  }
+
+  var beatPulse = 0, beatIndex = 0, liveLevel = 0, liveBass = 0, liveBpm = 0;
+  function decayBeat(dt) { beatPulse *= Math.exp(-dt * 6.2); if (beatPulse < 0.002) beatPulse = 0; }
+
+  var gl = null, canvas = null, engineReady = false, glLost = false;
+  var W = 1440, H = 900, dpr = 1, aspect = 1.6;
+  var sceneT = null, bloomA = null, bloomB = null;
+  var atlasTex = null, whiteTex = null;
+  var cubeVAO = null, cubePos = null, cubeNor = null, cubeUV = null, instVBO = null;
+  var dustVAO = null, dustVBO = null, dustN = 0;
+  var quadVAO = null;
+  var progScene = null, progDust = null, progBright = null, progBlur = null, progComp = null;
+  var loc = {};
+  var MAX_INST = 9000;
+  var instData = new Float32Array(MAX_INST * 18);
+  var wall = null, chars = [], atlasUV = null;
+
+  var cam = {
+    t: 0, fy: 0, angle: 0.62, radius: 11, height: 2, fov: 52, roll: 0,
+    px: 0, py: 2.4, pz: 11, tx: 0, ty: 0, tz: 0,
+    surges: [], seed: Math.random() * 97,
+    prevVP: null, prevFov: 52, prevPx: 0, prevPy: 2.4, prevPz: 11,
+    motion: { x: 0, y: 0 }, zoom: 0, speed: 0, lastR: 0
+  };
+
+  function rowFocus(i) {
+    if (!wall || !wall.rows) return { x: 0, y: 0, z: 0 };
+    var r = (i < 0) ? 0 : Math.min(wall.rows - 1, i);
+    return { x: 0, y: (wall.rows / 2 - r - 0.5) * wall.rowH, z: 0 };
+  }
+
+  var SURGES = [
+    { a: 1.30, r: -4.2, h: -1.1, f: 11, roll: 0.30 },
+    { a: -1.05, r: 5.6, h: 2.7, f: -10, roll: -0.22 },
+    { a: 0.50, r: -6.5, h: 0.5, f: 15, roll: 0.12 },
+    { a: -1.90, r: 3.2, h: 6.2, f: -5, roll: 0.52 },
+    { a: 2.20, r: -2.8, h: -5.0, f: 9, roll: -0.46 },
+    { a: 0.85, r: 4.2, h: 1.1, f: -14, roll: 0.17 },
+    { a: -1.60, r: -5.0, h: -2.1, f: 16, roll: -0.30 }
+  ];
+
+  function camSurge(now, idx) {
+    if (cam.surges.length) return;
+    var pool = SURGES;
+    if (cam.lastR > 0.5) {
+      pool = [];
+      for (var q = 0; q < SURGES.length; q++) if (SURGES[q].r < 0.5) pool.push(SURGES[q]);
+    }
+    var k = pool[(Math.random() * pool.length) | 0];
+    cam.lastR = k.r;
+    cam.surges.push({
+      at: cam.t,
+      dur: (RM ? 5.2 : 2.6) + Math.random() * (RM ? 1.8 : 1.2),
+      a: k.a * (RM ? 0.22 : 0.5),
+      r: k.r * (RM ? 0.22 : 0.7),
+      h: k.h * (RM ? 0.22 : 0.62),
+      f: k.f * (RM ? 0.22 : 0.7),
+      roll: k.roll * (RM ? 0.25 : 1),
+      fy: rowFocus(idx).y
+    });
+    if (cam.surges.length > 3) cam.surges.shift();
+  }
+
+  var free = { yaw: 0.3, height: 2, dist: 12, drag: false, lx: 0, ly: 0 };
+
+  function shotPreset(name, w, h, rowH) {
+    switch (name) {
+      case "side": return { a: 0.92, r: w * 0.84, h: 1.1, f: 47, roll: -0.07 };
+      case "high": return { a: 0.32, r: w * 0.94, h: h * 0.24 + 1.2, f: 50, roll: 0.08 };
+      case "close": return { a: 0.10, r: w * 0.62, h: rowH * 0.6, f: 56, roll: 0 };
+      case "low": return { a: -0.30, r: w * 0.82, h: -h * 0.28, f: 51, roll: 0.06 };
+      case "orbit": return { a: 0.56, r: w * 0.88, h: 0.2, f: 47, roll: 0.11 };
+      default: return { a: 0.03, r: w * 0.92, h: 0.9, f: 46, roll: 0 };
+    }
+  }
+
+  function camStep(dt) {
+    cam.t += dt;
+    var t = cam.t, s = cam.seed;
+    var wallW = wall ? wall.w : 17;
+    var wallH = wall ? wall.h : 14;
+    var rowH = wall ? wall.rowH : 2;
+    var driftK = P.drift * (RM ? 0.26 : 1);
+
+    var targetY = rowFocus(S.idx).y;
+    var kf = 1 - Math.exp(-dt * 1.9);
+    cam.fy += (targetY - cam.fy) * kf;
+
+    var ta = 0, tr = 12, th = 2, tf = 50, troll = 0;
+
+    if (P.camMode === "free") {
+      ta = clamp(free.yaw, -1.15, 1.15);
+      tr = clamp(free.dist, 3.6, wallW * 1.7);
+      th = clamp(free.height, -wallH * 0.8, wallH * 0.9);
+      tf = 50;
+    } else if (P.camMode === "lock") {
+      var sh = shotPreset(P.shot, wallW, wallH, rowH);
+      ta = sh.a; tr = sh.r; th = sh.h; tf = sh.f; troll = sh.roll;
+    } else {
+      var baseA = 0.03 + (0.20 * Math.sin(t * 0.072 + s * 0.7) + 0.10 * Math.sin(t * 0.029 + s * 1.9) + 0.04 * Math.sin(t * 0.131 + s * 2.3)) * driftK;
+      var baseR = 14.6 + (3.4 * Math.sin(t * 0.038 + s * 0.6) + 1.5 * Math.sin(t * 0.017 + s * 1.3)) * driftK;
+      var baseH = 1.2 + (1.2 * Math.sin(t * 0.071 + s * 2.1) + 0.5 * Math.sin(t * 0.031 + s * 0.4)) * driftK;
+      var baseF = 54 + (3.2 * Math.sin(t * 0.044 + s * 1.1) + 1.4 * Math.sin(t * 0.019 + s * 2.7)) * driftK;
+      var baseRoll = (0.12 * Math.sin(t * 0.053 + s * 0.9) + 0.05 * Math.sin(t * 0.117 + s * 1.9)) * driftK;
+
+      var da = 0, dr = 0, dh = 0, df = 0, droll = 0;
+      for (var k = cam.surges.length - 1; k >= 0; k--) {
+        var g = cam.surges[k];
+        var p = (cam.t - g.at) / g.dur;
+        if (p < 0) continue;
+        if (p >= 1) { cam.surges.splice(k, 1); continue; }
+        var e = Math.pow(Math.sin(Math.PI * p), 1.55) * driftK;
+        da += g.a * e; dr += g.r * e; dh += g.h * e; df += g.f * e; droll += g.roll * e;
+      }
+
+      ta = clamp(baseA + da, -0.30, 0.30);
+      tr = clamp(baseR + dr, 2.4, 40);
+      th = clamp(baseH + dh, -wallH * 0.30, wallH * 0.30);
+      tf = clamp(baseF + df, 46, 62);
+      troll = clamp(baseRoll + droll, -0.4, 0.4);
+
+      var side = Math.abs(Math.sin(ta));
+      var sm = clamp((side - 0.14) / 0.32, 0, 1);
+      sm = sm * sm * (3 - 2 * sm);
+      var floorR = 10.8 + (wallW * 0.68 - 10.8) * sm;
+      var absY = cam.fy + th;
+      if (absY > wallH * 0.6 || absY < -wallH * 0.6) floorR = Math.max(9.2, floorR * 0.8);
+      if (tr < floorR) tr = floorR;
+
+      var ri = S.idx < 0 ? 0 : S.idx;
+      var rowW = (wall && wall.rowW && wall.rowW[ri]) ? wall.rowW[ri] : wallW;
+      var hf = Math.atan(Math.tan(cam.fov * Math.PI / 360) * (aspect || 1.6));
+      var maxR = rowW / (2 * Math.tan(hf) * 0.6);
+      maxR = clamp(maxR, 9.5, wallW * 1.45);
+      if (tr > maxR) tr = maxR;
+
+      var hw = rowW * 0.5;
+      var minR = hw * (Math.cos(ta) / (Math.tan(cam.fov * Math.PI / 360) * (aspect || 1.6) * 0.84) + Math.sin(Math.abs(ta)));
+      minR = clamp(minR, 6, wallW * 1.5);
+      if (tr < minR) tr = minR;
+    }
+
+    var ks = 1 - Math.exp(-dt * (P.camMode === "free" ? 9 : 3.2));
+    cam.angle += (ta - cam.angle) * ks;
+    cam.radius += (tr - cam.radius) * ks;
+    cam.height += (th - cam.height) * ks;
+    cam.fov += (tf - cam.fov) * ks;
+    cam.roll += (troll - cam.roll) * ks;
+    cam.radius = clamp(cam.radius, 2.6, wallW * 1.8);
+    cam.height = clamp(cam.height, -wallH * 1.3, wallH * 1.3);
+    cam.fov = clamp(cam.fov, 24, 72);
+    cam.roll = clamp(cam.roll, -2.4, 2.4);
+
+    var a = cam.angle, rad = cam.radius, hy = cam.height;
+    cam.px = Math.sin(a) * rad;
+    cam.pz = Math.cos(a) * rad;
+    cam.py = cam.fy + hy;
+
+    if (P.camMode === "auto") {
+      var look = rad * 0.05;
+      cam.tx = 0.9 * Math.sin(t * 0.107 + s * 0.8) * look;
+      cam.ty = cam.fy + 0.3 * Math.sin(t * 0.23 + s) + 0.12 * Math.sin(t * 0.067);
+    } else {
+      cam.tx = 0;
+      cam.ty = cam.fy;
+    }
+    cam.tz = 0;
+  }
+
+  var VS_SCENE = [
+    "#version 300 es",
+    "precision highp float;",
+    "layout(location=0) in vec3 aPos;",
+    "layout(location=1) in vec3 aNor;",
+    "layout(location=2) in vec2 aFaceUV;",
+    "layout(location=3) in vec3 iCenter;",
+    "layout(location=4) in vec3 iHalf;",
+    "layout(location=5) in vec3 iAxis;",
+    "layout(location=6) in float iAngle;",
+    "layout(location=7) in vec4 iUV;",
+    "layout(location=8) in vec3 iColor;",
+    "layout(location=9) in float iGlow;",
+    "uniform mat4 uVP;",
+    "out vec3 vN;",
+    "out vec2 vUV;",
+    "out vec3 vColor;",
+    "out float vGlow;",
+    "out vec3 vWorld;",
+    "mat3 rotAxis(vec3 axis, float ang){",
+    "  vec3 a = normalize(axis + vec3(0.0001, 0.0002, 0.0003));",
+    "  float s = sin(ang), c = cos(ang), oc = 1.0 - c;",
+    "  return mat3(",
+    "    oc*a.x*a.x + c,     oc*a.x*a.y - a.z*s, oc*a.z*a.x + a.y*s,",
+    "    oc*a.x*a.y + a.z*s, oc*a.y*a.y + c,     oc*a.y*a.z - a.x*s,",
+    "    oc*a.z*a.x - a.y*s, oc*a.y*a.z + a.x*s, oc*a.z*a.z + c",
+    "  );",
+    "}",
+    "void main(){",
+    "  mat3 R = rotAxis(iAxis, iAngle);",
+    "  vec3 w = iCenter + R * (aPos * iHalf);",
+    "  gl_Position = uVP * vec4(w, 1.0);",
+    "  vWorld = w;",
+    "  vN = R * aNor;",
+    "  vColor = iColor;",
+    "  vGlow = iGlow;",
+    "  if (aNor.z > 0.5) {",
+    "    vUV = vec2(mix(iUV.x, iUV.z, aFaceUV.x), mix(iUV.y, iUV.w, aFaceUV.y));",
+    "  } else {",
+    "    vUV = vec2(-1.0);",
+    "  }",
+    "}"
+  ].join("\n");
+
+  var FS_SCENE = [
+    "#version 300 es",
+    "precision highp float;",
+    "in vec3 vN;",
+    "in vec2 vUV;",
+    "in vec3 vColor;",
+    "in float vGlow;",
+    "in vec3 vWorld;",
+    "uniform sampler2D uAtlas;",
+    "uniform vec3 uEye;",
+    "uniform vec3 uAccent;",
+    "uniform vec3 uFogColor;",
+    "uniform float uFogDensity;",
+    "out vec4 outColor;",
+    "void main(){",
+    "  vec3 N = normalize(vN);",
+    "  vec3 V = normalize(uEye - vWorld);",
+    "  float glyph = 0.0;",
+    "  if (vUV.x >= 0.0) glyph = texture(uAtlas, vUV).a;",
+    "  vec3 glyphCol = vec3(1.0, 0.965, 0.905);",
+    "  vec3 albedo = mix(vColor, glyphCol, glyph * (0.16 + 0.84 * vGlow));",
+    "  vec3 L1 = normalize(vec3(0.45, 0.75, 0.90));",
+    "  vec3 L2 = normalize(vec3(-0.70, -0.30, 0.35));",
+    "  float d1 = max(dot(N, L1), 0.0);",
+    "  float d2 = max(dot(N, L2), 0.0);",
+    "  float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0);",
+    "  vec3 col = albedo * (0.14 + 0.62 * d1 + 0.16 * d2);",
+    "  col += uAccent * fres * (0.30 + 1.35 * vGlow);",
+    "  col += glyphCol * glyph * vGlow * 1.4;",
+    "  float dist = length(uEye - vWorld);",
+    "  float fog = 1.0 - exp(-dist * uFogDensity);",
+    "  col = mix(col, uFogColor, clamp(fog, 0.0, 0.9));",
+    "  outColor = vec4(col, 1.0);",
+    "}"
+  ].join("\n");
+
+  var VS_DUST = [
+    "#version 300 es",
+    "precision highp float;",
+    "layout(location=0) in vec3 aP;",
+    "uniform mat4 uVP;",
+    "uniform float uTime;",
+    "uniform float uDpr;",
+    "uniform float uSize;",
+    "void main(){",
+    "  vec3 p = aP;",
+    "  p.x += sin(uTime * 0.23 + aP.y * 0.31) * 0.45;",
+    "  p.y += cos(uTime * 0.19 + aP.x * 0.27) * 0.35;",
+    "  vec4 clip = uVP * vec4(p, 1.0);",
+    "  gl_Position = clip;",
+    "  gl_PointSize = clamp(uSize * uDpr * (260.0 / max(0.6, clip.w)), 1.0, 26.0);",
+    "}"
+  ].join("\n");
+
+  var FS_DUST = [
+    "#version 300 es",
+    "precision highp float;",
+    "uniform vec3 uAccent;",
+    "out vec4 outColor;",
+    "void main(){",
+    "  float d = length(gl_PointCoord - vec2(0.5));",
+    "  float a = smoothstep(0.5, 0.05, d);",
+    "  a *= a;",
+    "  outColor = vec4(uAccent * a * 0.55, a * 0.55);",
+    "}"
+  ].join("\n");
+
+  var VS_QUAD = [
+    "#version 300 es",
+    "precision highp float;",
+    "layout(location=0) in vec2 aPos;",
+    "layout(location=1) in vec2 aUV;",
+    "out vec2 vUV;",
+    "void main(){ vUV = aUV; gl_Position = vec4(aPos, 0.0, 1.0); }"
+  ].join("\n");
+
+  var FS_BRIGHT = [
+    "#version 300 es",
+    "precision highp float;",
+    "in vec2 vUV;",
+    "uniform sampler2D uTex;",
+    "out vec4 outColor;",
+    "void main(){",
+    "  vec3 c = texture(uTex, vUV).rgb;",
+    "  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));",
+    "  float k = smoothstep(0.46, 0.92, l);",
+    "  outColor = vec4(c * k, 1.0);",
+    "}"
+  ].join("\n");
+
+  var FS_BLUR = [
+    "#version 300 es",
+    "precision highp float;",
+    "in vec2 vUV;",
+    "uniform sampler2D uTex;",
+    "uniform vec2 uDir;",
+    "out vec4 outColor;",
+    "void main(){",
+    "  vec2 t = uDir;",
+    "  vec3 s = texture(uTex, vUV).rgb * 0.227027;",
+    "  s += (texture(uTex, vUV + t * 1.3846).rgb + texture(uTex, vUV - t * 1.3846).rgb) * 0.3162162;",
+    "  s += (texture(uTex, vUV + t * 3.2308).rgb + texture(uTex, vUV - t * 3.2308).rgb) * 0.0702703;",
+    "  outColor = vec4(s, 1.0);",
+    "}"
+  ].join("\n");
+
+  var FS_COMP = [
+    "#version 300 es",
+    "precision highp float;",
+    "in vec2 vUV;",
+    "uniform sampler2D uScene;",
+    "uniform sampler2D uBloom;",
+    "uniform vec3 uAccent;",
+    "uniform vec2 uRes;",
+    "uniform float uTime;",
+    "uniform float uBloomAmt;",
+    "uniform float uAber;",
+    "uniform vec2 uMotion;",
+    "uniform float uZoom;",
+    "out vec4 outColor;",
+    "float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }",
+    "void main(){",
+    "  vec2 uv = vUV;",
+    "  vec2 q = uv - 0.5;",
+    "  float r2 = dot(q, q);",
+    "  vec2 ca = q * r2 * uAber;",
+    "  vec3 col = vec3(0.0);",
+    "  float wsum = 0.0;",
+    "  for (int i = 0; i < 6; i++) {",
+    "    float f = float(i) / 5.0;",
+    "    float w = 1.0 - 0.52 * f;",
+    "    vec2 suv = uv + uMotion * f + q * (uZoom * f);",
+    "    col += vec3(texture(uScene, suv - ca).r, texture(uScene, suv).g, texture(uScene, suv + ca).b) * w;",
+    "    wsum += w;",
+    "  }",
+    "  col /= max(wsum, 0.0001);",
+    "  col += texture(uBloom, uv).rgb * uBloomAmt;",
+    "  float vig = smoothstep(1.0, 0.18, length(q) * 1.32);",
+    "  col *= mix(0.40, 1.0, vig);",
+    "  vec3 bg = mix(vec3(0.004, 0.006, 0.014), vec3(0.017, 0.023, 0.046), smoothstep(0.0, 1.0, uv.y));",
+    "  float halo = exp(-length((uv - vec2(0.5, 0.46)) * vec2(1.05, 1.38)) * 3.0);",
+    "  bg += uAccent * halo * 0.07;",
+    "  col += bg * (1.0 - clamp(max(col.r, max(col.g, col.b)), 0.0, 1.0));",
+    "  float n = hash(uv * uRes + vec2(uTime * 13.7, uTime * 7.3));",
+    "  col += (n - 0.5) * 0.028;",
+    "  col = col * 1.12;",
+    "  col = col / (col + 0.78);",
+    "  col = pow(col, vec3(0.96));",
+    "  outColor = vec4(col, 1.0);",
+    "}"
+  ].join("\n");
+
+  function compileShader(type, src, name) {
+    var sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+      var info = gl.getShaderInfoLog(sh);
+      gl.deleteShader(sh);
+      throw new Error(name + " " + info);
+    }
+    return sh;
+  }
+
+  function makeProgram(vsSrc, fsSrc, name) {
+    var vs = compileShader(gl.VERTEX_SHADER, vsSrc, name + ".vert");
+    var fs = compileShader(gl.FRAGMENT_SHADER, fsSrc, name + ".frag");
+    var p = gl.createProgram();
+    gl.attachShader(p, vs);
+    gl.attachShader(p, fs);
+    gl.linkProgram(p);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      var info = gl.getProgramInfoLog(p);
+      gl.deleteProgram(p);
+      throw new Error(name + " " + info);
+    }
+    return p;
+  }
+
+  function buildCube() {
+    var pos = [], nor = [], uv = [];
+    function face(nx, ny, nz, verts) {
+      for (var i = 0; i < 6; i++) {
+        var v = verts[i];
+        pos.push(v[0], v[1], v[2]);
+        nor.push(nx, ny, nz);
+        uv.push(v[3], v[4]);
+      }
+    }
+    face(0, 0, 1, [
+      [-1, 1, 1, 0, 0], [1, 1, 1, 1, 0], [1, -1, 1, 1, 1],
+      [-1, 1, 1, 0, 0], [1, -1, 1, 1, 1], [-1, -1, 1, 0, 1]
+    ]);
+    face(0, 0, -1, [
+      [1, 1, -1, 0, 0], [-1, 1, -1, 1, 0], [-1, -1, -1, 1, 1],
+      [1, 1, -1, 0, 0], [-1, -1, -1, 1, 1], [1, -1, -1, 0, 1]
+    ]);
+    face(1, 0, 0, [
+      [1, 1, 1, 0, 0], [1, 1, -1, 1, 0], [1, -1, -1, 1, 1],
+      [1, 1, 1, 0, 0], [1, -1, -1, 1, 1], [1, -1, 1, 0, 1]
+    ]);
+    face(-1, 0, 0, [
+      [-1, 1, -1, 0, 0], [-1, 1, 1, 1, 0], [-1, -1, 1, 1, 1],
+      [-1, 1, -1, 0, 0], [-1, -1, 1, 1, 1], [-1, -1, -1, 0, 1]
+    ]);
+    face(0, 1, 0, [
+      [-1, 1, -1, 0, 0], [-1, 1, 1, 0, 1], [1, 1, 1, 1, 1],
+      [-1, 1, -1, 0, 0], [1, 1, 1, 1, 1], [1, 1, -1, 1, 0]
+    ]);
+    face(0, -1, 0, [
+      [-1, -1, 1, 0, 0], [-1, -1, -1, 0, 1], [1, -1, -1, 1, 1],
+      [-1, -1, 1, 0, 0], [1, -1, -1, 1, 1], [1, -1, 1, 1, 0]
+    ]);
+    return { pos: new Float32Array(pos), nor: new Float32Array(nor), uv: new Float32Array(uv) };
+  }
+
+  var CUBE = null;
+
+  function setupSceneVAO() {
+    CUBE = buildCube();
+    cubeVAO = gl.createVertexArray();
+    gl.bindVertexArray(cubeVAO);
+
+    cubePos = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubePos);
+    gl.bufferData(gl.ARRAY_BUFFER, CUBE.pos, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+
+    cubeNor = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeNor);
+    gl.bufferData(gl.ARRAY_BUFFER, CUBE.nor, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+
+    cubeUV = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, cubeUV);
+    gl.bufferData(gl.ARRAY_BUFFER, CUBE.uv, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 0, 0);
+
+    instVBO = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, instVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, MAX_INST * 18 * 4, gl.DYNAMIC_DRAW);
+
+    var stride = 18 * 4;
+    function inst(locIdx, size, off) {
+      gl.enableVertexAttribArray(locIdx);
+      gl.vertexAttribPointer(locIdx, size, gl.FLOAT, false, stride, off);
+      gl.vertexAttribDivisor(locIdx, 1);
+    }
+    inst(3, 3, 0);
+    inst(4, 3, 12);
+    inst(5, 3, 24);
+    inst(6, 1, 36);
+    inst(7, 4, 40);
+    inst(8, 3, 56);
+    inst(9, 1, 68);
+
+    gl.bindVertexArray(null);
+  }
+
+  function setupDustVAO() {
+    if (!dustVBO) dustVBO = gl.createBuffer();
+    dustVAO = gl.createVertexArray();
+    gl.bindVertexArray(dustVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, dustVBO);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+  }
+
+  function setupQuad() {
+    var data = new Float32Array([
+      -1, -1, 0, 0,
+       1, -1, 1, 0,
+       1,  1, 1, 1,
+      -1, -1, 0, 0,
+       1,  1, 1, 1,
+      -1,  1, 0, 1
+    ]);
+    quadVAO = gl.createVertexArray();
+    gl.bindVertexArray(quadVAO);
+    var b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+    gl.bindVertexArray(null);
+    quadVBO = b;
+  }
+
+  var quadVBO = null;
+
+  function makeTarget(w, h, withDepth) {
+    var tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    var fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    var rb = null;
+    if (withDepth) {
+      rb = gl.createRenderbuffer();
+      gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, w, h);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return { fb: fb, tex: tex, rb: rb, w: w, h: h };
+  }
+
+  function freeTarget(t) {
+    if (!t) return;
+    if (t.fb) gl.deleteFramebuffer(t.fb);
+    if (t.tex) gl.deleteTexture(t.tex);
+    if (t.rb) gl.deleteRenderbuffer(t.rb);
+  }
+
+  function makeWhite() {
+    if (whiteTex) gl.deleteTexture(whiteTex);
+    whiteTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, whiteTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([255, 255, 255, 255]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  }
+
+  function initResources() {
+    if (sceneT) { freeTarget(sceneT); sceneT = null; }
+    if (bloomA) { freeTarget(bloomA); bloomA = null; }
+    if (bloomB) { freeTarget(bloomB); bloomB = null; }
+
+    var cw = canvas.width, ch = canvas.height;
+    var halfW = Math.max(1, Math.floor(cw / 2));
+    var halfH = Math.max(1, Math.floor(ch / 2));
+    sceneT = makeTarget(cw, ch, true);
+    bloomA = makeTarget(halfW, halfH, false);
+    bloomB = makeTarget(halfW, halfH, false);
+
+    makeWhite();
+
+    if (!CUBE) setupSceneVAO();
+    if (!dustVAO) setupDustVAO();
+    if (!quadVAO) setupQuad();
+
+    loc.sceneVP = gl.getUniformLocation(progScene, "uVP");
+    loc.sceneEye = gl.getUniformLocation(progScene, "uEye");
+    loc.sceneAccent = gl.getUniformLocation(progScene, "uAccent");
+    loc.sceneFog = gl.getUniformLocation(progScene, "uFogColor");
+    loc.sceneFogD = gl.getUniformLocation(progScene, "uFogDensity");
+    loc.sceneAtlas = gl.getUniformLocation(progScene, "uAtlas");
+
+    loc.dustVP = gl.getUniformLocation(progDust, "uVP");
+    loc.dustTime = gl.getUniformLocation(progDust, "uTime");
+    loc.dustDpr = gl.getUniformLocation(progDust, "uDpr");
+    loc.dustSize = gl.getUniformLocation(progDust, "uSize");
+    loc.dustAccent = gl.getUniformLocation(progDust, "uAccent");
+
+    loc.brightTex = gl.getUniformLocation(progBright, "uTex");
+    loc.blurTex = gl.getUniformLocation(progBlur, "uTex");
+    loc.blurDir = gl.getUniformLocation(progBlur, "uDir");
+
+    loc.compScene = gl.getUniformLocation(progComp, "uScene");
+    loc.compBloom = gl.getUniformLocation(progComp, "uBloom");
+    loc.compAccent = gl.getUniformLocation(progComp, "uAccent");
+    loc.compRes = gl.getUniformLocation(progComp, "uRes");
+    loc.compTime = gl.getUniformLocation(progComp, "uTime");
+    loc.compBloomAmt = gl.getUniformLocation(progComp, "uBloomAmt");
+    loc.compAber = gl.getUniformLocation(progComp, "uAber");
+    loc.compMotion = gl.getUniformLocation(progComp, "uMotion");
+    loc.compZoom = gl.getUniformLocation(progComp, "uZoom");
+  }
+
+  function initEngine() {
+    try {
+      initGL();
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      showError(S.err);
+      errThrottled(e);
+      startFallback();
+    }
+  }
+
+  var glListenersBound = false;
+
+  function initGL() {
+    canvas = document.getElementById("cv");
+    gl = canvas.getContext("webgl2", {
+      alpha: false, antialias: false, depth: true, stencil: false,
+      premultipliedAlpha: false, preserveDrawingBuffer: false,
+      powerPreference: "high-performance"
+    });
+    if (!gl) { startFallback(); return; }
+
+    if (!glListenersBound) {
+      glListenersBound = true;
+      canvas.addEventListener("webglcontextlost", function (e) {
+        e.preventDefault();
+        glLost = true;
+      }, false);
+      canvas.addEventListener("webglcontextrestored", function () {
+        glLost = false;
+        CUBE = null;
+        cubeVAO = null; cubePos = null; cubeNor = null; cubeUV = null; instVBO = null;
+        dustVAO = null; dustVBO = null;
+        quadVAO = null; quadVBO = null;
+        atlasTex = null; whiteTex = null;
+        sceneT = null; bloomA = null; bloomB = null;
+        engineReady = false;
+        try { initGL(); } catch (e2) { S.err = String(e2); showError(S.err); }
+      }, false);
+    }
+
+    progScene = makeProgram(VS_SCENE, FS_SCENE, "scene");
+    progDust = makeProgram(VS_DUST, FS_DUST, "dust");
+    progBright = makeProgram(VS_QUAD, FS_BRIGHT, "bright");
+    progBlur = makeProgram(VS_QUAD, FS_BLUR, "blur");
+    progComp = makeProgram(VS_QUAD, FS_COMP, "comp");
+
+    S.gl = true;
+    engineReady = true;
+
+    addEventListener("resize", resize);
+    resize();
+
+    if (S.lines.length || S.song) rebuildWall();
+    updateEmpty();
+
+    lastNow = performance.now();
+    baseAt = lastNow;
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function resize() {
+    if (!gl) return;
+    var w = window.innerWidth || 1440;
+    var h = window.innerHeight || 900;
+    if (!isFinite(w) || w <= 0) w = 1440;
+    if (!isFinite(h) || h <= 0) h = 900;
+    var d = Math.min(2, window.devicePixelRatio || 1);
+    var budget = 3.4e6;
+    while (w * h * d * d > budget && d > 1) d -= 0.1;
+    if (d < 1) d = 1;
+    W = w; H = h; dpr = d;
+    canvas.width = Math.max(1, Math.round(w * d));
+    canvas.height = Math.max(1, Math.round(h * d));
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    aspect = (canvas.width / canvas.height) || 1.6;
+    initResources();
+  }
+
+  function buildAtlas() {
+    var seen = Object.create(null);
+    var list = [];
+    for (var i = 0; i < chars.length; i++) {
+      var ch = chars[i].ch;
+      if (!seen[ch]) { seen[ch] = 1; list.push(ch); }
+    }
+    if (!list.length) return null;
+
+    var size = list.length > 900 ? 4096 : 2048;
+    var cols = Math.ceil(Math.sqrt(list.length));
+    var rows = Math.ceil(list.length / cols);
+    var cell = Math.floor(size / Math.max(cols, 1));
+    if (cell < 24) return null;
+
+    var cv = document.createElement("canvas");
+    cv.width = cols * cell;
+    cv.height = rows * cell;
+    var g = cv.getContext("2d");
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.fillStyle = "#ffffff";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = "700 " + Math.floor(cell * 0.74) + "px \"PingFang SC\",\"Microsoft YaHei\",\"Noto Sans CJK SC\",\"Source Han Sans SC\",sans-serif";
+
+    var map = Object.create(null);
+    for (var k = 0; k < list.length; k++) {
+      var c = list[k];
+      var cx = (k % cols) * cell + cell / 2;
+      var cy = Math.floor(k / cols) * cell + cell / 2;
+      try { g.fillText(c, cx, cy + cell * 0.02); } catch (e) {}
+      map[c] = [
+        (k % cols) * cell / cv.width,
+        Math.floor(k / cols) * cell / cv.height,
+        ((k % cols) + 1) * cell / cv.width,
+        (Math.floor(k / cols) + 1) * cell / cv.height
+      ];
+    }
+    return { canvas: cv, map: map };
+  }
+
+  function uploadAtlas(cv) {
+    if (atlasTex) { gl.deleteTexture(atlasTex); atlasTex = null; }
+    atlasTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+
+  function buildDust() {
+    dustN = 900;
+    var arr = new Float32Array(dustN * 3);
+    var ww = wall ? wall.w : 22;
+    var hh = wall ? wall.h : 24;
+    for (var i = 0; i < dustN; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * (ww + 46);
+      arr[i * 3 + 1] = (Math.random() - 0.5) * (Math.max(hh, 30) + 26);
+      arr[i * 3 + 2] = -10 + Math.random() * 48;
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, dustVBO);
+    gl.bufferData(gl.ARRAY_BUFFER, arr, gl.STATIC_DRAW);
+  }
+
+  function rebuildWall() {
+    if (!gl) return;
+    chars = [];
+    wall = null;
+
+    var lines = S.lines;
+    var rows = lines.length;
+    if (!rows) {
+      dustN = 0;
+      updateEmpty();
+      return;
+    }
+
+    var maxLen = 1;
+    var lineChars = [];
+    for (var i = 0; i < rows; i++) {
+      var arr = Array.from(lines[i].text || "");
+      lineChars.push(arr);
+      if (arr.length > maxLen) maxLen = arr.length;
+    }
+    maxLen = Math.min(64, maxLen);
+    var cell = clamp(22 / maxLen, 0.34, 1.9);
+    var rowH = cell * 1.06;
+    wall = { rows: rows, cell: cell, rowH: rowH, w: maxLen * cell, h: rows * rowH, rowW: [] };
+
+    var cap = MAX_INST;
+    for (var r = 0; r < rows && chars.length < cap; r++) {
+      var times = lineTimes(lines[r]);
+      var cs = lineChars[r];
+      wall.rowW.push(Math.max(1, cs.length) * cell);
+      var rowY = (rows / 2 - r - 0.5) * rowH;
+      var off = (cs.length - 1) / 2;
+      for (var k = 0; k < cs.length && chars.length < cap; k++) {
+        var ch = cs[k];
+        if (ch === " " || ch === "\u3000" || ch === "\t" || ch === "\n") continue;
+        var hs = hash(r * 131 + k * 17 + 7);
+        var h2 = hash(r * 71 + k * 29 + 3);
+        var h3 = hash(r * 37 + k * 53 + 11);
+        var h4 = hash(r * 61 + k * 19 + 5);
+        var h5 = hash(r * 29 + k * 41 + 13);
+        var ax = h2 * 2 - 1, ay = h3 * 2 - 1, az = h4 * 2 - 1;
+        var al = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+        var theta = h2 * 6.28318;
+        var zz = 0.28 + h3 * 0.7;
+        var rr = Math.sqrt(Math.max(0, 1 - zz * zz));
+        var t = (k < times.length && times[k] != null && isFinite(times[k])) ? times[k] : lines[r].t;
+        chars.push({
+          ch: ch,
+          row: r,
+          x: (k - off) * cell,
+          y: rowY,
+          z: (hs - 0.5) * cell * 0.3,
+          time: t,
+          scale: 0.94 + hs * 0.1,
+          dx: Math.cos(theta) * rr,
+          dy: Math.sin(theta) * rr,
+          dz: zz,
+          dist: RM ? (4 + h4 * 7) : (9 + h4 * 10),
+          ax: ax / al, ay: ay / al, az: az / al,
+          ang: 2.6 + h5 * 4.4
+        });
+      }
+    }
+
+    var atlas = buildAtlas();
+    if (atlas) {
+      uploadAtlas(atlas.canvas);
+      atlasUV = atlas.map;
+      for (var q = 0; q < chars.length; q++) {
+        var u = atlasUV[chars[q].ch];
+        if (!u) u = atlasUV[chars[0].ch];
+        chars[q].uv = u;
+      }
+    } else {
+      atlasUV = null;
+    }
+
+    buildDust();
+    updateEmpty();
+
+    cam.surges.length = 0;
+  }
+
+  var lastNow = performance.now();
+  var rafId = 0;
+
+  function stepTime(now) {
+    if (S.playing) S.t = baseT + (now - baseAt) / 1000;
+    else S.t = baseT;
+    if (!isFinite(S.t)) S.t = baseT;
+  }
+
+  function idxAt(t) {
+    var a = S.lines, lo = 0, hi = a.length - 1, best = -1;
+    while (lo <= hi) {
+      var m = (lo + hi) >> 1;
+      if (a[m].t <= t + 0.02) { best = m; lo = m + 1; }
+      else hi = m - 1;
+    }
+    return best;
+  }
+
+  function frame(now) {
+    var js0 = performance.now();
+    try {
+      var dt = (now - lastNow) / 1000;
+      if (!(dt > 0) || dt > 0.1) dt = 0.05;
+      lastNow = now;
+
+      stepTime(now);
+
+      var i = idxAt(S.t);
+      if (i !== S.idx) {
+        if (i >= 0) camSurge(now, i);
+        S.idx = i;
+      }
+
+      decayBeat(dt);
+      camStep(dt);
+
+      if (gl && !glLost) render(now);
+
+      S.frames++;
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      errThrottled(e);
+    }
+    S.js = performance.now() - js0;
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function cameraFor(now) {
+    var amp = RM ? 0.004 : (beatPulse * 0.09 + 0.012);
+    var tt = cam.t;
+    return {
+      px: cam.px + Math.sin(tt * 7.3) * amp * 0.5,
+      py: cam.py + Math.cos(tt * 6.1) * amp * 0.5,
+      pz: cam.pz,
+      tx: cam.tx, ty: cam.ty, tz: cam.tz,
+      fov: cam.fov + beatPulse * (RM ? 0.2 : 0.8),
+      roll: cam.roll + Math.sin(tt * 5.7) * amp * 0.04
+    };
+  }
+
+  function projUV(m, x, y, z) {
+    var cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+    var cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+    var cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+    if (Math.abs(cw) < 1e-4) return { x: cx * 1e4, y: cy * 1e4 };
+    return { x: (cx / cw) * 0.5, y: (cy / cw) * 0.5 };
+  }
+
+  function fillInstances() {
+    var buf = instData;
+    var o = 0, n = 0;
+    var t = S.t;
+    if (!wall || !chars.length) return 0;
+    var rowH = wall.rowH, cell = wall.cell;
+    var ar = S.accent[0] / 255, ag = S.accent[1] / 255, ab = S.accent[2] / 255;
+    var litBodyR = 0.16 + ar * 0.05;
+    var litBodyG = 0.18 + ag * 0.05;
+    var litBodyB = 0.26 + ab * 0.05;
+    var intro = P.intro, ghost = P.ghost;
+
+    for (var i = 0; i < chars.length && n < MAX_INST; i++) {
+      var c = chars[i];
+      var lit = t >= c.time - 0.02;
+      if (!lit && ghost === "hidden") continue;
+      var px = c.x, py = c.y, pz = c.z;
+      var ang = 0;
+      var sc = c.scale;
+      var glow = 0;
+      var cr = 0.030, cg = 0.038, cb = 0.064;
+
+      if (lit) {
+        var u = (t - c.time) / 0.52;
+        if (u < 0) u = 0;
+        if (u > 1) u = 1;
+        var ea = easeOutCubic(u);
+        var back = 1 - ea;
+
+        if (intro === "back") {
+          px = c.x + c.dx * 1.2 * back;
+          py = c.y + c.dy * 1.2 * back;
+          pz = c.z - (7 + c.dist * 0.45) * back;
+          ang = c.ang * 0.8 * back;
+          sc = c.scale * (0.6 + 0.4 * ea);
+        } else if (intro === "rise") {
+          px = c.x + c.dx * 1.4 * back;
+          py = c.y - rowH * 2.8 * back;
+          pz = c.z + c.dz * 2.2 * back;
+          ang = c.ang * 0.45 * back;
+          sc = c.scale * (0.7 + 0.3 * ea);
+        } else if (intro === "drop") {
+          px = c.x + c.dx * 1.4 * back;
+          py = c.y + rowH * 2.8 * back;
+          pz = c.z + c.dz * 2.2 * back;
+          ang = c.ang * 0.45 * back;
+          sc = c.scale * (0.7 + 0.3 * ea);
+        } else if (intro === "pop") {
+          var pb = easeOutBack(clamp(u * 1.35, 0, 1));
+          sc = c.scale * (0.06 + 0.94 * pb + (u < 1 ? 0.06 * Math.sin(u * Math.PI) : 0));
+          ang = c.ang * 0.22 * (1 - pb);
+        } else if (intro === "spin") {
+          ang = c.ang * 3.4 * back;
+          sc = c.scale * (0.72 + 0.28 * ea);
+        } else {
+          px = c.x + c.dx * c.dist * back;
+          py = c.y + c.dy * c.dist * back;
+          pz = c.z + c.dz * c.dist * 0.35 * back;
+          ang = c.ang * back;
+          sc = c.scale * (0.62 + 0.38 * ea + (u < 1 ? 0.1 * Math.sin(u * Math.PI) : 0));
+        }
+
+        var fl = Math.max(0, 1 - (t - c.time) / 0.5);
+        glow = 0.5 + fl * 1.55;
+        if (c.row === S.idx) glow += 0.28;
+        glow += liveBass * 0.12;
+        cr = litBodyR; cg = litBodyG; cb = litBodyB;
+      } else {
+        glow = 0;
+        cr = 0.030; cg = 0.038; cb = 0.064;
+      }
+
+      var hx = cell * 0.42 * sc;
+      var hy = rowH * 0.42 * sc;
+      var hz = cell * 0.34 * sc;
+      var uv = c.uv || (atlasUV && atlasUV[c.ch]) || null;
+      var u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+      if (uv) { u0 = uv[0]; v0 = uv[1]; u1 = uv[2]; v1 = uv[3]; }
+      if (!lit && ghost === "blank") { u0 = 0; v0 = 0; u1 = 0; v1 = 0; }
+
+      buf[o++] = px; buf[o++] = py; buf[o++] = pz;
+      buf[o++] = hx; buf[o++] = hy; buf[o++] = hz;
+      buf[o++] = c.ax; buf[o++] = c.ay; buf[o++] = c.az;
+      buf[o++] = ang;
+      buf[o++] = u0; buf[o++] = v0; buf[o++] = u1; buf[o++] = v1;
+      buf[o++] = cr; buf[o++] = cg; buf[o++] = cb;
+      buf[o++] = glow;
+      n++;
+    }
+    return n;
+  }
+
+  function drawQuad() {
+    gl.bindVertexArray(quadVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  function render(now) {
+    var camv = cameraFor(now);
+    var eye = { x: camv.px, y: camv.py, z: camv.pz };
+    var tgt = { x: camv.tx, y: camv.ty, z: camv.tz };
+    var view = matView(eye, tgt, camv.roll);
+    var proj = matPerspective(camv.fov * Math.PI / 180, aspect, 0.08, 700);
+    var vp = matMul(proj, view);
+
+    if (cam.prevVP) {
+      var ax = (wall ? wall.w : 17) * 0.34;
+      var p0 = projUV(cam.prevVP, ax, cam.fy, 0);
+      var p1 = projUV(vp, ax, cam.fy, 0);
+      var mx = (p1.x - p0.x) * 1.15, my = (p1.y - p0.y) * 1.15;
+      var ml = Math.sqrt(mx * mx + my * my);
+      if (ml > 0.032) { mx *= 0.032 / ml; my *= 0.032 / ml; }
+      cam.motion.x += (mx - cam.motion.x) * 0.55;
+      cam.motion.y += (my - cam.motion.y) * 0.55;
+      var zt = clamp((cam.prevFov - camv.fov) * 0.022, -0.075, 0.075);
+      cam.zoom += (zt - cam.zoom) * 0.45;
+    }
+    cam.prevVP = vp;
+    cam.prevFov = camv.fov;
+    if (RM) { cam.motion.x *= 0.18; cam.motion.y *= 0.18; cam.zoom *= 0.18; }
+
+    var n = fillInstances();
+    var ar = S.accent[0] / 255, ag = S.accent[1] / 255, ab = S.accent[2] / 255;
+    var tsec = now * 0.001;
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneT.fb);
+    gl.viewport(0, 0, sceneT.w, sceneT.h);
+    gl.disable(gl.BLEND);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(true);
+    gl.clearColor(0.012, 0.015, 0.030, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    gl.useProgram(progScene);
+    gl.uniformMatrix4fv(loc.sceneVP, false, vp);
+    gl.uniform3f(loc.sceneEye, eye.x, eye.y, eye.z);
+    gl.uniform3f(loc.sceneAccent, ar, ag, ab);
+    gl.uniform3f(loc.sceneFog, 0.020, 0.026, 0.050);
+    gl.uniform1f(loc.sceneFogD, 0.0125);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, atlasTex || whiteTex);
+    gl.uniform1i(loc.sceneAtlas, 0);
+
+    if (n > 0) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, instVBO);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, instData.subarray(0, n * 18));
+      gl.bindVertexArray(cubeVAO);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, n);
+    }
+
+    if (dustN > 0) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+      gl.depthMask(false);
+      gl.useProgram(progDust);
+      gl.uniformMatrix4fv(loc.dustVP, false, vp);
+      gl.uniform1f(loc.dustTime, tsec);
+      gl.uniform1f(loc.dustDpr, dpr);
+      gl.uniform1f(loc.dustSize, 1.7 + liveBass * 1.2);
+      gl.uniform3f(loc.dustAccent, ar, ag, ab);
+      gl.bindVertexArray(dustVAO);
+      gl.drawArrays(gl.POINTS, 0, dustN);
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+    }
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindVertexArray(null);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fb);
+    gl.viewport(0, 0, bloomA.w, bloomA.h);
+    gl.useProgram(progBright);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sceneT.tex);
+    gl.uniform1i(loc.brightTex, 0);
+    drawQuad();
+
+    gl.useProgram(progBlur);
+    gl.uniform1i(loc.blurTex, 0);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fb);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+    gl.uniform2f(loc.blurDir, 1 / bloomA.w, 0);
+    drawQuad();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fb);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, bloomB.tex);
+    gl.uniform2f(loc.blurDir, 0, 1 / bloomB.h);
+    drawQuad();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomB.fb);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+    gl.uniform2f(loc.blurDir, 1.9 / bloomA.w, 0);
+    drawQuad();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloomA.fb);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, bloomB.tex);
+    gl.uniform2f(loc.blurDir, 0, 1.9 / bloomB.h);
+    drawQuad();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(progComp);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, sceneT.tex);
+    gl.uniform1i(loc.compScene, 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, bloomA.tex);
+    gl.uniform1i(loc.compBloom, 1);
+    gl.uniform3f(loc.compAccent, ar, ag, ab);
+    gl.uniform2f(loc.compRes, canvas.width, canvas.height);
+    gl.uniform1f(loc.compTime, tsec);
+    var blurK = P.blur * clamp(12 / (cam.radius || 12), 0.45, 1.15);
+    gl.uniform1f(loc.compBloomAmt, 0.72 + liveLevel * 0.55 + beatPulse * 0.18);
+    gl.uniform1f(loc.compAber, RM ? 0.002 : 0.0065);
+    gl.uniform2f(loc.compMotion, cam.motion.x * blurK, cam.motion.y * blurK);
+    gl.uniform1f(loc.compZoom, cam.zoom * blurK);
+    drawQuad();
+    gl.bindVertexArray(null);
+  }
+
+  function startFallback() {
+    try {
+      gl = null;
+      engineReady = false;
+      S.gl = false;
+      var old = document.getElementById("cv");
+      if (old && old.parentNode) {
+        var cv = document.createElement("canvas");
+        cv.id = "cv";
+        old.parentNode.replaceChild(cv, old);
+      }
+      canvas = document.getElementById("cv");
+      var ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      S.gl = false;
+
+      function fit() {
+        var w = window.innerWidth || 1440, h = window.innerHeight || 900;
+        if (!isFinite(w) || w <= 0) w = 1440;
+        if (!isFinite(h) || h <= 0) h = 900;
+        var d = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = Math.round(w * d);
+        canvas.height = Math.round(h * d);
+        canvas.style.width = w + "px";
+        canvas.style.height = h + "px";
+      }
+      fit();
+      addEventListener("resize", fit);
+
+      var last2 = performance.now();
+
+      function loop(now) {
+        var js0 = performance.now();
+        try {
+          stepTime(now);
+          var i = idxAt(S.t);
+          S.idx = i;
+          var w = canvas.width, h = canvas.height;
+          var g = ctx.createLinearGradient(0, 0, w, h);
+          g.addColorStop(0, "#04060b");
+          g.addColorStop(1, "#0a1024");
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, w, h);
+
+          var tsec = now * 0.001;
+          var ar = S.accent[0], ag = S.accent[1], ab = S.accent[2];
+          for (var b = 0; b < 5; b++) {
+            var yy = h * (0.2 + 0.13 * b) + Math.sin(tsec * 0.4 + b) * h * 0.03;
+            var gr = ctx.createLinearGradient(0, 0, w, 0);
+            gr.addColorStop(0, "rgba(" + ar + "," + ag + "," + ab + ",0)");
+            gr.addColorStop(0.5, "rgba(" + ar + "," + ag + "," + ab + "," + (0.05 + 0.02 * Math.sin(tsec + b)) + ")");
+            gr.addColorStop(1, "rgba(" + ar + "," + ag + "," + ab + ",0)");
+            ctx.fillStyle = gr;
+            ctx.fillRect(0, yy, w, Math.max(1, h * 0.006));
+          }
+
+          var line = (i >= 0 && S.lines[i]) ? String(S.lines[i].text || "") : "";
+          ctx.fillStyle = "#e9efff";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = "700 " + Math.round(Math.min(w * 0.055, 66) * dpr) + "px \"PingFang SC\",\"Microsoft YaHei\",sans-serif";
+          if (line) ctx.fillText(line, w / 2, h * 0.6, w * 0.84);
+          S.frames++;
+        } catch (e) {
+          S.err = String((e && e.message) || e);
+          errThrottled(e);
+        }
+        S.js = performance.now() - js0;
+        last2 = now;
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+      updateEmpty();
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      showError(S.err);
+    }
+  }
+
+  updateEmpty();
+})();
+</script>
+</body>
+</html>

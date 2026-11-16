@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>熔心棘冠</title>
+<style>
+  :root { --accent-rgb: 132, 226, 236; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #010204; }
+  body {
+    font-family: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+    background:
+      radial-gradient(ellipse 68% 55% at 50% 42%, rgba(var(--accent-rgb), 0.15), transparent 68%),
+      radial-gradient(ellipse 110% 90% at 50% 52%, #071016 0%, #020509 55%, #010203 100%);
+    color: #eef4f7;
+  }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 2; pointer-events: none;
+    opacity: 0.32; mix-blend-mode: soft-light;
+    background: repeating-linear-gradient(0deg, rgba(226, 250, 255, 0.035) 0 1px, transparent 1px 4px);
+  }
+  #lyric-scrim {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 42vh; z-index: 3; pointer-events: none;
+    background: linear-gradient(to bottom, transparent 0%, rgba(1,3,6,0.28) 46%, rgba(1,3,6,0.76) 100%);
+  }
+  #lyrics {
+    position: fixed; left: 7vw; right: 7vw; bottom: 8.5vh; height: 32vh;
+    display: flex; align-items: flex-end; justify-content: center; pointer-events: none;
+    z-index: 4;
+  }
+  .lyric-line {
+    position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center;
+    opacity: 0; transform: translateY(16px) scale(0.992);
+    transition: opacity 320ms ease, transform 460ms cubic-bezier(.18,.72,.24,1);
+  }
+  .lyric-line.active { opacity: 1; transform: translateY(0) scale(1); }
+  .lyric-text {
+    max-width: 86vw; text-align: center; line-height: 1.3; letter-spacing: 0.018em;
+    font-size: clamp(25px, 4.2vw, 68px); font-weight: 600; white-space: pre-wrap;
+    overflow-wrap: anywhere; word-break: break-word;
+    color: rgba(231, 240, 246, 0.25);
+    text-shadow: 0 0 34px rgba(var(--accent-rgb), 0.14), 0 2px 18px rgba(0,0,0,0.7);
+  }
+  .lyric-text.compact { font-size: clamp(21px, 3.25vw, 52px); line-height: 1.34; }
+  .lyric-text.ultra { font-size: clamp(17px, 2.55vw, 41px); line-height: 1.38; letter-spacing: 0.008em; }
+  .lyric-text.micro { font-size: clamp(14px, 1.9vw, 30px); line-height: 1.42; letter-spacing: 0.004em; }
+  .lyric-char { color: rgba(231, 240, 246, 0.26); transition: color 160ms ease, text-shadow 200ms ease, opacity 160ms ease; }
+  .lyric-char.lit { color: #f7fbff; text-shadow: 0 0 14px rgba(var(--accent-rgb), 0.78), 0 0 38px rgba(var(--accent-rgb), 0.32); }
+  .lyric-char.lit.edge { color: #ffffff; }
+  #empty-state {
+    position: fixed; left: 50%; bottom: 12vh; transform: translateX(-50%); width: min(80vw, 520px);
+    text-align: center; opacity: 0; transition: opacity 500ms ease; pointer-events: none; z-index: 4;
+  }
+  #empty-state.show { opacity: 1; }
+  #empty-state .empty-main { font-size: clamp(20px, 2.4vw, 34px); letter-spacing: 0.28em; color: rgba(235,244,248,0.76); }
+  #empty-state .empty-sub { margin-top: 12px; font-size: 10px; letter-spacing: 0.42em; color: rgba(var(--accent-rgb), 0.65); text-transform: uppercase; }
+  #tag {
+    position: fixed; top: 4.2vh; left: 4.5vw; z-index: 5; pointer-events: none;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 9px;
+    letter-spacing: 0.32em; color: rgba(219, 236, 242, 0.46); line-height: 1.8;
+    max-width: 44vw; white-space: nowrap;
+  }
+  #tag-song { display: block; max-width: 38vw; overflow: hidden; text-overflow: ellipsis; opacity: 0.72; }
+  #progress { position: fixed; left: 0; bottom: 0; height: 1px; width: 100%; z-index: 5; pointer-events: none; }
+  #progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb),0.85)); box-shadow: 0 0 14px rgba(var(--accent-rgb),0.6); }
+  @media (orientation: portrait) {
+    #lyrics { left: 4vw; right: 4vw; bottom: 7.5vh; height: 31vh; }
+    .lyric-text { max-width: 92vw; }
+    #lyric-scrim { height: 48vh; }
+    #tag { top: 3.2vh; left: 5.5vw; font-size: 8px; }
+    #empty-state { bottom: 10vh; }
+  }
+  @media (max-height: 520px) {
+    #lyrics { bottom: 5vh; height: 42vh; }
+    #lyric-scrim { height: 62vh; }
+    #tag { top: 3vh; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lyric-line { transition-duration: 120ms; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene" aria-hidden="true"></canvas>
+<div id="tag">413 / XENOMORPH<br><span id="tag-song">—</span></div>
+<div id="lyric-scrim"></div>
+<div id="lyrics" aria-live="off"></div>
+<div id="empty-state"><div class="empty-main">器乐 · 无词</div><div class="empty-sub">Instrumental / refraction only</div></div>
+<div id="progress"><div id="progress-fill"></div></div>
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '熔心棘冠',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* 413 — thorn glass heart. Protocol shell first; heavy matter boots after ready. */
+window.__stage = function () {
+  return {
+    lines: state.lyrics.length,
+    idx: state.idx,
+    t: state.time,
+    playing: state.playing,
+    frames: state.frames,
+    js: state.js,
+    err: '',
+    text: state.currentText,
+    gl: false,
+    rm: state.reducedMotion
+  };
+};
+
+var state = {
+  lyrics: [], idx: -1, time: 0, playing: true, frames: 0, js: 0, currentText: '',
+  duration: 0, songName: '', accent: [132, 226, 236], width: 1440, height: 900,
+  dpr: 1, reducedMotion: false, readySent: false, booted: false, initialized: false,
+  startedAt: 0, lastFrameAt: 0, lastErrorAt: 0, lastProgress: -1,
+  litLineIndex: -2, litCount: 0, lastLitTime: -1, activeCharNodes: null,
+  layout: { centerX: 720, centerY: 342, artifactSize: 760, minSide: 900, portrait: false },
+  atmosphereCanvas: null, artifactCanvas: null, glowCanvas: null, sceneToken: 0,
+  particles: [], beatPulse: 0, live: { bpm: 0, level: 0, bass: 0, mid: 0, treble: 0 },
+  clock: 0, quality: 1, frameCosts: [], goodFrames: 0, lastBeatIndex: -1, frameDelta: 16.7
+};
+
+var sceneCanvas = document.getElementById('scene');
+var sceneContext = sceneCanvas.getContext('2d', { alpha: true });
+var lyricsRoot = document.getElementById('lyrics');
+var emptyState = document.getElementById('empty-state');
+var tagSong = document.getElementById('tag-song');
+var progressFill = document.getElementById('progress-fill');
+
+/* Ready is wired before any bake or scene setup can run. */
+requestAnimationFrame(function firstFrame() {
+  sendReady();
+  startStageOnce();
+});
+setTimeout(function readyFallback() {
+  sendReady();
+  startStageOnce();
+}, 800);
+
+function reportError(error, where) {
+  var now = (window.performance && performance.now) ? performance.now() : Date.now();
+  if (state.lastErrorAt > 0 && now - state.lastErrorAt < 1000) { return; }
+  state.lastErrorAt = now || 1;
+  console.error('[413 thorn-glass-heart] ' + (where || 'runtime'), error);
+}
+
+function clampNumber(value, minimum, maximum, fallback) {
+  var numeric = Number(value);
+  if (!Number.isFinite(numeric)) { numeric = fallback; }
+  if (!Number.isFinite(numeric)) { numeric = minimum; }
+  return Math.min(maximum, Math.max(minimum, numeric));
+}
+
+function clampByte(value) {
+  var numeric = Number(value);
+  if (!Number.isFinite(numeric)) { numeric = 0; }
+  return Math.max(0, Math.min(255, Math.round(numeric)));
+}
+
+function parseAccent(payloadData) {
+  var rawAccent = payloadData && payloadData.accent;
+  if (!Array.isArray(rawAccent) || rawAccent.length < 3) { return [132, 226, 236]; }
+  var red = Number(rawAccent[0]);
+  var green = Number(rawAccent[1]);
+  var blue = Number(rawAccent[2]);
+  if (!Number.isFinite(red) || !Number.isFinite(green) || !Number.isFinite(blue)) {
+    return [132, 226, 236];
+  }
+  var clampedAccent = [clampByte(red), clampByte(green), clampByte(blue)];
+  if (clampedAccent[0] + clampedAccent[1] + clampedAccent[2] < 88) {
+    clampedAccent = [
+      clampByte(clampedAccent[0] * 0.5 + 150 * 0.5),
+      clampByte(clampedAccent[1] * 0.5 + 205 * 0.5),
+      clampByte(clampedAccent[2] * 0.5 + 216 * 0.5)
+    ];
+  }
+  return clampedAccent;
+}
+
+function accentText(alpha) {
+  var accent = state.accent;
+  return 'rgba(' + clampByte(accent[0]) + ',' + clampByte(accent[1]) + ',' + clampByte(accent[2]) + ',' + clampNumber(alpha, 0, 1, 0.5) + ')';
+}
+
+function applyAccent(payloadData) {
+  state.accent = parseAccent(payloadData);
+  document.documentElement.style.setProperty('--accent-rgb',
+    state.accent[0] + ', ' + state.accent[1] + ', ' + state.accent[2]);
+}
+
+function splitGlyphs(textValue) {
+  var normalized = String(textValue === null || textValue === undefined ? '' : textValue)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/ {2,}/g, ' ');
+  var glyphValues = Array.from(normalized);
+  var glyphLimit = Math.min(320, glyphValues.length);
+  if (glyphValues.length > glyphLimit) {
+    glyphValues = glyphValues.slice(0, glyphLimit - 1);
+    glyphValues.push('…');
+  }
+  return glyphValues;
+}
+
+function prepareLyricLine(lineData, orderIndex) {
+  var glyphs = splitGlyphs(lineData.text);
+  var lineStart = Math.max(0, Number(lineData.t) || 0);
+  var rawDuration = Number(lineData.dur);
+  var estimatedDuration = Math.min(14, Math.max(2.4, glyphs.length * 0.28));
+  var lineDuration = Number.isFinite(rawDuration) && rawDuration > 0.25 ? Math.min(40, rawDuration) : estimatedDuration;
+  var charTimes = [];
+  var sourceChars = Array.isArray(lineData.chars) ? lineData.chars : null;
+  var exactTiming = sourceChars && sourceChars.length === glyphs.length;
+  var runningTime = lineStart;
+  for (var glyphIndex = 0; glyphIndex < glyphs.length; glyphIndex += 1) {
+    var candidate = Number.NaN;
+    if (exactTiming && sourceChars[glyphIndex] && typeof sourceChars[glyphIndex] === 'object') {
+      candidate = Number(sourceChars[glyphIndex].t);
+    }
+    if (!Number.isFinite(candidate)) {
+      candidate = lineStart + (glyphIndex / Math.max(1, glyphs.length)) * lineDuration * 0.76;
+    }
+    if (candidate < runningTime) { candidate = runningTime; }
+    runningTime = candidate;
+    charTimes.push(candidate);
+  }
+  return {
+    t: lineStart,
+    dur: lineDuration,
+    end: lineStart + lineDuration,
+    text: glyphs.join(''),
+    glyphs: glyphs,
+    charTimes: charTimes,
+    order: orderIndex
+  };
+}
+
+function sendReady() {
+  if (state.readySent) { return; }
+  state.readySent = true;
+  try {
+    window.parent.postMessage({ __c100: 1, type: 'ready' }, '*');
+  } catch (error) {
+    reportError(error, 'ready');
+  }
+}
+
+function startStageOnce() {
+  if (state.booted) { return; }
+  state.booted = true;
+  try { bootStage(); } catch (error) { reportError(error, 'boot'); }
+  try { startLoop(); } catch (error) { reportError(error, 'loop'); }
+}
+
+function bootStage() {
+  state.startedAt = (window.performance && performance.now) ? performance.now() : Date.now();
+  viewportChanged();
+}
+
+function viewportChanged() {
+  var viewWidth = window.innerWidth;
+  var viewHeight = window.innerHeight;
+  if (!Number.isFinite(viewWidth) || viewWidth < 1) { viewWidth = 1440; }
+  if (!Number.isFinite(viewHeight) || viewHeight < 1) { viewHeight = 900; }
+  state.width = Math.round(viewWidth);
+  state.height = Math.round(viewHeight);
+  var rawPixelRatio = Number(window.devicePixelRatio);
+  if (!Number.isFinite(rawPixelRatio) || rawPixelRatio < 1) { rawPixelRatio = 1; }
+  var backingCap = 2800 / Math.max(1, state.width, state.height);
+  state.dpr = Math.max(0.45, Math.min(1.6, rawPixelRatio, backingCap));
+  sceneCanvas.width = Math.max(1, Math.round(state.width * state.dpr));
+  sceneCanvas.height = Math.max(1, Math.round(state.height * state.dpr));
+  sceneCanvas.style.width = state.width + 'px';
+  sceneCanvas.style.height = state.height + 'px';
+}
+
+function startLoop() {
+  requestAnimationFrame(renderFrame);
+}
+
+function renderFrame(timestamp) {
+  state.frames += 1;
+  var frameStart = (window.performance && performance.now) ? performance.now() : Date.now();
+  try {
+    drawScene(timestamp);
+  } catch (drawError) {
+    reportError(drawError, 'frame-draw');
+  }
+  try {
+    updateLyrics();
+  } catch (lyricError) {
+    reportError(lyricError, 'frame-lyrics');
+  }
+  state.js = Math.max(0, ((window.performance && performance.now) ? performance.now() : Date.now()) - frameStart);
+  updatePerformance();
+  requestAnimationFrame(renderFrame);
+}
+
+function updatePerformance() {
+  state.frameCosts.push(state.js);
+  if (state.frameCosts.length > 60) { state.frameCosts.shift(); }
+  if (state.frames % 20 !== 0 || state.frameCosts.length < 12) { return; }
+  var totalCost = 0;
+  for (var costIndex = 0; costIndex < state.frameCosts.length; costIndex += 1) {
+    totalCost += state.frameCosts[costIndex];
+  }
+  var averageCost = totalCost / state.frameCosts.length;
+  var tooSlow = averageCost > 10.5 || state.frameDelta > 38;
+  if (tooSlow) {
+    state.goodFrames = 0;
+    if (averageCost > 24 || state.frameDelta > 55) { state.quality = 0.38; }
+    else if (state.quality > 0.8) { state.quality = 0.72; }
+    else if (state.quality > 0.55) { state.quality = 0.48; }
+    else if (state.quality > 0.42) { state.quality = 0.38; }
+    state.frameCosts.length = 0;
+  } else if (averageCost < 5 && state.frameDelta < 22) {
+    state.goodFrames += 1;
+    if (state.goodFrames >= 8 && state.quality < 1) {
+      state.quality = state.quality < 0.6 ? 0.72 : 1;
+      state.goodFrames = 0;
+    }
+  } else {
+    state.goodFrames = 0;
+  }
+}
+
+function isDrawableCanvas(sourceCanvas) {
+  return sourceCanvas instanceof HTMLCanvasElement &&
+    sourceCanvas.width > 0 && sourceCanvas.height > 0 &&
+    typeof sourceCanvas.getContext === 'function';
+}
+
+function createRenderCanvas(canvasWidth, canvasHeight) {
+  var renderCanvas = document.createElement('canvas');
+  renderCanvas.width = Math.max(1, Math.round(Number(canvasWidth) || 1));
+  renderCanvas.height = Math.max(1, Math.round(Number(canvasHeight) || 1));
+  return renderCanvas;
+}
+
+function resetPath(targetContext) {
+  if (!targetContext || typeof targetContext.beginPath !== 'function') { return false; }
+  targetContext.beginPath();
+  return true;
+}
+
+function addGradientStops(gradient, stops) {
+  if (!gradient || typeof gradient.addColorStop !== 'function' || !Array.isArray(stops)) { return; }
+  try {
+    for (var stopIndex = 0; stopIndex < stops.length; stopIndex += 1) {
+      var stopData = stops[stopIndex];
+      if (!stopData || stopData.length < 2) { continue; }
+      var stopOffset = clampNumber(stopData[0], 0, 1, 0);
+      gradient.addColorStop(stopOffset, String(stopData[1]));
+    }
+  } catch (gradientError) {
+    reportError(gradientError, 'gradient');
+  }
+}
+
+function makeRandom(seedValue) {
+  var randomState = (Number(seedValue) || 413) >>> 0;
+  return function randomNext() {
+    randomState = (randomState + 0x6D2B79F5) >>> 0;
+    var mixedValue = randomState;
+    mixedValue = Math.imul(mixedValue ^ (mixedValue >>> 15), mixedValue | 1);
+    mixedValue ^= mixedValue + Math.imul(mixedValue ^ (mixedValue >>> 7), mixedValue | 61);
+    return ((mixedValue ^ (mixedValue >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seedFromAccent() {
+  var accent = state.accent;
+  return ((accent[0] * 73856093) ^ (accent[1] * 19349663) ^ (accent[2] * 83492791)) >>> 0;
+}
+
+function pearlColor(angleValue, depthValue, alphaValue) {
+  var accent = state.accent;
+  var shimmer = Math.sin(angleValue * 2.15 + depthValue * 3.7);
+  var warmShift = Math.max(0, Math.sin(angleValue * 1.2 - depthValue * 2.4 + 0.8));
+  var coolShift = Math.max(0, Math.cos(angleValue * 1.8 + depthValue * 1.6));
+  var red = accent[0] * 0.52 + 118 + warmShift * 54 + shimmer * 18;
+  var green = accent[1] * 0.52 + 142 + coolShift * 34 + shimmer * 14;
+  var blue = accent[2] * 0.52 + 168 + coolShift * 50 - warmShift * 10;
+  return 'rgba(' + clampByte(red) + ',' + clampByte(green) + ',' + clampByte(blue) + ',' +
+    clampNumber(alphaValue, 0, 1, 0.08) + ')';
+}
+
+function computeLayout() {
+  var width = state.width;
+  var height = state.height;
+  var minSide = Math.min(width, height);
+  var portrait = height > width * 1.08;
+  var artifactSize;
+  if (portrait) {
+    artifactSize = clampNumber(minSide * 1.12, 310, 760, 430);
+  } else if (height < 560) {
+    artifactSize = clampNumber(minSide * 0.82, 300, 760, 420);
+  } else {
+    artifactSize = clampNumber(minSide * 0.92, 340, 900, 700);
+  }
+  var centerYRatio = portrait ? 0.295 : (height < 560 ? 0.32 : 0.385);
+  return {
+    centerX: width * 0.5,
+    centerY: height * centerYRatio,
+    artifactSize: artifactSize,
+    minSide: minSide,
+    portrait: portrait
+  };
+}
+
+function rebuildScene() {
+  viewportChanged();
+  state.layout = computeLayout();
+  state.sceneToken += 1;
+  var activeToken = state.sceneToken;
+  state.atmosphereCanvas = null;
+  state.artifactCanvas = null;
+  state.glowCanvas = null;
+  requestAnimationFrame(function atmosphereBuildStep() {
+    if (activeToken !== state.sceneToken) { return; }
+    try { buildAtmosphere(); } catch (atmosphereError) { reportError(atmosphereError, 'atmosphere'); }
+    requestAnimationFrame(function artifactBuildStep() {
+      if (activeToken !== state.sceneToken) { return; }
+      try { buildArtifact(); } catch (artifactError) { reportError(artifactError, 'artifact'); }
+    });
+  });
+  try { buildParticles(); } catch (particleError) { reportError(particleError, 'particles'); }
+}
+
+function buildAtmosphere() {
+  var width = state.width;
+  var height = state.height;
+  var layout = state.layout;
+  var pixelScale = Math.min(1.25, Math.max(0.5,
+    state.dpr * 0.85 * Math.min(1, 2600 / Math.max(width, height))));
+  var atmosphere = createRenderCanvas(width * pixelScale, height * pixelScale);
+  var context = atmosphere.getContext('2d', { alpha: true });
+  if (!context) { return; }
+  context.setTransform(pixelScale, 0, 0, pixelScale, 0, 0);
+  var random = makeRandom(seedFromAccent() + 413);
+  var minSide = layout.minSide;
+
+  var aura = context.createRadialGradient(
+    layout.centerX, layout.centerY, minSide * 0.015,
+    layout.centerX, layout.centerY, minSide * 0.74
+  );
+  addGradientStops(aura, [
+    [0, accentText(0.25)],
+    [0.16, accentText(0.105)],
+    [0.46, 'rgba(88, 148, 164, 0.045)'],
+    [0.76, 'rgba(15, 28, 38, 0.05)'],
+    [1, 'rgba(0, 0, 0, 0)']
+  ]);
+  context.fillStyle = aura;
+  context.fillRect(0, 0, width, height);
+
+  var upperBeam = context.createLinearGradient(0, 0, 0, height);
+  addGradientStops(upperBeam, [
+    [0, 'rgba(220, 252, 255, 0.055)'],
+    [0.22, accentText(0.028)],
+    [0.55, 'rgba(0, 0, 0, 0)'],
+    [1, 'rgba(0, 0, 0, 0)']
+  ]);
+  context.fillStyle = upperBeam;
+  context.fillRect(0, 0, width, height);
+
+  drawCausticRibbons(context, random, width, height);
+  drawCausticFloor(context, random, width, height);
+  drawAtmosphereDust(context, random, width, height);
+  state.atmosphereCanvas = atmosphere;
+  buildGlowSprite();
+}
+
+function buildGlowSprite() {
+  var glow = createRenderCanvas(256, 256);
+  var context = glow.getContext('2d', { alpha: true });
+  if (!context) { return; }
+  var gradient = context.createRadialGradient(128, 128, 2, 128, 128, 126);
+  addGradientStops(gradient, [
+    [0, 'rgba(255, 255, 255, 0.72)'],
+    [0.12, accentText(0.48)],
+    [0.38, accentText(0.15)],
+    [0.7, 'rgba(140, 220, 230, 0.03)'],
+    [1, 'rgba(0, 0, 0, 0)']
+  ]);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 256);
+  state.glowCanvas = glow;
+}
+
+function drawCausticRibbons(context, random, width, height) {
+  var layout = state.layout;
+  var minSide = layout.minSide;
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.lineCap = 'round';
+  for (var ribbonIndex = 0; ribbonIndex < 34; ribbonIndex += 1) {
+    var startAngle = random() * Math.PI * 2;
+    var startRadius = minSide * (0.035 + random() * 0.28);
+    var startX = layout.centerX + Math.cos(startAngle) * startRadius;
+    var startY = layout.centerY + Math.sin(startAngle) * startRadius * 0.78;
+    var ribbonLength = minSide * (0.075 + random() * 0.35);
+    var bendAngle = startAngle + (random() - 0.5) * 1.85;
+    var endX = startX + Math.cos(bendAngle) * ribbonLength;
+    var endY = startY + Math.sin(bendAngle) * ribbonLength * 0.6 + minSide * 0.025;
+    endX = clampNumber(endX, -width * 0.1, width * 1.1, startX);
+    endY = clampNumber(endY, -height * 0.1, height * 1.1, startY);
+    var controlX = (startX + endX) * 0.5 + (random() - 0.5) * minSide * 0.24;
+    var controlY = (startY + endY) * 0.5 + (random() - 0.5) * minSide * 0.2;
+    if (!resetPath(context)) { break; }
+    context.moveTo(startX, startY);
+    context.quadraticCurveTo(controlX, controlY, endX, endY);
+    context.lineWidth = Math.max(0.8, minSide * (0.0016 + random() * 0.0034));
+    context.strokeStyle = pearlColor(startAngle, random(), 0.026 + random() * 0.036);
+    context.stroke();
+    context.lineWidth = Math.max(0.35, context.lineWidth * 0.32);
+    context.strokeStyle = 'rgba(239, 255, 255, ' + (0.05 + random() * 0.055).toFixed(3) + ')';
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawCausticFloor(context, random, width, height) {
+  var layout = state.layout;
+  var artifactSize = layout.artifactSize;
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.lineCap = 'round';
+  for (var ringIndex = 0; ringIndex < 9; ringIndex += 1) {
+    var ringWidth = artifactSize * (0.18 + ringIndex * 0.038 + random() * 0.018);
+    var ringHeight = artifactSize * (0.018 + ringIndex * 0.007);
+    var ringY = layout.centerY + artifactSize * (0.235 + ringIndex * 0.012);
+    if (ringY > height * 1.02) { break; }
+    if (!resetPath(context)) { break; }
+    context.ellipse(layout.centerX, ringY, ringWidth, ringHeight, 0, 0, Math.PI * 2);
+    context.lineWidth = Math.max(0.5, 1.6 - ringIndex * 0.11);
+    context.strokeStyle = accentText(0.072 - ringIndex * 0.006);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawAtmosphereDust(context, random, width, height) {
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (var dustIndex = 0; dustIndex < 118; dustIndex += 1) {
+    var dustX = random() * width;
+    var dustY = random() * height;
+    var dustSize = 0.35 + random() * 1.25;
+    var dustAlpha = 0.05 + random() * 0.26;
+    context.fillStyle = random() > 0.72 ? accentText(dustAlpha) : 'rgba(220, 244, 248, ' + dustAlpha.toFixed(3) + ')';
+    context.fillRect(dustX, dustY, dustSize, dustSize);
+  }
+  for (var bokehIndex = 0; bokehIndex < 14; bokehIndex += 1) {
+    var bokehX = random() * width;
+    var bokehY = height * (0.08 + random() * 0.74);
+    var bokehRadius = state.layout.minSide * (0.012 + random() * 0.042);
+    var bokeh = context.createRadialGradient(bokehX, bokehY, 0, bokehX, bokehY, bokehRadius);
+    addGradientStops(bokeh, [
+      [0, accentText(0.035 + random() * 0.035)],
+      [0.45, accentText(0.012)],
+      [1, 'rgba(0, 0, 0, 0)']
+    ]);
+    context.fillStyle = bokeh;
+    if (!resetPath(context)) { break; }
+    context.arc(bokehX, bokehY, bokehRadius, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
+}
+
+function buildParticles() {
+  state.particles = [];
+  var random = makeRandom(seedFromAccent() + 5513);
+  var particleCount = Math.round(clampNumber(state.layout.minSide * 0.072, 28, 78, 56));
+  for (var particleIndex = 0; particleIndex < particleCount; particleIndex += 1) {
+    var particleTint = random();
+    state.particles.push({
+      x: random() * state.width,
+      y: random() * state.height,
+      size: 0.35 + random() * 1.55,
+      alpha: 0.08 + random() * 0.34,
+      speed: 3 + random() * 12,
+      drift: 2 + random() * 9,
+      phase: random() * Math.PI * 2,
+      color: particleTint > 0.66 ? accentText(0.18 + random() * 0.34) :
+        (particleTint > 0.33 ? 'rgba(225, 249, 255, ' + (0.12 + random() * 0.34).toFixed(3) + ')' :
+          'rgba(255, 230, 250, ' + (0.08 + random() * 0.2).toFixed(3) + ')')
+    });
+  }
+}
+
+function buildArtifact() {
+  var activeToken = state.sceneToken;
+  var layout = state.layout;
+  var spriteSize = Math.round(clampNumber(layout.artifactSize * 1.34, 760, 1600, 1100));
+  var artifact = createRenderCanvas(spriteSize, spriteSize);
+  var context = artifact.getContext('2d', { alpha: true });
+  if (!context) { return; }
+  var centerX = spriteSize * 0.5;
+  var centerY = spriteSize * 0.5;
+  var radius = spriteSize * 0.225;
+  var random = makeRandom(seedFromAccent() + 9173);
+
+  drawArtifactAura(context, centerX, centerY, radius);
+  var spikes = buildCrownSpikes(centerX, centerY, radius, random);
+  drawCrownRing(context, centerX, centerY, radius, true);
+  drawCrownSpikes(context, spikes, true);
+
+  requestAnimationFrame(function heartBuildStep() {
+    if (activeToken !== state.sceneToken) { return; }
+    var heartOutline = [];
+    try {
+      heartOutline = drawHeartGlass(context, centerX, centerY, radius, random);
+      drawMeltingDrips(context, heartOutline, centerX, centerY, radius, random);
+    } catch (heartError) {
+      reportError(heartError, 'artifact-heart');
+      state.artifactCanvas = artifact;
+    }
+    requestAnimationFrame(function detailBuildStep() {
+      if (activeToken !== state.sceneToken) { return; }
+      try {
+        drawCrownRing(context, centerX, centerY, radius, false);
+        drawCrownSpikes(context, spikes, false);
+        drawFloatingShards(context, centerX, centerY, radius, random);
+        drawArtifactGlints(context, centerX, centerY, radius, random);
+      } catch (detailError) {
+        reportError(detailError, 'artifact-detail');
+      }
+      state.artifactCanvas = artifact;
+    });
+  });
+}
+
+function drawArtifactAura(context, centerX, centerY, radius) {
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  var aura = context.createRadialGradient(centerX, centerY, radius * 0.12, centerX, centerY, radius * 2.15);
+  addGradientStops(aura, [
+    [0, accentText(0.14)],
+    [0.24, accentText(0.06)],
+    [0.55, 'rgba(118, 186, 198, 0.025)'],
+    [1, 'rgba(0, 0, 0, 0)']
+  ]);
+  context.fillStyle = aura;
+  if (!resetPath(context)) { context.restore(); return; }
+  context.arc(centerX, centerY, radius * 2.15, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+}
+
+function buildHeartOutline(centerX, centerY, pointCount, radius, random) {
+  var points = [];
+  var phaseOne = random() * Math.PI * 2;
+  var phaseTwo = random() * Math.PI * 2;
+  var phaseThree = random() * Math.PI * 2;
+  for (var pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
+    var angleValue = (pointIndex / pointCount) * Math.PI * 2;
+    var rawX = 16 * Math.pow(Math.sin(angleValue), 3);
+    var rawY = 13 * Math.cos(angleValue) - 5 * Math.cos(2 * angleValue) -
+      2 * Math.cos(3 * angleValue) - Math.cos(4 * angleValue);
+    var organic = 1 +
+      0.082 * Math.sin(3 * angleValue + phaseOne) +
+      0.046 * Math.sin(5 * angleValue + phaseTwo) +
+      0.024 * Math.sin(9 * angleValue + phaseThree);
+    organic += 0.022 * Math.cos(angleValue - 0.6);
+    var localX = (rawX / 17) * radius * organic;
+    var localY = (-rawY / 17) * radius * organic;
+    points.push({
+      x: centerX + localX + localY * 0.028,
+      y: centerY + localY
+    });
+  }
+  return points;
+}
+
+function traceHeartPath(context, outline) {
+  if (!outline || outline.length < 3) { return false; }
+  if (!resetPath(context)) { return false; }
+  context.moveTo(outline[0].x, outline[0].y);
+  for (var pointIndex = 1; pointIndex < outline.length; pointIndex += 1) {
+    context.lineTo(outline[pointIndex].x, outline[pointIndex].y);
+  }
+  context.closePath();
+  return true;
+}
+
+function drawHeartGlass(context, centerX, centerY, radius, random) {
+  var outline = buildHeartOutline(centerX, centerY, 72, radius, random);
+  var bodyGradient = context.createRadialGradient(
+    centerX - radius * 0.28, centerY - radius * 0.34, radius * 0.04,
+    centerX, centerY, radius * 1.28
+  );
+  addGradientStops(bodyGradient, [
+    [0, 'rgba(232, 252, 255, 0.42)'],
+    [0.16, accentText(0.34)],
+    [0.38, 'rgba(42, 82, 93, 0.54)'],
+    [0.68, 'rgba(9, 24, 31, 0.76)'],
+    [0.9, 'rgba(2, 7, 10, 0.88)'],
+    [1, 'rgba(1, 4, 6, 0.92)']
+  ]);
+  if (traceHeartPath(context, outline)) {
+    context.fillStyle = bodyGradient;
+    context.fill();
+  }
+
+  drawHeartFacets(context, outline, centerX, centerY, radius);
+  drawHeartInterior(context, outline, centerX, centerY, radius, random);
+  drawHeartSpecular(context, outline, centerX, centerY, radius);
+  drawHeartRim(context, outline, centerX, centerY, radius);
+  return outline;
+}
+
+function drawHeartFacets(context, outline, centerX, centerY, radius) {
+  var layerCount = 8;
+  var layerPoints = [];
+  for (var depthIndex = 0; depthIndex < layerCount; depthIndex += 1) {
+    var depthValue = -1 + (depthIndex / (layerCount - 1)) * 2;
+    var lateral = 0.59 + 0.41 * Math.sqrt(Math.max(0, 1 - depthValue * depthValue));
+    var xShift = depthValue * radius * 0.062;
+    var yShift = depthValue * radius * 0.032;
+    var points = [];
+    for (var sourceIndex = 0; sourceIndex < outline.length; sourceIndex += 1) {
+      points.push({
+        x: centerX + (outline[sourceIndex].x - centerX) * lateral + xShift,
+        y: centerY + (outline[sourceIndex].y - centerY) * lateral + yShift
+      });
+    }
+    layerPoints.push({ depth: depthValue, points: points });
+  }
+
+  var facets = [];
+  for (var ringIndex = 0; ringIndex < layerPoints.length - 1; ringIndex += 1) {
+    var backLayer = layerPoints[ringIndex];
+    var frontLayer = layerPoints[ringIndex + 1];
+    var midDepth = (backLayer.depth + frontLayer.depth) * 0.5;
+    for (var facetIndex = 0; facetIndex < outline.length; facetIndex += 1) {
+      var nextIndex = (facetIndex + 1) % outline.length;
+      facets.push({
+        depth: midDepth,
+        angle: (facetIndex + 0.5) / outline.length * Math.PI * 2,
+        points: [
+          backLayer.points[facetIndex],
+          backLayer.points[nextIndex],
+          frontLayer.points[nextIndex],
+          frontLayer.points[facetIndex]
+        ]
+      });
+    }
+  }
+  facets.sort(function (firstFacet, secondFacet) { return firstFacet.depth - secondFacet.depth; });
+
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (var facetListIndex = 0; facetListIndex < facets.length; facetListIndex += 1) {
+    var facet = facets[facetListIndex];
+    var facing = Math.max(0, Math.cos(facet.angle + 2.24));
+    var depthLight = 0.35 + 0.65 * (facet.depth + 1) * 0.5;
+    var facetAlpha = 0.018 + facing * 0.054 * depthLight;
+    if (!resetPath(context)) { break; }
+    context.moveTo(facet.points[0].x, facet.points[0].y);
+    for (var cornerIndex = 1; cornerIndex < facet.points.length; cornerIndex += 1) {
+      context.lineTo(facet.points[cornerIndex].x, facet.points[cornerIndex].y);
+    }
+    context.closePath();
+    context.fillStyle = pearlColor(facet.angle, facet.depth, facetAlpha);
+    context.fill();
+    context.lineWidth = 0.55;
+    context.strokeStyle = pearlColor(facet.angle, facet.depth, facetAlpha * 0.6);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawHeartInterior(context, outline, centerX, centerY, radius, random) {
+  context.save();
+  if (!traceHeartPath(context, outline)) { context.restore(); return; }
+  context.clip();
+  context.globalCompositeOperation = 'lighter';
+
+  for (var veinIndex = 0; veinIndex < 16; veinIndex += 1) {
+    var veinAngle = random() * Math.PI * 2;
+    var startRadius = radius * (0.06 + random() * 0.46);
+    var startX = centerX + Math.cos(veinAngle) * startRadius;
+    var startY = centerY + Math.sin(veinAngle) * startRadius * 0.9;
+    var endX = centerX + (random() - 0.5) * radius * 1.35;
+    var endY = centerY + (random() - 0.5) * radius * 1.5;
+    var bendX = (startX + endX) * 0.5 + (random() - 0.5) * radius * 0.55;
+    var bendY = (startY + endY) * 0.5 + (random() - 0.5) * radius * 0.55;
+    if (!resetPath(context)) { break; }
+    context.moveTo(startX, startY);
+    context.bezierCurveTo(bendX, bendY, bendX, bendY, endX, endY);
+    context.lineWidth = 0.55 + random() * 1.5;
+    context.strokeStyle = pearlColor(veinAngle, random(), 0.075 + random() * 0.12);
+    context.stroke();
+  }
+
+  context.globalCompositeOperation = 'source-over';
+  for (var crackIndex = 0; crackIndex < 7; crackIndex += 1) {
+    var crackStartX = centerX + (random() - 0.5) * radius * 0.7;
+    var crackStartY = centerY + (random() - 0.5) * radius * 0.75;
+    var crackEndX = crackStartX + (random() - 0.5) * radius * 0.95;
+    var crackEndY = crackStartY + (random() - 0.5) * radius * 0.95;
+    var crackBendX = (crackStartX + crackEndX) * 0.5 + (random() - 0.5) * radius * 0.3;
+    var crackBendY = (crackStartY + crackEndY) * 0.5 + (random() - 0.5) * radius * 0.3;
+    if (!resetPath(context)) { break; }
+    context.moveTo(crackStartX, crackStartY);
+    context.quadraticCurveTo(crackBendX, crackBendY, crackEndX, crackEndY);
+    context.lineWidth = 1.1 + random() * 1.2;
+    context.strokeStyle = 'rgba(0, 5, 8, 0.42)';
+    context.stroke();
+    context.lineWidth = 0.45;
+    context.strokeStyle = 'rgba(232, 255, 255, 0.12)';
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawHeartSpecular(context, outline, centerX, centerY, radius) {
+  context.save();
+  if (!traceHeartPath(context, outline)) { context.restore(); return; }
+  context.clip();
+  context.globalCompositeOperation = 'lighter';
+
+  context.save();
+  context.translate(centerX - radius * 0.36, centerY - radius * 0.31);
+  context.scale(1, 0.62);
+  var hotSpot = context.createRadialGradient(0, 0, 0, 0, 0, radius * 0.61);
+  addGradientStops(hotSpot, [
+    [0, 'rgba(255, 255, 255, 0.6)'],
+    [0.24, accentText(0.2)],
+    [0.7, 'rgba(255, 255, 255, 0.03)'],
+    [1, 'rgba(0, 0, 0, 0)']
+  ]);
+  context.fillStyle = hotSpot;
+  if (resetPath(context)) {
+    context.arc(0, 0, radius * 0.61, 0, Math.PI * 2);
+    context.fill();
+  }
+  context.restore();
+
+  context.lineCap = 'round';
+  if (resetPath(context)) {
+    context.moveTo(centerX - radius * 0.72, centerY - radius * 0.17);
+    context.bezierCurveTo(
+      centerX - radius * 0.6, centerY - radius * 0.68,
+      centerX - radius * 0.08, centerY - radius * 0.58,
+      centerX + radius * 0.1, centerY - radius * 0.23
+    );
+    context.lineWidth = radius * 0.035;
+    context.strokeStyle = 'rgba(238, 255, 255, 0.1)';
+    context.stroke();
+    context.lineWidth = radius * 0.011;
+    context.strokeStyle = 'rgba(255, 255, 255, 0.64)';
+    context.stroke();
+  }
+  if (resetPath(context)) {
+    context.moveTo(centerX - radius * 0.54, centerY + radius * 0.2);
+    context.quadraticCurveTo(
+      centerX - radius * 0.46, centerY + radius * 0.63,
+      centerX - radius * 0.12, centerY + radius * 0.86
+    );
+    context.lineWidth = radius * 0.017;
+    context.strokeStyle = 'rgba(245, 255, 255, 0.35)';
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawHeartRim(context, outline, centerX, centerY, radius) {
+  var rimGradient = context.createLinearGradient(
+    centerX - radius, centerY - radius,
+    centerX + radius, centerY + radius
+  );
+  addGradientStops(rimGradient, [
+    [0, 'rgba(252, 255, 255, 0.9)'],
+    [0.22, accentText(0.7)],
+    [0.56, accentText(0.4)],
+    [0.8, 'rgba(146, 203, 212, 0.28)'],
+    [1, 'rgba(255, 244, 255, 0.55)']
+  ]);
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  if (traceHeartPath(context, outline)) {
+    context.lineWidth = radius * 0.032;
+    context.strokeStyle = accentText(0.11);
+    context.stroke();
+    context.lineWidth = radius * 0.009;
+    context.strokeStyle = rimGradient;
+    context.stroke();
+    context.lineWidth = radius * 0.0026;
+    context.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+    context.stroke();
+  }
+  context.restore();
+}
+
+function buildCrownSpikes(centerX, centerY, radius, random) {
+  var spikes = [];
+  var spikeCount = 30;
+  var ringX = radius * 1.42;
+  var ringY = radius * 0.5;
+  var ringRotation = -0.2;
+  var rotationCos = Math.cos(ringRotation);
+  var rotationSin = Math.sin(ringRotation);
+  for (var spikeIndex = 0; spikeIndex < spikeCount; spikeIndex += 1) {
+    var angleValue = (spikeIndex / spikeCount) * Math.PI * 2 + 0.05;
+    var ellipseX = Math.cos(angleValue) * ringX;
+    var ellipseY = Math.sin(angleValue) * ringY;
+    var baseX = centerX + ellipseX * rotationCos - ellipseY * rotationSin;
+    var baseY = centerY + ellipseY * rotationCos + ellipseX * rotationSin - radius * 0.045;
+    var rawTangentX = -Math.sin(angleValue) * ringX;
+    var rawTangentY = Math.cos(angleValue) * ringY;
+    var tangentLength = Math.max(0.001, Math.hypot(rawTangentX, rawTangentY));
+    var unitTangentX = rawTangentX / tangentLength;
+    var unitTangentY = rawTangentY / tangentLength;
+    var tangentX = unitTangentX * rotationCos - unitTangentY * rotationSin;
+    var tangentY = unitTangentX * rotationSin + unitTangentY * rotationCos;
+    var halfWidth = radius * (0.018 + random() * 0.018);
+    var outwardX = Math.cos(angleValue);
+    var outwardY = Math.sin(angleValue) * 0.52 - 0.5;
+    var outwardLength = Math.max(0.001, Math.hypot(outwardX, outwardY));
+    outwardX = outwardX / outwardLength;
+    outwardY = outwardY / outwardLength;
+    var spikeLength = radius * (0.27 + random() * 0.62);
+    if (Math.sin(angleValue) < -0.25) { spikeLength *= 1.18; }
+    spikes.push({
+      z: Math.sin(angleValue + 0.14),
+      baseX: baseX,
+      baseY: baseY,
+      baseOneX: baseX + tangentX * halfWidth,
+      baseOneY: baseY + tangentY * halfWidth,
+      baseTwoX: baseX - tangentX * halfWidth,
+      baseTwoY: baseY - tangentY * halfWidth,
+      tipX: baseX + outwardX * spikeLength,
+      tipY: baseY + outwardY * spikeLength,
+      midX: baseX + outwardX * spikeLength * 0.42,
+      midY: baseY + outwardY * spikeLength * 0.42,
+      width: halfWidth
+    });
+  }
+  return spikes;
+}
+
+function drawCrownRing(context, centerX, centerY, radius, backPass) {
+  var ringX = radius * 1.42;
+  var ringY = radius * 0.5;
+  var ringRotation = -0.2;
+  context.save();
+  context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = backPass ? 0.62 : 0.88;
+  if (!resetPath(context)) { context.restore(); return; }
+  if (backPass) {
+    context.ellipse(centerX, centerY - radius * 0.045, ringX, ringY, ringRotation, 0, Math.PI * 2);
+  } else {
+    context.ellipse(centerX, centerY - radius * 0.045, ringX, ringY, ringRotation, 0, Math.PI);
+  }
+  context.lineWidth = radius * 0.048;
+  context.strokeStyle = 'rgba(2, 6, 9, 0.86)';
+  context.stroke();
+  context.lineWidth = radius * 0.012;
+  context.strokeStyle = backPass ? 'rgba(133, 174, 184, 0.18)' : accentText(0.62);
+  context.stroke();
+  context.lineWidth = radius * 0.003;
+  context.strokeStyle = backPass ? 'rgba(220, 250, 255, 0.12)' : 'rgba(242, 255, 255, 0.72)';
+  context.stroke();
+  context.restore();
+}
+
+function drawCrownSpikes(context, spikes, backPass) {
+  context.save();
+  context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = backPass ? 0.4 : 1;
+  for (var spikeIndex = 0; spikeIndex < spikes.length; spikeIndex += 1) {
+    var spike = spikes[spikeIndex];
+    var isBack = spike.z < 0;
+    if (isBack !== backPass) { continue; }
+    context.globalCompositeOperation = 'source-over';
+    var metal = context.createLinearGradient(spike.baseX, spike.baseY, spike.tipX, spike.tipY);
+    if (backPass) {
+      addGradientStops(metal, [
+        [0, 'rgba(4, 10, 14, 0.9)'],
+        [0.52, 'rgba(51, 72, 79, 0.82)'],
+        [0.84, accentText(0.25)],
+        [1, 'rgba(190, 225, 231, 0.45)']
+      ]);
+    } else {
+      addGradientStops(metal, [
+        [0, 'rgba(3, 8, 11, 0.96)'],
+        [0.38, 'rgba(34, 52, 60, 0.95)'],
+        [0.73, accentText(0.64)],
+        [0.92, 'rgba(220, 246, 250, 0.88)'],
+        [1, 'rgba(255, 255, 255, 0.98)']
+      ]);
+    }
+    if (!resetPath(context)) { break; }
+    context.moveTo(spike.baseOneX, spike.baseOneY);
+    context.lineTo(spike.tipX, spike.tipY);
+    context.lineTo(spike.baseTwoX, spike.baseTwoY);
+    context.closePath();
+    context.fillStyle = metal;
+    context.fill();
+    context.lineWidth = Math.max(0.45, spike.width * 0.16);
+    context.strokeStyle = 'rgba(228, 251, 255, ' + (backPass ? '0.1' : '0.38') + ')';
+    context.stroke();
+    if (!backPass) { context.globalCompositeOperation = 'lighter'; }
+
+    if (!resetPath(context)) { break; }
+    context.moveTo(spike.baseX, spike.baseY);
+    context.lineTo(spike.tipX, spike.tipY);
+    context.lineWidth = Math.max(0.35, spike.width * 0.1);
+    context.strokeStyle = backPass ? accentText(0.1) : accentText(0.55);
+    context.stroke();
+
+    if (!backPass) {
+      if (resetPath(context)) {
+        context.moveTo(spike.midX, spike.midY);
+        context.lineTo(spike.tipX, spike.tipY);
+        context.lineWidth = Math.max(0.3, spike.width * 0.08);
+        context.strokeStyle = 'rgba(255, 255, 255, 0.56)';
+        context.stroke();
+      }
+      if (resetPath(context)) {
+        context.arc(spike.tipX, spike.tipY, Math.max(0.7, spike.width * 0.23), 0, Math.PI * 2);
+        context.fillStyle = 'rgba(255, 255, 255, 0.82)';
+        context.fill();
+      }
+    }
+  }
+  context.restore();
+}
+
+function drawMeltingDrips(context, outline, centerX, centerY, radius, random) {
+  var bottomPoint = outline[0];
+  for (var outlineIndex = 1; outlineIndex < outline.length; outlineIndex += 1) {
+    if (outline[outlineIndex].y > bottomPoint.y) { bottomPoint = outline[outlineIndex]; }
+  }
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (var dripIndex = 0; dripIndex < 5; dripIndex += 1) {
+    var dripStartX = bottomPoint.x + (dripIndex - 2) * radius * 0.085;
+    var dripStartY = bottomPoint.y - radius * (0.04 + random() * 0.1);
+    var dripLength = radius * (0.08 + random() * 0.26);
+    var dripWidth = radius * (0.012 + random() * 0.018);
+    if (!resetPath(context)) { break; }
+    context.moveTo(dripStartX - dripWidth, dripStartY);
+    context.bezierCurveTo(
+      dripStartX - dripWidth * 0.9, dripStartY + dripLength * 0.46,
+      dripStartX - dripWidth * 0.3, dripStartY + dripLength * 0.8,
+      dripStartX, dripStartY + dripLength
+    );
+    context.bezierCurveTo(
+      dripStartX + dripWidth * 0.3, dripStartY + dripLength * 0.8,
+      dripStartX + dripWidth * 0.9, dripStartY + dripLength * 0.46,
+      dripStartX + dripWidth, dripStartY
+    );
+    context.closePath();
+    context.fillStyle = pearlColor(dripIndex, random(), 0.16);
+    context.fill();
+    context.lineWidth = 0.55;
+    context.strokeStyle = 'rgba(230, 255, 255, 0.28)';
+    context.stroke();
+    if (resetPath(context)) {
+      context.arc(dripStartX, dripStartY + dripLength, dripWidth * 0.72, 0, Math.PI * 2);
+      context.fillStyle = accentText(0.18);
+      context.fill();
+    }
+  }
+  context.restore();
+}
+
+function drawFloatingShards(context, centerX, centerY, radius, random) {
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (var shardIndex = 0; shardIndex < 17; shardIndex += 1) {
+    var shardAngle = random() * Math.PI * 2;
+    var shardDistance = radius * (1.38 + random() * 0.88);
+    var shardX = centerX + Math.cos(shardAngle) * shardDistance;
+    var shardY = centerY + Math.sin(shardAngle) * shardDistance * 0.76;
+    var shardSize = radius * (0.025 + random() * 0.075);
+    var shardSpin = random() * Math.PI * 2;
+    context.save();
+    context.translate(shardX, shardY);
+    context.rotate(shardSpin);
+    if (!resetPath(context)) { context.restore(); break; }
+    context.moveTo(-shardSize * 0.8, shardSize * 0.15);
+    context.lineTo(shardSize * 0.7, -shardSize * 0.9);
+    context.lineTo(shardSize * 0.28, shardSize * 0.62);
+    context.closePath();
+    context.fillStyle = accentText(0.08 + random() * 0.12);
+    context.fill();
+    context.lineWidth = 0.55;
+    context.strokeStyle = 'rgba(232, 255, 255, 0.34)';
+    context.stroke();
+    if (resetPath(context)) {
+      context.moveTo(-shardSize * 0.8, shardSize * 0.15);
+      context.lineTo(shardSize * 0.7, -shardSize * 0.9);
+      context.lineWidth = 0.4;
+      context.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      context.stroke();
+    }
+    context.restore();
+  }
+  context.restore();
+}
+
+function drawArtifactGlints(context, centerX, centerY, radius, random) {
+  context.save();
+  context.globalCompositeOperation = 'lighter';
+  for (var glintIndex = 0; glintIndex < 26; glintIndex += 1) {
+    var glintAngle = random() * Math.PI * 2;
+    var glintDistance = radius * (0.82 + random() * 0.95);
+    var glintX = centerX + Math.cos(glintAngle) * glintDistance;
+    var glintY = centerY + Math.sin(glintAngle) * glintDistance * 0.8;
+    var glintSize = 0.45 + random() * 1.5;
+    context.fillStyle = random() > 0.62 ? accentText(0.22 + random() * 0.42) : 'rgba(255, 255, 255, 0.34)';
+    context.fillRect(glintX, glintY, glintSize, glintSize);
+  }
+  context.restore();
+}
+
+function drawScene(timestamp) {
+  if (!sceneContext) { return; }
+  var width = state.width;
+  var height = state.height;
+  var layout = state.layout;
+  var nowMilliseconds = Number.isFinite(timestamp) ?
+    timestamp : ((window.performance && performance.now) ? performance.now() : Date.now());
+  var deltaMilliseconds = state.lastFrameAt > 0 ?
+    clampNumber(nowMilliseconds - state.lastFrameAt, 0, 64, 16.7) : 16.7;
+  state.lastFrameAt = nowMilliseconds;
+  state.frameDelta = deltaMilliseconds;
+  var motionScale = state.reducedMotion ? 0.22 : 1;
+  state.clock += (deltaMilliseconds / 1000) * motionScale * (state.playing ? 1 : 0.28);
+  state.beatPulse *= Math.exp(-deltaMilliseconds / 290);
+  if (window.__liziShake === false) { state.beatPulse = 0; }
+  var seconds = state.clock;
+
+  sceneContext.setTransform(1, 0, 0, 1, 0, 0);
+  sceneContext.clearRect(0, 0, sceneCanvas.width, sceneCanvas.height);
+  sceneContext.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+
+  if (isDrawableCanvas(state.atmosphereCanvas)) {
+    sceneContext.save();
+    var driftX = Math.sin(seconds * 0.17) * width * 0.0045;
+    var driftY = Math.cos(seconds * 0.13) * height * 0.003;
+    var atmosphereScale = 1.012 + Math.sin(seconds * 0.21) * 0.006;
+    sceneContext.translate(state.layout.centerX + driftX, state.layout.centerY + driftY);
+    sceneContext.scale(atmosphereScale, atmosphereScale);
+    sceneContext.translate(-state.layout.centerX, -state.layout.centerY);
+    sceneContext.globalAlpha = 0.97;
+    sceneContext.drawImage(state.atmosphereCanvas, 0, 0, width, height);
+    sceneContext.restore();
+    if (state.quality > 0.55) {
+      sceneContext.save();
+      sceneContext.globalCompositeOperation = 'lighter';
+      sceneContext.globalAlpha = 0.16;
+      sceneContext.translate(layout.centerX, layout.centerY);
+      sceneContext.rotate(seconds * 0.007);
+      sceneContext.scale(1.045, 1.045);
+      sceneContext.translate(-layout.centerX, -layout.centerY);
+      sceneContext.drawImage(state.atmosphereCanvas, 0, 0, width, height);
+      sceneContext.restore();
+    }
+  }
+
+  drawBeatGlow(seconds);
+  drawOrbitalHalo(seconds);
+  drawArtifactSprite(seconds);
+  drawParticles(deltaMilliseconds);
+}
+
+function drawBeatGlow(seconds) {
+  if (!isDrawableCanvas(state.glowCanvas)) { return; }
+  var layout = state.layout;
+  var pulse = state.beatPulse * (state.reducedMotion ? 0.32 : 1);
+  var liveLevel = clampNumber(state.live.level, 0, 1, 0);
+  var glowAlpha = 0.08 + pulse * 0.34 + liveLevel * 0.06;
+  var glowSize = layout.artifactSize * (1.45 + pulse * 0.09);
+  sceneContext.save();
+  sceneContext.globalCompositeOperation = 'lighter';
+  sceneContext.globalAlpha = clampNumber(glowAlpha, 0, 0.52, 0.1);
+  sceneContext.translate(layout.centerX, layout.centerY);
+  sceneContext.rotate(Math.sin(seconds * 0.21) * 0.08);
+  sceneContext.scale(1, 0.88);
+  sceneContext.drawImage(state.glowCanvas, -glowSize * 0.5, -glowSize * 0.5, glowSize, glowSize);
+  sceneContext.restore();
+}
+
+function drawOrbitalHalo(seconds) {
+  if (!sceneContext) { return; }
+  var layout = state.layout;
+  var pulse = state.beatPulse * (state.reducedMotion ? 0.25 : 1);
+  var ringCount = state.quality > 0.55 ? 3 : 1;
+  sceneContext.save();
+  sceneContext.globalCompositeOperation = 'lighter';
+  for (var ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
+    var ringRadius = layout.artifactSize * (0.365 + ringIndex * 0.052) + pulse * layout.artifactSize * 0.006;
+    var ringSquash = 0.2 + ringIndex * 0.025;
+    var ringRotation = Math.sin(seconds * 0.065 + ringIndex * 1.7) * 0.16 + ringIndex * 0.42;
+    var startAngle = seconds * (0.055 + ringIndex * 0.018) + ringIndex * 2.1;
+    var arcLength = 1.15 + ringIndex * 0.55 + Math.sin(seconds * 0.23 + ringIndex) * 0.3;
+    sceneContext.save();
+    sceneContext.translate(layout.centerX, layout.centerY - layout.artifactSize * 0.01);
+    sceneContext.rotate(ringRotation);
+    if (!resetPath(sceneContext)) { sceneContext.restore(); break; }
+    sceneContext.ellipse(0, 0, ringRadius, ringRadius * ringSquash, 0, startAngle, startAngle + arcLength);
+    sceneContext.lineWidth = Math.max(0.55, 1.3 - ringIndex * 0.2);
+    sceneContext.strokeStyle = accentText(0.16 - ringIndex * 0.035);
+    sceneContext.stroke();
+    if (!resetPath(sceneContext)) { sceneContext.restore(); break; }
+    sceneContext.ellipse(0, 0, ringRadius, ringRadius * ringSquash, 0, startAngle + 2.6, startAngle + 3.15);
+    sceneContext.lineWidth = Math.max(0.4, 0.75 - ringIndex * 0.08);
+    sceneContext.strokeStyle = 'rgba(245, 255, 255, ' + (0.22 - ringIndex * 0.04).toFixed(3) + ')';
+    sceneContext.stroke();
+    sceneContext.restore();
+  }
+  sceneContext.restore();
+}
+
+function drawArtifactSprite(seconds) {
+  if (!isDrawableCanvas(state.artifactCanvas)) { return; }
+  var layout = state.layout;
+  var beatStrength = state.beatPulse * (state.reducedMotion ? 0.4 : 1);
+  var pulse = beatStrength + state.live.bass * 0.25;
+  var hoverY = Math.sin(seconds * 0.56) * layout.minSide * 0.006;
+  var hoverX = Math.cos(seconds * 0.37) * layout.minSide * 0.003;
+  var tilt = Math.sin(seconds * 0.31) * 0.022;
+  var breath = 1 + Math.sin(seconds * 0.72) * 0.006 + pulse * 0.018;
+  sceneContext.save();
+  sceneContext.translate(layout.centerX + hoverX, layout.centerY + hoverY);
+  sceneContext.rotate(tilt);
+  sceneContext.scale(breath, breath);
+  sceneContext.globalAlpha = 0.98;
+  sceneContext.drawImage(
+    state.artifactCanvas,
+    -layout.artifactSize * 0.5,
+    -layout.artifactSize * 0.5,
+    layout.artifactSize,
+    layout.artifactSize
+  );
+  if (state.quality > 0.55 && beatStrength > 0.1) {
+    var ghostShift = (Math.sin(seconds * 11.3) > 0 ? 1 : -1) * layout.artifactSize * (0.003 + beatStrength * 0.007);
+    sceneContext.save();
+    sceneContext.globalCompositeOperation = 'lighter';
+    sceneContext.globalAlpha = 0.06 + beatStrength * 0.1;
+    sceneContext.translate(ghostShift, -ghostShift * 0.25);
+    sceneContext.drawImage(
+      state.artifactCanvas,
+      -layout.artifactSize * 0.5,
+      -layout.artifactSize * 0.5,
+      layout.artifactSize,
+      layout.artifactSize
+    );
+    sceneContext.restore();
+  }
+  if (state.quality > 0.62 && beatStrength > 0.46) {
+    var bandSeed = Math.abs(Number(state.lastBeatIndex) || 0) % 4;
+    var bandTop = 0.16 + bandSeed * 0.17;
+    var bandHeight = 0.045;
+    var sourceCanvas = state.artifactCanvas;
+    var sourceY = sourceCanvas.height * bandTop;
+    var sourceHeight = sourceCanvas.height * bandHeight;
+    var destinationY = -layout.artifactSize * 0.5 + layout.artifactSize * bandTop;
+    var bandShift = (bandSeed % 2 === 0 ? 1 : -1) * layout.artifactSize * (0.016 + beatStrength * 0.022);
+    sceneContext.save();
+    if (resetPath(sceneContext)) {
+      sceneContext.rect(-layout.artifactSize * 0.5, destinationY, layout.artifactSize, layout.artifactSize * bandHeight);
+      sceneContext.clip();
+      sceneContext.globalCompositeOperation = 'lighter';
+      sceneContext.globalAlpha = 0.62 + beatStrength * 0.2;
+      sceneContext.drawImage(
+        sourceCanvas,
+        0, sourceY, sourceCanvas.width, sourceHeight,
+        -layout.artifactSize * 0.5 + bandShift, destinationY,
+        layout.artifactSize, layout.artifactSize * bandHeight
+      );
+    }
+    sceneContext.restore();
+  }
+  sceneContext.restore();
+}
+
+function drawParticles(deltaMilliseconds) {
+  if (!state.particles.length) { return; }
+  var layout = state.layout;
+  var visibleCount = Math.round(state.particles.length * clampNumber(state.quality, 0.3, 1, 1));
+  var motionScale = state.reducedMotion ? 0.18 : 1;
+  var seconds = state.clock;
+  sceneContext.save();
+  sceneContext.globalCompositeOperation = 'lighter';
+  for (var particleIndex = 0; particleIndex < visibleCount; particleIndex += 1) {
+    var particle = state.particles[particleIndex];
+    particle.y -= particle.speed * (deltaMilliseconds / 1000) * motionScale;
+    particle.x += Math.sin(seconds * 0.55 + particle.phase) * particle.drift * (deltaMilliseconds / 1000) * motionScale;
+    if (particle.y < -8) {
+      particle.y = layout.centerY + (Math.random() - 0.5) * layout.minSide * 0.75;
+      particle.x = Math.random() * state.width;
+    }
+    if (particle.y > state.height + 8) { particle.y = -8; }
+    if (particle.x < -8) { particle.x = state.width + 8; }
+    if (particle.x > state.width + 8) { particle.x = -8; }
+    sceneContext.fillStyle = particle.color;
+    sceneContext.fillRect(particle.x, particle.y, particle.size, particle.size);
+  }
+  sceneContext.restore();
+}
+
+function updateLyrics() {
+  if (!state.initialized) { return; }
+  if (!state.lyrics.length) {
+    state.idx = -1;
+    state.currentText = '';
+    state.activeCharNodes = null;
+    if (!emptyState.classList.contains('show')) { emptyState.classList.add('show'); }
+    return;
+  }
+  if (emptyState.classList.contains('show')) { emptyState.classList.remove('show'); }
+  var activeIndex = -1;
+  for (var lineIndex = 0; lineIndex < state.lyrics.length; lineIndex += 1) {
+    if (state.lyrics[lineIndex].t <= state.time + 0.04) { activeIndex = lineIndex; }
+    else { break; }
+  }
+  if (activeIndex !== state.idx) {
+    state.idx = activeIndex;
+    state.currentText = activeIndex >= 0 ? state.lyrics[activeIndex].text : '';
+    var allLines = lyricsRoot.children;
+    for (var childIndex = 0; childIndex < allLines.length; childIndex += 1) {
+      allLines[childIndex].classList.toggle('active', childIndex === activeIndex);
+    }
+    state.litLineIndex = -2;
+    state.litCount = 0;
+    state.activeCharNodes = null;
+  }
+  if (activeIndex >= 0 && lyricsRoot.children[activeIndex]) {
+    var activeElement = lyricsRoot.children[activeIndex];
+    var activeLine = state.lyrics[activeIndex];
+    var seekedBack = state.time + 0.12 < state.lastLitTime;
+    if (state.litLineIndex !== activeIndex) {
+      state.activeCharNodes = activeElement.querySelectorAll('.lyric-char');
+      state.litLineIndex = activeIndex;
+      state.litCount = 0;
+    }
+    var charNodes = state.activeCharNodes || activeElement.querySelectorAll('.lyric-char');
+    if (seekedBack) {
+      for (var staleIndex = 0; staleIndex < charNodes.length; staleIndex += 1) {
+        charNodes[staleIndex].classList.remove('lit');
+      }
+      state.litCount = 0;
+    }
+    var targetLit = 0;
+    for (var charIndex = 0; charIndex < activeLine.charTimes.length; charIndex += 1) {
+      if (activeLine.charTimes[charIndex] <= state.time + 0.055) { targetLit = charIndex + 1; }
+      else { break; }
+    }
+    if (targetLit < state.litCount) {
+      for (var resetIndex = 0; resetIndex < charNodes.length; resetIndex += 1) {
+        charNodes[resetIndex].classList.remove('lit');
+      }
+      state.litCount = 0;
+    }
+    var litLimit = Math.min(targetLit, charNodes.length);
+    for (var lightIndex = state.litCount; lightIndex < litLimit; lightIndex += 1) {
+      charNodes[lightIndex].classList.add('lit');
+    }
+    state.litCount = Math.max(state.litCount, litLimit);
+    state.lastLitTime = state.time;
+  }
+  if (state.duration > 0) {
+    var progressPercent = Math.min(100, Math.max(0, state.time / state.duration * 100));
+    if (Math.abs(progressPercent - state.lastProgress) > 0.05) {
+      state.lastProgress = progressPercent;
+      progressFill.style.width = progressPercent + '%';
+    }
+  }
+}
+
+function buildLyricDom(preparedLines) {
+  lyricsRoot.innerHTML = '';
+  for (var lyricIndex = 0; lyricIndex < preparedLines.length; lyricIndex += 1) {
+    var preparedLine = preparedLines[lyricIndex];
+    var lyricLine = document.createElement('div');
+    lyricLine.className = 'lyric-line';
+    var lyricText = document.createElement('div');
+    lyricText.className = 'lyric-text';
+    if (preparedLine.glyphs.length > 64) { lyricText.className += ' micro'; }
+    else if (preparedLine.glyphs.length > 34) { lyricText.className += ' ultra'; }
+    else if (preparedLine.glyphs.length > 19) { lyricText.className += ' compact'; }
+    for (var glyphIndex = 0; glyphIndex < preparedLine.glyphs.length; glyphIndex += 1) {
+      var glyphSpan = document.createElement('span');
+      glyphSpan.className = 'lyric-char';
+      var glyphValue = preparedLine.glyphs[glyphIndex];
+      glyphSpan.textContent = glyphValue;
+      lyricText.appendChild(glyphSpan);
+    }
+    lyricLine.appendChild(lyricText);
+    lyricsRoot.appendChild(lyricLine);
+  }
+}
+
+function handleInit(payloadData) {
+  var safePayload = payloadData && typeof payloadData === 'object' ? payloadData : {};
+  state.initialized = true;
+  applyAccent(safePayload);
+  var incomingLines = Array.isArray(safePayload.lines) ? safePayload.lines : [];
+  var preparedLines = [];
+  for (var lineIndex = 0; lineIndex < incomingLines.length; lineIndex += 1) {
+    var lineData = incomingLines[lineIndex];
+    if (!lineData || typeof lineData !== 'object') { continue; }
+    var lineTime = Number(lineData.t);
+    if (!Number.isFinite(lineTime)) { continue; }
+    try {
+      preparedLines.push(prepareLyricLine(lineData, lineIndex));
+    } catch (lineError) {
+      reportError(lineError, 'lyric-line');
+    }
+  }
+  preparedLines.sort(function (firstLine, secondLine) {
+    if (firstLine.t === secondLine.t) { return firstLine.order - secondLine.order; }
+    return firstLine.t - secondLine.t;
+  });
+  state.lyrics = preparedLines;
+  state.idx = -2;
+  state.currentText = '';
+  state.litLineIndex = -2;
+  state.litCount = 0;
+  state.lastLitTime = -1;
+  state.activeCharNodes = null;
+  state.lastProgress = -1;
+  buildLyricDom(preparedLines);
+  var songData = safePayload.song && typeof safePayload.song === 'object' ? safePayload.song : {};
+  state.songName = songData.name ? String(songData.name) : '';
+  state.duration = Number.isFinite(Number(safePayload.duration)) ? Math.max(0, Number(safePayload.duration)) : 0;
+  state.playing = safePayload.playing !== false;
+  tagSong.textContent = state.songName || '—';
+  progressFill.style.width = '0%';
+  emptyState.classList.toggle('show', preparedLines.length === 0);
+  try { updateLyrics(); } catch (lyricStateError) { reportError(lyricStateError, 'init-lyrics'); }
+  try {
+    rebuildScene();
+  } catch (sceneError) {
+    reportError(sceneError, 'init-scene');
+  }
+}
+
+window.addEventListener('message', function (messageEvent) {
+  var messageData = messageEvent.data;
+  if (!messageData || messageData.__c100 !== 1) { return; }
+  try {
+    if (messageData.type === 'init') {
+      handleInit(messageData.payload);
+    } else if (messageData.type === 'tick') {
+      var tickPayload = messageData.payload || {};
+      state.time = Number.isFinite(Number(tickPayload.time)) ? Number(tickPayload.time) : state.time;
+      state.playing = tickPayload.playing !== false;
+    } else if (messageData.type === 'beat') {
+      var beatPayload = messageData.payload || {};
+      var beatLevel = clampNumber(beatPayload.level, 0, 1, 0.45);
+      state.beatPulse = Math.max(state.beatPulse, beatLevel);
+      state.lastBeatIndex = Number.isFinite(Number(beatPayload.index)) ? Number(beatPayload.index) : state.lastBeatIndex;
+    } else if (messageData.type === 'live') {
+      var livePayload = messageData.payload || {};
+      state.live.bpm = clampNumber(livePayload.bpm, 0, 300, state.live.bpm);
+      state.live.level = clampNumber(livePayload.level, 0, 1, 0);
+      state.live.bass = clampNumber(livePayload.bass, 0, 1, 0);
+      state.live.mid = clampNumber(livePayload.mid, 0, 1, 0);
+      state.live.treble = clampNumber(livePayload.treble, 0, 1, 0);
+      if (livePayload.playing !== undefined) { state.playing = livePayload.playing !== false; }
+    }
+  } catch (error) {
+    reportError(error, messageData.type || 'message');
+  }
+});
+
+var resizeTimer = 0;
+window.addEventListener('resize', function () {
+  if (resizeTimer) { clearTimeout(resizeTimer); }
+  resizeTimer = setTimeout(function () {
+    resizeTimer = 0;
+    try { rebuildScene(); } catch (error) { reportError(error, 'resize'); }
+  }, 160);
+});
+
+window.addEventListener('error', function (errorEvent) {
+  reportError(errorEvent.error || errorEvent.message, 'window');
+});
+window.addEventListener('unhandledrejection', function (rejectionEvent) {
+  reportError(rejectionEvent.reason, 'promise');
+});
+
+try {
+  var motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  state.reducedMotion = !!(motionPreference && motionPreference.matches);
+  if (motionPreference && typeof motionPreference.addEventListener === 'function') {
+    motionPreference.addEventListener('change', function (motionEvent) {
+      state.reducedMotion = !!motionEvent.matches;
+    });
+  } else if (motionPreference && typeof motionPreference.addListener === 'function') {
+    motionPreference.addListener(function (motionEvent) {
+      state.reducedMotion = !!motionEvent.matches;
+    });
+  }
+} catch (motionError) {
+  reportError(motionError, 'motion-preference');
+}
+
+</script>
+</body>
+</html>
