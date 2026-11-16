@@ -1,9 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { PlayerState } from '../../types';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
-import { usePlaybackStore } from '../../stores/usePlaybackStore';
+import { setDuration, setPlayerState, usePlaybackStore } from '../../stores/usePlaybackStore';
 import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nativePlaybackSync';
 import type { MutableRefObject } from 'react';
-import { setDuration } from '../../stores/usePlaybackStore';
 import { currentTime } from '../../stores/motionSignals';
 import { nativePlaybackEngine } from './nativePlaybackEngine';
 
@@ -78,10 +78,13 @@ export const useNativePlaybackRuntime = ({
          */
         const resumeAtSec = pendingResumeTimeRef.current;
         pendingResumeTimeRef.current = null;
+        const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
         void nativePlaybackEngine.setSource(audioSrc, {
             songKey: song ? getPlaybackSongKey(song) : null,
             startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
         }).catch(error => {
+            if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration) return;
+            if (nativePlaybackEngine.activeUrl() !== audioSrc) return;
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
@@ -109,7 +112,21 @@ export const useNativePlaybackRuntime = ({
         if (!shouldAutoPlayRef.current) return;
         shouldAutoPlayRef.current = false;
         nativePlaybackEngine.setVolume(callbacksRef.current.getTargetPlaybackVolume());
-        void nativePlaybackEngine.play().catch(error => {
+        const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
+        const sourceGeneration = nativePlaybackEngine.sourceGeneration();
+        void nativePlaybackEngine.play().then(() => {
+            // 只让当前起播意图同步状态，避免迟到的结果覆盖暂停、换歌或 ABA 换源。
+            if (
+                nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
+                && nativePlaybackEngine.sourceGeneration() === sourceGeneration
+            ) {
+                setPlayerState(PlayerState.PLAYING);
+            }
+        }).catch(error => {
+            if (
+                nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
+                || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
+            ) return;
             console.error('[NativePlayer] play failed', error);
             callbacksRef.current.onError(String(error));
         });

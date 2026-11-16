@@ -115,9 +115,15 @@ export function usePlaybackTransportController({
          * 以前这里一路走到 `if (!audio) return`，暂停之后再按播放毫无反应。
          */
         if (nativePlaybackEngine.ownsPlayback()) {
+            const playIntentGeneration = nativePlaybackEngine.playIntentGeneration();
+            const sourceGeneration = nativePlaybackEngine.sourceGeneration();
             try {
                 await nativePlaybackEngine.play();
-                if (revision !== transportRevision.current) return;
+                if (
+                    revision !== transportRevision.current
+                    || nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
+                    || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
+                ) return;
                 setPlayerState(PlayerState.PLAYING);
             } catch (error) {
                 if (revision !== transportRevision.current) return;
