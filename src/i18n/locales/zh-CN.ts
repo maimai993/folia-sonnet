@@ -1483,7 +1483,6 @@ export default {
     "consoleTabReverb": "混响",
     "consoleTabPostEq": "后置",
     "consoleTabSaturation": "染色",
-    "consoleGroupSpace": "空间声场",
     "consoleTabSpatial": "空间",
     "consoleSpatial": "空间声场",
     "consoleSpatialHint": "用 SCNet 拆出的四个音轨（鼓 / 贝斯 / 其他 / 人声）各自摆位，再实时混成最终声场。",

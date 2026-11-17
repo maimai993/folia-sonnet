@@ -59,8 +59,7 @@ const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_
 // t() 在组件里调用，所以这里只放 id 与页签归属，label 在渲染处拼。
 const CONSOLE_GROUP_DEFS: ReadonlyArray<{ id: string; tabs: ConsoleTabId[]; labelKey: string }> = [
     { id: 'base', tabs: ['equalizer', 'repair', 'compressor'], labelKey: 'ui.consoleGroupBase' },
-    { id: 'color', tabs: ['reverb', 'saturation'], labelKey: 'ui.consoleGroupColor' },
-    { id: 'space', tabs: ['spatial'], labelKey: 'ui.consoleGroupSpace' },
+    { id: 'color', tabs: ['reverb', 'saturation', 'spatial'], labelKey: 'ui.consoleGroupColor' },
     { id: 'master', tabs: ['mastering', 'postEq'], labelKey: 'ui.consoleGroupMaster' },
     { id: 'smart', tabs: ['studio'], labelKey: 'ui.consoleGroupSmart' },
 ];

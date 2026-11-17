@@ -78,6 +78,7 @@ const SpatialPane: React.FC = () => {
                                 <span className="text-[13px] leading-5">{t('ui.consoleStemAudible')}</span>
                                 <Toggle
                                     checked={stem.audible}
+                                    disabled={!editable}
                                     onChange={audible => setStemSpatial(kind, { audible })}
                                     label={t('ui.consoleStemAudible')}
                                 />

@@ -1467,7 +1467,6 @@ export default {
     "consoleTabReverb": "Reverb",
     "consoleTabPostEq": "Pasca",
     "consoleTabSaturation": "Warna",
-    "consoleGroupSpace": "Ruang suara",
     "consoleTabSpatial": "Ruang",
     "consoleSpatial": "Ruang suara",
     "consoleSpatialHint": "Tempatkan keempat stem SCNet (drum, bas, lainnya, vokal) lalu campur kembali menjadi panggung suara akhir secara real time.",

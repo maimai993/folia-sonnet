@@ -1467,7 +1467,6 @@ export default {
     "consoleTabReverb": "Reverb",
     "consoleTabPostEq": "Post",
     "consoleTabSaturation": "Drive",
-    "consoleGroupSpace": "Spatial",
     "consoleTabSpatial": "Space",
     "consoleSpatial": "Spatial field",
     "consoleSpatialHint": "Place each of the four SCNet stems (drums, bass, other, vocals) and mix them back into the final sound stage in real time.",
