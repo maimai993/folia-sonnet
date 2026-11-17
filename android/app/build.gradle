@@ -275,8 +275,11 @@ android {
      * System.loadLibrary("node") 找不到就 UnsatisfiedLinkError，应用直接起不来。
      * 它按 <ABI>/libnode.so 的目录约定放在 cpp/libnode/ 下，正好能被 jniLibs 按
      * ABI 收进去，所以这里显式指过去补上这一条。
+     *
+     * 用单数 srcDir 追加，不要写成 srcDirs = [...]：赋值形式会整个替换源目录集合，
+     * 把默认的 src/main/jniLibs 一起顶掉。这里只补 libnode，别的 .so 仍走默认目录。
      */
-    sourceSets.main.jniLibs.srcDirs 'src/main/cpp/libnode'
+    sourceSets.main.jniLibs.srcDir 'src/main/cpp/libnode'
 }
 
 try {
