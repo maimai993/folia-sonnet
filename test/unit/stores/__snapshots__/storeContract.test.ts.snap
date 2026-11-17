@@ -3,7 +3,6 @@
 exports[`store contract > keeps every localStorage key the stores read or write 1`] = `
 [
   "active_online_provider_id",
-  "audio_output_device_id",
   "auto_hide_player_chrome",
   "background_opacity",
   "background_silent_skip",
@@ -20,7 +19,6 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "close_to_tray",
   "custom_shortcut_command",
   "custom_shortcut_letter",
-  "default_audio_quality",
   "diorama_tuning",
   "disable_home_dynamic_background",
   "enable_home_dynamic_background",
@@ -195,8 +193,6 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "player_chrome_hidden",
   "player_control_slot_primary",
   "player_control_slot_secondary",
-  "player_loop_mode",
-  "player_volume",
   "playercap_host",
   "playercap_player",
   "playercap_time_basis",
@@ -204,7 +200,6 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "ponder_touch_button",
   "preferred_alternative_lyric_source",
   "prevent_display_sleep_during_playback",
-  "queue_add_behavior",
   "queue_palette_keep_open",
   "random_visualizer_modes",
   "reduce_motion_collectionMorph",
