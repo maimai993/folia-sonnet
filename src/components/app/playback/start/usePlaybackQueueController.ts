@@ -55,6 +55,7 @@ import { playbackFade } from '../../../../services/playbackFade';
 import { getProviderSongMetadata } from '../../../../services/onlineMusic/songMetadata';
 import { setStatusMessage as setStatusMsg, beginStatusLoading, completeStatusLoading, failStatusLoading, cancelStatusLoading, reviseStatusLoading, withStatusLoadingResult } from '../../../../stores/useStatusMessageStore';
 import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState, startLoadingToPlay, usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { usePendingResumeStore } from '../../../../stores/usePendingResumeStore';
 import { askedSongKeyRef, askForSong, keepSongsOfProvidersStanding, makeSongCurrent, playsDroppedSoFar, providerDropsSoFar, providerPlaysDroppedSoFar, showSong, startOfAskedSong, startPlay, withdrawAsk } from '../currentSong';
 import { personalFmEndingsSoFar } from '../personalFmEndings';
 import { loadOnlineSongAudio } from '../source/songAudioSource';
@@ -1255,6 +1256,9 @@ export function usePlaybackQueueController({
         // at and the address's fetch time to the song the key went back to.
         shouldAutoPlayRef.current = true;
         pendingResumeTimeRef.current = null;
+        // 新的播放意图从头开始：续播位置是恢复链路专用，这里和 ref 一并清掉，
+        // 否则恢复失败/HiFi/外部播放残留的 store 会让手动重播同一首从旧位置起播。
+        usePendingResumeStore.getState().setPendingResume(null);
         lastAudioRecoverySourceRef.current = null;
         currentOnlineAudioUrlFetchedAtRef.current = null;
         setLyrics(null);
