@@ -224,6 +224,14 @@ const ReverbPane: React.FC = () => {
                             onCommit={() => undefined}
                         />
                         <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoWidthHint')}</p>
+                        <Button
+                            variant="bare"
+                            className="mt-2 h-7 whitespace-nowrap rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] transition-colors hover:bg-[var(--st-fill2)]"
+                            disabled={!stereo.enabled}
+                            onClick={() => setStereo({ width: 0, crossfeed: 0 })}
+                        >
+                            {t('ui.consoleStereoMonoFold')}
+                        </Button>
                         {/* 低频单声道：拖到最左边是关。它和宽度是两件事 —— 宽度管「侧向有多少」，
                             这一根管「多低的频率不算侧向」。 */}
                         <div className="mt-3">

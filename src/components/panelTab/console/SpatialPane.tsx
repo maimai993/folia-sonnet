@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     AUDIO_CONSOLE_SPATIAL_LEVEL_MAX,
@@ -143,6 +143,27 @@ const SpatialPane: React.FC = () => {
         setSpatial({ enabled: true, mode: 'custom' });
     };
 
+    // Solo：点一下只听这一轨（自动静音其它三轨）；再点一下恢复之前的 audible 状态。
+    const [solo, setSolo] = useState<AudioConsoleStemKind | null>(null);
+    const soloBefore = useRef<Record<AudioConsoleStemKind, boolean> | null>(null);
+    const toggleSolo = (kind: AudioConsoleStemKind): void => {
+        if (solo === kind) {
+            if (soloBefore.current) {
+                for (const other of AUDIO_CONSOLE_STEM_KINDS) {
+                    setStemSpatial(other, { audible: soloBefore.current[other] });
+                }
+            }
+            soloBefore.current = null;
+            setSolo(null);
+            return;
+        }
+        const before = {} as Record<AudioConsoleStemKind, boolean>;
+        for (const other of AUDIO_CONSOLE_STEM_KINDS) before[other] = spatial.stems[other].audible;
+        soloBefore.current = before;
+        for (const other of AUDIO_CONSOLE_STEM_KINDS) setStemSpatial(other, { audible: other === kind });
+        setSolo(kind);
+    };
+
     const stateKey = separationState === 'building' || separationState === 'ready' || separationState === 'failed'
         ? `ui.consoleSpatialState${separationState[0].toUpperCase()}${separationState.slice(1)}`
         : 'ui.consoleSpatialStateIdle';
@@ -230,13 +251,23 @@ const SpatialPane: React.FC = () => {
                     <EqualizerSection key={kind} title={t(STEM_LABEL_KEYS[kind])}>
                         <div className={`space-y-3.5 px-4 pb-4 pt-3${editable ? '' : ' opacity-40'}`}>
                             <div className="flex items-center justify-between gap-3">
-                                <span className="text-[13px] leading-5">{t('ui.consoleStemAudible')}</span>
-                                <Toggle
-                                    checked={stem.audible}
-                                    disabled={!editable}
-                                    onChange={audible => setStemSpatial(kind, { audible })}
-                                    label={t('ui.consoleStemAudible')}
-                                />
+                                <span className="text-[13px] leading-5">{t(STEM_LABEL_KEYS[kind])}</span>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        variant="quiet"
+                                        tip={t('ui.consoleStemSolo')}
+                                        disabled={!editable}
+                                        onClick={() => toggleSolo(kind)}
+                                    >
+                                        {solo === kind ? t('ui.consoleStemSoloOff') : t('ui.consoleStemSolo')}
+                                    </Button>
+                                    <Toggle
+                                        checked={stem.audible}
+                                        disabled={!editable}
+                                        onChange={audible => setStemSpatial(kind, { audible })}
+                                        label={t('ui.consoleStemAudible')}
+                                    />
+                                </div>
                             </div>
                             <ConsoleSlider
                                 label={t('ui.consoleStemPan')}
