@@ -26,6 +26,7 @@ import CompressorPane from './console/CompressorPane';
 import ReverbPane from './console/ReverbPane';
 import PostEqPane from './console/PostEqPane';
 import SaturationPane from './console/SaturationPane';
+import SpatialPane from './console/SpatialPane';
 import MasteringPane from './console/MasteringPane';
 import StudioPane from './console/StudioPane';
 import RepairPane from './console/RepairPane';
@@ -50,7 +51,7 @@ type AudioEqualizerDialogProps = {
     isDaylight: boolean;
 };
 
-type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'studio';
+type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'studio' | 'spatial';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
 
@@ -59,6 +60,7 @@ const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_
 const CONSOLE_GROUP_DEFS: ReadonlyArray<{ id: string; tabs: ConsoleTabId[]; labelKey: string }> = [
     { id: 'base', tabs: ['equalizer', 'repair', 'compressor'], labelKey: 'ui.consoleGroupBase' },
     { id: 'color', tabs: ['reverb', 'saturation'], labelKey: 'ui.consoleGroupColor' },
+    { id: 'space', tabs: ['spatial'], labelKey: 'ui.consoleGroupSpace' },
     { id: 'master', tabs: ['mastering', 'postEq'], labelKey: 'ui.consoleGroupMaster' },
     { id: 'smart', tabs: ['studio'], labelKey: 'ui.consoleGroupSmart' },
 ];
@@ -258,6 +260,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                             { value: 'compressor', label: t('ui.consoleTabCompressor') },
                             { value: 'reverb', label: t('ui.consoleTabReverb') },
                             { value: 'saturation', label: t('ui.consoleTabSaturation') },
+                            { value: 'spatial', label: t('ui.consoleTabSpatial') },
                             { value: 'mastering', label: t('ui.consoleTabMastering') },
                             { value: 'postEq', label: t('ui.consoleTabPostEq') },
                             { value: 'studio', label: t('ui.consoleTabStudio') },
@@ -294,6 +297,7 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     {tab === 'compressor' && <CompressorPane />}
                     {tab === 'reverb' && <ReverbPane />}
                     {tab === 'saturation' && <SaturationPane />}
+                    {tab === 'spatial' && <SpatialPane />}
                     {tab === 'mastering' && <MasteringPane />}
                     {tab === 'postEq' && <PostEqPane />}
                     {tab === 'studio' && <StudioPane />}

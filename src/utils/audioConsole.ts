@@ -90,6 +90,32 @@ export type AudioConsoleStereo = {
     bassMonoHz: number;
 };
 
+/** 四个分离音轨：顺序与 ScnetRunner.STEMS 一致，改这里要改原生。 */
+export const AUDIO_CONSOLE_STEM_KINDS = ['drums', 'bass', 'other', 'vocals'] as const;
+export type AudioConsoleStemKind = typeof AUDIO_CONSOLE_STEM_KINDS[number];
+
+/** 单个音轨在空间声场里的位置：pan 决定左右，width 决定自身宽度，levelDb 决定响度。 */
+export type AudioConsoleStemSpatial = {
+    /** 这一轨是否参与混音。关掉 = 这一轨静音。 */
+    audible: boolean;
+    /** -1 全左 ~ 1 全右，0 居中。 */
+    pan: number;
+    /** 0 单声道 ~ 2 侧向加倍；1 是原样。 */
+    width: number;
+    /** -24 ~ +6 dB。 */
+    levelDb: number;
+};
+
+/**
+ * 空间声场：四个分离音轨各有一个可调位置，全部音轨一起播放时按这里的位置混成
+ * 最终声场。混音方式交给用户：auto 用内置摆位，custom 逐轨手调。
+ */
+export type AudioConsoleSpatial = {
+    enabled: boolean;
+    mode: 'auto' | 'custom';
+    stems: Record<AudioConsoleStemKind, AudioConsoleStemSpatial>;
+};
+
 /** 饱和的三种传输曲线，编号与 EqSettings.kt 的 SaturationMode 一致。 */
 export const AUDIO_CONSOLE_SATURATION_MODES = ['tape', 'tube', 'diode'] as const;
 export type AudioConsoleSaturationMode = typeof AUDIO_CONSOLE_SATURATION_MODES[number];
@@ -362,6 +388,8 @@ export type AudioConsoleSettings = {
     stereo: AudioConsoleStereo;
     saturation: AudioConsoleSaturation;
     limiter: AudioConsoleLimiter;
+    /** 空间声场：四个分离音轨的位置，可缺省（老存档按中性补齐）。 */
+    spatial: AudioConsoleSpatial;
     /** 可缺省：老存档没有这一块时按中性补齐（全部关闭）。 */
     mastering: AudioConsoleMastering;
 };
@@ -413,6 +441,14 @@ export const AUDIO_CONSOLE_CROSSOVER_MAX = 16000;
 export const AUDIO_CONSOLE_CROSSOVER_RATIO = 1.4;
 
 export const AUDIO_CONSOLE_BASS_MONO_MAX = 400;
+
+// —— 空间声场取值范围 ——
+export const AUDIO_CONSOLE_SPATIAL_PAN_MIN = -1;
+export const AUDIO_CONSOLE_SPATIAL_PAN_MAX = 1;
+export const AUDIO_CONSOLE_SPATIAL_WIDTH_MIN = 0;
+export const AUDIO_CONSOLE_SPATIAL_WIDTH_MAX = 2;
+export const AUDIO_CONSOLE_SPATIAL_LEVEL_MIN = -24;
+export const AUDIO_CONSOLE_SPATIAL_LEVEL_MAX = 6;
 
 export const AUDIO_CONSOLE_SATURATION_DRIVE_MIN = 0;
 export const AUDIO_CONSOLE_SATURATION_DRIVE_MAX = 24;
@@ -545,6 +581,16 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
     limiter: {
         ceilingDb: -0.3,
         releaseMs: 120,
+    },
+    spatial: {
+        enabled: false,
+        mode: 'auto',
+        stems: {
+            drums: { audible: true, pan: 0, width: 1, levelDb: 0 },
+            bass: { audible: true, pan: 0, width: 1, levelDb: 0 },
+            other: { audible: true, pan: 0, width: 1, levelDb: 0 },
+            vocals: { audible: true, pan: 0, width: 1, levelDb: 0 },
+        },
     },
     mastering: {
         compensation: {
@@ -811,6 +857,33 @@ const normalizeMastering = (value: unknown): AudioConsoleMastering => {
     };
 };
 
+/** 空间声场块的归一化：老存档没有 spatial 时整块按出厂值补齐，手改过的存档逐字段夹紧。 */
+const normalizeSpatial = (value: unknown): AudioConsoleSpatial => {
+    const root = asRecord(value);
+    const stems = asRecord(root.stems);
+    const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS.spatial;
+    const readStem = (kind: AudioConsoleStemKind): AudioConsoleStemSpatial => {
+        const candidate = asRecord(stems[kind]);
+        const fallback = defaults.stems[kind];
+        return {
+            audible: readBoolean(candidate.audible, fallback.audible),
+            pan: clamp(candidate.pan, AUDIO_CONSOLE_SPATIAL_PAN_MIN, AUDIO_CONSOLE_SPATIAL_PAN_MAX, fallback.pan),
+            width: clamp(candidate.width, AUDIO_CONSOLE_SPATIAL_WIDTH_MIN, AUDIO_CONSOLE_SPATIAL_WIDTH_MAX, fallback.width),
+            levelDb: clamp(candidate.levelDb, AUDIO_CONSOLE_SPATIAL_LEVEL_MIN, AUDIO_CONSOLE_SPATIAL_LEVEL_MAX, fallback.levelDb),
+        };
+    };
+    return {
+        enabled: readBoolean(root.enabled, defaults.enabled),
+        mode: root.mode === 'custom' ? 'custom' : 'auto',
+        stems: {
+            drums: readStem('drums'),
+            bass: readStem('bass'),
+            other: readStem('other'),
+            vocals: readStem('vocals'),
+        },
+    };
+};
+
 /** 把存档里读到的（可能是旧版本、可能是手改过的）设置整理成一份完整合法的设置。 */
 export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSettings => {
     const root = asRecord(value);
@@ -881,6 +954,7 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             ceilingDb: clamp(limiter.ceilingDb, AUDIO_CONSOLE_LIMITER_CEILING_MIN, AUDIO_CONSOLE_LIMITER_CEILING_MAX, defaults.limiter.ceilingDb),
             releaseMs: clamp(limiter.releaseMs, AUDIO_CONSOLE_LIMITER_RELEASE_MIN, AUDIO_CONSOLE_LIMITER_RELEASE_MAX, defaults.limiter.releaseMs),
         },
+        spatial: normalizeSpatial(root.spatial),
         mastering,
     };
 };

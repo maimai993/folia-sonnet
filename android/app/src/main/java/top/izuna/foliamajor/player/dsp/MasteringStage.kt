@@ -33,8 +33,6 @@ import kotlin.math.tanh
 class MasteringStage {
 
     // —— 检测 / 分析滤波器（只用来算包络，不改变信号）——
-    private val gateDetect = BiquadFilter()      // 噪声门：宽带检测用直通，无需滤波
-    private val dePlosiveBand = BiquadFilter()   // 去喷麦：低频带
     private val deEsserBand = BiquadFilter()     // 去齿音：高频带
     private val exciterHighpass = BiquadFilter() // 激励：提取高频
     private val exciterLowpass = BiquadFilter()  // 激励：限制激励频带上限
@@ -102,7 +100,7 @@ class MasteringStage {
     }
 
     fun reset() {
-        gateDetect.reset(); dePlosiveBand.reset(); deEsserBand.reset()
+        deEsserBand.reset()
         exciterHighpass.reset(); exciterLowpass.reset()
         bassShelf.reset(); toneAir.reset(); tonePresence.reset(); toneWarmth.reset()
         toneClarity.reset(); loudLow.reset(); loudHigh.reset()
@@ -129,7 +127,11 @@ class MasteringStage {
         channels = ch
 
         val neutral = settings.isNeutral()
-        if (neutral) return
+        if (neutral) {
+            // 回到中性时把标志翻回来：下一次从「全关」切到「有处理」才能重新清包络。
+            wasNeutral = true
+            return
+        }
         if (wasNeutral) {
             // 从全关切到有处理：清掉包络，第一块从一个干净的状态开始。
             reset()

@@ -145,6 +145,20 @@ internal object InstrumentalStore {
     fun targetFor(context: Context, key: String, mode: VocalTrackMode = VocalTrackMode.INSTRUMENTAL): File =
         File(directory(context), "$key${mode.suffix}")
 
+    /** 四轨里某一轨的正式文件；没有则 null。 */
+    fun stemTargetFor(context: Context, key: String, kind: StemKind): File =
+        File(directory(context), "$key${kind.suffix}")
+
+    fun stemTempFor(context: Context, key: String, kind: StemKind): File =
+        File(directory(context), "$key${kind.suffix}$TEMP_SUFFIX")
+
+    /** 四轨都齐了没有：空间声场用它判断这首歌还要不要重跑。不刷新 mtime（同 [bothReady]）。 */
+    fun allStemsReady(context: Context, key: String): Boolean =
+        StemKind.ALL.all {
+            val file = stemTargetFor(context, key, it)
+            file.isFile && file.length() > 0L
+        }
+
     /**
      * 把临时文件转正。
      *

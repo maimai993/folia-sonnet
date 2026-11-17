@@ -343,6 +343,15 @@ class ConsoleDspTest {
               "stereo": { "enabled": true, "width": 1.5, "bassMonoHz": 140 },
               "saturation": { "enabled": true, "mode": "tube", "driveDb": 14, "mix": 0.35, "outputDb": -8 },
               "limiter": { "ceilingDb": -1.2, "releaseMs": 260 },
+              "spatial": {
+                "enabled": true, "mode": "custom",
+                "stems": {
+                  "drums": { "audible": true, "pan": -0.3, "width": 1.4, "levelDb": 1 },
+                  "bass": { "audible": true, "pan": 0, "width": 0.9, "levelDb": 0 },
+                  "other": { "audible": true, "pan": 0.3, "width": 1.2, "levelDb": -1 },
+                  "vocals": { "audible": true, "pan": 0, "width": 1, "levelDb": 0 }
+                }
+              },
               "mastering": {
                 "compensation": { "enabled": true, "amount": 0.8, "maxGainDb": 8, "responseMs": 400 },
                 "noiseGate": { "enabled": true, "thresholdDb": -55, "attackMs": 7, "releaseMs": 200, "reductionDb": -18 },
@@ -424,6 +433,18 @@ class ConsoleDspTest {
 
         assertEquals(first.limiter.ceilingDb, second.limiter.ceilingDb, 1e-4f)
         assertEquals(first.limiter.releaseMs, second.limiter.releaseMs, 1e-4f)
+
+        // 空间声场：四轨往返一致
+        assertEquals(first.spatial.enabled, second.spatial.enabled)
+        assertEquals(first.spatial.mode, second.spatial.mode)
+        for (kind in StemKind.ALL) {
+            val expected = first.spatial.stem(kind)
+            val actual = second.spatial.stem(kind)
+            assertEquals(expected.audible, actual.audible)
+            assertEquals(expected.pan, actual.pan, 1e-4f)
+            assertEquals(expected.width, actual.width, 1e-4f)
+            assertEquals(expected.levelDb, actual.levelDb, 1e-4f)
+        }
 
         // 工作室块：四大方向 12 项往返一致
         val s1 = first.mastering.studio
@@ -606,5 +627,62 @@ class ConsoleDspTest {
         var peak = 0f
         for (index in 1024 until frames) peak = maxOf(peak, abs(buffer[index]))
         assertTrue("限幅后峰值 $peak", peak <= 0.52f)
+    }
+
+    @Test
+    fun `空间声场把单轨摆到左边`() {
+        val stage = SpatialStage()
+        val buffer = floatArrayOf(0.4f, 0.4f, 0.4f, 0.4f)
+        stage.process(buffer, 0, 2, 2, StemSpatialSettings(audible = true, pan = -1f, width = 1f, levelDb = 0f))
+        // 全左：右声道静音，左声道按 constant-power 保持 0.4。
+        assertEquals(0.4f, buffer[0], 1e-4f)
+        assertEquals(0f, buffer[1], 1e-4f)
+        assertEquals(0.4f, buffer[2], 1e-4f)
+        assertEquals(0f, buffer[3], 1e-4f)
+    }
+
+    @Test
+    fun `空间声场关掉的轨静音`() {
+        val stage = SpatialStage()
+        val buffer = floatArrayOf(0.4f, -0.2f)
+        stage.process(buffer, 0, 1, 2, StemSpatialSettings(audible = false, pan = 0f, width = 1f, levelDb = 0f))
+        assertEquals(0f, buffer[0], 0f)
+        assertEquals(0f, buffer[1], 0f)
+    }
+
+    @Test
+    fun `空间声场中性参数不碰样本`() {
+        val stage = SpatialStage()
+        val buffer = floatArrayOf(0.4f, -0.2f)
+        val reference = buffer.copyOf()
+        stage.process(buffer, 0, 1, 2, StemSpatialSettings(audible = true, pan = 0f, width = 1f, levelDb = 0f))
+        assertArrayEquals(reference, buffer, 0f)
+    }
+
+    @Test
+    fun `自动摆位与自定义摆位各用各的`() {
+        val settings = SpatialSettings(
+            enabled = true,
+            mode = SpatialMode.AUTO,
+            vocals = StemSpatialSettings(audible = true, pan = -0.8f, width = 0.5f, levelDb = -3f),
+        )
+        assertEquals(0f, settings.resolve(StemKind.VOCALS).pan, 1e-4f)
+        assertEquals(1.35f, settings.resolve(StemKind.DRUMS).width, 1e-4f)
+        val custom = SpatialSettings(
+            enabled = true,
+            mode = SpatialMode.CUSTOM,
+            vocals = StemSpatialSettings(audible = true, pan = -0.8f, width = 0.5f, levelDb = -3f),
+        )
+        assertEquals(-0.8f, custom.resolve(StemKind.VOCALS).pan, 1e-4f)
+    }
+
+    @Test
+    fun `空间声场字段缺席按中性补齐`() {
+        val settings = EqSettings.fromJson(
+            JSONObject("""{"version":2,"enabled":true,"gains":[0,0,0,0,0,0,0,0,0,0]}"""),
+        )
+        assertTrue(!settings.spatial.enabled)
+        assertEquals(SpatialMode.AUTO, settings.spatial.mode)
+        assertTrue(settings.spatial.isNeutral())
     }
 }

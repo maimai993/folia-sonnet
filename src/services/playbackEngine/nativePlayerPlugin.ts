@@ -71,6 +71,18 @@ export type NativePlaybackSnapshot = {
     sourceToken?: string;
 };
 
+/** 单个音轨在空间声场里的位置。 */
+export type NativeStemSpatial = {
+    /** 这一轨是否参与混音。 */
+    audible: boolean;
+    /** -1 全左 ~ 1 全右，0 居中。 */
+    pan: number;
+    /** 0 单声道 ~ 2 侧向加倍；1 是原样。 */
+    width: number;
+    /** -24 ~ +6 dB。 */
+    levelDb: number;
+};
+
 /**
  * 原生调音台的设置载荷。
  *
@@ -167,6 +179,21 @@ export type NativeEqualizerSettings = {
         ceilingDb: number;
         /** 回落时间 40 ~ 500 ms。 */
         releaseMs: number;
+    };
+    /**
+     * 空间声场：四个分离音轨各有一个可调位置。可缺省，原生对缺席的块按中性处理。
+     * 协议仍是 v2 —— 这是增量扩展字段，老包不带也能照常播放。
+     */
+    spatial?: {
+        enabled: boolean;
+        /** auto 用内置摆位，custom 逐轨手调。 */
+        mode: 'auto' | 'custom';
+        stems: {
+            drums: NativeStemSpatial;
+            bass: NativeStemSpatial;
+            other: NativeStemSpatial;
+            vocals: NativeStemSpatial;
+        };
     };
     /**
      * 母带块：损失补偿 + 九项修复/塑造/增强效果。可缺省，原生对缺席的块按中性（全关）处理。

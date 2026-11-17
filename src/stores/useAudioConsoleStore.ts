@@ -20,6 +20,9 @@ import {
     type AudioConsoleSaturation,
     type AudioConsoleSettings,
     type AudioConsoleStereo,
+    type AudioConsoleSpatial,
+    type AudioConsoleStemKind,
+    type AudioConsoleStemSpatial,
     type AudioConsoleLimiter,
     type AudioConsoleLossCompensation,
     type AudioConsoleNoiseGate,
@@ -45,6 +48,8 @@ type AudioConsoleStore = {
     setFrontEq: (patch: Partial<AudioConsoleFrontEq>) => void;
     setPostEq: (patch: Partial<AudioConsolePostEq>) => void;
     setStereo: (patch: Partial<AudioConsoleStereo>) => void;
+    setSpatial: (patch: Partial<AudioConsoleSpatial>) => void;
+    setStemSpatial: (kind: AudioConsoleStemKind, patch: Partial<AudioConsoleStemSpatial>) => void;
     setSaturation: (patch: Partial<AudioConsoleSaturation>) => void;
     setLimiter: (patch: Partial<AudioConsoleLimiter>) => void;
     setCompensation: (patch: Partial<AudioConsoleLossCompensation>) => void;
@@ -151,6 +156,29 @@ export const useAudioConsoleStore = create<AudioConsoleStore>((set) => ({
     setStereo: (patch) => set(state => ({
         settings: commit(
             { ...state.settings, stereo: { ...state.settings.stereo, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    setSpatial: (patch) => set(state => ({
+        settings: commit(
+            { ...state.settings, spatial: { ...state.settings.spatial, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    setStemSpatial: (kind, patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                spatial: {
+                    ...state.settings.spatial,
+                    stems: {
+                        ...state.settings.spatial.stems,
+                        [kind]: { ...state.settings.spatial.stems[kind], ...patch },
+                    },
+                },
+            },
             state.settings,
         ),
     })),

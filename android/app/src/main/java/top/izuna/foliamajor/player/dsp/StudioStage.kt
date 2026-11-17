@@ -95,7 +95,10 @@ class StudioStage {
         channels = ch
 
         val neutral = settings.isNeutral()
-        if (neutral) return
+        if (neutral) {
+            wasNeutral = true
+            return
+        }
         if (wasNeutral) {
             reset()
             wasNeutral = false

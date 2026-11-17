@@ -10,13 +10,18 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import java.io.File
 
 import top.izuna.foliamajor.automix.AutomixLoad
+import top.izuna.foliamajor.automix.ScnetRunner
 import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.EqSettings
 import top.izuna.foliamajor.player.dsp.InstrumentalCoordinator
 import top.izuna.foliamajor.player.dsp.InstrumentalStore
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
+import top.izuna.foliamajor.player.dsp.StemKind
+import top.izuna.foliamajor.player.dsp.StemMixState
+import top.izuna.foliamajor.player.dsp.StemSongState
 import top.izuna.foliamajor.player.dsp.VocalTrackMode
 import top.izuna.foliamajor.player.dsp.vocalTrackModeOf
 import top.izuna.foliamajor.player.dsp.shouldSwapVocalTrack
@@ -611,6 +616,24 @@ class FoliaNativePlayerPlugin : Plugin() {
         super.handleOnDestroy()
     }
 
+    /** 空间声场：装源后把这首歌的四轨状态发布给音频线程。 */
+    private fun publishStemState(url: String?, songKey: String?) {
+        if (url.isNullOrBlank()) {
+            StemMixState.publishSong(null)
+            return
+        }
+        val key = InstrumentalStore.keyFor(url, songKey)
+        val ready = InstrumentalStore.allStemsReady(context, key)
+        val stems = if (ready) {
+            Array<File?>(StemKind.ALL.size) { index ->
+                InstrumentalStore.stemTargetFor(context, key, StemKind.ALL[index]).takeIf { it.isFile }
+            }
+        } else {
+            arrayOfNulls(StemKind.ALL.size)
+        }
+        StemMixState.publishSong(StemSongState(key, stems, ready))
+    }
+
     @PluginMethod
     fun prepare(call: PluginCall) {
         val current = player
@@ -681,6 +704,7 @@ class FoliaNativePlayerPlugin : Plugin() {
          * currentSongKey 一起写，两者才会描述同一首歌。
          */
         InstrumentalCoordinator.noteSourcePrepared()
+        publishStemState(url, webSongKey)
         /*
          * 开关开着的话：这首歌要是有现成的那一轨就直接换过去，没有就开始生成。
          * reconcile 内部会先把旧任务作废（generation +1），不会串到上一首。
@@ -748,6 +772,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             return
         }
         current.seek(positionMs.toLong())
+        StemMixState.requestSeek(positionMs.toLong() * ScnetRunner.SAMPLE_RATE / 1000L)
         call.resolve()
     }
 
@@ -987,6 +1012,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         val (state, percent, key) = InstrumentalCoordinator.status()
         val (usedBytes, usedCount, limitBytes) = InstrumentalStore.usage()
         val current = player
+        // 生成刚完成时桥没有专门事件，这里顺手把四轨状态刷新一遍，空间声场即时接管。
+        publishStemState(current?.baseUrl(), currentSongKey)
         val currentKey = current?.let {
             InstrumentalStore.keyFor(it.baseUrl().orEmpty(), currentSongKey)
         }

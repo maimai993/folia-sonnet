@@ -351,6 +351,72 @@ class BalanceSettings(
     companion object { val NEUTRAL = BalanceSettings() }
 }
 
+/** 空间声场里的单轨位置：pan 定左右，width 定自身宽度，levelDb 定响度。 */
+class StemSpatialSettings(
+    /** 这一轨是否参与混音。 */
+    val audible: Boolean = true,
+    /** -1 全左 ~ 1 全右，0 居中。 */
+    val pan: Float = 0f,
+    /** 0 单声道 ~ 2 侧向加倍；1 是原样。 */
+    val width: Float = 1f,
+    /** -24 ~ +6 dB。 */
+    val levelDb: Float = 0f,
+) {
+    companion object { val NEUTRAL = StemSpatialSettings() }
+    fun isNeutral(): Boolean = kotlin.math.abs(pan) < 0.01f
+        && kotlin.math.abs(width - 1f) < 0.01f
+        && kotlin.math.abs(levelDb) < 0.01f
+}
+
+/** 空间声场的混音方式：自动（内置摆位）或自定义（用户逐轨调）。 */
+object SpatialMode {
+    const val AUTO = 0
+    const val CUSTOM = 1
+}
+
+/**
+ * 空间声场：四个分离音轨各有一个可调位置。
+ *
+ * 与全局的 [StereoSettings] 不同：那个是「整首混音」的 M/S 宽度，这个是「每个音轨」
+ * 在声场里的摆位。只有把音轨分开、再按这里的参数混回去，才能真的把鼓放左边、人声放中间。
+ * 混音方式交给用户：auto 用内置摆位（人声居中、鼓和伴奏铺开），custom 逐轨手调。
+ */
+class SpatialSettings(
+    val enabled: Boolean = false,
+    /** [SpatialMode]。 */
+    val mode: Int = SpatialMode.AUTO,
+    val drums: StemSpatialSettings = StemSpatialSettings.NEUTRAL,
+    val bass: StemSpatialSettings = StemSpatialSettings.NEUTRAL,
+    val other: StemSpatialSettings = StemSpatialSettings.NEUTRAL,
+    val vocals: StemSpatialSettings = StemSpatialSettings.NEUTRAL,
+) {
+    companion object {
+        val NEUTRAL = SpatialSettings()
+
+        /** 自动摆位：人声居中、贝斯略收、鼓与其他铺开。用户切到 custom 时仍可逐轨改。 */
+        val AUTO_STEMS: Map<StemKind, StemSpatialSettings> = mapOf(
+            StemKind.DRUMS to StemSpatialSettings(audible = true, pan = 0f, width = 1.35f, levelDb = 0f),
+            StemKind.BASS to StemSpatialSettings(audible = true, pan = 0f, width = 0.85f, levelDb = 0f),
+            StemKind.OTHER to StemSpatialSettings(audible = true, pan = 0f, width = 1.2f, levelDb = 0f),
+            StemKind.VOCALS to StemSpatialSettings(audible = true, pan = 0f, width = 1f, levelDb = 0f),
+        )
+    }
+
+    fun stem(kind: StemKind): StemSpatialSettings = when (kind) {
+        StemKind.DRUMS -> drums
+        StemKind.BASS -> bass
+        StemKind.OTHER -> other
+        StemKind.VOCALS -> vocals
+    }
+
+    /** 混音时真正使用的摆位：auto 返回内置摆位，custom 返回用户摆位。 */
+    fun resolve(kind: StemKind): StemSpatialSettings =
+        if (mode == SpatialMode.AUTO) AUTO_STEMS.getValue(kind) else stem(kind)
+
+    fun isNeutral(): Boolean = !enabled
+        && drums.isNeutral() && bass.isNeutral() && other.isNeutral() && vocals.isNeutral()
+}
+
 // —————————————————————————————————————————————————————————————————————————————
 // 工作室（Studio）：四大方向 12 项新功能，独立成块，位于母带之后、限幅之前。
 // 每一项仍是"一个开关 + 一根滑杆"，名字专业但用法直觉。
@@ -482,6 +548,8 @@ class EqSettings(
     val stereo: StereoSettings = StereoSettings.NEUTRAL,
     val saturation: SaturationSettings = SaturationSettings.NEUTRAL,
     val limiter: LimiterSettings = LimiterSettings.NEUTRAL,
+    /** 空间声场：四个分离音轨的位置，缺席时全中性。 */
+    val spatial: SpatialSettings = SpatialSettings.NEUTRAL,
     /** 母带块：十项修复 / 塑造 / 增强，缺席时全中性。 */
     val mastering: MasteringSettings = MasteringSettings.NEUTRAL,
     val seq: Long = 0L,
@@ -505,6 +573,7 @@ class EqSettings(
         stereo = stereo,
         saturation = saturation,
         limiter = limiter,
+        spatial = spatial,
         mastering = mastering,
         seq = next,
     )
@@ -521,6 +590,7 @@ class EqSettings(
         && !postEq.enabled
         && !stereo.enabled
         && !saturation.enabled
+        && spatial.isNeutral()
         // 母带块十项全中性时，整条链仍是恒等变换。
         && mastering.isNeutral()
         // 限幅器永远在链上，但它出厂时是「保护」而不是「效果」：只有用户动过
@@ -571,6 +641,16 @@ class EqSettings(
         val limiterJson = JSONObject().apply {
             put("ceilingDb", limiter.ceilingDb.toDouble())
             put("releaseMs", limiter.releaseMs.toDouble())
+        }
+        val spatialJson = JSONObject().apply {
+            put("enabled", spatial.enabled)
+            put("mode", if (spatial.mode == SpatialMode.CUSTOM) "custom" else "auto")
+            put("stems", JSONObject().apply {
+                put("drums", spatial.drums.toJson())
+                put("bass", spatial.bass.toJson())
+                put("other", spatial.other.toJson())
+                put("vocals", spatial.vocals.toJson())
+            })
         }
         val compressorJson = JSONObject().apply {
             put("enabled", compressor.enabled)
@@ -657,6 +737,7 @@ class EqSettings(
             put("stereo", stereoJson)
             put("saturation", saturationJson)
             put("limiter", limiterJson)
+            put("spatial", spatialJson)
             put("mastering", masteringJson)
             put("glideMs", glideMs)
         }
@@ -705,6 +786,13 @@ class EqSettings(
             put("mix", mix.toDouble())
         }
 
+        private fun StemSpatialSettings.toJson(): JSONObject = JSONObject().apply {
+            put("audible", audible)
+            put("pan", pan.toDouble())
+            put("width", width.toDouble())
+            put("levelDb", levelDb.toDouble())
+        }
+
         /** 分频点必须过一遍 [sanitizeCrossovers]：手改过的存档可能给出倒序或越界的值。 */
         private fun readCrossovers(raw: JSONArray?): FloatArray {
             if (raw == null) return DEFAULT_COMPRESSOR_CROSSOVERS
@@ -724,6 +812,13 @@ class EqSettings(
                 0f
             }
         }
+
+        /** 子对象可能整体缺席（optJSONObject 返回 null）：按兜底值读，绝不 NPE。 */
+        private fun JSONObject?.bool(key: String, fallback: Boolean): Boolean =
+            this?.optBoolean(key, fallback) ?: fallback
+
+        private fun JSONObject?.string(key: String, fallback: String): String =
+            this?.optString(key, fallback) ?: fallback
 
         /**
          * 从 Web 的 `NativeEqualizerPayload` 解析。
@@ -752,6 +847,7 @@ class EqSettings(
                 stereo = readStereo(json.optJSONObject("stereo")),
                 saturation = readSaturation(json.optJSONObject("saturation")),
                 limiter = readLimiter(json.optJSONObject("limiter")),
+                spatial = readSpatial(json.optJSONObject("spatial")),
                 mastering = readMastering(json.optJSONObject("mastering")),
             )
         }
@@ -813,6 +909,30 @@ class EqSettings(
             )
         }
 
+        /** 空间声场块解析：任一项缺席就按 NEUTRAL，绝不抛异常。 */
+        private fun readSpatial(json: JSONObject?): SpatialSettings {
+            if (json == null) return SpatialSettings.NEUTRAL
+            val stems = json.optJSONObject("stems")
+            fun readStem(name: String, fallback: StemSpatialSettings): StemSpatialSettings {
+                val item = stems?.optJSONObject(name) ?: return fallback
+                return StemSpatialSettings(
+                    audible = item.optBoolean("audible", fallback.audible),
+                    pan = item.number("pan", fallback.pan.toDouble(), -1f, 1f),
+                    width = item.number("width", fallback.width.toDouble(), 0f, 2f),
+                    levelDb = item.number("levelDb", fallback.levelDb.toDouble(), -24f, 6f),
+                )
+            }
+            val defaults = SpatialSettings.NEUTRAL
+            return SpatialSettings(
+                enabled = json.optBoolean("enabled", defaults.enabled),
+                mode = if (json.optString("mode", "auto") == "custom") SpatialMode.CUSTOM else SpatialMode.AUTO,
+                drums = readStem("drums", defaults.drums),
+                bass = readStem("bass", defaults.bass),
+                other = readStem("other", defaults.other),
+                vocals = readStem("vocals", defaults.vocals),
+            )
+        }
+
         private fun readCompressor(json: JSONObject?): CompressorSettings {
             if (json == null) return CompressorSettings.NEUTRAL
             val rawBands = json.optJSONArray("bands")
@@ -870,40 +990,40 @@ class EqSettings(
             val studio = readStudio(json.optJSONObject("studio"))
             return MasteringSettings(
                 compensation = CompensationSettings(
-                    enabled = comp.optBoolean("enabled", false),
+                    enabled = comp.bool("enabled", false),
                     amount = comp.number("amount", 0.7, 0f, 1f),
                     maxGainDb = comp.number("maxGainDb", 6.0, 0f, 12f),
                     responseMs = comp.number("responseMs", 300.0, 50f, 800f),
                 ),
                 noiseGate = NoiseGateSettings(
-                    enabled = gate.optBoolean("enabled", false),
+                    enabled = gate.bool("enabled", false),
                     thresholdDb = gate.number("thresholdDb", -50.0, -80f, -20f),
                     attackMs = gate.number("attackMs", 5.0, 0.5f, 50f),
                     releaseMs = gate.number("releaseMs", 120.0, 20f, 600f),
                     reductionDb = gate.number("reductionDb", -24.0, -60f, -6f),
                 ),
                 deEsser = DeEsserSettings(
-                    enabled = deess.optBoolean("enabled", false),
+                    enabled = deess.bool("enabled", false),
                     frequencyHz = deess.number("frequencyHz", 6500.0, 4000f, 10000f),
                     thresholdDb = deess.number("thresholdDb", -24.0, -48f, 0f),
                     ratio = deess.number("ratio", 4.0, 1f, 10f),
                 ),
                 dePlosive = DePlosiveSettings(
-                    enabled = deplos.optBoolean("enabled", false),
+                    enabled = deplos.bool("enabled", false),
                     reductionDb = deplos.number("reductionDb", -12.0, -24f, 0f),
                 ),
                 bassBoost = BassBoostSettings(
-                    enabled = bass.optBoolean("enabled", false),
+                    enabled = bass.bool("enabled", false),
                     gainDb = bass.number("gainDb", 4.0, 0f, 12f),
                     frequencyHz = bass.number("frequencyHz", 90.0, 40f, 250f),
                 ),
                 exciter = ExciterSettings(
-                    enabled = exc.optBoolean("enabled", false),
+                    enabled = exc.bool("enabled", false),
                     amount = exc.number("amount", 0.4, 0f, 1f),
                     mix = exc.number("mix", 0.35, 0f, 1f),
                 ),
                 transient = TransientSettings(
-                    enabled = tran.optBoolean("enabled", false),
+                    enabled = tran.bool("enabled", false),
                     amount = tran.number("amount", 0.5, -1f, 1f),
                 ),
                 tone = ToneSettings(
@@ -913,11 +1033,11 @@ class EqSettings(
                     clarity = tone.number("clarity", 0.0, 0f, 6f),
                 ),
                 loudness = LoudnessSettings(
-                    enabled = loud.optBoolean("enabled", false),
+                    enabled = loud.bool("enabled", false),
                     amount = loud.number("amount", 0.5, 0f, 1f),
                 ),
                 balance = BalanceSettings(
-                    enabled = bal.optBoolean("enabled", false),
+                    enabled = bal.bool("enabled", false),
                     value = bal.number("value", 0.0, -1f, 1f),
                 ),
                 studio = studio,
@@ -935,18 +1055,18 @@ class EqSettings(
             val headphones = setOf("flat", "airpods", "sony", "sennheiser")
             return StudioSettings(
                 normalize = NormalizeSettings(
-                    enabled = norm.optBoolean("enabled", false),
+                    enabled = norm.bool("enabled", false),
                     targetLufs = norm.number("targetLufs", -14.0, -20f, -9f),
-                    truePeak = norm.optBoolean("truePeak", true),
+                    truePeak = norm.bool("truePeak", true),
                 ),
                 restore = RestoreSettings(
-                    declick = rest.optBoolean("declick", false),
-                    hum = rest.optBoolean("hum", false),
-                    denoise = rest.optBoolean("denoise", false),
+                    declick = rest.bool("declick", false),
+                    hum = rest.bool("hum", false),
+                    denoise = rest.bool("denoise", false),
                     amount = rest.number("amount", 0.5, 0f, 1f),
                 ),
                 advanced = AdvancedSettings(
-                    dynamicEq = adv.optBoolean("dynamicEq", false),
+                    dynamicEq = adv.bool("dynamicEq", false),
                     dynamicEqFreq = adv.number("dynamicEqFreq", 180.0, 80f, 400f),
                     dynamicEqAmount = adv.number("dynamicEqAmount", 4.0, 0f, 12f),
                     msWidth = adv.number("msWidth", 0.0, -1f, 1f),
@@ -954,9 +1074,9 @@ class EqSettings(
                     vocalBoost = adv.number("vocalBoost", 0.0, 0f, 1f),
                 ),
                 scene = SceneSettings(
-                    genre = scene.optString("genre", "flat").let { if (genres.contains(it)) it else "flat" },
-                    compare = scene.optBoolean("compare", false),
-                    headphone = scene.optString("headphone", "flat").let { if (headphones.contains(it)) it else "flat" },
+                    genre = scene.string("genre", "flat").let { if (genres.contains(it)) it else "flat" },
+                    compare = scene.bool("compare", false),
+                    headphone = scene.string("headphone", "flat").let { if (headphones.contains(it)) it else "flat" },
                     amount = scene.number("amount", 0.6, 0f, 1f),
                 ),
             )

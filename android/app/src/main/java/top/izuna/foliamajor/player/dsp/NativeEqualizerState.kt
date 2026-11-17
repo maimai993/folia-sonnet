@@ -180,6 +180,7 @@ object NativeEqualizerState {
         seq += 1
         val stamped = next.withSeq(seq)
         current = stamped
+        StemMixState.publishSpatial(stamped.spatial)
         return stamped
     }
 

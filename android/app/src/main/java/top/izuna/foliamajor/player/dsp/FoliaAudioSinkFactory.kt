@@ -63,7 +63,7 @@ class FoliaAudioSinkFactory(
         enableAudioTrackPlaybackParams: Boolean,
     ): AudioSink {
         /*
-         * 顺序：EQ → 关闭人声 → 过渡。
+         * 顺序：空间声场（四轨摆位）→ EQ → 关闭人声 → 过渡。
          *
          * 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
          * 否则换手时两路的 EQ 状态会互相干扰。
@@ -78,7 +78,9 @@ class FoliaAudioSinkFactory(
          *
          * 显式写出元素类型：toTypedArray 出来的是 Array<AudioProcessor>。
          */
-        val chain = ArrayList<AudioProcessor>(3)
+        val chain = ArrayList<AudioProcessor>(4)
+        // 空间声场在最前：它决定「这首歌的声源是四轨摆位混音还是原曲」。
+        chain.add(StemMixProcessor(state))
         chain.add(EqAudioProcessor(state))
         chain.add(VocalCancelProcessor(state))
         if (transitionRoleProvider != null) {

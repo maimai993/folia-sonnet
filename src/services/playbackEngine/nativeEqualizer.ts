@@ -150,6 +150,17 @@ const buildSettings = (): NativeEqualizerSettings => {
             ceilingDb: console_.limiter.ceilingDb,
             releaseMs: console_.limiter.releaseMs,
         },
+        // 空间声场：四轨位置整份发过去，原生对缺席字段按中性兜底。
+        spatial: {
+            enabled: console_.spatial.enabled,
+            mode: console_.spatial.mode,
+            stems: {
+                drums: { ...console_.spatial.stems.drums },
+                bass: { ...console_.spatial.stems.bass },
+                other: { ...console_.spatial.stems.other },
+                vocals: { ...console_.spatial.stems.vocals },
+            },
+        },
         // 母带块整份发过去：损失补偿 + 九项修复/塑造/增强全在里面，原生对缺席字段按中性兜底。
         mastering: {
             compensation: { ...console_.mastering.compensation },
