@@ -102,6 +102,7 @@ class StemMixProcessor(
             passthrough(inputBuffer, incoming)
             return
         }
+        state.stemMixActive = true
 
         val frameBytes = 2 * channels
         val total = carrySize + incoming
@@ -129,7 +130,16 @@ class StemMixProcessor(
 
         for (index in 0 until mix.size) mix[index] = 0f
         var audible = 0
+        // 播放模式决定哪些音轨参与：全部 = 四轨；伴奏 = 鼓/贝斯/其他；清唱 = 人声。
+        // 在此基础上再叠加用户对每轨的 audible 开关。
+        val mode = state.activeMode()
         for (kind in StemKind.ALL) {
+            val wantedByMode = when (mode) {
+                VocalTrackMode.INSTRUMENTAL -> kind != StemKind.VOCALS
+                VocalTrackMode.VOCAL -> kind == StemKind.VOCALS
+                null -> true
+            }
+            if (!wantedByMode) continue
             val stem = settings.resolve(kind)
             if (!stem.audible) continue
             val decoder = decoders[kind.ordinal]
@@ -157,6 +167,7 @@ class StemMixProcessor(
     }
 
     private fun passthrough(inputBuffer: ByteBuffer, incoming: Int) {
+        state.stemMixActive = false
         val out = replaceOutputBuffer(incoming)
         out.put(inputBuffer)
         out.flip()

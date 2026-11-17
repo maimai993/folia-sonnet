@@ -242,7 +242,8 @@ internal object InstrumentalCoordinator {
         if (url.isNullOrBlank()) return
         val key = InstrumentalStore.keyFor(url, songKey)
         if (state == STATE_BUILDING) return
-        if (InstrumentalStore.bothReady(context, key)) return
+        // 四轨是空间声场的数据源，只检查四轨；老版本只有两轨派生文件的缓存会在这里被补全。
+        if (InstrumentalStore.allStemsReady(context, key)) return
         startBuild(context, null, url, key, songKey, wantSwitch = false)
     }
 

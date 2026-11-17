@@ -156,6 +156,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val player = current?.player
             if (current == null || player == null || !player.hasMedia()) return
             player.seek(Math.max(0L, positionMs))
+            StemMixState.requestSeek(Math.max(0L, positionMs) * ScnetRunner.SAMPLE_RATE / 1000L)
         }
 
         /**
@@ -202,6 +203,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val player = current?.player
             if (current == null || player == null || url == null || url.isEmpty()) return false
             player.prepare(url, -1L, mediaId)
+            current.publishStemState(url, mediaId)
             return true
         }
 
@@ -271,7 +273,9 @@ class FoliaNativePlayerPlugin : Plugin() {
         fun crossfadeFromSystem(url: String, mediaId: String?, durationMs: Int): Boolean {
             val current = instance ?: return false
             val player = current.player ?: return false
-            return player.crossfadeTo(url, mediaId, durationMs)
+            val started = player.crossfadeTo(url, mediaId, durationMs)
+            if (started) current.publishStemState(url, mediaId)
+            return started
         }
 
         /**

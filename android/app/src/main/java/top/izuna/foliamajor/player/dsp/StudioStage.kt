@@ -131,12 +131,14 @@ class StudioStage {
                 v = humNotch100.process(v, channel)
             }
 
-            // 降噪：稳态包络低于噪声门限时按 amount 衰减。
+            // 降噪：稳态包络低于固定门限（约 -52 dBFS）时按 amount 衰减。
             if (s.restore.denoise) {
                 val a = if (abs(v) > noiseEnv[channel]) noiseAtkCoef else noiseRelCoef
                 noiseEnv[channel] += (abs(v) - noiseEnv[channel]) * a
-                val target = if (noiseEnv[channel] < noiseGate[channel]) noiseFloorGain else 1f
-                val g = noiseGate[channel] + (target - noiseGate[channel]) * noiseAtkCoef
+                val threshold = 0.0025f
+                val target = if (noiseEnv[channel] < threshold) noiseFloorGain else 1f
+                val g = noiseGate[channel] + (target - noiseGate[channel]) *
+                    (if (target > noiseGate[channel]) noiseAtkCoef else noiseRelCoef)
                 noiseGate[channel] = g
                 v *= g
             }

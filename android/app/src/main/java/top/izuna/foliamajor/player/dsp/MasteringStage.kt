@@ -55,7 +55,6 @@ class MasteringStage {
     private val plosiveEnv = FloatArray(MAX_CHANNELS)
     private val plosiveDetect = FloatArray(MAX_CHANNELS)
     private val deEssEnv = FloatArray(MAX_CHANNELS)
-    private val deEssDetect = FloatArray(MAX_CHANNELS)
     private val transientEnv = FloatArray(MAX_CHANNELS)
     private val transientPrev = FloatArray(MAX_CHANNELS)
     private val transientGain = FloatArray(MAX_CHANNELS)
@@ -106,7 +105,7 @@ class MasteringStage {
         toneClarity.reset(); loudLow.reset(); loudHigh.reset()
         gateEnv.fill(0f); gateGain.fill(1f)
         plosiveEnv.fill(0f); plosiveDetect.fill(0f); plosiveFloorGain = 1f
-        deEssEnv.fill(0f); deEssDetect.fill(0f)
+        deEssEnv.fill(0f)
         transientEnv.fill(0f); transientPrev.fill(0f); transientGain.fill(1f)
         compPower = 0f
         compGain = 1f
@@ -176,10 +175,9 @@ class MasteringStage {
                 s *= target
             }
 
-            // ③ 去齿音：高频带包络超阈才压
+            // ③ 去齿音：齿音频段的高通包络超阈才压。检测频段跟着 frequencyHz 走。
             if (settings.deEsser.enabled) {
-                val hp = s - deEssDetect[channel] // 一阶高通近似：原信号减去低通
-                deEssDetect[channel] += (s - deEssDetect[channel]) * 0.08f
+                val hp = deEsserBand.process(s, channel)
                 val env = follow(deEssEnv[channel], abs(hp), if (abs(hp) >= deEssEnv[channel]) deessAtkCoef else deessRelCoef)
                 deEssEnv[channel] = env
                 val g = if (env > deessThreshold) {
@@ -275,12 +273,15 @@ class MasteringStage {
             plosiveFloorGain = dbToLinear(s.dePlosive.reductionDb)
         }
 
-        // ③ 去齿音：检测平滑 + 阈值 + 斜率的倒数
+        // ③ 去齿音：检测用高通，中心频率就是用户调的那个 frequencyHz
         if (s.deEsser.enabled) {
+            deEsserBand.setHighPass(sampleRate, s.deEsser.frequencyHz, 0.7f)
             deessAtkCoef = coefFromMs(10f)
             deessRelCoef = coefFromMs(120f)
             deessThreshold = dbToLinear(s.deEsser.thresholdDb)
             deessSlope = s.deEsser.ratio.coerceAtLeast(1f)
+        } else {
+            deEsserBand.bypass()
         }
 
         // ④ 低频增强

@@ -2,7 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 // src/services/playbackEngine/nativePlayerPlugin.ts
 //
-// 原生播放内核的 JS 侧声明（P1）。与 android/.../player/FoliaNativePlayerPlugin.java 一一对应：
+// 原生播放内核的 JS 侧声明（P1）。与 android/.../player/FoliaNativePlayerPlugin.kt 一一对应：
 // 方法名、事件名（`foliaNativePlayer`）、字段名改一处两边都要改。
 
 export type NativePlaybackEventType =

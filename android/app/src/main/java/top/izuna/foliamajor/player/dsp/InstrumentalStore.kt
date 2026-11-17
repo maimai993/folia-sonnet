@@ -24,6 +24,9 @@ internal object InstrumentalStore {
 
     private const val DIR_NAME = "instrumental"
 
+    /** [keyFor] 生成的缓存键长度（SHA-1 前 32 个 hex）。 */
+    private const val KEY_LENGTH = 32
+
     private const val TAG = "Instrumental"
 
     /**
@@ -102,9 +105,10 @@ internal object InstrumentalStore {
         val files = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(TEMP_SUFFIX) }.orEmpty()
         val total = files.sumOf { it.length() }
         usedBytes = total
-        usedCount = files.size
+        // 一首歌现在有 6 个文件（4 轨 + 2 派生），按 key 前缀去重算首数。
+        usedCount = files.map { it.name.take(KEY_LENGTH) }.toSet().size
         limitBytes = limit
-        return total to files.size
+        return total to usedCount
     }
 
     /**

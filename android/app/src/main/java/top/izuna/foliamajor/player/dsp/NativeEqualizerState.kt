@@ -73,6 +73,16 @@ object NativeEqualizerState {
     var vocalOnlyEnabled: Boolean = false
 
     /**
+     * 空间声场正在混音没有。
+     *
+     * StemMixProcessor 每块更新；VocalCancelProcessor 读它 —— 混音出来的是
+     * 「已经按四轨摆好位」的成品，不能再做中置相消，否则会把居中的贝斯/底鼓/人声
+     * 一起减掉。
+     */
+    @Volatile
+    var stemMixActive: Boolean = false
+
+    /**
      * 此刻该播哪一轨分离结果；两个开关都关着就是 null。
      *
      * [InstrumentalCoordinator] 只认这个，不再各自判断两个布尔，
