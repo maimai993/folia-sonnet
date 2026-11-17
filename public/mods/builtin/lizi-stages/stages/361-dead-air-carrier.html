@@ -1,6 +1,58 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+<script>
+/* lizi-perf 1：画布像素预算 + 帧率闸（Folia 内置舞台补丁，页面逻辑不改）
+   · 像素预算：4K 屏 DPR=2 本来要画 7680x4320（3300 万像素），压到约 830 万像素
+   · 限帧 60：120/165Hz 屏不再按屏幕刷新率重绘
+   · 窗口不可见时 4fps */
+(function () {
+  var BUDGET = 8300000, MIN_DPR = 1, MAX_DPR = 2;
+  function liziDpr(w, h, cap) {
+    w = w > 0 ? w : (window.innerWidth || 1);
+    h = h > 0 ? h : (window.innerHeight || 1);
+    var c = cap > 0 ? Math.min(cap, MAX_DPR) : MAX_DPR;
+    var d = window.devicePixelRatio || 1;
+    if (!isFinite(d) || d <= 0) d = 1;
+    d = Math.max(MIN_DPR, Math.min(c, d));
+    while (d > MIN_DPR && w * h * d * d > BUDGET) d = Math.max(MIN_DPR, Math.round((d - 0.25) * 100) / 100);
+    return d;
+  }
+  window.liziDpr = liziDpr;
+  var raf = window.requestAnimationFrame, craf = window.cancelAnimationFrame;
+  var seq = 0, slots = Object.create(null), last = 0, gap = 1000 / 60;
+  window.liziSetFps = function (fps) { gap = fps > 0 ? 1000 / fps : 0; };
+  function arm(id, cb) {
+    var slot = slots[id];
+    if (!slot) return;
+    slot.inner = raf.call(window, function (ts) {
+      slot.inner = 0;
+      if (!slots[id]) return;
+      var g = document.hidden ? 250 : gap;
+      if (g > 0 && ts - last < g - 2) { arm(id, cb); return; }
+      last = ts;
+      delete slots[id];
+      cb(ts);
+    });
+  }
+  window.requestAnimationFrame = function (cb) {
+    var id = ++seq;
+    slots[id] = { inner: 0 };
+    arm(id, cb);
+    return id;
+  };
+  window.cancelAnimationFrame = function (id) {
+    var slot = slots[id];
+    if (slot) {
+      if (slot.inner) craf.call(window, slot.inner);
+      delete slots[id];
+    } else {
+      craf.call(window, id);
+    }
+  };
+})();
+</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>载波残影</title>
@@ -197,7 +249,7 @@ function resizeCanvas() {
   var height = stageCanvas.clientHeight || window.innerHeight || 900;
   if (!isFinite(width) || width <= 0) { width = 1440; }
   if (!isFinite(height) || height <= 0) { height = 900; }
-  pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+  pixelRatio = liziDpr();
   viewWidth = Math.round(width);
   viewHeight = Math.round(height);
   stageCanvas.width = Math.max(1, Math.round(viewWidth * pixelRatio));
