@@ -1,20 +1,20 @@
 import React, { useCallback, useMemo } from 'react';
 import {
-  AlertCircle,
-  ArrowUpCircle,
-  CheckCircle2,
-  Download,
-  ExternalLink,
-  Loader2,
-  RefreshCw,
+    AlertCircle,
+    ArrowUpCircle,
+    CheckCircle2,
+    Download,
+    ExternalLink,
+    Loader2,
+    RefreshCw,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { APP_UPDATE_RELEASES_PAGE } from '../../../services/appUpdate';
 import {
-  installDownloadedUpdate,
-  isUpdateVersionIgnored,
-  refreshUpdateCheck,
-  startUpdateDownload,
+    installDownloadedUpdate,
+    isUpdateVersionIgnored,
+    refreshUpdateCheck,
+    startUpdateDownload,
 } from '../../../services/appUpdateCenter';
 import { useUpdateCenter } from '../../../hooks/useUpdateCenter';
 import { openExternalUrl } from '../../../utils/openExternalUrl';

@@ -229,7 +229,7 @@ export const buildStageSourcePrompt = (input: {
 
 const normalizeTheme = (value: unknown): DualTheme | null => (
     isRecord(value) && isThemeShaped(value.light) && isThemeShaped(value.dark)
-        ? sanitizeDualTheme(value as unknown as DualTheme)
+        ? sanitizeDualTheme(value)
         : null
 );
 

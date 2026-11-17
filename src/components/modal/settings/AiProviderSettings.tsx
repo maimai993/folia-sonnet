@@ -313,38 +313,38 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                 )}
 
                 {!isFreeChannel && (
-                <div className="space-y-1.5 text-left">
-                    <label className="block space-y-1">
-                        <span className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.aiApiKey')}
-                            {provider !== 'custom' && preset?.label ? ` · ${preset.label}` : ''}
-                        </span>
-                        <TextField
-                            type="password"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={apiKey}
-                            onChange={(event) => update(provider === 'gemini'
-                                ? { geminiApiKey: event.target.value }
-                                : { apiKeys: { ...settings.apiKeys, [provider]: event.target.value } })}
-                            placeholder={provider === 'gemini' ? 'AIza...' : 'sk-...'}
-                            className={fieldClass}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
-                    </label>
-                    {consoleUrl && (
-                        <a
-                            href={consoleUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 opacity-60 hover:opacity-100 transition-opacity"
-                            style={{ color: 'var(--text-secondary)' }}
-                        >
-                            {t('options.openProviderConsole', { provider: t('options.aiProvider_' + provider) })}
-                            <ExternalLink size={11} aria-hidden="true" />
-                        </a>
-                    )}
-                </div>
+                    <div className="space-y-1.5 text-left">
+                        <label className="block space-y-1">
+                            <span className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.aiApiKey')}
+                                {provider !== 'custom' && preset?.label ? ` · ${preset.label}` : ''}
+                            </span>
+                            <TextField
+                                type="password"
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={apiKey}
+                                onChange={(event) => update(provider === 'gemini'
+                                    ? { geminiApiKey: event.target.value }
+                                    : { apiKeys: { ...settings.apiKeys, [provider]: event.target.value } })}
+                                placeholder={provider === 'gemini' ? 'AIza...' : 'sk-...'}
+                                className={fieldClass}
+                                style={{ color: 'var(--text-primary)' }}
+                            />
+                        </label>
+                        {consoleUrl && (
+                            <a
+                                href={consoleUrl}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 opacity-60 hover:opacity-100 transition-opacity"
+                                style={{ color: 'var(--text-secondary)' }}
+                            >
+                                {t('options.openProviderConsole', { provider: t('options.aiProvider_' + provider) })}
+                                <ExternalLink size={11} aria-hidden="true" />
+                            </a>
+                        )}
+                    </div>
                 )}
 
                 {/* 免费渠道：机器码（可复制）+ 剩余额度 + 贡献账号 */}
@@ -472,7 +472,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                                 : <X size={12} className="text-red-400" />}
                             {testResult.ok
                                 ? `${t('options.aiTestSuccess')} · ${t('options.aiTestDuration')} ${testResult.durationMs} ms`
-                                    + `${testResult.model ? ` · ${t('options.aiTestModel')} ${testResult.model}` : ''}`
+                                    + (testResult.model ? ` · ${t('options.aiTestModel')} ${testResult.model}` : '')
                                 : `${t('options.aiTestFailed')}${testResult.error ? `: ${testResult.error}` : ''}`}
                         </span>
                     )}

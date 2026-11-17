@@ -144,7 +144,7 @@ export const resolveSearchSource = (tab: HomeViewTab | SearchSource): SearchSour
     if (tab === 'local' || tab === 'navidrome' || tab === 'cloud' || tab === 'bilibili' || tab === 'all') {
         return tab;
     }
-    if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio' && tab !== 'explore') return tab as OnlineProviderId;
+    if (tab !== 'playlist' && tab !== 'albums' && tab !== 'radio' && tab !== 'explore') return tab;
     return DEFAULT_ONLINE_PROVIDER_ID;
 };
 
@@ -174,11 +174,11 @@ const mapLocalSongToUnifiedSong = (
     song: LocalSong,
     catalog?: LocalLibraryDisplayCatalog,
 ): UnifiedSong => applyLocalLibraryEntityDisplay(buildUnifiedLocalSong({
-        localSong: song,
-        matchedSong: null,
-        coverUrl: song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null,
-        preferOnlineMetadata: false,
-    }), catalog);
+    localSong: song,
+    matchedSong: null,
+    coverUrl: song.useOnlineCover ? song.onlineMetadata?.coverUrl || null : null,
+    preferOnlineMetadata: false,
+}), catalog);
 
 const searchLocalSongs = (
     deps: SearchExecutorDeps,
@@ -296,7 +296,7 @@ const mapWithConcurrency = async <T, R>(
             const index = cursor;
             cursor += 1;
             if (index >= items.length) return;
-            results[index] = await worker(items[index] as T);
+            results[index] = await worker(items[index]);
         }
     });
     await Promise.all(lanes);

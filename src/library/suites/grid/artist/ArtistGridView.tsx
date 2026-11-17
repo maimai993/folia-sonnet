@@ -4,7 +4,7 @@ import { motion, useMotionValue, animate, AnimatePresence, useDragControls, useI
 import { ChevronLeft, ListMusic, ListPlus, RefreshCw } from 'lucide-react';
 import GridPanelToggleIndicator from '../shared/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
-import { SongResult, Theme } from '../../../../types';
+import { type SongResult, type Theme } from '../../../../types';
 import { getSizedCoverUrl } from '../../../../utils/coverUrl';
 import { getSongCoverUrl } from '../../../../services/onlineMusic/songMetadata';
 import type { LibraryArtistResource } from '../../../core/artist/artist.contract';
@@ -46,7 +46,7 @@ import {
 } from '../transitions/morphGeometry';
 import { useCollectionMorphStore, useMorphPageExit } from '../transitions/collectionMorphStore';
 import { useGridViewSettingsStore } from '../../../../stores/useGridViewSettingsStore';
-import { HexGridCoord, CubeCoord, getHexCubicSpiral } from '../shared/hexViewport';
+import { type HexGridCoord, type CubeCoord, getHexCubicSpiral } from '../shared/hexViewport';
 import { useFoliaHexViewport } from '../shared/useFoliaHexViewport';
 import { CollectionListItem, SidePanelList } from '../../../../components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../../components/shared/GridListSearchButton';
@@ -1212,39 +1212,39 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                             ? { duration: 0.5, ease: [0.32, 0.72, 0, 1], delay: morphFlyIn!.delay }
                             : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                     >
-                    <PolaroidCard
-                        item={item}
-                        isDaylight={isDaylight}
-                        theme={theme}
-                        mode={cardMode}
-                        t={t}
-                        cardWidth={layoutConfig.cardWidth}
-                        cardHeight={layoutConfig.cardHeight}
-                        fullBleedCover={fullBleedCover}
-                        openWhenFocusedOnCardClick={!isSongCard}
-                        isFocused={focusedIndex === idx}
-                        onSelect={() => {
-                            if (isSongCard && canPlaySong && item.rawTrack) {
-                                persistNavigationState(idx);
-                                artistActions.playSong(item.rawTrack);
-                            } else if (!isSongCard && onSelectAlbum && canOpenAlbum && item.rawCollection) {
-                                persistNavigationState(idx);
-                                onSelectAlbum(item.rawCollection.id, item.rawCollection);
-                            }
-                        }}
-                        onCenter={() => {
-                            if (isDraggingRef.current) return;
-                            centerOnIndex(idx, true);
-                        }}
-                        onSelectArtist={handleSelectArtist}
-                        onSelectAlbum={handleSelectAlbumLink}
-                        onAddQueue={() => {
-                            if (isSongCard && canEnqueueSong && item.rawTrack) {
-                                artistActions.enqueueSong(item.rawTrack);
-                            }
-                        }}
-                        playbackMark={isSongCard ? stayPlayback.markFor(item.rawTrack) : null}
-                    />
+                        <PolaroidCard
+                            item={item}
+                            isDaylight={isDaylight}
+                            theme={theme}
+                            mode={cardMode}
+                            t={t}
+                            cardWidth={layoutConfig.cardWidth}
+                            cardHeight={layoutConfig.cardHeight}
+                            fullBleedCover={fullBleedCover}
+                            openWhenFocusedOnCardClick={!isSongCard}
+                            isFocused={focusedIndex === idx}
+                            onSelect={() => {
+                                if (isSongCard && canPlaySong && item.rawTrack) {
+                                    persistNavigationState(idx);
+                                    artistActions.playSong(item.rawTrack);
+                                } else if (!isSongCard && onSelectAlbum && canOpenAlbum && item.rawCollection) {
+                                    persistNavigationState(idx);
+                                    onSelectAlbum(item.rawCollection.id, item.rawCollection);
+                                }
+                            }}
+                            onCenter={() => {
+                                if (isDraggingRef.current) return;
+                                centerOnIndex(idx, true);
+                            }}
+                            onSelectArtist={handleSelectArtist}
+                            onSelectAlbum={handleSelectAlbumLink}
+                            onAddQueue={() => {
+                                if (isSongCard && canEnqueueSong && item.rawTrack) {
+                                    artistActions.enqueueSong(item.rawTrack);
+                                }
+                            }}
+                            playbackMark={isSongCard ? stayPlayback.markFor(item.rawTrack) : null}
+                        />
                     </motion.div>
                 </div>
             );

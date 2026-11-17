@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { ChevronLeft, Eye, EyeOff, ListFilter } from 'lucide-react';
 import GridPanelToggleIndicator from '../shared/GridPanelToggleIndicator';
 import { useTranslation } from 'react-i18next';
-import { Theme } from '../../../../types';
+import { type Theme } from '../../../../types';
 import { SidePanelList, CollectionListItem } from '../../../../components/shared/SidePanelList';
 import { GridListSearchButton } from '../../../../components/shared/GridListSearchButton';
 import { useGridCommandFilter } from '../../../../hooks/useGridCommandFilter';
@@ -610,30 +610,30 @@ export const GridMap: React.FC<GridMapProps> = ({
                                     className="mt-auto space-y-2 border-t pt-4"
                                     style={{ borderTopColor: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }}
                                 >
-                            {isPlaylistEditMode && (
-                                <Button
-                                    onClick={toggleHiddenOnly}
-                                    className={`w-full rounded-full py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                                        showHiddenPlaylistsOnly
-                                            ? 'bg-black/10 dark:bg-white/10'
-                                            : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'
-                                    }`}
-                                >
-                                    <ListFilter size={14} />
-                                    {showHiddenPlaylistsOnly ? t('home.showAllPlaylists') : t('home.showHiddenPlaylistsOnly')}
-                                </Button>
-                            )}
-                            <Button
-                                onClick={togglePlaylistEditMode}
-                                className={`w-full rounded-full py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                                    isPlaylistEditMode
-                                        ? 'bg-red-500/20 text-red-500 border border-red-500/30'
-                                        : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'
-                                }`}
-                            >
-                                {isPlaylistEditMode ? <EyeOff size={14} /> : <Eye size={14} />}
-                                {isPlaylistEditMode ? t('home.finishHidingPlaylists') : t('home.hidePlaylists')}
-                            </Button>
+                                    {isPlaylistEditMode && (
+                                        <Button
+                                            onClick={toggleHiddenOnly}
+                                            className={`w-full rounded-full py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                                showHiddenPlaylistsOnly
+                                                    ? 'bg-black/10 dark:bg-white/10'
+                                                    : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'
+                                            }`}
+                                        >
+                                            <ListFilter size={14} />
+                                            {showHiddenPlaylistsOnly ? t('home.showAllPlaylists') : t('home.showHiddenPlaylistsOnly')}
+                                        </Button>
+                                    )}
+                                    <Button
+                                        onClick={togglePlaylistEditMode}
+                                        className={`w-full rounded-full py-2.5 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                            isPlaylistEditMode
+                                                ? 'bg-red-500/20 text-red-500 border border-red-500/30'
+                                                : 'bg-zinc-800/10 dark:bg-zinc-100/10 hover:bg-zinc-900 hover:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900'
+                                        }`}
+                                    >
+                                        {isPlaylistEditMode ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        {isPlaylistEditMode ? t('home.finishHidingPlaylists') : t('home.hidePlaylists')}
+                                    </Button>
                                 </div>
                             </>
                         )}

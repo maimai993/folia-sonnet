@@ -493,7 +493,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     vocalCancelCacheBytes: 0,
     vocalCancelCacheLimit: 0,
     vocalTrackMode: 'off',
-        // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
+    // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
     prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,

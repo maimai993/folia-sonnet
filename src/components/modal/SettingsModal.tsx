@@ -6,10 +6,10 @@ import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db
 import { useCacheUsagePanel } from './settings/useCacheUsagePanel';
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
+import { type DualTheme, type StageStatus, type StageSource, type Theme, type ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, setNavidromeEnabled, getCachedNavidromeServerProfile, refreshNavidromeServerProfile, getNavidromeConfigOrigin, dismissNavidromeServerPreset } from '../../services/navidromeService';
 import { fetchNavidromeServerPreset, markNavidromeConfigAsPresetIfMatching, restoreNavidromeServerPreset } from '../../services/navidromeServerPreset';
-import { NavidromeConfig, NavidromeServerProfile } from '../../types/navidrome';
+import { type NavidromeConfig, type NavidromeServerProfile } from '../../types/navidrome';
 import VisPlayground from '../visualizer/window/VisPlayground';
 import { useVisualizerTunings } from '../visualizer/useVisualizerTunings';
 import ThemePark from './ThemePark';
@@ -25,7 +25,7 @@ import { kitMotionTokens, useKitReducedMotion } from './settings/kit/motion';
 import { parseNumberText } from './settings/kit/numberText';
 import { SETTINGS_PAGES, SETTINGS_PAGE_OPTIONS } from './settings/pages';
 import HelpPage from './settings/pages/HelpPage';
-import { SettingsPageContext, type CacheCategory, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
+import { SettingsPageContext, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import ReleaseNotesDialog from './ReleaseNotesDialog';
 import meowImageUrl from '../../../build/miao.png';
@@ -558,7 +558,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             }
             await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
             await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
-            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM === true);
+            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM);
             await (window as any).electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
             await (window as any).electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
             await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);

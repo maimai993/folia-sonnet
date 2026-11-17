@@ -126,8 +126,8 @@ export const buildSourcePrompt = (input: DirectorPromptInput): string => {
         out.push(
             '',
             `这首歌上次的选择：${modeLabelOf(previousChoice.mode)}`
-                + `${paramKeys.length > 0 ? `，参数 ${JSON.stringify(previousChoice.params)}` : ''}`
-                + `${previousChoice.reason ? `（理由：${clipLine(previousChoice.reason)}）` : ''}`,
+                + (paramKeys.length > 0 ? `，参数 ${JSON.stringify(previousChoice.params)}` : '')
+                + (previousChoice.reason ? `（理由：${clipLine(previousChoice.reason)}）` : ''),
             previousChoice.forced
                 ? '注意：用户主动要求“重新决策这首歌”，可以改变上面的选择。'
                 : '这首歌的用户体验应该保持稳定，除非明显不合适，请沿用上次的选择。',

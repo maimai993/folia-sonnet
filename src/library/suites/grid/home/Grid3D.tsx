@@ -4,7 +4,7 @@ import { Search, Loader2, Settings, PanelsTopLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { resolveSearchSource, useSearchNavigationStore } from '../../../../stores/useSearchNavigationStore';
 import { useShallow } from 'zustand/react/shallow';
-import { SongResult, LocalSong, LocalPlaylist, LocalLibraryGroup, Theme, type StatusMessage } from '../../../../types';
+import { type SongResult, type LocalSong, type LocalPlaylist, type LocalLibraryGroup, type Theme, type StatusMessage } from '../../../../types';
 import LocalGrid3DView from './LocalGrid3DView';
 import NavidromeGrid3DView from './NavidromeGrid3DView';
 import { useGrid3DTabKeys } from './useGrid3DTabKeys';
@@ -331,9 +331,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         <Button
                             onClick={() => onOpenSettings?.('help')}
                             className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${showUpdateIndicator
-                                    ? 'opacity-90 hover:opacity-100'
-                                    : 'opacity-40 hover:opacity-100'
-                                }`}
+                                ? 'opacity-90 hover:opacity-100'
+                                : 'opacity-40 hover:opacity-100'
+                            }`}
                             title={t('ui.options')}
                         >
                             <Settings size={20} style={{ color: 'var(--text-primary)' }} />
@@ -360,7 +360,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                 >
                                     <div
                                         className={`relative flex items-center justify-center min-w-[56px] h-7 px-2.5 rounded-full backdrop-blur-md ${isDaylight ? 'bg-white/95 text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]' : 'bg-zinc-950/92 text-zinc-100'
-                                            }`}
+                                        }`}
                                     >
                                         <span className="relative z-10 text-[10px] font-semibold tabular-nums leading-none">
                                             {scanProgressPercent}%
@@ -374,7 +374,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             animate={{ opacity: 1, y: 0 }}
                                             exit={{ opacity: 0, y: -6 }}
                                             className={`absolute left-0 top-full mt-2 w-72 p-4 rounded-2xl border backdrop-blur-xl shadow-xl ${isDaylight ? 'bg-white/85 border-black/10 text-zinc-800' : 'bg-black/60 border-white/10 text-zinc-100'
-                                                }`}
+                                            }`}
                                         >
                                             <div className="text-sm font-semibold truncate">
                                                 {t('options.scanningFolder', { folderName: scanProgress.folderName })}
@@ -544,7 +544,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             type: 'playlist',
                             coverUrl: chart.coverUrl,
                             providerData: { platform: chart.platform, nativeId: chart.id, kind: 'chart' },
-                        } as unknown as ProviderCollection, activeProviderId))}
+                        }, activeProviderId))}
                     />
                 ) : isOnlineTab && activeProviderId === 'lxmusic' && homeViewTab === 'albums' ? (
                     // 洛雪也没有「用户专辑库」，但收藏的歌各自属于某张专辑：这一页是那些专辑的封面墙，
@@ -557,7 +557,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                             type: 'album',
                             coverUrl,
                             providerData: { platform, nativeId: albumId, kind: 'album' },
-                        } as unknown as ProviderCollection, activeProviderId))}
+                        }, activeProviderId))}
                     />
                 ) : homeViewTab === 'explore' ? (
                     online.canUseExplore && (

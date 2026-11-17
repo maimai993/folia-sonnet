@@ -1,5 +1,5 @@
 import React, { useCallback, useLayoutEffect, useRef } from 'react';
-import { MotionValue, useMotionValueEvent } from 'framer-motion';
+import { type MotionValue, useMotionValueEvent } from 'framer-motion';
 import { FoliumProgressButtons, FoliumProgressLayers, useFoliumProgressContext } from '../mods/folium/registries/progress';
 import { getProgressFillStep, getProgressFillStepFraction } from './progressFillStep';
 
@@ -38,7 +38,7 @@ const SEEK_SETTLE_MS = 700;
 const SEEK_SETTLE_TOLERANCE_SEC = 0.4;
 
 const formatTime = (time: number) => {
-    if (isNaN(time)) return "00:00";
+    if (isNaN(time)) return '00:00';
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time % 60);
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
@@ -134,7 +134,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         updateUI(currentTime.get(), true);
     }, [currentTime, updateUI]);
 
-    useMotionValueEvent(currentTime, "change", (latest: number) => {
+    useMotionValueEvent(currentTime, 'change', (latest: number) => {
         updateUI(latest);
     });
 
