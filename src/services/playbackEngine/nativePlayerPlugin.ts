@@ -389,6 +389,11 @@ interface FoliaNativePlayerPlugin {
     /** 「设置 → 存储」里的总开关：预先拆分音轨。原生存一份，通知栏起播也能读到。 */
     setPrebuildTracksEnabled(options: { enabled: boolean }): Promise<void>;
     /**
+     * 问一首歌的某个分离音轨缓存（drums / bass / other / vocals）：有回 file:// 地址，没有回空串。
+     * 空间声场与动感效果共用这份四轨缓存。
+     */
+    getStemCacheUrl(options: { url: string; songKey: string | null; kind: string }): Promise<{ url: string }>;
+    /**
      * 「关闭人声」此刻的状态。
      *
      * idle / building / ready / failed —— ready 表示播的是离线分离好的伴奏，
@@ -466,6 +471,8 @@ export const nativePlayer = {
     prepareSongTracks: (url: string, songKey: string | null) =>
         FoliaNativePlayer.prepareSongTracks({ url, songKey }),
     setPrebuildTracksEnabled: (enabled: boolean) => FoliaNativePlayer.setPrebuildTracksEnabled({ enabled }),
+    getStemCacheUrl: (url: string, songKey: string | null, kind: string) =>
+        FoliaNativePlayer.getStemCacheUrl({ url, songKey, kind }),
     getInstrumentalState: () => FoliaNativePlayer.getInstrumentalState(),
     getSpectrum: () => FoliaNativePlayer.getSpectrum(),
     getSnapshot: () => FoliaNativePlayer.getSnapshot(),

@@ -21,6 +21,7 @@ import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { omni } from '../onlineMusic/omni';
 import { nativeAudioUrlForRef } from '../nativeLocalMusic';
 import { getPlaybackSongKey, getPlaybackSourceRef } from '../../utils/appPlaybackGuards';
+import { nativePlayer } from '../playbackEngine/nativePlayerPlugin';
 import type { PlaybackRepresentation } from '../../types/playbackRecovery';
 
 // src/services/beatFx/beatFxSource.ts
@@ -305,6 +306,22 @@ export const resolveNativeAudioUrl = async (song: SongResult): Promise<string | 
         return await readNativeMediaCacheUrl(cacheKey);
     } catch (error) {
         console.warn('[BeatFx] could not prepare the audio for native drum bands', error);
+        return null;
+    }
+};
+
+/** 空间声场/动感效果共用的四轨缓存查询：有该音轨缓存就回 file:// 地址，否则 null。 */
+export const resolveNativeStemUrl = async (
+    song: SongResult,
+    kind: 'drums' | 'bass' | 'other' | 'vocals',
+): Promise<string | null> => {
+    if (!isNativeModelsAvailable()) return null;
+    const url = await resolveNativeAudioUrl(song);
+    if (!url) return null;
+    try {
+        const result = await nativePlayer.getStemCacheUrl(url, getPlaybackSongKey(song), kind);
+        return result.url || null;
+    } catch {
         return null;
     }
 };

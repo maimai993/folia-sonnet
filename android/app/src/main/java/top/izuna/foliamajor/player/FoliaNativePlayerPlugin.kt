@@ -1006,6 +1006,30 @@ class FoliaNativePlayerPlugin : Plugin() {
     }
 
     /**
+     * 问一首歌的某个分离音轨缓存：有就回 `file://` 地址，没有回空串。
+     *
+     * 空间声场与动感效果共用同一份四轨缓存 —— 效果要鼓点就只读鼓轨、要人声包络就只读
+     * 人声轨，不再各自重跑一遍 SCNet。
+     */
+    @PluginMethod
+    fun getStemCacheUrl(call: PluginCall) {
+        val url = call.getString("url")
+        val songKey = call.getString("songKey")
+        val kindName = call.getString("kind")
+        val result = JSObject()
+        if (url.isNullOrBlank() || kindName.isNullOrBlank()) {
+            result.put("url", "")
+            call.resolve(result)
+            return
+        }
+        val kind = StemKind.entries.firstOrNull { it.name.equals(kindName, ignoreCase = true) }
+        val key = InstrumentalStore.keyFor(url, songKey)
+        val file = kind?.let { InstrumentalStore.stemTargetFor(context, key, it) }
+        result.put("url", if (file != null && file.isFile) Uri.fromFile(file).toString() else "")
+        call.resolve(result)
+    }
+
+    /**
      * 「关闭人声」此刻的状态。
      *
      * state: idle / building / ready / failed；percent 只在 building 时有意义。
