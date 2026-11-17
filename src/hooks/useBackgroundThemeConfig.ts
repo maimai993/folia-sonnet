@@ -19,8 +19,9 @@ export const useBackgroundThemeConfig = (enabled: boolean): void => {
             const settings = readDirectorSettings();
             const cloud = readFoliaCloudSettings();
             const hint = settings.userHint;
-            // 生效的禁区：用户勾掉的 + 永远不许 AI 用的（fork 与模组样式）。
-            const blocked = effectiveBlockedDirectorModes(settings.blockedModes);
+            // 清单按生效禁区过滤；策略只认用户自己那份（理由见 aiStage 同处注释）。
+            const blocked = settings.blockedModes;
+            const selectable = effectiveBlockedDirectorModes(blocked);
             const next = {
                 enabled,
                 cloudEnabled: cloud.enabled,
@@ -31,7 +32,7 @@ export const useBackgroundThemeConfig = (enabled: boolean): void => {
                     songTitle: '{{FOLIA_TITLE}}',
                     song: { title: '{{FOLIA_TITLE}}', artist: '{{FOLIA_ARTIST}}', album: null },
                     lines: [{ fullText: '{{FOLIA_LYRICS}}', translation: '', songPart: '', isChorus: false }],
-                    modes: listDirectorModes(key => i18n.t(key)).filter(mode => !isBlockedDirectorMode(mode.id, blocked)),
+                    modes: listDirectorModes(key => i18n.t(key)).filter(mode => !isBlockedDirectorMode(mode.id, selectable)),
                     currentMode: '', hint, recentModes: [], blockedModes: blocked,
                 }),
                 policy: buildStagePolicy({ hint, blocked }),
