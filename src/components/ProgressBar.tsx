@@ -1,7 +1,6 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import { MotionValue, useMotionValueEvent } from 'framer-motion';
 import { FoliumProgressButtons, FoliumProgressLayers, useFoliumProgressContext } from '../mods/folium/registries/progress';
-import { TextField } from './ui';
 import { getProgressFillStep, getProgressFillStepFraction } from './progressFillStep';
 
 // Folium public parts (mods/README.md): `data-folium-part` marks what mod CSS may
@@ -30,13 +29,6 @@ interface ProgressBarProps {
     variant?: 'default' | 'line';
 }
 
-
-/*
- * 松手之后，播放器回传真实位置要一点时间（要缓冲的时候更久）。这段窗口内继续停在
- * 刚拖到的位置上，否则进度条会先弹回旧位置再跳过去 —— 看着就是「拖了没反应」。
- */
-const SEEK_SETTLE_MS = 700;
-const SEEK_SETTLE_TOLERANCE_SEC = 0.4;
 
 const formatTime = (time: number) => {
     if (isNaN(time)) return "00:00";
@@ -67,31 +59,16 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     const isDraggingRef = useRef(false);
     const lastDisplayedSecondRef = useRef<number | null>(null);
     const lastInputSecondRef = useRef<number | null>(null);
-    /** 刚拖到的位置与它的保鲜期；见 SEEK_SETTLE_MS。 */
-    const settleRef = useRef<{ value: number; expiresAt: number } | null>(null);
-    // 拖动中把把手放大。一次拖动只翻转两次，进 React 更新路径的代价可以忽略。
-    const [isScrubbing, setIsScrubbing] = useState(false);
     const trackDeviceWidthRef = useRef(0);
     const lastFillStepRef = useRef<number | null>(null);
 
     // Keeps continuous progress on the compositor while coarse values update only when needed.
     const updateUI = useCallback((value: number, force = false, syncInput = true, bypassDrag = false) => {
+        if (!bypassDrag && isDraggingRef.current) return;
+
         const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
         const clampedValue = duration > 0 ? Math.min(safeValue, duration) : safeValue;
         const displayedSecond = Math.floor(clampedValue);
-
-        if (!bypassDrag) {
-            if (isDraggingRef.current) return;
-            const settle = settleRef.current;
-            if (settle && !force) {
-                const arrived = Math.abs(clampedValue - settle.value) <= SEEK_SETTLE_TOLERANCE_SEC;
-                if (arrived || Date.now() >= settle.expiresAt) {
-                    settleRef.current = null;
-                } else {
-                    return;
-                }
-            }
-        }
 
         // Nothing is painted without a duration, and that is the fix for the flash at the start of
         // a blend: the app switches to the incoming track the moment the overlap begins, but its
@@ -114,8 +91,8 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
             progressRef.current.style.clipPath = edgeStyle === 'square'
                 ? `inset(0 ${hiddenPercent}% 0 0)`
                 : `inset(0 ${hiddenPercent}% 0 0 round 999px)`;
-            // 把手的载体铺满整条轨道，靠 translateX（按自身宽度百分比 = 轨道长度）移动，
-            // 全程只在合成器上跑。把手本身默认可见 —— 一条没有把手的细线看不出能拖。
+            // The thumb is invisible unless a mod styles it. Its full-width carrier moves by
+            // translateX (percent of its own width = the track), so this stays compositor-only.
             if (thumbRef.current) {
                 thumbRef.current.style.transform = `translateX(${(progress * 100).toFixed(4)}%)`;
             }
@@ -176,15 +153,9 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     };
 
     const handleSeekStart = (e: React.PointerEvent<HTMLInputElement>) => {
-        if (disabled || e.button !== 0) return;
+        if (disabled) return;
         isDraggingRef.current = true;
-        settleRef.current = null;
-        setIsScrubbing(true);
-        try {
-            e.currentTarget.setPointerCapture(e.pointerId);
-        } catch {
-            // 指针已经没了（例如被系统手势抢走）。捕获失败不影响 input 事件本身。
-        }
+        e.currentTarget.setPointerCapture(e.pointerId);
         onSeekStart?.();
     };
 
@@ -192,8 +163,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         if (disabled) return;
         const value = Number(e.currentTarget.value);
         isDraggingRef.current = false;
-        setIsScrubbing(false);
-        settleRef.current = { value, expiresAt: Date.now() + SEEK_SETTLE_MS };
         updateUI(value, true);
         onSeek(value);
         onSeekEnd?.();
@@ -201,8 +170,6 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
 
     const handleSeekCancel = () => {
         isDraggingRef.current = false;
-        setIsScrubbing(false);
-        settleRef.current = null;
         updateUI(currentTime.get(), true);
         onSeekEnd?.();
     };
@@ -257,12 +224,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                     style={{ transform: 'translateX(0%)', willChange: 'transform' }}
                 >
                     <div
-                        className={`absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--folium-progress-fill)] shadow transition-[width,height] duration-150 ${isScrubbing ? 'w-3.5 h-3.5' : 'w-2.5 h-2.5'}`}
+                        className="absolute top-1/2 left-0 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full opacity-0 bg-[var(--folium-progress-fill)]"
                         data-folium-part="progress.thumb"
-                        data-scrubbing={isScrubbing ? 'true' : undefined}
                     />
                 </div>
-                <TextField
+                <input
                     ref={inputRef}
                     type="range"
                     min={0} max={duration || 100}
@@ -275,12 +241,7 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                     onInput={handleInput}
                     onChange={() => { }} // React requires this
                     onClick={(e) => e.stopPropagation()}
-                    // 命中区向外撑开：轨道只有 6px 高，手指根本抓不住。撑到 22px 为止 ——
-                    // 再往上会越过 gap 盖住上面一排按钮的底边，把播放键的点击吃掉。
-                    // touch-none 是关键：没有它，Android 会把这次拖动判成滚动并发出
-                    // pointercancel，拖到一半就被取消，表现就是「拖不动」。
-                    // line 档只有 3px 轨道，命中区按上下各 6px 撑开。
-                    className={`absolute w-full touch-none opacity-0 ${isLine ? 'inset-x-0 -top-1.5 h-[calc(100%+12px)]' : '-inset-y-2 inset-x-0'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    className={`absolute w-full opacity-0 ${isLine ? 'inset-x-0 -top-1.5 h-[calc(100%+12px)]' : 'inset-0 h-full'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 />
                 <FoliumProgressLayers ctx={foliumCtx} />
             </div>

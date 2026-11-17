@@ -28,7 +28,7 @@ export const LYRICS_WALLPAPER: SettingsGroupDef = {
 
 export const THEME: SettingsGroupDef = { id: 'themePresets', titleKey: 'options.settingsHeadingTheme' };
 export const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'options.settingsHeadingSongTheme' };
-export const AI: SettingsGroupDef = { id: 'electronSettings', titleKey: 'options.electronSettings', electronOnly: true };
+export const AI: SettingsGroupDef = { id: 'aiCredentials', titleKey: 'options.electronSettings', electronOnly: true };
 
 /**
  * 显示那一组（fork 独有）：歌词扁平两端都画；设备类型与横竖屏只有安卓有。

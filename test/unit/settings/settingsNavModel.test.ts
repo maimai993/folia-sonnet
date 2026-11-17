@@ -31,15 +31,16 @@ describe('settingsNavModel', () => {
     it('drops desktop-only sections on web without leaving an empty group', () => {
         const groups = buildSettingsNavGroups(echo, { isElectron: false });
         const ids = flattenSettingsNavItems(groups).map(item => item.id);
-        // 桌面专属的分组数不是写死的：每加一个 electronOnly 分类（AI 服务就是这样一个），
-        // 网页版就少一项，断言跟着模型走才不会被下一次新增弄成假失败。
-        const desktopOnlyCount = SETTINGS_NAV_GROUP_SPECS.flatMap(group => group.sections)
-            .filter(section => section.electronOnly).length;
 
         expect(ids).not.toContain('desktop');
-        expect(ids).not.toContain('mods');
-        expect(ids).not.toContain('ai');
-        expect(ids).toHaveLength(ALL_SECTIONS.length - desktopOnlyCount);
+        /*
+         * 模组页不再是桌面专属：安卓 App 靠内置的 nodejs-mobile 运行时
+         * （android/.../mods/ 下的 NodeModHost）也能跑模组，所以这个分组
+         * 在 web / 安卓上都该出现。
+         */
+        expect(ids).toContain('mods');
+        // 桌面专属被摘掉：desktop / ai / remote（fork 把 ai 与 remote 也标了 electronOnly）。
+        expect(ids).toHaveLength(ALL_SECTIONS.length - 3);
         expect(groups.every(group => group.items.length > 0)).toBe(true);
     });
 
