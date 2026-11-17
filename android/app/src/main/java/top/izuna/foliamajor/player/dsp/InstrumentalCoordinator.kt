@@ -222,8 +222,7 @@ internal object InstrumentalCoordinator {
              * 每次 reconcile 都重新 prepare 一遍）。
              */
             val target = Uri.fromFile(cached).toString()
-            // 空间声场开着：四轨混音接管，不再换源，避免与实时摆位互相覆盖。
-            if (!NativeEqualizerState.stemMixerEnabled() && shouldSwapVocalTrack(player.currentUrl(), target)) {
+            if (shouldSwapVocalTrack(player.currentUrl(), target)) {
                 player.swapSource(target, instrumental = true)
             }
             return
@@ -370,10 +369,7 @@ internal object InstrumentalCoordinator {
              */
             val wanted = if (mode == VocalTrackMode.VOCAL) tracks.vocal else tracks.instrumental
             val wantedUrl = Uri.fromFile(wanted).toString()
-            // 空间声场开着：由混音器按模式选轨播放，这里不再换源。
-            if (player != null && stillThisSong && !NativeEqualizerState.stemMixerEnabled()
-                && shouldSwapVocalTrack(player.currentUrl(), wantedUrl)
-            ) {
+            if (player != null && stillThisSong && shouldSwapVocalTrack(player.currentUrl(), wantedUrl)) {
                 player.swapSource(wantedUrl, instrumental = true)
             }
         }
