@@ -42,6 +42,7 @@ class StereoStage {
 
     private var sampleRate = 0
     private var appliedBassHz = 0f
+    private var appliedCrossfeed = 0f
 
     /** 交叉馈送的短延时线，左右各一条环形缓冲。 */
     private var crossBuf = arrayOf(FloatArray(0), FloatArray(0))
@@ -50,6 +51,7 @@ class StereoStage {
     fun configure(sampleRate: Int) {
         this.sampleRate = sampleRate
         appliedBassHz = 0f
+        appliedCrossfeed = 0f
         val delaySamples = (sampleRate * CROSSFEED_DELAY_SEC).toInt().coerceAtLeast(16)
         crossBuf = arrayOf(FloatArray(delaySamples), FloatArray(delaySamples))
         crossIdx = 0
@@ -80,6 +82,14 @@ class StereoStage {
         val monoBass = bassHz > 0f
         val crossfeed = settings.crossfeed.coerceIn(0f, 1f)
         val rotation = settings.rotation.coerceIn(-180f, 180f)
+        // 交叉馈送从关到开：把延时线与低通历史清掉，避免把上一段旧样本混进来造成左右瞬跳。
+        if (crossfeed > 0.001f && appliedCrossfeed <= 0.001f) {
+            crossBuf[0].fill(0f)
+            crossBuf[1].fill(0f)
+            crossLow.forEach { it.reset() }
+            crossIdx = 0
+        }
+        appliedCrossfeed = crossfeed
         if (monoBass) applyBass(bassHz)
         // 宽度恰好 1、没开低频单声道、交叉馈送与旋转都为 0 时是恒等变换，别白跑一遍。
         if (!monoBass && abs(width - 1f) < 0.001f
