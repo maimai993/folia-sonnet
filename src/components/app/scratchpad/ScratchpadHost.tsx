@@ -75,6 +75,9 @@ const PAGE_TITLE_KEYS: Record<ScratchpadTab, string> = { notes: 'scratchpad.titl
 /** 清空的第二下要在这么久之内点，过了就复原。 */
 const CLEAR_CONFIRM_MS = 3000;
 
+/** 点击呼出的侧边标签（钉住态）多久无操作自动缩回常驻小点。 */
+const EDGE_PIN_MS = 3000;
+
 /** 焦点在抽屉里时这些键归抽屉：不让它们冒到 window 上被资料库墙（方向键移焦、Enter 打开）或播放页（方向键快进）接走。
  *  只拦冒泡，不 preventDefault：按钮照常响应 Enter / 空格，画布照常翻页滚动。 */
 const DRAWER_KEYS = new Set([
@@ -143,7 +146,7 @@ const PAGE_VARIANTS = {
 
 const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, queue, isHandleHidden = false }) => {
     const { t } = useTranslation();
-    const { entries, isOpen, tab, isExpanded, isCovered, addNonce, setOpen, toggleOpen, setExpanded, setTab, clear } = useScratchpadStore(useShallow(state => ({
+    const { entries, isOpen, tab, isExpanded, isCovered, addNonce, setOpen, setExpanded, setTab, clear } = useScratchpadStore(useShallow(state => ({
         entries: state.entries,
         isOpen: state.isOpen,
         tab: state.tab,
@@ -151,7 +154,6 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
         isCovered: state.isCovered,
         addNonce: state.addNonce,
         setOpen: state.setOpen,
-        toggleOpen: state.toggleOpen,
         setExpanded: state.setExpanded,
         setTab: state.setTab,
         clear: state.clear,
@@ -165,6 +167,18 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
     const handleStyle = useScratchpadSettingsStore(state => state.handleStyle);
     const listRef = useRef<HTMLDivElement>(null);
     const [confirmingClear, setConfirmingClear] = useState(false);
+    // 把手的两步开合：第一次点击只呼出侧边标签（pinned，3 秒无操作收回），再点一次才打开抽屉。瞬时 UI 状态，不持久化。
+    const [edgePinned, setEdgePinned] = useState(false);
+    // 呼出后 3 秒无操作自动缩回常驻小点。
+    useEffect(() => {
+        if (!edgePinned) return;
+        const timer = window.setTimeout(() => setEdgePinned(false), EDGE_PIN_MS);
+        return () => window.clearTimeout(timer);
+    }, [edgePinned]);
+    // 抽屉打开（无论从把手还是快捷键）时，钉住态一并清除：把手随抽屉卸载，回来时不该还带着展开的标签。
+    useEffect(() => {
+        if (isOpen) setEdgePinned(false);
+    }, [isOpen]);
 
     // 新收进来的行：和上一批条目比出来，闪一下底色；列表开着时滚到第一条新行。
     const seenKeysRef = useRef<Set<string>>(new Set(entries.map(entry => entry.key)));
@@ -418,6 +432,16 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
     const handleTitle = `${handleLabel} (${PRIMARY_MODIFIER_LABEL} + J)`;
     const expandLabel = isExpanded ? t('scratchpad.collapseCanvas') : t('scratchpad.expandCanvas');
 
+    // 把手点击的两步：第一次只呼出侧边标签，标签已呼出时再点才打开抽屉。
+    const handleEdgeToggle = () => {
+        if (!edgePinned) {
+            setEdgePinned(true);
+            return;
+        }
+        setEdgePinned(false);
+        setOpen(true);
+    };
+
     // 底部按钮是 F 的方角描边按钮：最常用的「全部入队」实心，清空单独靠右（点两下才清，第二下前写明）。
     const footer = entries.length > 0 && (
         <footer className="scratchpad-footer">
@@ -561,7 +585,8 @@ const ScratchpadHost: React.FC<ScratchpadHostProps> = ({ isDaylight, playback, q
                     title={t('scratchpad.title')}
                     label={handleLabel}
                     hint={handleTitle}
-                    onToggle={toggleOpen}
+                    pinned={edgePinned}
+                    onToggle={handleEdgeToggle}
                     handleRef={handleRef}
                 />
             )}

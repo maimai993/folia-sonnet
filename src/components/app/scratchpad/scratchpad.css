@@ -129,9 +129,11 @@
     transition: opacity 0s linear 0.2s, filter 0.2s ease;
 }
 
-.scratchpad-edge:is(:hover, :focus-within) .scratchpad-edge-rest { opacity: 0; transition: none; }
+/* 点击呼出的钉住态与悬停 / 聚焦同用一套展开规则：第一次点击只呼出标签（pinned），
+   不随指针移开收回，3 秒无操作才缩回（定时器在 ScratchpadHost）。 */
+.scratchpad-edge:is(:hover, :focus-within, .is-pinned) .scratchpad-edge-rest { opacity: 0; transition: none; }
 
-.scratchpad-edge:is(:hover, :focus-within) .scratchpad-handle {
+.scratchpad-edge:is(:hover, :focus-within, .is-pinned) .scratchpad-handle {
     filter: drop-shadow(0 12px 24px rgb(0 0 0 / 45%));
     opacity: 1;
     pointer-events: auto;
@@ -160,7 +162,7 @@
     transition: clip-path 0.2s ease, opacity 0.2s ease;
 }
 
-.scratchpad-edge:is(:hover, :focus-within) .scratchpad-handle-paper {
+.scratchpad-edge:is(:hover, :focus-within, .is-pinned) .scratchpad-handle-paper {
     clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
     opacity: 1;
 }
@@ -169,7 +171,7 @@
 .scratchpad-handle-texture,
 .scratchpad-handle-body { transition: opacity 0.12s ease; }
 
-.scratchpad-edge:not(:hover, :focus-within) :is(.scratchpad-handle-texture, .scratchpad-handle-body) { opacity: 0; }
+.scratchpad-edge:not(:hover, :focus-within):not(.is-pinned) :is(.scratchpad-handle-texture, .scratchpad-handle-body) { opacity: 0; }
 
 /* 网点纹理，中段（标题那一截）渐隐掉，不影响读字。 */
 .scratchpad-handle-texture {
