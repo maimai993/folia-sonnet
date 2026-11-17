@@ -1663,6 +1663,8 @@ export default {
     "consoleTabMastering": "母带",
     "consoleMasteringComp": "损失补偿",
     "consoleMasteringNightMode": "夜间模式",
+    "consoleMasteringPresets": "快捷预设",
+    "consoleMasteringPresetsHint": "一键套用常用组合，套完还能逐项微调。",
     "consoleMasteringDetailBoost": "高低频补偿",
     "consoleMasteringLoudnessComp": "音量补偿",
     "consoleMasteringCompHint": "补回变小的音量",

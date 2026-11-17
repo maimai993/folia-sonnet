@@ -75,11 +75,13 @@ const MasteringPane: React.FC = () => {
 
     return (
         <div className="flex min-h-full flex-col">
-            <div className="flex flex-wrap gap-2 px-4 pt-3">
-                <Button variant="bare" onClick={applyNightMode}>{t('ui.consoleMasteringNightMode')}</Button>
-                <Button variant="bare" onClick={applyDetailBoost}>{t('ui.consoleMasteringDetailBoost')}</Button>
-                <Button variant="bare" onClick={applyLoudnessComp}>{t('ui.consoleMasteringLoudnessComp')}</Button>
-            </div>
+            <EqualizerSection title={t('ui.consoleMasteringPresets')} hint={t('ui.consoleMasteringPresetsHint')}>
+                <div className="flex flex-wrap gap-2 px-4 pb-4 pt-3">
+                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyNightMode}>{t('ui.consoleMasteringNightMode')}</Button>
+                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyDetailBoost}>{t('ui.consoleMasteringDetailBoost')}</Button>
+                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyLoudnessComp}>{t('ui.consoleMasteringLoudnessComp')}</Button>
+                </div>
+            </EqualizerSection>
             {/* —— 核心：损失补偿，放最上面 —— */}
             <EqualizerSection title={t('ui.consoleMasteringComp')} hint={t('ui.consoleMasteringCompHint')}>
                 <div className="space-y-3.5 px-4 pb-4 pt-3">

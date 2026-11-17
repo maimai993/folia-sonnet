@@ -1647,6 +1647,8 @@ export default {
     "consoleTabMastering": "Mastering",
     "consoleMasteringComp": "Loss compensation",
     "consoleMasteringNightMode": "Night mode",
+    "consoleMasteringPresets": "Quick presets",
+    "consoleMasteringPresetsHint": "One-tap combos; fine-tune after applying.",
     "consoleMasteringDetailBoost": "Detail boost",
     "consoleMasteringLoudnessComp": "Loudness comp",
     "consoleMasteringCompHint": "restore lost loudness",

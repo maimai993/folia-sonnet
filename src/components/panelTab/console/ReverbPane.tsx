@@ -261,7 +261,6 @@ const ReverbPane: React.FC = () => {
                                 onChange={crossfeed => setStereo({ crossfeed })}
                                 onCommit={() => undefined}
                             />
-                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoCrossfeedHint')}</p>
                         </div>
                         <div className="mt-3">
                             <ConsoleSlider
@@ -275,7 +274,6 @@ const ReverbPane: React.FC = () => {
                                 onChange={rotation => setStereo({ rotation })}
                                 onCommit={() => undefined}
                             />
-                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoRotationHint')}</p>
                         </div>
                     </div>
                 </div>

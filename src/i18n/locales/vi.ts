@@ -1648,6 +1648,8 @@ export default {
     "consoleTabMastering": "Mastering",
     "consoleMasteringComp": "Bù tổn thất",
     "consoleMasteringNightMode": "Chế độ đêm",
+    "consoleMasteringPresets": "Cài đặt nhanh",
+    "consoleMasteringPresetsHint": "Tổ hợp một chạm; chỉnh tiếp sau khi áp.",
     "consoleMasteringDetailBoost": "Tăng chi tiết",
     "consoleMasteringLoudnessComp": "Bù âm lượng",
     "consoleMasteringCompHint": "khôi phục độ to đã mất",

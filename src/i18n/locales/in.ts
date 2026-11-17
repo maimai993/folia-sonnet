@@ -1647,6 +1647,8 @@ export default {
     "consoleTabMastering": "Mastering",
     "consoleMasteringComp": "Kompensasi kehilangan",
     "consoleMasteringNightMode": "Mode malam",
+    "consoleMasteringPresets": "Preset cepat",
+    "consoleMasteringPresetsHint": "Kombinasi sekali sentuh; bisa disetel lagi setelahnya.",
     "consoleMasteringDetailBoost": "Boost detail",
     "consoleMasteringLoudnessComp": "Kompensasi volume",
     "consoleMasteringCompHint": "pulihkan kerasnya yang hilang",
