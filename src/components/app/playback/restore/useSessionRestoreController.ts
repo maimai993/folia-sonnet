@@ -21,6 +21,7 @@ import { readNativeQueueState } from '../../../../services/nativeQueueBridge';
 import { adoptNativePlaybackState } from './adoptNativePlaybackState';
 import { getPositionWriteProbe, readPlaybackPositionForSong, savePlaybackPosition } from '../playbackPositionCache';
 import { orderQueueLikeMirror, songFromMirrorEntry } from '../../../../utils/queueMirrorEntry';
+import { usePendingResumeStore } from '../../../../stores/usePendingResumeStore';
 
 // src/components/app/playback/restore/useSessionRestoreController.ts
 
@@ -366,6 +367,14 @@ export function useSessionRestoreController({
                 const nearEnd = resumeDurationSec > 0 && resumeSec > resumeDurationSec - 5;
                 if (!nearEnd && resumeSec > 3) {
                     pendingResumeTimeRef.current = resumeSec;
+                    // 原生装源 effect 可能已经在位置恢复之前跑过了（读到 null → 从 0 开始）。
+                    // 把位置写进 store 状态：它会触发重渲染，让装源 effect 再跑一次带上
+                    // startPositionMs；已经装过源的只 seek、不重装。连同 songKey 一起存，
+                    // 换歌之后旧位置不会被错用。
+                    usePendingResumeStore.getState().setPendingResume({
+                        songKey: getPlaybackSongKey(lastSong),
+                        seconds: resumeSec,
+                    });
                     // 这份位置可能是从原生快照捡回来的：立刻在 WebView 这边也落一条，
                     // 下次 WebView 自己就有数据，不必每次都从原生补。
                     if (!savedPosition) {

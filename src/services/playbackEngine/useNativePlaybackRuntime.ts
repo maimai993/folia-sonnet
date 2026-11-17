@@ -6,6 +6,7 @@ import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nati
 import type { MutableRefObject } from 'react';
 import { currentTime } from '../../stores/motionSignals';
 import { nativePlaybackEngine } from './nativePlaybackEngine';
+import { usePendingResumeStore } from '../../stores/usePendingResumeStore';
 
 // src/services/playbackEngine/useNativePlaybackRuntime.ts
 //
@@ -59,14 +60,27 @@ export const useNativePlaybackRuntime = ({
 
     const reconciling = useSyncExternalStore(subscribeNativePlaybackSync, isNativePlaybackReconciling, () => false);
     const takes = enabled && !reconciling && nativePlaybackEngine.supports(audioSrc);
+    // 会话恢复的续播位置走 store：位置晚到时值会变化，触发下面装源 effect 重跑。
+    const pendingResume = usePendingResumeStore(state => state.pendingResume);
 
     // 地址 → 播放器。blob 地址（本地歌）原生吃不下，那种歌整首回落到 <audio>。
     useEffect(() => {
-        if (!enabled || reconciling || isNativePlaybackReconciling() || !audioSrc) return;
+        // 原生整条路不参与时，store 里那份位置没人消费，留到下次会带到别的歌上。
+        if (!enabled) {
+            if (usePendingResumeStore.getState().pendingResume) {
+                usePendingResumeStore.getState().setPendingResume(null);
+            }
+            return;
+        }
+        if (reconciling || isNativePlaybackReconciling() || !audioSrc) return;
         if (!nativePlaybackEngine.supports(audioSrc)) {
             // 「开关开了但这首歌还是网页在播」的全部答案都在这行日志里 —— 均衡器还能听出
             // 变化，就是因为它根本没走原生。看日志比猜快。
             console.info('[NativePlayer] 这一首回落到 <audio>', audioSrc.slice(0, 24), '(原生吃不下这种地址)');
+            // 这首歌原生吃不下（本地 blob）：位置由 <audio> 经 ref 消费，store 直接清掉。
+            if (usePendingResumeStore.getState().pendingResume) {
+                usePendingResumeStore.getState().setPendingResume(null);
+            }
             return;
         }
         console.info('[NativePlayer] 接管这一首', audioSrc.slice(0, 24));
@@ -75,23 +89,59 @@ export const useNativePlaybackRuntime = ({
         /*
          * 恢复会话时的续播位置。在这里消费而不是在引擎里：引擎不知道「这一首是新装的还是
          * 重新协商的」，而对后者再跳一次位置会把正在播的歌拽回去。
+         *
+         * store 里那份连同 songKey 一起存：只认「恢复出的那一首」，换歌之后旧位置不能错用。
+         * 会话恢复那条路也写 ref（给 <audio> 路），其余路径仍只写 ref；store 里没有或对不上
+         * 当前这首歌就退回 ref。
          */
-        const resumeAtSec = pendingResumeTimeRef.current;
+        const storeResume = pendingResume
+            && song
+            && pendingResume.songKey === getPlaybackSongKey(song)
+            ? pendingResume.seconds
+            : null;
+        if (pendingResume) {
+            usePendingResumeStore.getState().setPendingResume(null);
+        }
+        const resumeAtSec = storeResume ?? pendingResumeTimeRef.current;
         /*
-         * 已经在播同一地址、也不是续播、上一次装源没失败：不重新装源。
+         * 已经在播同一地址、上一次装源没失败：不重新装源。
          * 回前台 / 主题墙 reconcile 会让 reconciling 从 true 翻回 false，这个 effect 会再跑一次，
          * 若不拦下来，同一首歌会被重新 prepare —— 听感就是「无缘无故顿一下、像从头来过」。
          */
-        if (resumeAtSec === null && nativePlaybackEngine.activeUrl() === audioSrc
-            && !nativePlaybackEngine.sourceReadyError()) {
-            pendingResumeTimeRef.current = null;
+        const sameSourceReady = nativePlaybackEngine.activeUrl() === audioSrc
+            && !nativePlaybackEngine.sourceReadyError();
+        pendingResumeTimeRef.current = null;
+        if (resumeAtSec === null && sameSourceReady) {
             return;
         }
-        pendingResumeTimeRef.current = null;
+        /*
+         * 已经装过源、这次只是会话恢复的位置晚到了：只 seek、不重装 —— 重装会让歌从头
+         * 再来一遍，把「接着听」变成「重新听」。
+         */
+        if (resumeAtSec !== null && sameSourceReady) {
+            console.info('[NativePlayer] 续播位置晚到，seek 到', resumeAtSec);
+            void nativePlaybackEngine.seek(resumeAtSec).catch(error => {
+                console.error('[NativePlayer] resume seek failed', error);
+            });
+            return;
+        }
         const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
         void nativePlaybackEngine.setSource(audioSrc, {
             songKey: song ? getPlaybackSongKey(song) : null,
-            startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
+            // 续播位置不塞给 prepare：原生 prepare(call) 调用即 resolve，prepareInternal 里
+            // prepare() 之后的立刻 seekTo 对 media-cache 回环源不可靠（实测停在 0）。
+            // 改成装源完成后再在命令链上 seek —— 与手动拖进度条同一条路。
+            startPositionMs: null,
+        }).then(() => {
+            if (resumeAtSec !== null
+                && nativePlaybackEngine.sourceGeneration() === expectedSourceGeneration
+                && nativePlaybackEngine.activeUrl() === audioSrc
+                && !nativePlaybackEngine.sourceReadyError()) {
+                console.info('[NativePlayer] 装源后 seek 续播位置', resumeAtSec);
+                void nativePlaybackEngine.seek(resumeAtSec).catch(error => {
+                    console.error('[NativePlayer] resume seek failed', error);
+                });
+            }
         }).catch(error => {
             if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration) return;
             if (nativePlaybackEngine.activeUrl() !== audioSrc) return;
@@ -101,7 +151,7 @@ export const useNativePlaybackRuntime = ({
             console.error('[NativePlayer] prepare failed', error);
             callbacksRef.current.onError(String(error));
         });
-    }, [audioSrc, enabled, reconciling, pendingResumeTimeRef]);
+    }, [audioSrc, enabled, reconciling, pendingResume, pendingResumeTimeRef]);
 
     // 关掉开关、或没有歌了 → 收掉播放器，别让上一首在后台继续响。
     useEffect(() => {
