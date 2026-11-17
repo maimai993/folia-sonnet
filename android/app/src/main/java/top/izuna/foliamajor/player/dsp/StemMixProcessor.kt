@@ -102,11 +102,7 @@ class StemMixProcessor(
             passthrough(inputBuffer, incoming)
             return
         }
-        // 伴奏 / 清唱走换源路径（播派生文件），只有「全部」才由四轨混音接管。
-        if (state.activeMode() != null) {
-            passthrough(inputBuffer, incoming)
-            return
-        }
+        // 伴奏 / 清唱 / 全部都走四轨混音：模式决定哪些轨参与（见下面 mode 的筛选）。
         state.stemMixActive = true
 
         val frameBytes = 2 * channels

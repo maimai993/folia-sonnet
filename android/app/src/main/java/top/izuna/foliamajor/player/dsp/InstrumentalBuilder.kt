@@ -37,9 +37,6 @@ internal object InstrumentalBuilder {
 
     private const val TAG = "Instrumental"
 
-    /** 一次 separate() 跑几个窗口。4 个 ≈ 44 秒，输出缓冲约 16MB。 */
-    private const val BLOCK_WINDOWS = 4
-
     /** 伴奏码率。人声已经去掉了，剩下的乐器 128k 足够，再高只是浪费空间。 */
     private const val BIT_RATE = 128_000
 
@@ -68,15 +65,21 @@ internal object InstrumentalBuilder {
         return (6 + done * 93 / total).coerceIn(6, 99)
     }
 
-    /** 一次分离的成品：伴奏 / 清唱两轨沿用旧文件名，四轨另存给空间声场。 */
-    data class BuiltTracks(val instrumental: File, val vocal: File)
+    /** 一次分离的成品：只留四轨。清唱 = 人声轨、伴奏 = 其余三轨、全部 = 四轨一起。 */
+    data class BuiltTracks(val stems: Map<StemKind, File>)
+
+    /** 后台时每个块之间歇多久：够狠 —— 整块让出 CPU，内存也已按块释放。 */
+    private const val BACKGROUND_BLOCK_SLEEP_MS = 5_000L
+
+    /** 一次 decodeRange 解多少个 11s 窗口。8 个 ≈ 88 秒，常驻内存约 30MB。 */
+    private const val CHUNK_WINDOWS = 8
 
     /**
-     * 生成一首歌的四轨分离结果，并把「伴奏 / 清唱」两条派生轨一起写出。
+     * 生成一首歌的四轨分离结果。
      *
-     * 四轨（drums / bass / other / vocals）是空间声场的数据源；两条派生轨继续供
-     * 换源路径使用 —— 换源路径一次只装一个文件，装不下三轨伴奏，所以伴奏在生成时
-     * 把鼓 + 贝斯 + 其他按原比例混好，清唱直接取人声轨。
+     * 只写四轨（drums / bass / other / vocals）：清唱 = 人声轨、伴奏 = 其余三轨、
+     * 全部 = 四轨一起，播放时由 StemMixProcessor 按模式实时混音。不再另写两份派生
+     * m4a，也就不存在「拆完把派生文件换到别的歌上」这条错源路径。
      *
      * 调用方必须在后台线程跑：解码 + 推理是几十秒的活。
      */
@@ -87,6 +90,7 @@ internal object InstrumentalBuilder {
         onProgress: (Int) -> Unit,
         cancelled: () -> Boolean,
         eager: Boolean = false,
+        background: () -> Boolean = { false },
     ): BuiltTracks? {
         val started = System.currentTimeMillis()
         if (InstrumentalStore.cacheLimitBytes(context) < MIN_CACHE_BYTES) {
@@ -94,16 +98,17 @@ internal object InstrumentalBuilder {
             return null
         }
         onProgress(1)
-        val decoded = TrackPcmDecoder.decode(
-            context,
-            url,
-            maxSeconds = MAX_SEPARATION_SECONDS,
-            onProgress = { fraction -> onProgress(1 + (fraction * 2).toInt()) },
-        ) ?: run {
-            Log.w(TAG, "解码失败: $url")
-            return null
+        /*
+         * 分块解码：一次只解 CHUNK_WINDOWS 个窗口（约 88 秒），拆完就丢，常驻内存只有
+         * 这一块 + 模型。原来把整首歌解成双声道 PCM 再拆，一首 4 分钟 85MB、长歌更大，
+         * 后台时系统按内存压力直接回收进程 —— 光降 CPU 压不住。
+         */
+        val durationSec = TrackPcmDecoder.durationSec(url)
+        val totalSamples = if (durationSec > 0) {
+            (durationSec * ScnetRunner.SAMPLE_RATE).toLong().coerceAtMost(MAX_SEPARATION_SECONDS * ScnetRunner.SAMPLE_RATE.toLong())
+        } else {
+            MAX_SEPARATION_SECONDS * ScnetRunner.SAMPLE_RATE.toLong()
         }
-        if (decoded.samples <= 0) return null
         onProgress(3)
 
         val model = AutomixModels.ensureLocal(
@@ -122,42 +127,49 @@ internal object InstrumentalBuilder {
             temps[kind] = InstrumentalStore.stemTempFor(context, key, kind)
             targets[kind] = InstrumentalStore.stemTargetFor(context, key, kind)
         }
-        val tempInstrumental = InstrumentalStore.tempFor(context, key, VocalTrackMode.INSTRUMENTAL)
-        val tempVocal = InstrumentalStore.tempFor(context, key, VocalTrackMode.VOCAL)
-        val targetInstrumental = InstrumentalStore.targetFor(context, key, VocalTrackMode.INSTRUMENTAL)
-        val targetVocal = InstrumentalStore.targetFor(context, key, VocalTrackMode.VOCAL)
-        (temps.values + listOf(tempInstrumental, tempVocal)).forEach { it.delete() }
+        temps.values.forEach { it.delete() }
 
         val writers = mutableMapOf<StemKind, AacWriter>()
         for (kind in StemKind.ALL) {
             writers[kind] = AacWriter(temps.getValue(kind).absolutePath, ScnetRunner.SAMPLE_RATE, 2, BIT_RATE)
         }
-        val writerInstrumental = AacWriter(tempInstrumental.absolutePath, ScnetRunner.SAMPLE_RATE, 2, BIT_RATE)
-        val writerVocal = AacWriter(tempVocal.absolutePath, ScnetRunner.SAMPLE_RATE, 2, BIT_RATE)
-        val totalWindows = (decoded.samples + ScnetRunner.SEGMENT - 1) / ScnetRunner.SEGMENT
+        val chunkSamples = CHUNK_WINDOWS * ScnetRunner.SEGMENT
+        val totalWindows = ((totalSamples + ScnetRunner.SEGMENT - 1) / ScnetRunner.SEGMENT).toInt()
         var finished = false
+        var writtenSamples = 0L
         try {
-            var cursor = 0
-            while (cursor < decoded.samples) {
+            var cursorSec = 0.0
+            var decodedAny = false
+            while (writtenSamples < totalSamples) {
                 if (cancelled()) {
-                    Log.i(TAG, "生成被取消，已到 ${cursor * 100L / decoded.samples}%")
+                    Log.i(TAG, "生成被取消，已到 ${writtenSamples * 100L / totalSamples}%")
                     return null
                 }
-                val end = minOf(cursor + BLOCK_WINDOWS * ScnetRunner.SEGMENT, decoded.samples)
-                val windowsBefore = cursor / ScnetRunner.SEGMENT
+                val remainSec = (totalSamples - writtenSamples).toDouble() / ScnetRunner.SAMPLE_RATE
+                val chunkSec = minOf(chunkSamples.toDouble() / ScnetRunner.SAMPLE_RATE, remainSec)
+                val decoded = TrackPcmDecoder.decodeRange(context, url, cursorSec, chunkSec)
+                if (decoded == null || decoded.samples <= 0) {
+                    if (!decodedAny) {
+                        Log.w(TAG, "解码失败: $url")
+                        return null
+                    }
+                    break
+                }
+                decodedAny = true
+                val windowsBefore = (writtenSamples / ScnetRunner.SEGMENT).toInt()
                 val stems = ScnetRunner.separate(
                     decoded.left,
                     decoded.right,
                     stems = StemKind.ALL.indices.toList(),
-                    fromSample = cursor,
-                    toSample = end,
+                    fromSample = 0,
+                    toSample = decoded.samples,
                     onProgress = { done, _ ->
                         onProgress(percentForWindow(windowsBefore + done, totalWindows))
                     },
                     cancelled = cancelled,
                     eager = eager,
                 ).stems
-                val frames = end - cursor
+                val frames = decoded.samples
                 val drums = stems["drums"] ?: return null
                 val bass = stems["bass"] ?: return null
                 val other = stems["other"] ?: return null
@@ -166,51 +178,40 @@ internal object InstrumentalBuilder {
                 writers.getValue(StemKind.BASS).write(mixStems(listOf(bass), frames), frames)
                 writers.getValue(StemKind.OTHER).write(mixStems(listOf(other), frames), frames)
                 writers.getValue(StemKind.VOCALS).write(mixStems(listOf(vocals), frames), frames)
-                writerInstrumental.write(mixStems(listOf(drums, bass, other), frames), frames)
-                writerVocal.write(mixStems(listOf(vocals), frames), frames)
-                cursor = end
+                writtenSamples += decoded.samples
+                cursorSec += chunkSec
+                // 后台狠限：整块让出 CPU；内存这边已经按块释放，进程不再因为大 PCM 被杀。
+                if (background()) {
+                    Thread.sleep(BACKGROUND_BLOCK_SLEEP_MS)
+                }
             }
             writers.values.forEach { it.finish() }
-            writerInstrumental.finish()
-            writerVocal.finish()
             finished = true
             onProgress(100)
         } catch (error: Throwable) {
             Log.w(TAG, "生成音轨失败", error)
         } finally {
             writers.values.forEach { try { it.close() } catch (_: Throwable) {} }
-            try { writerInstrumental.close() } catch (_: Throwable) {}
-            try { writerVocal.close() } catch (_: Throwable) {}
         }
         if (!finished) {
-            (temps.values + listOf(tempInstrumental, tempVocal)).forEach { it.delete() }
+            temps.values.forEach { it.delete() }
             return null
         }
 
         for (kind in StemKind.ALL) {
             if (!InstrumentalStore.commit(temps.getValue(kind), targets.getValue(kind))) {
                 Log.w(TAG, "音轨落盘失败: ${targets.getValue(kind).absolutePath}")
-                (temps.values + targets.values + listOf(tempInstrumental, tempVocal, targetInstrumental, targetVocal))
-                    .forEach { it.delete() }
+                (temps.values + targets.values).forEach { it.delete() }
                 return null
             }
         }
-        if (!InstrumentalStore.commit(tempInstrumental, targetInstrumental)
-            || !InstrumentalStore.commit(tempVocal, targetVocal)
-        ) {
-            Log.w(TAG, "派生轨落盘失败: ${targetInstrumental.absolutePath}")
-            (temps.values + targets.values + listOf(tempInstrumental, tempVocal, targetInstrumental, targetVocal))
-                .forEach { it.delete() }
-            return null
-        }
         Log.i(
             TAG,
-            "音轨完成：${decoded.samples * 1000L / decoded.sampleRate}ms, " +
+            "音轨完成：${writtenSamples * 1000L / ScnetRunner.SAMPLE_RATE}ms, " +
                 "四轨 ${targets.values.sumOf { it.length() } / 1024}KB, " +
-                "伴奏 ${targetInstrumental.length() / 1024}KB / 清唱 ${targetVocal.length() / 1024}KB, " +
                 "耗时 ${System.currentTimeMillis() - started}ms",
         )
-        return BuiltTracks(targetInstrumental, targetVocal)
+        return BuiltTracks(targets.toMap())
     }
 
     /**

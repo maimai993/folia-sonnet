@@ -84,6 +84,13 @@ class FoliaNativePlayerPlugin : Plugin() {
         @Volatile
         private var instance: FoliaNativePlayerPlugin? = null
 
+        /** 应用是否退到后台。拆分任务读它做「后台慢而缓」的节流。 */
+        @Volatile
+        private var appInBackground: Boolean = false
+
+        @JvmStatic
+        fun isAppInBackground(): Boolean = appInBackground
+
         /**
          * 原生播放器此刻的只读快照，作为 getQueueState 的 `nativeMedia` 字段。
          *
@@ -356,6 +363,14 @@ class FoliaNativePlayerPlugin : Plugin() {
             event.put("reason", reason)
             MAIN.post { notifyListeners("sourceReload", event) }
         }
+        /*
+         * 四轨生成完就发布给音频线程：清唱 / 伴奏 / 全部现在都走四轨混音，不换源。
+         * isAppInBackground 让拆分在后台慢而缓。
+         */
+        InstrumentalCoordinator.onStemsReady = { url, songKey ->
+            publishStemState(url, songKey)
+        }
+        InstrumentalCoordinator.isAppInBackground = { appInBackground }
         val appContext = context.applicationContext
         Thread { InstrumentalCoordinator.sweep(appContext) }.apply {
             isDaemon = true
@@ -620,6 +635,22 @@ class FoliaNativePlayerPlugin : Plugin() {
         super.handleOnDestroy()
     }
 
+    override fun handleOnPause() {
+        appInBackground = true
+        /*
+         * 只在前台拆分：退后台只作废当前拆分任务（worker 退出后释放 PCM 内存），
+         * 不动共享的 ScnetRunner —— 推理模型还被 automix / 节拍分析等其它功能用，
+         * 谁都不许在这里整应用级地释放它。
+         */
+        InstrumentalCoordinator.pauseForBackground()
+        super.handleOnPause()
+    }
+
+    override fun handleOnResume() {
+        appInBackground = false
+        super.handleOnResume()
+    }
+
     /** 空间声场：装源后把这首歌的四轨状态发布给音频线程。 */
     private fun publishStemState(url: String?, songKey: String?) {
         if (url.isNullOrBlank()) {
@@ -676,30 +707,15 @@ class FoliaNativePlayerPlugin : Plugin() {
         // 撤销条件：Web 亲自装源 = 手动换歌，进行中的过渡必须让位并恢复播放器状态。
         FoliaTransitionPlugin.interrupt("Web 亲自装源")
         /*
-         * 「关闭人声」开着、而且这首已经生成过伴奏：一次就装伴奏。
-         *
-         * 不先装原曲再切 —— 那会多一次解码器初始化，启播时听得出一下顿。
-         * 装伴奏时 MediaItem 的 mediaId 仍然是这首歌的 songKey，
-         * 通知栏 / 桌面歌词 / 镜像兜底都以为没换过东西。
+         * 只拆四轨：清唱 = 人声轨、伴奏 = 其余三轨、全部 = 四轨一起，播放时由
+         * StemMixProcessor 按模式实时混音，所以这里永远只装原曲 —— 不再为伴奏 /
+         * 清唱另装一份派生文件。
          */
-        val activeMode = NativeEqualizerState.activeMode()
-        val cachedTrack = activeMode?.let { mode ->
-            InstrumentalStore.find(context, InstrumentalStore.keyFor(url, webSongKey), mode)
-        }
-        if (cachedTrack != null) {
-            current.prepareInstrumental(
-                url,
-                Uri.fromFile(cachedTrack).toString(),
-                if (startPositionMs != null) startPositionMs.toLong() else -1L,
-                webSongKey,
-            )
-        } else {
-            current.prepare(
-                url,
-                if (startPositionMs != null) startPositionMs.toLong() else -1L,
-                webSongKey,
-            )
-        }
+        current.prepare(
+            url,
+            if (startPositionMs != null) startPositionMs.toLong() else -1L,
+            webSongKey,
+        )
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
         currentSongKey = webSongKey

@@ -22,6 +22,8 @@ import { useNativePlaybackRuntime } from '../../../services/playbackEngine/useNa
 import { currentTime } from '../../../stores/motionSignals';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
 import { setDuration as setDurationInStore, setPlayerState as setPlayerStateInStore } from '../../../stores/usePlaybackStore';
+import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
+import { queuePlaybackQueuePrecompute, rearmPlaybackQueuePrecompute } from '../../../services/analysis/songAssetPrecompute';
 import { PlayerState } from '../../../types';
 import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { resolveLikeAvailability } from '../../../utils/playerLikeAvailability';
@@ -40,7 +42,7 @@ import { usePlaybackTransportController } from '../playback/bridges/usePlaybackT
 import { startExternalSong } from '../playback/start/externalSongStart';
 import { usePlaybackVisualizerBridge } from '../playback/bridges/usePlaybackVisualizerBridge';
 import { runTransportButtonAction, useTransportCommandRefs, type TransportButtonAction } from '../playback/bridges/useTransportCommandRefs';
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import type { SongResult } from '../../../types';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { useSongThemeFollow } from '../../../hooks/useSongThemeFollow';
@@ -497,6 +499,36 @@ export const useAppPlaybackBridges = (model: Input) => {
      * 订阅 store 之后，只要当前曲或队列真的变了就会写，不必每条路径都记得。
      */
     usePlaybackSessionSnapshot();
+
+    /*
+     * 进应用自动拆分整条播放队列：把队列里每首都排进预拆分，一首接一首直到全拆完。
+     *
+     * 只排「未拆过」的歌：songAssetPrecompute 本会话去重，原生 prebuild 还会再查一次
+     * 四轨缓存，已拆的直接读缓存、不会重复拆分。总开关（预先拆分音轨）关着时只排
+     * 整曲曲线，不跑 SCNet。
+     */
+    const prebuildTracksEnabled = useAudioSettingsStore(state => state.prebuildTracksEnabled);
+    useEffect(() => {
+        if (!prebuildTracksEnabled) return;
+        queuePlaybackQueuePrecompute(playQueue);
+        /*
+         * 只在前台拆分：回前台就把被后台作废的重新排上。清掉 settled 再整队重排，
+         * 已拆完的由原生 allStemsReady 兜底跳过，不会重复拆。
+         */
+        const rearmWhenVisible = () => {
+            if (document.visibilityState === 'visible') {
+                rearmPlaybackQueuePrecompute(playQueue);
+            }
+        };
+        document.addEventListener('visibilitychange', rearmWhenVisible);
+        window.addEventListener('focus', rearmWhenVisible);
+        window.addEventListener('resume', rearmWhenVisible);
+        return () => {
+            document.removeEventListener('visibilitychange', rearmWhenVisible);
+            window.removeEventListener('focus', rearmWhenVisible);
+            window.removeEventListener('resume', rearmWhenVisible);
+        };
+    }, [prebuildTracksEnabled, playQueue]);
 
     /*
      * 自动歌词校准：播起来之后在后台自己估一次整曲偏移，算完就写进本曲偏移。

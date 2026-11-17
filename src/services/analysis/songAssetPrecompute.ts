@@ -52,6 +52,38 @@ export const queueSongAssetPrecompute = (song: SongResult): void => {
     void drain();
 };
 
+/**
+ * 进应用时把整条播放队列排进预拆分：一首接一首，直到队列全拆完。
+ *
+ * 每一首仍走 [queueSongAssetPrecompute] 的去重（本会话 settled/pending），
+ * 原生侧 [InstrumentalCoordinator.prebuild] 还会再查一次四轨缓存 —— 已拆过的
+ * 直接跳过，不会重复拆分。总开关关着时这里不排 SCNet，只排整曲曲线。
+ */
+export const queuePlaybackQueuePrecompute = (queue: SongResult[]): void => {
+    if (!isCapacitorAndroid() || !isNativePlayerAvailable()) return;
+    if (!useAudioSettingsStore.getState().prebuildTracksEnabled) return;
+    for (const song of queue) {
+        queueSongAssetPrecompute(song);
+    }
+};
+
+/**
+ * 回前台时重排整条队列。
+ *
+ * 后台会把没拆完的生成作废（原生 pauseForBackground），但本会话的 settled 记录还在，
+ * 那些被作废的歌不会被重新排上。这里清掉 settled 再整队重排：已拆完的由原生
+ * allStemsReady 兜底跳过，不会重复拆；没拆完的从断点整首重来。
+ */
+export const rearmPlaybackQueuePrecompute = (queue: SongResult[]): void => {
+    if (!isCapacitorAndroid() || !isNativePlayerAvailable()) return;
+    if (!useAudioSettingsStore.getState().prebuildTracksEnabled) return;
+    settled.clear();
+    failures.clear();
+    for (const song of queue) {
+        queueSongAssetPrecompute(song);
+    }
+};
+
 const drain = async (): Promise<void> => {
     if (running) return;
     running = true;
