@@ -1055,6 +1055,17 @@
   var cam = { ox: 0, oy: 0, z: 1, r: 0, flash: 0, ca: 1, last: 0 };
   var camT = { ox: 0, oy: 0, z: 1, r: 0 };
   var jelly = { a: 0, v: 0 };
+
+  /*
+   * ★ 自闪（配合 frame 里的逻辑）：固定节奏持续换纸，不再等音乐节拍。
+   *    默认 320ms 一下（~3 次/秒，「快一点」），beat 到来时由 frame 重置计时，
+   *    真节拍优先。这个值可以按手感调整。
+   */
+  var FOLIA_AUTO_FLASH_MS = 320;
+  var autoFlashAt = 0;
+  var lastAutoNow = performance.now();
+  var trailFrame = 0;
+  var autoFlashSeq = 0;
   var pageIdx = 0, bass = 0;
 
   function zoomOf() {
@@ -1158,8 +1169,12 @@
     vig = g;
   }
 
+  var grainFrame = 0;
   function drawGrain(now) {
     if (!noisePat) return;
+    /* 隔帧画：噪点本身在滚动，隔一帧根本看不出，全屏 overlay fillRect 却是每帧最贵的一笔。 */
+    grainFrame = (grainFrame + 1) % 2;
+    if (grainFrame) return;
     ctx.save();
     ctx.globalCompositeOperation = "overlay";
     ctx.globalAlpha = 0.05;
@@ -1252,10 +1267,19 @@
       var t = trail.x;
       t.setTransform(1, 0, 0, 1, 0, 0);
       t.globalCompositeOperation = "source-over";
-      t.globalAlpha = trailDirty ? 1 : (1 - keep);
-      t.drawImage(scene.c, 0, 0, trail.c.width, trail.c.height);
-      t.globalAlpha = 1;
-      trailDirty = false;
+      /*
+       * 隔帧衰减：残影本来就是低频观感，衰减频率减半后把 keep 稍调大补偿，
+       * 观感几乎一致，每帧却少一次全屏 drawImage（scene→trail 的叠加）。
+       */
+      trailFrame = (trailFrame + 1) % 2;
+      if (trailFrame) {
+        trailDirty = false;
+      } else {
+        t.globalAlpha = trailDirty ? 1 : (1 - Math.min(0.9, keep * 1.35));
+        t.drawImage(scene.c, 0, 0, trail.c.width, trail.c.height);
+        t.globalAlpha = 1;
+        trailDirty = false;
+      }
 
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
@@ -1724,6 +1748,43 @@
         cam.r += (camT.r - cam.r) * 0.07;
       }
 
+      /*
+       * ★ 自闪：纸快闪的「闪」原本只跟着 beat 消息走 —— 音乐安静下来（前奏 / 间奏 /
+       *    轻声段）就没有 beat，纸停在那里不动，像是整个舞台在等歌词。改成播放中
+       *    固定节奏自己闪：FOLIA_AUTO_FLASH_MS 毫秒一次，beat 来了就重置计时
+       *    （真节拍优先，避免连续闪两下）。中间的歌词字照旧跟着 tick / 分词走，
+       *    一切不变，只是背景不再等歌词。
+       */
+      if (S.playing) {
+        autoFlashAt += now - lastAutoNow;
+        lastAutoNow = now;
+        if (autoFlashAt >= FOLIA_AUTO_FLASH_MS) {
+          autoFlashAt = 0;
+          try {
+            if (P.layout === "inline") {
+              if (P.pageCut && PAGE) {
+                /*
+                 * inline 自闪不每次都重排整页（buildPage 是全页坐标重算，
+                 * 320ms 一次会周期性掉帧）：每次只让果冻抖一下 + 翻页号，
+                 * 每 3 次才真正重排一次页面，视觉上仍是「纸在一直换」。
+                 */
+                autoFlashSeq++;
+                pageNo++;
+                if (P.jelly > 0) jelly.v += 1.2;
+                if (autoFlashSeq % 3 === 0) {
+                  pageCutSeed++;
+                  try { buildPage(); fReset(); aimAtWord(curWordIdx); } catch (e) { fail(e); }
+                }
+              }
+            } else if (P.pageCut) {
+              cutPage(0.45, false);
+            }
+          } catch (e) { fail(e); }
+        }
+      } else {
+        lastAutoNow = now;
+      }
+
       cam.flash *= 0.84;
       if (cam.flash < 0.01) cam.flash = 0;
       cam.ca += (1 - cam.ca) * 0.13;
@@ -1931,7 +1992,9 @@
     if (!isFinite(w) || w <= 0) w = 1440;
     if (!isFinite(h) || h <= 0) h = 900;
     W = Math.round(w); H = Math.round(h);
-    DPR = Math.min(2, window.devicePixelRatio || 1);
+    /* DPR 封顶 1.5：手机屏上 2 和 1.5 肉眼几乎无差，像素量却差 44% ——
+       这一层是全屏多层 canvas 合成，安卓 WebView 里降这个最划算。 */
+    DPR = Math.min(1.5, window.devicePixelRatio || 1);
 
     cv.width = Math.round(W * DPR);
     cv.height = Math.round(H * DPR);
@@ -1943,9 +2006,7 @@
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = "#f5eeda";
-    ctx.fillRect(0, 0, W, H);
-
-    /* 旧的那张纸先留着，新的建好再换，免得中间空一大片 */
+    ctx.fillRect(0, 0, W, H);    /* 旧的那张纸先留着，新的建好再换，免得中间空一大片 */
     if (!paper) paper = newLayer();
     head = newLayer(HEAD_SS);
     caA = newLayer(HEAD_SS);

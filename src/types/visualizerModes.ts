@@ -24,6 +24,7 @@ export const BUILTIN_VISUALIZER_MODES = [
     'kinetic',
     'lumiere',
     'machi',
+    'metaphor',
     'monet',
     'nebbia',
     'partita',
