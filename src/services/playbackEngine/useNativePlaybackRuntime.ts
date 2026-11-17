@@ -77,6 +77,16 @@ export const useNativePlaybackRuntime = ({
          * 重新协商的」，而对后者再跳一次位置会把正在播的歌拽回去。
          */
         const resumeAtSec = pendingResumeTimeRef.current;
+        /*
+         * 已经在播同一地址、也不是续播、上一次装源没失败：不重新装源。
+         * 回前台 / 主题墙 reconcile 会让 reconciling 从 true 翻回 false，这个 effect 会再跑一次，
+         * 若不拦下来，同一首歌会被重新 prepare —— 听感就是「无缘无故顿一下、像从头来过」。
+         */
+        if (resumeAtSec === null && nativePlaybackEngine.activeUrl() === audioSrc
+            && !nativePlaybackEngine.sourceReadyError()) {
+            pendingResumeTimeRef.current = null;
+            return;
+        }
         pendingResumeTimeRef.current = null;
         const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
         void nativePlaybackEngine.setSource(audioSrc, {
