@@ -264,6 +264,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "video_layer_fit",
   "video_layer_opacity",
   "video_layer_url",
+  "video_source_url",
   "visualizer_background_mode",
   "visualizer_mode",
   "visualizer_opacity",
