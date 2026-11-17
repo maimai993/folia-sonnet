@@ -179,6 +179,9 @@ object NativeEqualizerState {
     /** 音频线程用的只读快照。 */
     fun snapshot(): EqSettings = current
 
+    /** 空间声场开着时，四轨混音接管伴奏/清唱，换源路径不再 swapSource。 */
+    fun stemMixerEnabled(): Boolean = current.spatial.enabled
+
     /**
      * 换一份设置，返回带新 seq 的那一份。
      *
