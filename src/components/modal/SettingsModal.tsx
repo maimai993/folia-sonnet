@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db';
-import { cacheSizeLabels, readMvMediaCacheBytes, clearMvMatchCache, clearMvMediaCacheBytes } from './settings/useCacheUsagePanel';
+import { useCacheUsagePanel } from './settings/useCacheUsagePanel';
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
@@ -41,7 +41,7 @@ import { buildSettingsSearchEntries, searchSettings, type SettingsSearchEntry } 
 import { isSettingsSectionSubview, resolveInitialSettingsSection, sectionForSettingsSubview, writeLastSettingsSection } from './settings/navigation/settingsLastSection';
 import { useSettingsLanding, type SettingsLandingTarget } from './settings/navigation/useSettingsLanding';
 import { runsOnWindows } from '../../utils/platform';
-import { hasElectronBridge } from '../../platform/runtime';
+import { hasElectronBridge, isCapacitorAndroid } from '../../platform/runtime';
 import { canReadDesktopSettings } from './settings/desktopSettingsBridge';
 import { openOutsideLink } from '../../utils/system/outsideLink';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
@@ -323,9 +323,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
     const contentScrollRef = useRef<HTMLDivElement>(null);
-    // Matches the md: split of the window: under it the categories go into the drawer the menu
-    // button opens, and only that bar (menu button + search) stays on top.
-    const isWideSettingsLayout = useMediaQuery('(min-width: 768px)');
+    // 安卓上不用宽屏两列：横屏逻辑宽度就有 780~900px，768px 会命中，而横屏高度只有
+    // 390~430px，内容区被压成一条（「横屏设置页不显示文字、界面大小异常」）。
+    // androidPhoneFit.css ⑤ 也在同一环境下压回单列，两边必须一致。
+    const isWideSettingsLayout = useMediaQuery('(min-width: 768px)') && !isCapacitorAndroid();
     const settingsAnchorStore = useSettingsAnchorStore();
     const settingsAnchors = useSettingsAnchorList(settingsAnchorStore);
 
@@ -377,20 +378,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         landOn(initialAnchor.rowId ?? initialAnchor.id, initialAnchor.id);
     }, [initialAnchor]);
 
-    // Cache State
-    const [cacheSizes, setCacheSizes] = useState({
-        playlist: '0 B',
-        lyrics: '0 B',
-        cover: '0 B',
-        media: '0 B',
-        analysis: '0 B',
-        volumeBalance: '0 B',
-        // fork：MV 的匹配记录与音视频字节缓存（不进 IndexedDB，见 useCacheUsagePanel）。
-        mvMatch: '0 B',
-        mvMedia: '0 B'
-    });
-    const [mediaCount, setMediaCount] = useState(0);
-    const [isCleaning, setIsCleaning] = useState<CacheCategory | null>(null);
+    // 缓存用量：状态与清理都在 useCacheUsagePanel 里（别在这里再写一份 —— 以前两份就是
+    // 「新加一类只在其中一处出现」的来源）。
+    const { cacheSizes, mediaCount, isCleaning, clearCategory } = useCacheUsagePanel(activeTab);
 
     // Electron Settings State
     // Seeded synchronously so a remembered desktop/mods section has its title on the first frame; the effect below still confirms it.
@@ -818,52 +808,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         refreshServerProfile(config);
     };
 
-    const applyCacheUsage = (
-        usage: Awaited<ReturnType<typeof getCacheUsageByCategory>>,
-        mvMediaBytes = 0,
-    ) => {
-        setCacheSizes(cacheSizeLabels(usage, mvMediaBytes));
-        setMediaCount(usage.mediaCount);
-    };
-
-    const fetchCacheUsage = async () => {
-        // MV 那份字节缓存在盘上、要问原生；与 IndexedDB 的用量一起量好再交给界面。
-        const [usage, mvMediaBytes] = await Promise.all([
-            getCacheUsageByCategory(),
-            readMvMediaCacheBytes().catch(() => 0),
-        ]);
-        applyCacheUsage(usage, mvMediaBytes);
-    };
-
-    useEffect(() => {
-        if (activeTab === 'options') {
-            // Like the answers above, it lands while the window is opening.
-            void Promise.all([
-                getCacheUsageByCategory(),
-                readMvMediaCacheBytes().catch(() => 0),
-            ]).then(([usage, mvMediaBytes]) => startTransition(() => applyCacheUsage(usage, mvMediaBytes)));
-        }
-    }, [activeTab]);
-
-    const handleClear = async (category: CacheCategory) => {
-        setIsCleaning(category);
-        // 智能平衡's readings held in memory go with its stored ones, or they would be written back. First, so
-        // a write already sent lands before the clear and none is sent after it.
-        if (category === 'volumeBalance') clearBalanceRuntime();
-        if (category === 'mvMatch') {
-            // MV 匹配结果不进 IndexedDB，清的是那平台自己的 store。
-            clearMvMatchCache();
-        } else if (category === 'mvMedia') {
-            // 只清盘上的音视频字节，保留「配了哪条投稿」的记录。
-            await clearMvMediaCacheBytes();
-        } else {
-            await clearCacheByCategory(category);
-        }
-        // The drum hits' memory of which tracks are stored goes with the stored analyses.
-        if (category === 'analysis') forgetSettledDrumHits();
-        await fetchCacheUsage();
-        setIsCleaning(null);
-    };
 
     const handleChooseCacheDirectory = async () => {
         const bridge = (window as any).electron;
@@ -1144,7 +1088,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isCleaning,
                 mediaCount,
                 onChooseCacheDirectory: handleChooseCacheDirectory,
-                onClear: handleClear,
+                onClear: clearCategory,
             },
             desktop: {
                 model: {
@@ -1194,6 +1138,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
+            data-folia-settings-overlay="true"
             data-ponder-page-scope={activeTab === 'help' ? 'help-page' : 'settings-page'}
             className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-8 sm:px-5 sm:py-12"
             style={{ backgroundColor: overlayBackground }}
@@ -1206,6 +1151,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 role="dialog"
                 aria-modal="true"
                 aria-label={t('options.settingsWindowName')}
+                data-folia-settings-panel="true"
                 className="st-window relative isolate flex h-[90vh] w-full flex-col overflow-hidden rounded-2xl text-[color:var(--st-t1)] shadow-[0_36px_90px_rgba(0,0,0,0.5),0_0_0_1px_var(--st-line2)] md:grid md:h-[86vh] md:w-[960px] md:grid-cols-[212px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]"
                 style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reducedKitMotion) }}
                 onClick={(event) => event.stopPropagation()}
@@ -1259,6 +1205,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         />
                         <div
                             ref={contentScrollRef}
+                            data-folia-settings-content="true"
                             className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-8 md:pb-16 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-4 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--st-fill2)] [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-3"
                         >
                             {isSearching ? (

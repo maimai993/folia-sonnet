@@ -9,7 +9,7 @@ import { installNativeAndroidBridge } from './services/nativeAndroidBridge';
 import { installPerfDiagnosticsSwitch } from './utils/frameTimingDiagnostics';
 import { setMediaDiagnosticsEnabledReader } from './utils/mediaDiagnostics';
 import { usePerfDiagnosticsStore } from './stores/usePerfDiagnosticsStore';
-import { installAndroidPhoneFitPreference, installDeviceProfilePreference } from './services/androidPhoneLayout';
+import { installDeviceProfilePreference, installPhoneOrientationPreference } from './services/androidPhoneLayout';
 import { installHdrProjectionPreference } from './services/hdrProjection';
 import { installAndroidModsBridge } from './mods/android/androidModsBridge';
 import { isPerfCheckSurface } from './utils/appSurface';
@@ -69,9 +69,10 @@ setMediaDiagnosticsEnabledReader(perfDiagnosticsPort.isEnabled);
 // 本地登录的地基：把内置的接口代码挂到页面与原生之间。它是异步的（要 import 那份 JS），
 // 但装好之前页面发来的请求会被排队，装好后统一补发，所以不用 await。
 void installNativeAndroidBridge();
-// 手机适配的属性必须在首帧之前落到 <html> 上：否则用户开了开关后，React 挂载那一瞬
-// 会先按桌面布局量一遍尺寸，再被 CSS 拉回手机布局，开屏那一下看得见跳变。
-installAndroidPhoneFitPreference();
+// 方向属性（竖屏 / 横屏）要在首帧之前落到 <html> 上：横屏那套缩放与「强制横屏」都读它，
+// 晚一步就会先按原始尺寸铺完再变，开屏那一下看得见跳变。
+// （原来的「手机适配」总开关是废弃代码，已删；这里只剩方向。）
+installPhoneOrientationPreference();
 // 设备类型（手机 / 平板）：选了手机的话横屏整屏缩一档，同样要在首帧之前落到 <html> 上，
 // 否则第一帧按原始尺寸铺完再缩，开屏那一下看得见跳变。
 installDeviceProfilePreference();

@@ -1,28 +1,14 @@
 import { setSafeAreaBypass } from './phoneInsets';
 import { setSystemBarsAlwaysHidden } from '../platform/foliaNative';
 
-export const ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
+/*
+ * 「手机适配」那套覆盖样式（styles/androidPhoneFit.css 里 data-folia-phone-fit 那一半）
+ * 是废弃代码，已经整体删掉：它恒为 false，从来没有真正生效过，留着只会让「设置了却没效果」
+ * 这类问题反复出现。这里只剩**方向**（竖屏 / 横屏），「强制横屏」与 HDR 投影的镜像读它。
+ */
 export const ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY = 'folia_android_phone_fit_orientation';
 
 export type AndroidPhoneFitOrientation = 'portrait' | 'landscape';
-
-export const readStoredAndroidPhoneFit = (): boolean => {
-    if (typeof window === 'undefined') return false;
-    try {
-        return localStorage.getItem(ANDROID_PHONE_FIT_STORAGE_KEY) === 'true';
-    } catch {
-        return false;
-    }
-};
-
-export const writeStoredAndroidPhoneFit = (enabled: boolean): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(ANDROID_PHONE_FIT_STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch {
-        // A storage failure must not make the switch unusable for the current session.
-    }
-};
 
 export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => {
     if (typeof window === 'undefined') return 'portrait';
@@ -45,28 +31,21 @@ export const writeStoredAndroidPhoneFitOrientation = (orientation: AndroidPhoneF
 };
 
 /**
- * Applies the Android-only compact layout at the document root.
+ * 把方向写到文档根上。横屏那套缩放、「强制横屏」与 HDR 镜像都读它。
  *
- * Keeping this as one attribute means every override lives in one stylesheet and upstream
- * components keep their own markup and breakpoints.
+ * 这里原来还有一个「手机适配」总开关，写 `data-folia-phone-fit`；那套覆盖样式是废弃代码，
+ * 见 styles/androidPhoneFit.css 顶部说明，已整体删除。
  */
-export const applyAndroidPhoneFit = (
-    enabled: boolean,
+export const applyPhoneOrientation = (
     orientation: AndroidPhoneFitOrientation = readStoredAndroidPhoneFitOrientation(),
 ): void => {
     if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    root.setAttribute('data-folia-phone-fit', enabled ? 'true' : 'false');
-    root.setAttribute('data-folia-phone-orientation', orientation);
+    document.documentElement.setAttribute('data-folia-phone-orientation', orientation);
 };
 
-export const installAndroidPhoneFitPreference = (): void => {
-    /*
-     * 总开关恒为 false —— 「手机适配」那一行已经从设置里删掉了，没有入口的东西不该
-     * 在启动时被盘上那份旧值重新打开（以前打开过的人会一直带着那套覆盖样式）。
-     * 方向这一份还要照旧恢复：「强制横屏」要看它。
-     */
-    applyAndroidPhoneFit(false, readStoredAndroidPhoneFitOrientation());
+/** 启动时在首帧之前把方向落上去（「强制横屏」从上次的选择恢复）。 */
+export const installPhoneOrientationPreference = (): void => {
+    applyPhoneOrientation(readStoredAndroidPhoneFitOrientation());
 };
 
 /**
