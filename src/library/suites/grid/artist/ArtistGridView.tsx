@@ -1319,7 +1319,12 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
             )}
 
             {/* Header Area */}
-            <div className={`absolute ${lowerBackButton ? 'top-6' : 'top-0'} left-0 p-6 z-30 flex items-center gap-4`}>
+            {/* 安全区：`absolute top-0/top-6` 的返回按钮那一排 —— 用 margin-top 整份往下让开
+                摄像头区域（与歌单网格 GridView 的同一颗按钮一致）。 */}
+            <div
+                data-folia-safe-top="shift"
+                className={`absolute ${lowerBackButton ? 'top-6' : 'top-0'} left-0 p-6 z-30 flex items-center gap-4`}
+            >
                 <button
                     // 返回按钮表示看完了（onDone）：宿主清掉浏览会话、让每套 suite 忘掉布局记录，再返回
                     // （Escape 与浏览器后退保留）。P4.5 起这条语义在宿主，不在这里清。
@@ -1365,6 +1370,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                     setShowSidePanel(false);
                     setShowCutInPanel(current => !current);
                 }}
+                data-folia-safe-top="shift"
                 className="group/grid-title absolute left-1/2 top-5 -translate-x-1/2 z-[70] text-center flex flex-col items-center select-none cursor-pointer hover:scale-[1.01] active:scale-98 transition-all px-5 py-2 rounded-2xl backdrop-blur-md"
                 style={{
                     backgroundColor: 'color-mix(in srgb, var(--bg-color) 20%, transparent)',
@@ -1406,6 +1412,7 @@ const ArtistGridView: React.FC<ArtistGridViewProps> = ({
                         if (loadError) artistActions.reload();
                         else if (backgroundLoadFailed) artistActions.retryAlbums();
                     }}
+                    data-folia-safe-top="shift"
                     className="absolute right-6 top-5 z-[70] flex items-center gap-2 rounded-full px-3 py-2 text-xs backdrop-blur-md"
                     style={{ backgroundColor: 'color-mix(in srgb, var(--bg-color) 65%, transparent)' }}
                     title={t('playlist.loading')}

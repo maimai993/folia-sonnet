@@ -451,8 +451,10 @@ export const GridMap: React.FC<GridMapProps> = ({
             }}
         >
             {/* Top Floating Glass Header */}
+            {/* 安全区：整条 header 贴 `top-0`，返回 / 标题 / 搜索都在里面 —— pad 往下让开摄像头。 */}
             <div
                 data-folia-gridmap-header="true"
+                data-folia-safe-top="pad"
                 className="absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-5 z-[70] bg-gradient-to-b from-black/10 to-transparent"
             >
                 <Button

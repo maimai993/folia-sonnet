@@ -8,7 +8,7 @@ import {
 } from '../services/backgroundThemeBridge';
 import { readDirectorSettings, subscribeDirectorState } from '../services/lyricDirector/state';
 import { readFoliaCloudSettings, subscribeFoliaCloudSettings } from '../services/foliaCloud';
-import { listDirectorModes, isBlockedDirectorMode } from '../services/lyricDirector/catalog';
+import { effectiveBlockedDirectorModes, listDirectorModes, isBlockedDirectorMode } from '../services/lyricDirector/catalog';
 import i18n from '../i18n/config';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
@@ -19,7 +19,8 @@ export const useBackgroundThemeConfig = (enabled: boolean): void => {
             const settings = readDirectorSettings();
             const cloud = readFoliaCloudSettings();
             const hint = settings.userHint;
-            const blocked = settings.blockedModes;
+            // 生效的禁区：用户勾掉的 + 永远不许 AI 用的（fork 与模组样式）。
+            const blocked = effectiveBlockedDirectorModes(settings.blockedModes);
             const next = {
                 enabled,
                 cloudEnabled: cloud.enabled,

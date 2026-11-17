@@ -31,6 +31,12 @@ export const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'option
 export const AI: SettingsGroupDef = { id: 'aiCredentials', titleKey: 'options.electronSettings', electronOnly: true };
 
 /**
+ * AI 歌词动画导演那一组（fork 独有）。那几行画在 AiProviderSettings 里、紧挨着 AI 凭证，
+ * 但声明在这里 —— 搜索索引只认各页声明的 OPTIONS，不声明就搜不到（用户反馈过）。
+ */
+export const AI_DIRECTOR: SettingsGroupDef = { id: 'aiDirectorGroup', titleKey: 'aiDirector.title', electronOnly: true };
+
+/**
  * 显示那一组（fork 独有）：歌词扁平两端都画；设备类型与横竖屏只有安卓有。
  * 原在「通用」页，那里剩下的都是语言、启动、更新这类「行为」，这几项讲的是「长什么样」，
  * 所以搬到这里，排在歌词那组之后。液态玻璃的开关与参数不在这里：它同时是性能设置，
@@ -126,6 +132,16 @@ export const O = {
     openaiStream: option(AI, 'openaiApiStream', 'options.openaiApiStream'),
     openaiKey: option(AI, 'openaiApiKey', 'options.openaiApiKey'),
     aiProxy: option(AI, 'useSystemProxyAI', 'options.useSystemProxyAI'),
+    // AI 歌词动画导演（fork 独有）：让搜索也能找到这几行。
+    aiDirectorAuto: option(AI_DIRECTOR, 'aiDirectorAutoMode', 'aiDirector.allowAutoMode', {
+        noteKey: 'aiDirector.allowAutoModeDesc',
+    }),
+    aiDirectorParams: option(AI_DIRECTOR, 'aiDirectorAutoParams', 'aiDirector.allowAutoParams', {
+        noteKey: 'aiDirector.allowAutoParamsDesc',
+    }),
+    aiDirectorBlocked: option(AI_DIRECTOR, 'aiDirectorBlockedModes', 'aiDirector.blockedModes', {
+        noteKey: 'aiDirector.modeLockedHint',
+    }),
 };
 
 /** What the wallpaper section draws, which the search lists under the page. */

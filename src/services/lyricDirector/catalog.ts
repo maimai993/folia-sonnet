@@ -26,6 +26,11 @@ export interface DirectorModeInfo {
     id: string;
     label: string;
     hint: string;
+    /**
+     * AI 不能选、用户也不能给它解禁（界面上一律划掉）。见 isLockedDirectorMode：
+     * 只有上游自带的样式可以给 AI 用，fork 自己加的和模组投稿的都在这一档。
+     */
+    locked: boolean;
 }
 
 /** One-line character notes, so the AI can tell the modes apart. */
@@ -49,6 +54,8 @@ const MODE_HINTS: Record<string, string> = {
     nebbia: '雨夜车窗上的手写字、雾气与霓虹，安静',
     machi: '三维街区实景、雨夜霓虹与镜头漫游，电影感与空间感强',
     kinetic: '动画 PV 分镜：跳切、故障错位与装饰元素，节奏感极强',
+    metaphor: '隐喻字块、融球与半调颗粒、硬切转场，实验感强',
+    blank: '连歌词都不画，整屏留白',
 };
 
 /** Chinese names, used in the prompt (it is written in Chinese) and as the UI fallback. */
@@ -72,6 +79,8 @@ const MODE_NAMES: Record<string, string> = {
     nebbia: '雾笺',
     machi: '町景',
     kinetic: '文字PV',
+    metaphor: '隐喻',
+    blank: '无歌词',
 };
 
 /** i18n keys for the UI. `cadenza` is spelled `Cadenze` in the locale files. */
@@ -95,6 +104,8 @@ const MODE_LABEL_KEYS: Record<string, string> = {
     nebbia: 'ui.visualizerNebbia',
     machi: 'ui.visualizerMachi',
     kinetic: 'ui.visualizerKinetic',
+    metaphor: 'ui.visualizerMetaphor',
+    blank: 'ui.visualizerBlank',
 };
 
 export type DirectorParamSpec =
@@ -518,6 +529,36 @@ export const isBlockedDirectorMode = (mode: string, blockedModes: readonly strin
 );
 
 /**
+ * 上游自带的样式。AI 歌词动画导演**只**允许启用这些。
+ *
+ * 这份清单是判据：不在里面的（fork 自己写的 `blank` / `kinetic` / `prompt`，以及模组投稿的
+ * `mod:<modId>:<id>`）在设置里一律划掉、点不动，也不会出现在给 AI 的提示词里 —— 它们的行为
+ * 由 fork 或模组自己描述，上游那句「交给 AI 挑一个」管不到，交出去只会让 AI 选到画面完全
+ * 不合预期的东西。上游以后新增样式时把 id 补进来即可。
+ */
+export const UPSTREAM_DIRECTOR_MODES: readonly string[] = [
+    'cadenza', 'cappella', 'claddagh', 'classic', 'diorama', 'fume', 'hanabi', 'lumiere',
+    'machi', 'metaphor', 'monet', 'nebbia', 'partita', 'pendolo', 'sonnet', 'still', 'tempera', 'tilt',
+];
+
+/** AI 永远不许用，用户也不能解禁（界面上一律划掉）。 */
+export const isLockedDirectorMode = (mode: string): boolean => !UPSTREAM_DIRECTOR_MODES.includes(mode);
+
+/**
+ * 真正生效的「不许 AI 用」清单：用户勾掉的 + 永远划掉的。
+ *
+ * 提示词、答案校验、界面三处都读这一份，否则会出现「界面划掉但仍被选到」这种自相矛盾。
+ */
+export const effectiveBlockedDirectorModes = (blockedModes: readonly string[] | undefined): string[] => {
+    const merged = new Set<string>(Array.isArray(blockedModes) ? blockedModes : []);
+    // 只把真实存在的内置样式并进来：清单里写错一个 id 不该让别的判断跟着出错。
+    (BUILTIN_VISUALIZER_MODES as readonly string[]).forEach((mode) => {
+        if (isLockedDirectorMode(mode)) merged.add(mode);
+    });
+    return [...merged];
+};
+
+/**
  * The modes the AI may choose from, with the label to show for each.
  *
  * `extra` carries the mod-contributed modes (`mod:<modId>:<id>`) the host has registered, so the
@@ -532,6 +573,7 @@ export const listDirectorModes = (
         id,
         label: modeLabel(id, t),
         hint: MODE_HINTS[id] ?? '',
+        locked: isLockedDirectorMode(id),
     })),
     ...extra,
 ];
@@ -544,6 +586,8 @@ export const describeHostDirectorMode = (
     id,
     label,
     hint: MODE_HINTS[id] ?? '',
+    // 模组样式一律锁死：AI 只认上游自带的那几个。
+    locked: true,
 });
 
 export const modeLabel = (mode: string, t?: (key: string) => string): string => {

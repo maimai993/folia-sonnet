@@ -12,6 +12,7 @@ import {
 } from './aiCloudCache';
 import { requestAiCompletion } from './aiCompletion';
 import {
+    effectiveBlockedDirectorModes,
     isBlockedDirectorMode,
     isKnownDirectorMode,
     listDirectorModes,
@@ -303,9 +304,11 @@ const buildStageContext = (request: StageRequest): StageContext => {
         songTitle: request.songTitle ?? song?.title ?? '',
     });
 
+    // 生效的禁区：用户勾掉的 + 永远不许 AI 用的（fork 与模组样式）。
+    const effectiveBlocked = effectiveBlockedDirectorModes(blockedModes);
     const modes = listDirectorModes(translate)
-        .filter((mode) => !isBlockedDirectorMode(mode.id, blockedModes));
-    const policy = buildStagePolicy({ isPureMusic, hint, blocked: blockedModes });
+        .filter((mode) => !isBlockedDirectorMode(mode.id, effectiveBlocked));
+    const policy = buildStagePolicy({ isPureMusic, hint, blocked: effectiveBlocked });
 
     return {
         fingerprint: fingerprintStage(lyricSource, policy),

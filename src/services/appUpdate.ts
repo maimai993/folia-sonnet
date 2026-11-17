@@ -22,8 +22,15 @@ import {
 // 版本号来源是编译期注入的 `__APP_VERSION__`（vite.config.ts 从 package.json 读），
 // 和清单里的 version 直接对齐。
 
-/** 版本清单地址。 */
-export const APP_UPDATE_MANIFEST_URL = 'https://cdn.tangbot.xyz/update.json';
+/**
+ * 版本清单地址。
+ *
+ * fork 自己的更新走 GitHub Releases 的 latest —— 上游那份静态清单（cdn.tangbot.xyz/update.json）
+ * 里的 download_url 不带扩展名，解析出来是「没有可安装的 APK」；而且上面写的是上游的版本号，
+ * 与本 fork 的 0.7.29.x 对不上。CI 打出来的产物名是 `folia-sonnet-<version>-release.apk`，
+ * 正好能被下面按后缀挑产物的逻辑认出来。
+ */
+export const APP_UPDATE_MANIFEST_URL = 'https://api.github.com/repos/Folia-CE/folia-sonnet/releases/latest';
 
 /** 打开发布页的兜底入口：清单里给了 page_url 就用清单的。 */
 export const APP_UPDATE_RELEASES_PAGE = `https://github.com/Folia-CE/folia-sonnet/releases`;
@@ -259,30 +266,71 @@ const describeFetchFailure = (error: unknown): string => {
 };
 
 /**
+ * 把 GitHub Releases 的 latest 应答摊成上面那份清单的形状。
+ *
+ * 也认原本那份清单形状（`version` + `download_url`）：自建清单还能用，单测与本机调试
+ * 都是直接把一份清单喂进来的。
+ */
+type GithubReleasePayload = {
+  tag_name?: unknown;
+  name?: unknown;
+  html_url?: unknown;
+  body?: unknown;
+  published_at?: unknown;
+  draft?: unknown;
+  prerelease?: unknown;
+  assets?: Array<{ name?: unknown; browser_download_url?: unknown; size?: unknown }>;
+};
+
+const toManifestPayload = (payload: GithubReleasePayload & Partial<UpdateManifestPayload>): UpdateManifestPayload => {
+  if (nonEmptyString(payload?.version) || nonEmptyString(payload?.download_url)) {
+    return payload as UpdateManifestPayload;
+  }
+  return {
+    version: nonEmptyString(payload?.tag_name) ?? undefined,
+    page_url: nonEmptyString(payload?.html_url) ?? undefined,
+    notes: nonEmptyString(payload?.body) ?? undefined,
+    published_at: nonEmptyString(payload?.published_at) ?? undefined,
+    assets: Array.isArray(payload?.assets)
+      ? payload.assets.map((asset) => ({
+        name: nonEmptyString(asset?.name) ?? undefined,
+        browser_download_url: nonEmptyString(asset?.browser_download_url) ?? undefined,
+        size: typeof asset?.size === 'number' ? asset.size : undefined,
+      }))
+      : undefined,
+  };
+};
+
+/**
  * 取一次版本清单。
  *
- * 安卓上优先走原生 OkHttp 桥：自建 CDN（cdn.tangbot.xyz）不回 `Access-Control-Allow-Origin`，
- * WebView 里的 fetch 会被同源策略直接拦掉，表现就是「一直检查失败」。原生侧没有这个限制。
+ * 安卓上优先走原生 OkHttp 桥：GitHub API 回的 CORS 头虽然允许任意源，但 WebView 里
+ * 走 fetch 会带上浏览器自己的 UA 并受同源策略、缓存策略两层影响，原生侧没有这些问题。
  * 桥也没拿到时再退回全局 fetch，好让失败原因是真实的 HTTP 状态而不是一句「桥不可用」。
  */
 const fetchUpdateManifest = async (signal?: AbortSignal): Promise<UpdateManifestPayload> => {
-  if (isNativeHttpAvailable()) {
-    try {
-      const text = await nativeGetText(APP_UPDATE_MANIFEST_URL, REQUEST_TIMEOUT_MS);
-      return JSON.parse(text) as UpdateManifestPayload;
-    } catch {
-      // 落到下面的 fetch。
+  const readRaw = async (): Promise<unknown> => {
+    if (isNativeHttpAvailable()) {
+      try {
+        const text = await nativeGetText(APP_UPDATE_MANIFEST_URL, REQUEST_TIMEOUT_MS);
+        return JSON.parse(text);
+      } catch {
+        // 落到下面的 fetch。
+      }
     }
-  }
-  return fetchJsonWithRetry<UpdateManifestPayload>(
-    APP_UPDATE_MANIFEST_URL,
-    {
-      signal,
-      // CDN 上可能留着上一版清单，带 no-store 拿最新的；缓存由 CDN 自己在边缘管。
-      cache: 'no-store',
-    },
-    { timeoutMs: REQUEST_TIMEOUT_MS },
-  );
+    return fetchJsonWithRetry<unknown>(
+      APP_UPDATE_MANIFEST_URL,
+      {
+        signal,
+        // 检查更新不该读到上一次的应答：GitHub API 的缓存策略由它自己管。
+        cache: 'no-store',
+        headers: { Accept: 'application/vnd.github+json' },
+      },
+      { timeoutMs: REQUEST_TIMEOUT_MS },
+    );
+  };
+
+  return toManifestPayload((await readRaw()) as GithubReleasePayload & Partial<UpdateManifestPayload>);
 };
 
 /**

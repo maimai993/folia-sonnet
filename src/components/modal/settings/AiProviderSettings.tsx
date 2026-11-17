@@ -26,7 +26,7 @@ import {
     subscribeDirectorState,
     updateDirectorSettings,
 } from '../../../services/lyricDirector/state';
-import { listDirectorModes, describeHostDirectorMode } from '../../../services/lyricDirector/catalog';
+import { listDirectorModes, describeHostDirectorMode, isLockedDirectorMode } from '../../../services/lyricDirector/catalog';
 import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '@/components/visualizer/registry';
 import {
     testConfiguredAiConnection,
@@ -197,6 +197,8 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     );
 
     const toggleBlockedMode = (mode: string) => {
+        // 锁死的样式（fork 自己写的、模组投稿的）点不动：AI 只能用上游自带的那几个。
+        if (isLockedDirectorMode(mode)) return;
         const current = readDirectorSettings().blockedModes;
         const next = current.includes(mode)
             ? current.filter((entry) => entry !== mode)
@@ -509,14 +511,20 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {directorModes.map((mode) => {
-                            const blocked = directorSettings.blockedModes.includes(mode.id);
+                            /*
+                             * 锁死的一律划掉、点不动：AI 只允许用上游自带的样式。fork 自己写的
+                             * （blank / kinetic / prompt）与模组投稿的都在这一档 —— 它们的行为只有
+                             * fork 或模组自己说得清，交出去只会让 AI 选到完全不合预期的画面。
+                             */
+                            const blocked = mode.locked || directorSettings.blockedModes.includes(mode.id);
                             return (
                                 <Button
                                     key={mode.id}
                                     aria-pressed={blocked}
+                                    disabled={mode.locked}
                                     onClick={() => toggleBlockedMode(mode.id)}
-                                    title={mode.hint}
-                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
+                                    title={mode.locked ? t('aiDirector.modeLockedHint') : mode.hint}
+                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'} ${mode.locked ? 'cursor-not-allowed' : ''}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {mode.label}

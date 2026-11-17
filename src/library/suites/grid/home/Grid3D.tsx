@@ -317,7 +317,9 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         >
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
-            <div className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
+            {/* 安全区：这一块自己没有内边距（p-4/p-8 在里层 grid 上），所以用 pad 往下让出
+                摄像头/状态栏那一条；网格首页的标题、设置按钮、搜索框与页签都在这里面。 */}
+            <div data-folia-safe-top="pad" className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
                     {/* Left title and settings */}
                     <div className="flex items-center justify-start order-1 md:order-none">
