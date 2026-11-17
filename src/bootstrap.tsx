@@ -18,9 +18,21 @@ import { bootNavidromeServerPreset } from './services/navidromeServerPreset';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { setNavidromeEnabledState } from './stores/useLibraryStore';
 import { isMainAppSurface, isObsBrowserSourceSurface, isPerfCheckSurface, isRemoteControlSurface, obsSourceKind } from './utils/appSurface';
+// 手机适配的整套覆盖样式。规则全部由 <html data-folia-phone-fit='true'> 门控，
+// 开关关着时这里等于一张空表，上游桌面布局不会被碰到。放在 bootstrap 而不是 App 里，
+// 是为了让下面按 URL 挂的几个根（远程控制 / OBS）也能拿到同样的属性语义。
+import './styles/androidPhoneFit.css';
+import { installHdslbImageFixer } from './services/bilibili/hdslbImage';
+// 安卓的安全区必须在画第一帧之前就落进 CSS 变量：env(safe-area-inset-*) 在安卓 WebView 上
+// 不可信（只报挖孔不报系统栏，无刘海全 0），顶部控件会被状态栏压住。
+import { installPhoneInsets } from './services/phoneInsets';
+installPhoneInsets();
+installHdslbImageFixer();
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
 import './stores/useMotionSettingsStore';
+// 同上：液态玻璃的开关（`<html data-liquid-glass='on'>` + 注入器）也要在画第一帧之前就挂好。
+import './stores/useGlassSurfaceSettingsStore';
 
 // src/bootstrap.tsx
 // Mounts the React app after index.tsx installs runtime-level browser shims.
@@ -116,14 +128,28 @@ const bootNavidrome = async () => {
 };
 
 // allSettled：mod 加载失败也要等预置写完再渲染，失败原因单独打出来，不吞掉。
+// 启动链上的每一步都是 await 串起来的，而 #app-splash 遮罩要等 renderApp 跑完才移除。
+// 只要其中任何一步不 settle（WebView 里的 serviceWorker.ready、Dexie 打开、某个 host
+// 桥调用），遮罩就会永久停在首屏动画上。这里给整条链套一个兜底超时：先渲染出界面，
+// 迟到的初始化结果被忽略。
+const BOOT_RENDER_FALLBACK_MS = 8_000;
+let hasRendered = false;
+const renderOnce = () => {
+    if (hasRendered) return;
+    hasRendered = true;
+    renderApp();
+};
+const bootFallbackTimer = setTimeout(renderOnce, BOOT_RENDER_FALLBACK_MS);
+
 void Promise.allSettled([bootFolium(), bootNavidrome()])
     .then(([folium, navidrome]) => {
         if (folium.status === 'rejected') console.error('[Bootstrap] Folium boot failed:', folium.reason);
         if (navidrome.status === 'rejected') console.warn('[Navidrome] Server preset boot failed:', navidrome.reason);
     })
     .finally(() => {
+        clearTimeout(bootFallbackTimer);
         // Not in the performance check's window: the cover migration it may start writes through a
         // first-party channel (the main window runs it).
         if (!isPerfCheckSurface) initializeLocalCoverRuntime();
-        renderApp();
+        renderOnce();
     });

@@ -4,7 +4,6 @@ import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db';
 import { cacheSizeLabels, readMvMediaCacheBytes, clearMvMatchCache, clearMvMediaCacheBytes } from './settings/useCacheUsagePanel';
-
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
 import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
@@ -26,7 +25,7 @@ import { kitMotionTokens, useKitReducedMotion } from './settings/kit/motion';
 import { parseNumberText } from './settings/kit/numberText';
 import { SETTINGS_PAGES, SETTINGS_PAGE_OPTIONS } from './settings/pages';
 import HelpPage from './settings/pages/HelpPage';
-import { SettingsPageContext, type CacheCategory, type ElectronSettingsState, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
+import { SettingsPageContext, type CacheCategory, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import ReleaseNotesDialog from './ReleaseNotesDialog';
 import meowImageUrl from '../../../build/miao.png';
@@ -35,6 +34,7 @@ import { type SettingsModalState, type SettingsSubviewId, type VisualizerSetting
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
 import SettingsSearchResults from './settings/navigation/SettingsSearchResults';
 import SettingsSideList from './settings/navigation/SettingsSideList';
+import SettingsCompactNav from './settings/navigation/SettingsCompactNav';
 import { settingsAnchorSubview } from '../../utils/settingsAnchorModel';
 import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
 import { buildSettingsSearchEntries, searchSettings, type SettingsSearchEntry } from './settings/navigation/settingsNavSearch';
@@ -126,7 +126,7 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
             : 'realeco';
 
 // Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
-const hasElectronBridge = () => typeof window !== 'undefined' && typeof (window as any).electron?.platform === 'string';
+const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
@@ -324,7 +324,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
     const contentScrollRef = useRef<HTMLDivElement>(null);
-    // Matches the md: split of the window: under it the side list is a strip that scrolls sideways.
+    // Matches the md: split of the window: under it the categories go into the drawer the menu
+    // button opens, and only that bar (menu button + search) stays on top.
     const isWideSettingsLayout = useMediaQuery('(min-width: 768px)');
     const settingsAnchorStore = useSettingsAnchorStore();
     const settingsAnchors = useSettingsAnchorList(settingsAnchorStore);
@@ -385,6 +386,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         media: '0 B',
         analysis: '0 B',
         volumeBalance: '0 B',
+        // fork：MV 的匹配记录与音视频字节缓存（不进 IndexedDB，见 useCacheUsagePanel）。
         mvMatch: '0 B',
         mvMedia: '0 B'
     });
@@ -394,7 +396,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Electron Settings State
     // Seeded synchronously so a remembered desktop/mods section has its title on the first frame; the effect below still confirms it.
     const [isElectron, setIsElectron] = useState(hasElectronBridge);
-    const [electronSettings, setElectronSettings] = useState<ElectronSettingsState>({
+    const [electronSettings, setElectronSettings] = useState({
         GEMINI_API_KEY: '',
         // fork：留空表示沿用主进程里的默认地址（见 services/aiText.ts，那里才写具体主机）。
         GEMINI_API_URL: '',
@@ -430,7 +432,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
-    const isElectronRuntime = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
+    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
     const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
         ? savedElectronAiCredentials.OPENAI_API_KEY
         : savedElectronAiCredentials.GEMINI_API_KEY;
@@ -453,7 +455,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
         const electron = (window as any).electron;
-        if (!electron || typeof electron.platform !== 'string') {
+        if (!electron) {
             return;
         }
         setIsElectron(true);
@@ -1210,18 +1212,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             >
                 <GlassLayer radius="rounded-2xl" tint="bg-[var(--st-win)]" />
                 <SettingsKitThemeContext.Provider value={kitTheme}>
-                    <SettingsSideList
-                        groups={settingsNavGroups}
-                        activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
-                        onSelectSection={handleSelectSettingsSection}
-                        onSelectHelp={handleSelectHelp}
-                        query={searchQuery}
-                        onQueryChange={handleSearchQueryChange}
-                        onSubmitQuery={() => {
-                            if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
-                        }}
-                        isWide={isWideSettingsLayout}
-                    />
+                    {/* 宽屏：左侧栏（搜索框 + 分类）常在。紧凑档：顶上只有菜单按钮和搜索框，
+                        分类收进菜单按钮打开的抽屉里——抽屉就是同一个侧栏，不带搜索框。 */}
+                    {isWideSettingsLayout ? (
+                        <SettingsSideList
+                            groups={settingsNavGroups}
+                            activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
+                            onSelectSection={handleSelectSettingsSection}
+                            onSelectHelp={handleSelectHelp}
+                            query={searchQuery}
+                            onQueryChange={handleSearchQueryChange}
+                            onSubmitQuery={() => {
+                                if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
+                            }}
+                        />
+                    ) : (
+                        <SettingsCompactNav
+                            groups={settingsNavGroups}
+                            activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
+                            onSelectSection={handleSelectSettingsSection}
+                            onSelectHelp={handleSelectHelp}
+                            query={searchQuery}
+                            onQueryChange={handleSearchQueryChange}
+                            onSubmitQuery={() => {
+                                if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
+                            }}
+                            isDaylight={isDaylight}
+                            onClose={onClose}
+                            closeLabel={t('ui.close')}
+                        />
+                    )}
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <PageHeader
                             title={isSearching
@@ -1235,10 +1255,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 : undefined}
                             closeLabel={t('ui.close')}
                             onClose={onClose}
+                            showClose={isWideSettingsLayout}
                         />
                         <div
                             ref={contentScrollRef}
-                            className="relative z-10 min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-8 md:pb-16 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-4 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--st-fill2)] [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-3"
+                            className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-8 md:pb-16 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-4 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--st-fill2)] [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-3"
                         >
                             {isSearching ? (
                                 <SettingsSearchResults hits={searchHits} onSelect={handleSelectSearchHit} />
@@ -1287,7 +1308,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                 </AnimatePresence>
             </motion.div>
-            <MarketMount />
             <AnimatePresence>
                 {showVisPlayground && (
                     <VisPlayground
@@ -1436,6 +1456,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                 )}
             </AnimatePresence>
+
+            <MarketMount />
 
             <LyricFilterSettingsModal
                 isOpen={showLyricFilterSettings}

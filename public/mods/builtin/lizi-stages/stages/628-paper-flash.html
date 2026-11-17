@@ -230,7 +230,7 @@
       var size = baseSize * st.sizeK;
       var w = glyphW(cxt, ch, st.weight, st.fam, size);
       if (!isFinite(w) || w < 0) w = size * 0.9;
-      items.push({ ch: ch, ti: cells[i].ti, st: st, size: size, w: w });
+      items.push({ ch: ch, ti: cells[i].ti, st: st, size: size, w: w, kw: cells[i].kw || 0, kc: cells[i].kc || "" });
       total += w;
     }
     var track = baseSize * 0.018;
@@ -251,6 +251,7 @@
     var out = [];
     var x = x0;
     var A = (alpha == null ? 1 : alpha);
+    var ink = cxt.fillStyle;
     for (var i = 0; i < row.items.length; i++) {
       var it = row.items[i];
       if (kx0 != null && (x + it.w < kx0 || x > kx1)) { x += it.w + row.track; continue; }
@@ -261,7 +262,20 @@
       cxt.translate(cx, y);
       cxt.rotate(it.st.rot);
       if (it.st.skew) cxt.transform(1, 0, it.st.skew, 1, 0, 0);
-      cxt.globalAlpha = A;
+      /*
+       * fork 628：纸页上只有「关键词」字用深墨（能看清），其余字一律压成
+       * 极淡的底墨 —— 翻页再快也只是灰雾，只有关键词高亮浮出来。
+       * it.kw 由 host.mjs 依主题 wordColors 给出；无 kw 数据时保持原样（全深墨）。
+       */
+      if (it.kw) {
+        cxt.fillStyle = it.kc || "rgba(16,14,11,0.98)";
+        cxt.globalAlpha = A;
+      } else if (typeof it.kw === "number") {
+        cxt.fillStyle = ink;
+        cxt.globalAlpha = A * 0.09;
+      } else {
+        cxt.globalAlpha = A;
+      }
       cxt.fillText(it.ch, -it.w / 2, 0);
       if (!plain) {
         cxt.globalAlpha = A * 0.26;
@@ -318,7 +332,7 @@
 
   var PUNCT_RE = /^[，。、！？；：,.!?;:…—\-·"'“”‘’（）()《》〈〉【】\s]+$/;
 
-  function wordize(text) {
+  function wordize(text, chars) {
     var words = [];
     if (!text) return words;
 
@@ -341,6 +355,16 @@
       parts = flat;
     }
 
+    /* fork：按字符 index 对齐关键词标记（host 依据主题 wordColors 给的 kw/kc） */
+    var kwAt = function (idx) {
+      if (!chars || !chars.length) return null;
+      for (var j = 0; j < chars.length; j++) {
+        var rec = chars[j];
+        if (rec && rec.ti === idx && rec.kw) return rec;
+      }
+      return null;
+    };
+
     var cur = null, ci = 0;
     for (var i = 0; i < parts.length; i++) {
       var p = parts[i];
@@ -357,6 +381,12 @@
       }
 
       cur = { text: p, s: ci, n: n };
+      var kws = [];
+      for (var m = 0; m < n; m++) {
+        var krec = kwAt(ci + m);
+        kws.push(krec ? { kw: 1, kc: krec.kc || "" } : null);
+      }
+      cur.kws = (kws.some(function (x) { return x; })) ? kws : null;
       words.push(cur);
       ci += n;
       cur = null;
@@ -370,7 +400,7 @@
   function ensureWords(line) {
     if (line === curLineRef) return;
     curLineRef = line;
-    curWords = line ? wordize(String(line.text || "")) : [];
+    curWords = line ? wordize(String(line.text || ""), line.chars || null) : [];
     curTimes = line ? lineTimes(line) : [];
     curWordIdx = -1;
   }
@@ -456,7 +486,12 @@
 
     var chars = Array.from(text);
     var cells = [];
-    for (var i = 0; i < chars.length; i++) cells.push({ ch: chars[i], ti: word.s + i });
+    /* fork：头词层的关键词标记（word.kws 与字符 index 对齐） */
+    var hws = (word && word.kws) || null;
+    for (var i = 0; i < chars.length; i++) {
+      var hkr = hws ? hws[i] : null;
+      cells.push({ ch: chars[i], ti: word.s + i, kw: hkr ? 1 : 0, kc: hkr ? (hkr.kc || "") : "" });
+    }
 
     var base = headBase();
     var f = fitRow(x, cells, headSeed, base, W * 0.66 / headZoom());
@@ -725,7 +760,7 @@
       var sz = size * st.sizeK;
       var w = glyphW(cxt, ch, st.weight, st.fam, sz);
       if (!isFinite(w) || w <= 0) w = sz * 0.92;
-      items.push({ ch: ch, ti: i, st: st, size: sz, w: w });
+      items.push({ ch: ch, ti: i, st: st, size: sz, w: w, kw: 0 });
       total += w + track;
       i++;
     }
@@ -744,7 +779,7 @@
       var w = glyphW(cxt, ch, st.weight, st.fam, sz);
       if (!isFinite(w) || w <= 0) w = sz * 0.92;
       if (i > 0 && sum + w > maxW) break;
-      items.push({ ch: ch, ti: i, st: st, size: sz, w: w });
+      items.push({ ch: ch, ti: i, st: st, size: sz, w: w, kw: 0 });
       sum += w;
       i++;
     }
@@ -1061,7 +1096,7 @@
    *    默认 320ms 一下（~3 次/秒，「快一点」），beat 到来时由 frame 重置计时，
    *    真节拍优先。这个值可以按手感调整。
    */
-  var FOLIA_AUTO_FLASH_MS = 320;
+  var FOLIA_AUTO_FLASH_MS = 160;
   var autoFlashAt = 0;
   var lastAutoNow = performance.now();
   var trailFrame = 0;
@@ -1385,7 +1420,12 @@
     var text = String((w && w.text) || "");
     var chars = Array.from(text);
     var cells = [], k;
-    for (k = 0; k < chars.length; k++) cells.push({ ch: chars[k], ti: (w.s | 0) + k });
+    /* fork：关键词标记随字走（w.kws 与字符 index 对齐） */
+    var kws = (w && w.kws) || null;
+    for (k = 0; k < chars.length; k++) {
+      var kr = kws ? kws[k] : null;
+      cells.push({ ch: chars[k], ti: (w.s | 0) + k, kw: kr ? 1 : 0, kc: kr ? (kr.kc || "") : "" });
+    }
     var seed = seedOfText(text);
     var size = small * (0.96 + R() * 0.12);
     var wr = layoutRow(scr, cells, seed + 33, size);
@@ -1755,6 +1795,10 @@
        *    （真节拍优先，避免连续闪两下）。中间的歌词字照旧跟着 tick / 分词走，
        *    一切不变，只是背景不再等歌词。
        */
+      /*
+       * ★ fork 628：持续疯狂快闪。每 160ms 一次真翻页（整页重排 + 硬切），
+       *   beat 只重置计时；页面永远在闪，背景字只配当灰雾。
+       */
       if (S.playing) {
         autoFlashAt += now - lastAutoNow;
         lastAutoNow = now;
@@ -1763,18 +1807,11 @@
           try {
             if (P.layout === "inline") {
               if (P.pageCut && PAGE) {
-                /*
-                 * inline 自闪不每次都重排整页（buildPage 是全页坐标重算，
-                 * 320ms 一次会周期性掉帧）：每次只让果冻抖一下 + 翻页号，
-                 * 每 3 次才真正重排一次页面，视觉上仍是「纸在一直换」。
-                 */
                 autoFlashSeq++;
                 pageNo++;
                 if (P.jelly > 0) jelly.v += 1.2;
-                if (autoFlashSeq % 3 === 0) {
-                  pageCutSeed++;
-                  try { buildPage(); fReset(); aimAtWord(curWordIdx); } catch (e) { fail(e); }
-                }
+                pageCutSeed++;
+                try { buildPage(); fReset(); aimAtWord(curWordIdx); } catch (e) { fail(e); }
               }
             } else if (P.pageCut) {
               cutPage(0.45, false);
@@ -1858,7 +1895,17 @@
         t: isFinite(Number(l.t)) ? Number(l.t) : 0,
         dur: isFinite(Number(l.dur)) ? Number(l.dur) : 0,
         text: (l.text == null ? "" : String(l.text)),
-        chars: (Array.isArray(l.chars) && l.chars.length) ? l.chars : null
+        chars: (Array.isArray(l.chars) && l.chars.length)
+          ? l.chars.map(function (c) {
+              return {
+                c: c && c.c != null ? String(c.c) : "",
+                t: isFinite(Number(c && c.t)) ? Number(c.t) : 0,
+                // fork：关键词标记（host.mjs 依据主题 wordColors 给的），1 = 关键词字。
+                kw: (c && c.kw) ? 1 : 0,
+                kc: (c && c.kc) ? String(c.kc) : ""
+              };
+            })
+          : null
       });
     }
     out.sort(function (a, b) { return a.t - b.t; });

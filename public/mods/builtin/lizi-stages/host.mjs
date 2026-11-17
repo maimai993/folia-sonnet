@@ -68,8 +68,19 @@ function rgbFromCss(css) {
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
 
+/** Keyword color of one char: the word-color whose word contains this char. Empty when none. */
+function kwColorOf(ch, wordColors) {
+    if (!Array.isArray(wordColors) || !ch) return '';
+    for (let i = 0; i < wordColors.length; i++) {
+        const entry = wordColors[i];
+        const w = String((entry && entry.word) || '');
+        if (w && w.indexOf(ch) !== -1) return String(entry.color || '');
+    }
+    return '';
+}
+
 /** Characters of one word, each with its own start time, evenly spread over the word. */
-function wordChars(word, fallbackStart) {
+function wordChars(word, fallbackStart, wordColors) {
     const text = String(word.text || '');
     const glyphs = Array.from(text);
     if (!glyphs.length) return [];
@@ -81,13 +92,14 @@ function wordChars(word, fallbackStart) {
     for (let i = 0; i < glyphs.length; i++) {
         const c = glyphs[i];
         if (!c || /\s/u.test(c)) continue;
-        out.push({ c, t: +(ws + step * i).toFixed(3) });
+        const kw = kwColorOf(c, wordColors);
+        out.push({ c, t: +(ws + step * i).toFixed(3), kw: kw ? 1 : 0, kc: kw || '' });
     }
     return out;
 }
 
 /** ctx.lines (FoliumLine[]) → LIZI's { t, dur, text, chars } rows. */
-function linesToLizi(lines) {
+function linesToLizi(lines, wordColors) {
     const rows = [];
     const list = lines || [];
     for (let i = 0; i < list.length; i++) {
@@ -99,7 +111,7 @@ function linesToLizi(lines) {
         const dur = Math.max(0.4, end - t);
         const words = line.words || [];
         let chars = [];
-        for (const w of words) chars = chars.concat(wordChars(w || {}, t));
+        for (const w of words) chars = chars.concat(wordChars(w || {}, t, wordColors));
         rows.push({
             t: +t.toFixed(3),
             dur: +dur.toFixed(3),
@@ -127,7 +139,7 @@ function initPayload(ctx) {
     return {
         song: songPayload(ctx),
         accent: rgbFromCss(theme.accentColor) || rgbFromCss(theme.primaryColor) || [150, 165, 255],
-        lines: linesToLizi(ctx.lines),
+        lines: linesToLizi(ctx.lines, theme.wordColors),
         duration: ctx.getDuration ? (ctx.getDuration() || 0) : 0,
     };
 }
@@ -239,6 +251,8 @@ export function mountLiziStage(container, ctx, fixedStage) {
             last ? last.startTime : 0,
             (ctx.song && ctx.song.id) || '',
             ctx.getCoverUrl ? (ctx.getCoverUrl() || '').length : 0,
+            // 主题换色（关键词颜色跟着主题走）也要重推 init。
+            ((ctx.getTheme && ctx.getTheme().wordColors) || []).length,
         ].join('|');
     }
 
