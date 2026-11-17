@@ -2,16 +2,11 @@ import React, { useLayoutEffect, useRef } from 'react';
 import { Button } from '../../ui';
 
 // src/components/panelTab/console/ConsoleTabs.tsx
-// 调音台顶部的两级导航：第一行是大类（基础 / 染色 / 母带 / 智能），第二行是当前大类下的页签。
+// 调音台顶部的两级导航，层级要一眼分清：大类是「分组提示」、页签是「当前页」。
 //
-// 耳机方案那一行**不在**这里，它在内容里滚动（见 AudioEqualizerDialog）。两级导航 + 方案条
-// 三行都常驻会让头部太高、占掉手机窗口一截；而且 sticky 底色和窗口底色对不上时，滚动内容
-// 会从行间透出来。现在常驻这两行导航，方案条随内容走。
-//
-// 两级规则：
-//   · 一级大类始终全显示，点一下跳到该大类第一个页签；当前 tab 属于哪个大类，哪个就高亮。
-//   · 二级只渲染当前大类下的页签 —— 点大类就收拢到那一组。
-//   · 页签按钮的 aria-pressed 保持不变（测试与无障碍都靠它认当前页）。
+// 视觉权重：页签（二级）> 大类（一级）。页签做成主分段条 —— 当前页用强调色整块点亮，
+// 其它页签只是灰字；大类退成一行小字，只负责「收拢到这一组」，不抢页签的注意力。
+// 之前大类条和分区卡都做得太显眼，页签反而像装饰，现在把它压回主角位置。
 
 export type ConsoleTabGroup = {
     id: string;
@@ -38,7 +33,6 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
         : options;
 
     // 当前页签滚出视野时，只把页签条自己横向推回来 —— 纵向一像素都不动。
-    // 不能用 scrollIntoView：它会滚动所有可滚动祖先，把整个弹层拽回顶部（跳屏 + 丢滚动位置）。
     useLayoutEffect(() => {
         const strip = stripRef.current;
         if (!strip) return;
@@ -72,11 +66,11 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
 
     return (
         <div className="flex flex-col gap-1.5">
-            {/* 一级：大类。小一号文字 + 弱配色，和二级页签区分。 */}
+            {/* 一级：大类，只是分组提示，小字弱化。 */}
             <div
                 ref={groupRef}
                 role="group"
-                className="hide-scrollbar flex items-center gap-0.5 self-start overflow-x-auto"
+                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto"
             >
                 {groups.map(group => {
                     const selected = group.id === activeGroup?.id;
@@ -89,7 +83,7 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                                 if (!selected && first) onTabChange(first);
                             }}
                             className={`st-t-fast h-6 shrink-0 whitespace-nowrap rounded px-2 text-[11px] transition-colors ${selected
-                                ? 'bg-[var(--st-raise)] font-semibold text-[color:var(--st-t1)] shadow-[0_1px_2px_rgba(0,0,0,0.15)]'
+                                ? 'font-semibold text-[color:var(--st-t2)]'
                                 : 'text-[color:var(--st-t3)] hover:text-[color:var(--st-t1)]'}`}
                         >
                             {group.label}
@@ -98,11 +92,11 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                 })}
             </div>
 
-            {/* 二级：当前大类下的页签。 */}
+            {/* 二级：页签，主分段条 —— 当前页强调色整块点亮。 */}
             <div
                 ref={stripRef}
                 role="group"
-                className="hide-scrollbar flex items-center gap-0.5 self-start overflow-x-auto rounded-lg bg-[var(--st-fill)] p-0.5"
+                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto rounded-xl bg-[var(--st-fill)] p-1"
             >
                 {visibleOptions.map(option => {
                     const selected = option.value === tab;
@@ -113,9 +107,9 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                             onClick={() => {
                                 if (!selected) onTabChange(option.value);
                             }}
-                            className={`st-t-fast h-7 shrink-0 whitespace-nowrap rounded-md px-2.5 text-[13px] transition-colors ${selected
-                                ? 'bg-[var(--st-raise)] font-medium text-[color:var(--st-t1)] shadow-[0_1px_2px_rgba(0,0,0,0.2)]'
-                                : 'text-[color:var(--st-t2)] hover:text-[color:var(--st-t1)]'}`}
+                            className={`st-t-fast h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-[14px] transition-colors ${selected
+                                ? 'bg-[var(--st-accent)] font-semibold text-[color:var(--st-on-accent)] shadow-[0_1px_3px_rgba(0,0,0,0.25)]'
+                                : 'text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]'}`}
                         >
                             {option.label}
                         </Button>
