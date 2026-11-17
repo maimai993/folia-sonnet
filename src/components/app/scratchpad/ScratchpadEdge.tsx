@@ -18,13 +18,15 @@ type ScratchpadEdgeProps = {
     label: string;
     /** 悬停提示（带开合的快捷键）。 */
     hint: string;
+    /** 点击呼出的标签（钉住状态）：第一次点击只呼出标签，不随指针移开收回，3 秒无操作才缩回常驻小点。 */
+    pinned: boolean;
     onToggle: () => void;
     handleRef: React.Ref<HTMLButtonElement>;
 };
 
-const ScratchpadEdge: React.FC<ScratchpadEdgeProps> = ({ handleStyle, position, count, pulsing, title, label, hint, onToggle, handleRef }) => (
+const ScratchpadEdge: React.FC<ScratchpadEdgeProps> = ({ handleStyle, position, count, pulsing, title, label, hint, pinned, onToggle, handleRef }) => (
     <div
-        className={`scratchpad-edge is-${handleStyle}${count > 0 ? ' has-entries' : ''}${pulsing ? ' is-pulsing' : ''}`}
+        className={`scratchpad-edge is-${handleStyle}${count > 0 ? ' has-entries' : ''}${pulsing ? ' is-pulsing' : ''}${pinned ? ' is-pinned' : ''}`}
         style={{ '--scratchpad-edge-position': position } as React.CSSProperties}
         data-ponder="scratchpad"
     >

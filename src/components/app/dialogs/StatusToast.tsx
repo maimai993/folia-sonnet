@@ -4,7 +4,7 @@ import { motion, useIsPresent } from 'framer-motion';
 import { PlatformMark } from '../../login/PlatformMark';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { usePlayerOverlayObstacle } from '../../../hooks/usePlayerOverlayLayout';
-import { holdStatusMessage } from '../../../stores/useStatusMessageStore';
+import { holdStatusMessage, setStatusMessage } from '../../../stores/useStatusMessageStore';
 import { Button } from '@/components/ui';
 import type { AppStatusToast } from './buildAppDialogsModel';
 import { LoadingBars } from '../../shared/LoadingBars';
@@ -22,6 +22,8 @@ const OPEN_AFTER_MS = 120;
 const CLOSE_AFTER_MS = 300;
 const EASE_OUT = [0.2, 0.8, 0.2, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
+/** 上滑这么多（px）就当作「划走」，把提示浮窗消除。 */
+const SWIPE_AWAY_Y_PX = -48;
 
 export const StatusToast: React.FC<{ toast: AppStatusToast }> = ({ toast }) => {
     const calm = useReducedMotionFor('uiMicroMotion');
@@ -73,6 +75,16 @@ export const StatusToast: React.FC<{ toast: AppStatusToast }> = ({ toast }) => {
             onFocus={() => rest(true)}
             onBlur={event => {
                 if (!event.currentTarget.contains(event.relatedTarget as Node | null)) rest(false);
+            }}
+            /* 触屏上滑把浮窗划走（向上拖）；拖回原位则留在原地。只认竖直方向，避免和横向布局的滚动争手势。 */
+            drag="y"
+            dragSnapToOrigin
+            dragElastic={0.24}
+            dragMomentum={false}
+            onDragEnd={(_, info) => {
+                if (info.offset.y < SWIPE_AWAY_Y_PX) {
+                    setStatusMessage(null);
+                }
             }}
         >
             <div className="status-toast-line">
