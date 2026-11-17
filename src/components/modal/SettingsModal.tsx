@@ -41,6 +41,8 @@ import { buildSettingsSearchEntries, searchSettings, type SettingsSearchEntry } 
 import { isSettingsSectionSubview, resolveInitialSettingsSection, sectionForSettingsSubview, writeLastSettingsSection } from './settings/navigation/settingsLastSection';
 import { useSettingsLanding, type SettingsLandingTarget } from './settings/navigation/useSettingsLanding';
 import { runsOnWindows } from '../../utils/platform';
+import { hasElectronBridge } from '../../platform/runtime';
+import { canReadDesktopSettings } from './settings/desktopSettingsBridge';
 import { openOutsideLink } from '../../utils/system/outsideLink';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
@@ -124,9 +126,6 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
         : __APP_RELEASE_CHANNEL__ === 'internal'
             ? 'internal'
             : 'realeco';
-
-// Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
-const hasElectronBridge = () => typeof window !== 'undefined' && Boolean((window as any).electron);
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
@@ -432,7 +431,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
-    const isElectronRuntime = typeof window !== 'undefined' && Boolean(window.electron);
+    const isElectronRuntime = hasElectronBridge();
     const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
         ? savedElectronAiCredentials.OPENAI_API_KEY
         : savedElectronAiCredentials.GEMINI_API_KEY;
@@ -455,7 +454,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
         const electron = (window as any).electron;
-        if (!electron) {
+        if (!canReadDesktopSettings()) {
             return;
         }
         setIsElectron(true);
@@ -545,7 +544,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const saveElectronSettings = async () => {
-        if ((window as any).electron) {
+        if (hasElectronBridge() && typeof (window as any).electron?.saveSettings === 'function') {
             // What is saved is the number that was typed, so "0,7" is kept as 0.7 and the main process
             // reads it as that; anything that is not a number from 0 to 2 falls back to the default.
             const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
@@ -867,13 +866,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const handleChooseCacheDirectory = async () => {
-        if (!(window as any).electron) {
+        const bridge = (window as any).electron;
+        if (!hasElectronBridge() || typeof bridge?.chooseCacheDirectory !== 'function') {
             return;
         }
 
         setCacheDirectoryStatus('choosing');
         try {
-            const result = await (window as any).electron.chooseCacheDirectory();
+            const result = await bridge.chooseCacheDirectory();
             if (result?.path) {
                 setCacheDirectory(result.path);
                 setCacheDirectoryIsDefault(result.isDefault);
