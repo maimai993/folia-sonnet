@@ -136,6 +136,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/library/suites/grid/collection/GridView.tsx': { n: { ytm: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/grid/entry.ts': { n: { qq: 1, lxmusic: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/grid/home/Grid3DSlider.tsx': { n: { netease: 1 }, kind: 'doc' },   // comments only,
+    'src/library/suites/grid/home/Grid3D.tsx': { n: { lxmusic: 14 }, kind: 'doc', why: '洛雪在首页的三块专属卡流（歌单筛选条 / 电台榜单 / 专辑封面墙）就是在这里分支的：LxSquareToolbar / LxChartBoard / LxAlbumWall 三个组件的入口只能由首页套件决定，挪进 lxmusic 目录就等于让平台自己挑首页布局' },
     'src/library/suites/grid/transitions/standInHandover.ts': { n: { netease: 1, ytm: 2 }, kind: 'doc', why: 'comments on the picture-host rules under them (YouTube stills, Google\'s picture hosts, NetEase\'s hosts); those rules would go with getSizedCoverUrl in src/utils/coverUrl.ts' },   // comments only,
     'src/mods/folium/lyricsSource.ts': { n: { netease: 1 }, kind: 'doc' },   // comments only,
     'src/nativeBridge/api/bodian.js': { n: { bodian: 61 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },

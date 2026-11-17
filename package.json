@@ -1,411 +1,411 @@
 {
-  "name": "folia-major",
-  "productName": "Folia",
-  "desktopName": "folia-major.desktop",
-  "description": "Lyrics Reimagine",
-  "author": {
-    "name": "Folia-CE",
-    "email": "hjm184563@gmail.com"
-  },
-  "private": true,
-  "version": "0.7.29.1",
-  "license": "AGPL-3.0",
-  "type": "module",
-  "main": "electron/main.cjs",
-  "engines": {
-    "node": ">=24.0.0"
-  },
-  "scripts": {
-    "dev": "vite",
-    "dev:probe": "vite --open /dev-probe.html",
-    "build": "npm run build:vercel-api && vite build",
-    "build:capacitor": "cross-env FOLIA_BUILD_TARGET=capacitor vite build",
-    "build:vercel-api": "tsc -p api-ts/tsconfig.json",
-    "preview": "vite preview",
-    "cap:sync:android": "npm run build:capacitor && npm run models:android && cap sync android",
-    "cap:assets:android": "node scripts/generate-android-assets.mjs",
-    "cap:open:android": "cap open android",
-    "cap:run:android": "npm run build:capacitor && cap run android",
-    "build:android:debug": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug",
-    "build:android:bundle": "npm run cap:sync:android && cd android && gradlew.bat bundleRelease",
-    "typecheck": "tsc --noEmit",
-    "check:versions": "node ci/checkVersionPolicy.ts",
-    "check:ui": "node ci/uiPolicy.ts controls",
-    "check:size": "node ci/uiPolicy.ts size",
-    "ci:local": "npm run check:ui && npm run check:size && npm run check:versions && node ci/checkSecrets.ts && npm run typecheck && npm run test:unit",
-    "pr": "node ci/openPr.ts",
-    "codemap": "node dev/mcp/ts-code-map/codemap.mjs",
-    "folium:api": "node dev/folium/api-docs.mjs",
-    "folium:types": "node dev/folium/types.mjs",
-    "folium:new": "node dev/folium/new.mjs",
-    "folium:check": "node dev/folium/check.mjs",
-    "codemap:check": "node dev/mcp/ts-code-map/codemap.mjs --check",
-    "dedicatus": "node dev/dedicatus/cli.mjs",
-    "lint": "node dev/dedicatus/cli.mjs --lint",
-    "lint:install": "npm ci --prefix dev/dedicatus/lint --no-audit --no-fund",
-    "lint:fix": "node dev/dedicatus/eslint/eslint.mjs --fix",
-    "lint:fix-style": "node dev/dedicatus/eslint/fixStyle.mjs",
-    "lint:prune": "node dev/dedicatus/eslint/prune.mjs",
-    "coven:scope": "node packages/coven/bin/coven.mjs scope",
-    "coven:state": "node packages/coven/bin/coven.mjs state",
-    "coven:claim": "node packages/coven/bin/coven.mjs claim",
-    "coven:prompt": "node packages/coven/bin/coven.mjs prompt",
-    "coven:contract": "node packages/coven/bin/coven.mjs contract",
-    "coven:verify": "node packages/coven/bin/coven.mjs verify",
-    "coven:pr": "node packages/coven/bin/coven.mjs pr",
-    "coven:setup": "node packages/coven/bin/coven.mjs setup",
-    "coven:compass": "node packages/coven/bin/coven.mjs compass",
-    "test": "vitest run -c vitest.config.ts",
-    "test:unit": "vitest run -c vitest.config.ts",
-    "test:unit:watch": "vitest -c vitest.config.ts",
-    "test:ui": "playwright test",
-    "test:component": "playwright test --project=components",
-    "test:ui:update": "playwright test --update-snapshots",
-    "test:render": "playwright test -c playwright.probe.config.ts",
-    "benchmark:lyrics": "npx tsx test/manual/lyrics_benchmark.ts",
-    "manual:lyrics": "npx tsx test/manual/netease_lyrics_cli.ts",
-    "audit:lyrics-sources": "npx tsx test/manual/lyric-audit/index.ts",
-    "probe:netease-xeapi": "node test/manual/netease_xeapi_probe.cjs",
-    "manual:wallpaper-watchdog": "npx tsx test/manual/wallpaper-watchdog-sim.ts",
-    "manual:analysis-idle": "node test/manual/analysis_idle_release.mts",
-    "manual:visualizer-memory": "node test/manual/visualizer-memory-probe.mjs",
-    "manual:lattice-cover-memory": "node test/manual/lattice-cover-memory.mjs",
-    "manual:bravais-perf": "node test/manual/bravais-perf-probe.mjs",
-    "stage:client": "vite --open /stage-client.html",
-    "dev:electron": "cross-env ELECTRON_DEV=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
-    "dev:electron:update-preview": "cross-env ELECTRON_DEV=true FOLIA_DEV_UPDATE_PREVIEW=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
-    "dev:electron:wallpaper": "npm run build:windowtolayer && npm run build:wallpaper-helper && npm run dev:electron",
-    "dev:electron:dist": "node build/fetchSteamAudio.mjs --optional && cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
-    "dev:electron:dist:sourcemap": "cross-env-shell ELECTRON_DEV=false ELECTRON=true NODE_OPTIONS=--enable-source-maps FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer \"vite build --sourcemap && electron .\"",
-    "dev:electron:dist:swiftshader": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=swiftshader FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
-    "dev:electron:dist:software": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=software FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
-    "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder --linux dir",
-    "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder",
-    "build:windowtolayer": "node packaging/linux/build-windowtolayer.mjs",
-    "build:wallpaper-helper": "node packaging/windows/build-wallpaper-helper.mjs",
-    "build:ffmpeg": "node packaging/ffmpeg/fetch-ffmpeg.mjs",
-    "contributors:add": "npx all-contributors-cli add",
-    "contributors:generate": "npx all-contributors-cli generate",
-    "models:fetch": "node build/fetchModels.mjs",
-    "models:android": "node scripts/fetchAndroidModels.mjs",
-    "steam-audio:fetch": "node build/fetchSteamAudio.mjs",
-    "manual:ai-probe": "node test/manual/ai_probe.mjs"
-  },
-  "build": {
-    "appId": "top.izuna.foliamajor",
+    "name": "folia-major",
     "productName": "Folia",
-    "beforePack": "build/beforePack.cjs",
-    "afterPack": "build/afterPack.cjs",
-    "electronLanguages": [
-      "en-US",
-      "zh-CN",
-      "zh-TW",
-      "id",
-      "vi"
-    ],
-    "generateUpdatesFilesForAllChannels": true,
-    "directories": {
-      "output": "release"
+    "desktopName": "folia-major.desktop",
+    "description": "Lyrics Reimagine",
+    "author": {
+        "name": "Folia-CE",
+        "email": "hjm184563@gmail.com"
     },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Folia-CE",
-        "repo": "folia-sonnet"
-      }
-    ],
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "shared/**/*",
-      "!**/node_modules/youtubei.js/bundle/**",
-      "package.json",
-      "build/miao.webp",
-      "build/thumbar/*.png"
-    ],
-    "asarUnpack": [
-      "node_modules/@koromix/koffi-*/**/*.node",
-      "electron/qishui/qishui-auth-v6/bdms.node",
-      "electron/qishui/qishui-auth-v6/metasecml.dll",
-      "node_modules/@lox-audioserver/node-librespot/prebuilds/**/*.node"
-    ],
-    "extraResources": [
-      {
-        "from": "build/ffmpeg/${os}-${arch}",
-        "to": "ffmpeg-audio"
-      },
-      {
-        "from": "build/mnn/${os}-${arch}",
-        "to": "mnn",
-        "filter": [
-          "*folia_mnn.*"
-        ]
-      },
-      {
-        "from": "build/steam-audio/${os}-${arch}",
-        "to": "steam-audio"
-      },
-      {
-        "from": "build/steamAudio.LICENSE.md",
-        "to": "steam-audio/LICENSE.md"
-      },
-      {
-        "from": "models",
-        "to": "models",
-        "filter": [
-          "beat_this-wgsl.bin",
-          "htdemucs-wgsl.bin"
-        ]
-      },
-      {
-        "from": "build/icon.png",
-        "to": "icon.png"
-      },
-      {
-        "from": "build/icon.png",
-        "to": "linux/icon.png"
-      },
-      {
-        "from": "build/trayTemplate.png",
-        "to": "trayTemplate.png"
-      },
-      {
-        "from": "build/trayTemplate@2x.png",
-        "to": "trayTemplate@2x.png"
-      },
-      {
-        "from": "packaging/linux/folia-major.desktop",
-        "to": "linux/folia-major.desktop"
-      },
-      {
-        "from": "packaging/linux/README-LINUX.txt",
-        "to": "linux/README-LINUX.txt"
-      },
-      {
-        "from": "build",
-        "to": ".",
-        "filter": [
-          "windowtolayer",
-          "windowtolayer-COPYING"
-        ]
-      }
-    ],
-    "mac": {
-      "electronLanguages": [
-        "en",
-        "zh_CN",
-        "zh_TW",
-        "id",
-        "vi"
-      ],
-      "extraResources": [
-        {
-          "from": "build/koffi/darwin_${arch}",
-          "to": "koffi/darwin_${arch}"
+    "private": true,
+    "version": "0.7.29.2",
+    "license": "AGPL-3.0",
+    "type": "module",
+    "main": "electron/main.cjs",
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "scripts": {
+        "dev": "vite",
+        "dev:probe": "vite --open /dev-probe.html",
+        "build": "npm run build:vercel-api && vite build",
+        "build:capacitor": "cross-env FOLIA_BUILD_TARGET=capacitor vite build",
+        "build:vercel-api": "tsc -p api-ts/tsconfig.json",
+        "preview": "vite preview",
+        "cap:sync:android": "npm run build:capacitor && npm run models:android && cap sync android",
+        "cap:assets:android": "node scripts/generate-android-assets.mjs",
+        "cap:open:android": "cap open android",
+        "cap:run:android": "npm run build:capacitor && cap run android",
+        "build:android:debug": "npm run cap:sync:android && cd android && gradlew.bat assembleDebug",
+        "build:android:bundle": "npm run cap:sync:android && cd android && gradlew.bat bundleRelease",
+        "typecheck": "tsc --noEmit",
+        "check:versions": "node ci/checkVersionPolicy.ts",
+        "check:ui": "node ci/uiPolicy.ts controls",
+        "check:size": "node ci/uiPolicy.ts size",
+        "ci:local": "npm run check:ui && npm run check:size && npm run check:versions && node ci/checkSecrets.ts && npm run typecheck && npm run test:unit",
+        "pr": "node ci/openPr.ts",
+        "codemap": "node dev/mcp/ts-code-map/codemap.mjs",
+        "folium:api": "node dev/folium/api-docs.mjs",
+        "folium:types": "node dev/folium/types.mjs",
+        "folium:new": "node dev/folium/new.mjs",
+        "folium:check": "node dev/folium/check.mjs",
+        "codemap:check": "node dev/mcp/ts-code-map/codemap.mjs --check",
+        "dedicatus": "node dev/dedicatus/cli.mjs",
+        "lint": "node dev/dedicatus/cli.mjs --lint",
+        "lint:install": "npm ci --prefix dev/dedicatus/lint --no-audit --no-fund",
+        "lint:fix": "node dev/dedicatus/eslint/eslint.mjs --fix",
+        "lint:fix-style": "node dev/dedicatus/eslint/fixStyle.mjs",
+        "lint:prune": "node dev/dedicatus/eslint/prune.mjs",
+        "coven:scope": "node packages/coven/bin/coven.mjs scope",
+        "coven:state": "node packages/coven/bin/coven.mjs state",
+        "coven:claim": "node packages/coven/bin/coven.mjs claim",
+        "coven:prompt": "node packages/coven/bin/coven.mjs prompt",
+        "coven:contract": "node packages/coven/bin/coven.mjs contract",
+        "coven:verify": "node packages/coven/bin/coven.mjs verify",
+        "coven:pr": "node packages/coven/bin/coven.mjs pr",
+        "coven:setup": "node packages/coven/bin/coven.mjs setup",
+        "coven:compass": "node packages/coven/bin/coven.mjs compass",
+        "test": "vitest run -c vitest.config.ts",
+        "test:unit": "vitest run -c vitest.config.ts",
+        "test:unit:watch": "vitest -c vitest.config.ts",
+        "test:ui": "playwright test",
+        "test:component": "playwright test --project=components",
+        "test:ui:update": "playwright test --update-snapshots",
+        "test:render": "playwright test -c playwright.probe.config.ts",
+        "benchmark:lyrics": "npx tsx test/manual/lyrics_benchmark.ts",
+        "manual:lyrics": "npx tsx test/manual/netease_lyrics_cli.ts",
+        "audit:lyrics-sources": "npx tsx test/manual/lyric-audit/index.ts",
+        "probe:netease-xeapi": "node test/manual/netease_xeapi_probe.cjs",
+        "manual:wallpaper-watchdog": "npx tsx test/manual/wallpaper-watchdog-sim.ts",
+        "manual:analysis-idle": "node test/manual/analysis_idle_release.mts",
+        "manual:visualizer-memory": "node test/manual/visualizer-memory-probe.mjs",
+        "manual:lattice-cover-memory": "node test/manual/lattice-cover-memory.mjs",
+        "manual:bravais-perf": "node test/manual/bravais-perf-probe.mjs",
+        "stage:client": "vite --open /stage-client.html",
+        "dev:electron": "cross-env ELECTRON_DEV=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
+        "dev:electron:update-preview": "cross-env ELECTRON_DEV=true FOLIA_DEV_UPDATE_PREVIEW=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer FOLIA_WALLPAPER_HELPER_PATH=build/folia-wallpaper-helper.exe concurrently -k \"vite\" \"wait-on tcp:3000 && electron .\"",
+        "dev:electron:wallpaper": "npm run build:windowtolayer && npm run build:wallpaper-helper && npm run dev:electron",
+        "dev:electron:dist": "node build/fetchSteamAudio.mjs --optional && cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+        "dev:electron:dist:sourcemap": "cross-env-shell ELECTRON_DEV=false ELECTRON=true NODE_OPTIONS=--enable-source-maps FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer \"vite build --sourcemap && electron .\"",
+        "dev:electron:dist:swiftshader": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=swiftshader FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+        "dev:electron:dist:software": "cross-env ELECTRON_DEV=false ELECTRON=true ELECTRON_LINUX_PACKAGED_GRAPHICS=true FOLIA_LINUX_GRAPHICS_MODE=software FOLIA_WINDOWTOLAYER_PATH=build/windowtolayer vite build && electron .",
+        "build:electron:dir": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder --linux dir",
+        "build:electron": "cross-env ELECTRON_DEV=false ELECTRON=true vite build && npm run build:windowtolayer && npm run build:wallpaper-helper && electron-builder",
+        "build:windowtolayer": "node packaging/linux/build-windowtolayer.mjs",
+        "build:wallpaper-helper": "node packaging/windows/build-wallpaper-helper.mjs",
+        "build:ffmpeg": "node packaging/ffmpeg/fetch-ffmpeg.mjs",
+        "contributors:add": "npx all-contributors-cli add",
+        "contributors:generate": "npx all-contributors-cli generate",
+        "models:fetch": "node build/fetchModels.mjs",
+        "models:android": "node scripts/fetchAndroidModels.mjs",
+        "steam-audio:fetch": "node build/fetchSteamAudio.mjs",
+        "manual:ai-probe": "node test/manual/ai_probe.mjs"
+    },
+    "build": {
+        "appId": "top.izuna.foliamajor",
+        "productName": "Folia",
+        "beforePack": "build/beforePack.cjs",
+        "afterPack": "build/afterPack.cjs",
+        "electronLanguages": [
+            "en-US",
+            "zh-CN",
+            "zh-TW",
+            "id",
+            "vi"
+        ],
+        "generateUpdatesFilesForAllChannels": true,
+        "directories": {
+            "output": "release"
         },
-        {
-          "from": "build/mac-helper/darwin-${arch}",
-          "to": "."
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "Folia-CE",
+                "repo": "folia-sonnet"
+            }
+        ],
+        "files": [
+            "dist/**/*",
+            "electron/**/*",
+            "shared/**/*",
+            "!**/node_modules/youtubei.js/bundle/**",
+            "package.json",
+            "build/miao.webp",
+            "build/thumbar/*.png"
+        ],
+        "asarUnpack": [
+            "node_modules/@koromix/koffi-*/**/*.node",
+            "electron/qishui/qishui-auth-v6/bdms.node",
+            "electron/qishui/qishui-auth-v6/metasecml.dll",
+            "node_modules/@lox-audioserver/node-librespot/prebuilds/**/*.node"
+        ],
+        "extraResources": [
+            {
+                "from": "build/ffmpeg/${os}-${arch}",
+                "to": "ffmpeg-audio"
+            },
+            {
+                "from": "build/mnn/${os}-${arch}",
+                "to": "mnn",
+                "filter": [
+                    "*folia_mnn.*"
+                ]
+            },
+            {
+                "from": "build/steam-audio/${os}-${arch}",
+                "to": "steam-audio"
+            },
+            {
+                "from": "build/steamAudio.LICENSE.md",
+                "to": "steam-audio/LICENSE.md"
+            },
+            {
+                "from": "models",
+                "to": "models",
+                "filter": [
+                    "beat_this-wgsl.bin",
+                    "htdemucs-wgsl.bin"
+                ]
+            },
+            {
+                "from": "build/icon.png",
+                "to": "icon.png"
+            },
+            {
+                "from": "build/icon.png",
+                "to": "linux/icon.png"
+            },
+            {
+                "from": "build/trayTemplate.png",
+                "to": "trayTemplate.png"
+            },
+            {
+                "from": "build/trayTemplate@2x.png",
+                "to": "trayTemplate@2x.png"
+            },
+            {
+                "from": "packaging/linux/folia-major.desktop",
+                "to": "linux/folia-major.desktop"
+            },
+            {
+                "from": "packaging/linux/README-LINUX.txt",
+                "to": "linux/README-LINUX.txt"
+            },
+            {
+                "from": "build",
+                "to": ".",
+                "filter": [
+                    "windowtolayer",
+                    "windowtolayer-COPYING"
+                ]
+            }
+        ],
+        "mac": {
+            "electronLanguages": [
+                "en",
+                "zh_CN",
+                "zh_TW",
+                "id",
+                "vi"
+            ],
+            "extraResources": [
+                {
+                    "from": "build/koffi/darwin_${arch}",
+                    "to": "koffi/darwin_${arch}"
+                },
+                {
+                    "from": "build/mac-helper/darwin-${arch}",
+                    "to": "."
+                },
+                {
+                    "from": "build/apple-music-native/darwin-${arch}/FoliaAppleMusicCompanion.app",
+                    "to": "apple-music/FoliaAppleMusicCompanion.app"
+                }
+            ],
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "x64",
+                        "arm64"
+                    ]
+                },
+                {
+                    "target": "zip",
+                    "arch": [
+                        "x64",
+                        "arm64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.png",
+            "artifactName": "${productName}-${version}-${arch}.${ext}"
         },
-        {
-          "from": "build/apple-music-native/darwin-${arch}/FoliaAppleMusicCompanion.app",
-          "to": "apple-music/FoliaAppleMusicCompanion.app"
-        }
-      ],
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+        "win": {
+            "artifactName": "${productName}-Setup-${version}.${ext}",
+            "target": [
+                "nsis"
+            ],
+            "icon": "build/icon.png",
+            "extraResources": [
+                {
+                    "from": "build",
+                    "to": ".",
+                    "filter": [
+                        "folia-wallpaper-helper.exe"
+                    ]
+                },
+                {
+                    "from": "build/apple-music-native/windows",
+                    "to": "apple-music/windows",
+                    "filter": [
+                        "FoliaAppleMusicCompanion.exe",
+                        "FoliaAppleMusicCompanion.exe.config",
+                        "Microsoft.Web.WebView2.Core.dll",
+                        "Microsoft.Web.WebView2.WinForms.dll",
+                        "WebView2Loader.dll"
+                    ]
+                }
+            ]
         },
-        {
-          "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ],
-      "icon": "build/icon.png",
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
-    },
-    "win": {
-      "artifactName": "${productName}-Setup-${version}.${ext}",
-      "target": [
-        "nsis"
-      ],
-      "icon": "build/icon.png",
-      "extraResources": [
-        {
-          "from": "build",
-          "to": ".",
-          "filter": [
-            "folia-wallpaper-helper.exe"
-          ]
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "installerLanguages": [
+                "en_US",
+                "zh_CN",
+                "id",
+                "vi_VN"
+            ],
+            "include": "build/installer.nsh"
         },
-        {
-          "from": "build/apple-music-native/windows",
-          "to": "apple-music/windows",
-          "filter": [
-            "FoliaAppleMusicCompanion.exe",
-            "FoliaAppleMusicCompanion.exe.config",
-            "Microsoft.Web.WebView2.Core.dll",
-            "Microsoft.Web.WebView2.WinForms.dll",
-            "WebView2Loader.dll"
-          ]
+        "rpm": {
+            "fpm": [
+                "--rpm-rpmbuild-define",
+                "_build_id_links none"
+            ]
+        },
+        "linux": {
+            "artifactName": "${name}-${version}-linux-${arch}.${ext}",
+            "target": [
+                "tar.gz",
+                "deb",
+                "rpm"
+            ],
+            "publish": {
+                "provider": "github",
+                "publishAutoUpdate": false
+            },
+            "icon": "build/icon.png",
+            "category": "AudioVideo",
+            "executableName": "folia-major",
+            "syncDesktopName": true,
+            "desktop": {
+                "entry": {
+                    "StartupWMClass": "folia-major"
+                }
+            }
         }
-      ]
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "installerLanguages": [
-        "en_US",
-        "zh_CN",
-        "id",
-        "vi_VN"
-      ],
-      "include": "build/installer.nsh"
+    "dependencies": {
+        "@capacitor/android": "8.4.2",
+        "@capacitor/browser": "8.0.4",
+        "@capacitor/core": "8.4.2",
+        "@capacitor/filesystem": "8.1.5",
+        "@capacitor/screen-orientation": "8.0.2",
+        "@capacitor/splash-screen": "8.0.2",
+        "@capacitor/status-bar": "8.0.3",
+        "@google/genai": "^2.24.0",
+        "@neteasecloudmusicapienhanced/api": "4.41.1",
+        "@xhayper/discord-rpc": "^1.5.1",
+        "@yakult-green-tea/qq-music-api": "3.3.6",
+        "axios": "^1.20.0",
+        "bgutils-js": "4.0.3",
+        "bodian-music-api": "0.1.2",
+        "busboy": "^1.6.0",
+        "electron-store": "^11.0.2",
+        "electron-updater": "^6.8.9",
+        "fflate": "^0.8.3",
+        "file-type": "^21.3.4",
+        "googlevideo": "4.1.1",
+        "koffi": "^3.3.1",
+        "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz",
+        "music-metadata": "^11.16.1",
+        "qishui-music-api": "0.2.2",
+        "qrcode": "^1.5.4",
+        "ws": "^8.21.3",
+        "youtubei.js": "18.1.0"
     },
-    "rpm": {
-      "fpm": [
-        "--rpm-rpmbuild-define",
-        "_build_id_links none"
-      ]
+    "devDependencies": {
+        "@applemusic-like-lyrics/ttml": "^1.0.1",
+        "@capacitor/assets": "3.0.5",
+        "@capacitor/cli": "8.4.2",
+        "@chenglou/pretext": "^0.0.9",
+        "@emnapi/core": "1.11.3",
+        "@emnapi/runtime": "1.11.3",
+        "@paper-design/shaders-react": "^0.0.80",
+        "@playwright/test": "^1.63.0",
+        "@react-three/drei": "^10.7.8",
+        "@react-three/fiber": "^9.8.1",
+        "@react-three/postprocessing": "^3.1.2",
+        "@tailwindcss/postcss": "^4.3.3",
+        "@types/better-sqlite3": "^9.6.0",
+        "@types/blueimp-md5": "^2.18.2",
+        "@types/node": "^26.6.2",
+        "@types/react": "^19.3.0",
+        "@types/react-dom": "^19.3.0",
+        "@types/three": "^0.185.4",
+        "@types/ws": "^8.18.1",
+        "@vitejs/plugin-react": "^6.1.1",
+        "@webgpu/types": "0.1.74",
+        "@xmldom/xmldom": "^0.9.12",
+        "animejs": "^4.5.0",
+        "autoprefixer": "^10.6.1",
+        "baseline-browser-mapping": "^2.11.26",
+        "better-sqlite3": "^13.0.3",
+        "blueimp-md5": "^2.19.0",
+        "budoux": "^0.9.3",
+        "buffer": "^6.0.3",
+        "concurrently": "^10.0.5",
+        "cross-env": "^10.1.0",
+        "dexie": "^4.4.6",
+        "electron": "^43.7.5",
+        "electron-builder": "^26.15.3",
+        "fake-indexeddb": "^6.2.5",
+        "framer-motion": "^13.4.3",
+        "hono": "^4.13.13",
+        "i18next": "^26.4.2",
+        "lucide-react": "^1.48.0",
+        "opencc-js": "^1.4.2",
+        "pinyin-pro": "3.29.3",
+        "pixi.js": "^8.21.0",
+        "postcss": "^8.5.28",
+        "react": "^19.3.0",
+        "react-colorful": "^5.8.1",
+        "react-dom": "^19.3.0",
+        "react-i18next": "^17.0.15",
+        "react-window": "^2.3.3",
+        "tailwindcss": "^4.3.3",
+        "three": "^0.185.1",
+        "twgl.js": "^7.0.0",
+        "typescript": "6.0.2",
+        "vite": "^8.3.1",
+        "vite-plugin-pwa": "^1.3.0",
+        "vitest": "^4.1.11",
+        "wait-on": "^9.1.0",
+        "wanakana": "^5.3.1",
+        "zustand": "^5.0.15"
     },
-    "linux": {
-      "artifactName": "${name}-${version}-linux-${arch}.${ext}",
-      "target": [
-        "tar.gz",
-        "deb",
-        "rpm"
-      ],
-      "publish": {
-        "provider": "github",
-        "publishAutoUpdate": false
-      },
-      "icon": "build/icon.png",
-      "category": "AudioVideo",
-      "executableName": "folia-major",
-      "syncDesktopName": true,
-      "desktop": {
-        "entry": {
-          "StartupWMClass": "folia-major"
+    "overrides": {
+        "@babel/plugin-transform-runtime": "7.29.7",
+        "concurrently": {
+            "shell-quote": "1.12.0"
+        },
+        "@discordjs/rest": {
+            "undici": "^6.27.0"
+        },
+        "qs": "6.16.0",
+        "three-stdlib": {
+            "fflate": "$fflate"
         }
-      }
+    },
+    "allowScripts": {
+        "sharp@0.32.6": true
+    },
+    "optionalDependencies": {
+        "@lox-audioserver/node-librespot": "0.5.1"
+    },
+    "coven": {
+        "config": "dev/coven/config.json"
     }
-  },
-  "dependencies": {
-    "@capacitor/android": "8.4.2",
-    "@capacitor/browser": "8.0.4",
-    "@capacitor/core": "8.4.2",
-    "@capacitor/filesystem": "8.1.5",
-    "@capacitor/screen-orientation": "8.0.2",
-    "@capacitor/splash-screen": "8.0.2",
-    "@capacitor/status-bar": "8.0.3",
-    "@google/genai": "^2.24.0",
-    "@neteasecloudmusicapienhanced/api": "4.41.1",
-    "@xhayper/discord-rpc": "^1.5.1",
-    "@yakult-green-tea/qq-music-api": "3.3.6",
-    "axios": "^1.20.0",
-    "bgutils-js": "4.0.3",
-    "bodian-music-api": "0.1.2",
-    "busboy": "^1.6.0",
-    "electron-store": "^11.0.2",
-    "electron-updater": "^6.8.9",
-    "fflate": "^0.8.3",
-    "file-type": "^21.3.4",
-    "googlevideo": "4.1.1",
-    "koffi": "^3.3.1",
-    "kugoumusicapi": "https://github.com/MakcRe/KuGouMusicApi/archive/refs/tags/v1.6.0.tar.gz",
-    "music-metadata": "^11.16.1",
-    "qishui-music-api": "0.2.2",
-    "qrcode": "^1.5.4",
-    "ws": "^8.21.3",
-    "youtubei.js": "18.1.0"
-  },
-  "devDependencies": {
-    "@applemusic-like-lyrics/ttml": "^1.0.1",
-    "@capacitor/assets": "3.0.5",
-    "@capacitor/cli": "8.4.2",
-    "@chenglou/pretext": "^0.0.9",
-    "@emnapi/core": "1.11.3",
-    "@emnapi/runtime": "1.11.3",
-    "@paper-design/shaders-react": "^0.0.80",
-    "@playwright/test": "^1.63.0",
-    "@react-three/drei": "^10.7.8",
-    "@react-three/fiber": "^9.8.1",
-    "@react-three/postprocessing": "^3.1.2",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@types/better-sqlite3": "^9.6.0",
-    "@types/blueimp-md5": "^2.18.2",
-    "@types/node": "^26.6.2",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@types/three": "^0.185.4",
-    "@types/ws": "^8.18.1",
-    "@vitejs/plugin-react": "^6.1.1",
-    "@webgpu/types": "0.1.74",
-    "@xmldom/xmldom": "^0.9.12",
-    "animejs": "^4.5.0",
-    "autoprefixer": "^10.6.1",
-    "baseline-browser-mapping": "^2.11.26",
-    "better-sqlite3": "^13.0.3",
-    "blueimp-md5": "^2.19.0",
-    "budoux": "^0.9.3",
-    "buffer": "^6.0.3",
-    "concurrently": "^10.0.5",
-    "cross-env": "^10.1.0",
-    "dexie": "^4.4.6",
-    "electron": "^43.7.5",
-    "electron-builder": "^26.15.3",
-    "fake-indexeddb": "^6.2.5",
-    "framer-motion": "^13.4.3",
-    "hono": "^4.13.13",
-    "i18next": "^26.4.2",
-    "lucide-react": "^1.48.0",
-    "opencc-js": "^1.4.2",
-    "pinyin-pro": "3.29.3",
-    "pixi.js": "^8.21.0",
-    "postcss": "^8.5.28",
-    "react": "^19.3.0",
-    "react-colorful": "^5.8.1",
-    "react-dom": "^19.3.0",
-    "react-i18next": "^17.0.15",
-    "react-window": "^2.3.3",
-    "tailwindcss": "^4.3.3",
-    "three": "^0.185.1",
-    "twgl.js": "^7.0.0",
-    "typescript": "6.0.2",
-    "vite": "^8.3.1",
-    "vite-plugin-pwa": "^1.3.0",
-    "vitest": "^4.1.11",
-    "wait-on": "^9.1.0",
-    "wanakana": "^5.3.1",
-    "zustand": "^5.0.15"
-  },
-  "overrides": {
-    "@babel/plugin-transform-runtime": "7.29.7",
-    "concurrently": {
-      "shell-quote": "1.12.0"
-    },
-    "@discordjs/rest": {
-      "undici": "^6.27.0"
-    },
-    "qs": "6.16.0",
-    "three-stdlib": {
-      "fflate": "$fflate"
-    }
-  },
-  "allowScripts": {
-    "sharp@0.32.6": true
-  },
-  "optionalDependencies": {
-    "@lox-audioserver/node-librespot": "0.5.1"
-  },
-  "coven": {
-    "config": "dev/coven/config.json"
-  }
 }
