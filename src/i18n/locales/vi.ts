@@ -1648,6 +1648,8 @@ export default {
     "consoleTabMastering": "Mastering",
     "consoleMasteringComp": "Bù tổn thất",
     "consoleMasteringNightMode": "Chế độ đêm",
+    "consoleMasteringDetailBoost": "Tăng chi tiết",
+    "consoleMasteringLoudnessComp": "Bù âm lượng",
     "consoleMasteringCompHint": "khôi phục độ to đã mất",
     "consoleMasteringCompEnabled": "Bù tổn thất",
     "consoleMasteringCompAmount": "Mức",

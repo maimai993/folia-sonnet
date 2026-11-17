@@ -62,10 +62,23 @@ const MasteringPane: React.FC = () => {
         setTone({ warmth: 2, clarity: 1 });
     };
 
+    /** 高低频补偿：低频+高频一起抬，细节（气息、镲片、泛音）更清楚。 */
+    const applyDetailBoost = (): void => {
+        setLoudness({ enabled: true, amount: 0.55 });
+        setExciter({ enabled: true, amount: 0.5, mix: 0.35 });
+    };
+
+    /** 音量补偿：链末慢速 AGC 把调音损失的响度补回来，开调音不再变小变闷。 */
+    const applyLoudnessComp = (): void => {
+        setCompensation({ enabled: true, amount: 0.8, maxGainDb: 8, responseMs: 300 });
+    };
+
     return (
         <div className="flex min-h-full flex-col">
-            <div className="px-4 pt-3">
+            <div className="flex flex-wrap gap-2 px-4 pt-3">
                 <Button variant="bare" onClick={applyNightMode}>{t('ui.consoleMasteringNightMode')}</Button>
+                <Button variant="bare" onClick={applyDetailBoost}>{t('ui.consoleMasteringDetailBoost')}</Button>
+                <Button variant="bare" onClick={applyLoudnessComp}>{t('ui.consoleMasteringLoudnessComp')}</Button>
             </div>
             {/* —— 核心：损失补偿，放最上面 —— */}
             <EqualizerSection title={t('ui.consoleMasteringComp')} hint={t('ui.consoleMasteringCompHint')}>
