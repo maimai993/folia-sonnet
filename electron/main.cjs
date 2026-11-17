@@ -2743,9 +2743,9 @@ const MOD_SYSTEM_ENABLED_SETTING_KEY = 'MOD_SYSTEM_ENABLED';
 const DEFAULT_STAGE_API_PORT = 32107;
 const DEFAULT_OBS_BROWSER_SOURCE_PORT = 32108;
 const DEFAULT_LYRIC_API_PORT = 32109;
-const FOLIA_RELEASES_URL = 'https://github.com/maimai993/folia-sonnet/releases';
+const FOLIA_RELEASES_URL = 'https://github.com/Folia-CE/folia-sonnet/releases';
 const FOLIA_GITHUB_REPOSITORY = {
-  owner: 'maimai993',
+  owner: 'Folia-CE',
   repo: 'folia-sonnet',
 };
 const WINDOWS_APP_USER_MODEL_ID = 'top.izuna.foliamajor';

@@ -11,6 +11,7 @@ import i18n from '../i18n/config';
 import { normalizePinnedCommandIds, readPinnedCommandIds, writePinnedCommandIds, type PinnedCommandIds } from '../utils/pinnedCommandPreferences';
 import { applyAppLanguagePreference, readStoredAppLanguagePreference, type AppLanguagePreference } from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
+import { getStoredString, setStoredString } from './storagePrimitives';
 import type { SettingsAnchorId } from '../utils/settingsAnchorModel';
 
 export type SettingsModalInitialTab = 'help' | 'options';
@@ -72,12 +73,15 @@ export const useSettingsModalStore = create<SettingsModalUiState>((set, get) => 
         initialVisualizerSection: null,
         initialAnchor: null,
     },
-    lastSeenGuideVersion: typeof window !== 'undefined' ? localStorage.getItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY) : null,
+    lastSeenGuideVersion: (() => {
+        // 不直接读裸 localStorage：窗口存着但存储被裁掉的环境（以及只 stub 了 window 的单测）
+        // 会在这里抛 ReferenceError，把整个 store 拖垮。走 storagePrimitives 的统一兜底。
+        const stored = getStoredString(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY, '');
+        return stored || null;
+    })(),
     isUserGuideModalOpen: false,
     setLastSeenGuideVersion: (version) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY, version);
-        }
+        setStoredString(LAST_SEEN_GUIDE_VERSION_STORAGE_KEY, version);
         set({ lastSeenGuideVersion: version });
     },
     setIsUserGuideModalOpen: (isOpen) => set({ isUserGuideModalOpen: isOpen }),

@@ -4,11 +4,13 @@ import { AnimatePresence } from 'framer-motion';
 import LyricMatchDialog from '../../modal/lyric-match/LyricMatchDialog';
 import UnavailableReplacementDialog from '../../modal/UnavailableReplacementDialog';
 import SettingsModal from '../../modal/SettingsModal';
+import { SettingsErrorBoundary } from '../SettingsErrorBoundary';
 import ConfirmDialog from '../../shared/ConfirmDialog';
 import PerfCheckOffer from '../../perfCheck/PerfCheckOffer';
 import type { AppDialogsModel } from './buildAppDialogsModel';
 import { StatusToast } from './StatusToast';
 import { countRender } from '../../../dev/renderCount';
+import { closeSettings } from '../../../stores/useSettingsModalStore';
 
 // Centralized app-level dialog and toast renderer for the player shell.
 type AppDialogsProps = {
@@ -41,7 +43,11 @@ const AppDialogs: React.FC<AppDialogsProps> = ({ model }) => {
             {/* The performance check's offer on the first automix / 智能动感 switch-on, and its chosen settings. */}
             <PerfCheckOffer />
             <AnimatePresence>
-                {isSettingsShown && settingsDialog && <SettingsModal {...settingsDialog} />}
+                {isSettingsShown && settingsDialog && (
+                    <SettingsErrorBoundary onClose={() => closeSettings()}>
+                        <SettingsModal {...settingsDialog} />
+                    </SettingsErrorBoundary>
+                )}
             </AnimatePresence>
         </>
     );

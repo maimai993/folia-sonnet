@@ -362,8 +362,6 @@ export type AudioSettingsState = {
     volume: number;
     isMuted: boolean;
     loopMode: 'off' | 'all' | 'one' | 'shuffle';
-    /** Shuffle in rounds: songs heard this round go after the rest; a finished round reshuffles under list loop. Off by default. (上游 v0.7.29) */
-    shuffleRoundNoRepeat: boolean;
     setAudioQuality: (quality: AudioQuality) => void;
     handleToggleMediaCache: (enable: boolean) => void;
     handleSetMediaCacheLimitGb: (gigabytes: number) => void;
@@ -375,7 +373,6 @@ export type AudioSettingsState = {
     handleTogglePlaybackFade: (enable: boolean) => void;
     handleToggleAutoSkipUnplayable: (enable: boolean) => void;
     handleToggleBackgroundSilentSkip: (enable: boolean) => void;
-    handleToggleShuffleRoundNoRepeat: (enable: boolean) => void;
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
     handleToggleMixWithOtherAudio: (enable: boolean) => void;
     handleToggleVocalCancel: (enable: boolean) => void;
@@ -426,6 +423,9 @@ export type AudioSettingsState = {
     /** Sets the repeat mode and toasts it like the repeat button; the mode already in effect is a no-op. */
     handleSetLoopMode: (mode: 'off' | 'all' | 'one' | 'shuffle') => void;
     handleToggleLoopMode: (isFmMode?: boolean) => void;
+    /** Shuffle in rounds: songs heard this round go after the rest; a finished round reshuffles under list loop. Off by default. (上游 v0.7.29) */
+    shuffleRoundNoRepeat: boolean;
+    handleToggleShuffleRoundNoRepeat: (enable: boolean) => void;
 };
 
 /*
@@ -505,7 +505,6 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     volume: readStoredVolume(),
     isMuted: getStoredBoolean('player_is_muted', false),
     loopMode: readStoredLoopMode(),
-    shuffleRoundNoRepeat: getStoredBoolean('folia_shuffle_round_no_repeat', false),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
             storageOrNull()?.setItem('default_audio_quality', quality);
@@ -586,10 +585,6 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
          * 不推过去，界面上关掉它，后台遇到无法播放的歌照样会跳。
          */
         void writeNativeSettings({ backgroundSilentSkip: enable });
-    },
-    handleToggleShuffleRoundNoRepeat: (enable) => {
-        setStoredBoolean('folia_shuffle_round_no_repeat', enable);
-        set({ shuffleRoundNoRepeat: enable });
     },
     handleToggleKeepScreenOnWhilePlaying: (enable) => {
         setStoredBoolean(KEEP_SCREEN_ON_WHILE_PLAYING_KEY, enable);
@@ -856,18 +851,28 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         });
     },
     handleToggleLoopMode: (isFmMode = false) => {
+        // 私人 FM 里只有 不循环 ↔ 单曲循环 两档：FM 的队列是电台给的，循环一圈没有意义，
+        // 也不进随机（上游 v0.7.29 的语义）。普通播放保持 fork 的四档：
         // 顺序（off）→ 列表循环（all）→ 单曲循环（one）→ 随机播放（shuffle）→ 回到顺序。
         // 随机放在最后：它是这一圈里唯一的「会把队列重排一遍」的模式，挨着顺序放容易误触。
-        // 私人 FM 里跳过列表循环：FM 的队列是电台给的，循环一圈没有意义（上游 v0.7.29 的语义）。
         const prev = get().loopMode;
+        if (isFmMode) {
+            get().handleSetLoopMode(prev === 'one' ? 'off' : 'one');
+            return;
+        }
         const next = prev === 'off'
             ? 'all'
             : prev === 'all'
-                ? (isFmMode ? 'one' : 'one')
+                ? 'one'
                 : prev === 'one'
                     ? 'shuffle'
                     : 'off';
         get().handleSetLoopMode(next);
+    },
+    shuffleRoundNoRepeat: getStoredBoolean('folia_shuffle_round_no_repeat', false),
+    handleToggleShuffleRoundNoRepeat: (enable) => {
+        setStoredBoolean('folia_shuffle_round_no_repeat', enable);
+        set({ shuffleRoundNoRepeat: enable });
     },
 }));
 
@@ -884,6 +889,8 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     autoJumpToVisualizerOnLaunch: state.autoJumpToVisualizerOnLaunch,
     enableTranscodeFallback: state.enableTranscodeFallback,
     neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
+    shuffleRoundNoRepeat: state.shuffleRoundNoRepeat,
+    handleToggleShuffleRoundNoRepeat: state.handleToggleShuffleRoundNoRepeat,
     playbackFadeEnabled: state.playbackFadeEnabled,
     audioOutputDeviceId: state.audioOutputDeviceId,
     audioEqualizerSettings: state.audioEqualizerSettings,
@@ -891,13 +898,11 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     volume: state.volume,
     isMuted: state.isMuted,
     loopMode: state.loopMode,
-    shuffleRoundNoRepeat: state.shuffleRoundNoRepeat,
     setAudioQuality: state.setAudioQuality,
     handleToggleMediaCache: state.handleToggleMediaCache,
     handleSetMediaCacheLimitGb: state.handleSetMediaCacheLimitGb,
     handleSetQueueAddBehavior: state.handleSetQueueAddBehavior,
     handleToggleAutoPlayOnLaunch: state.handleToggleAutoPlayOnLaunch,
-    handleToggleShuffleRoundNoRepeat: state.handleToggleShuffleRoundNoRepeat,
     handleToggleAutoJumpToVisualizerOnLaunch: state.handleToggleAutoJumpToVisualizerOnLaunch,
     handleToggleTranscodeFallback: state.handleToggleTranscodeFallback,
     handleToggleNeteaseScrobble: state.handleToggleNeteaseScrobble,

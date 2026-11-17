@@ -4,7 +4,7 @@
   "desktopName": "folia-major.desktop",
   "description": "Lyrics Reimagine",
   "author": {
-    "name": "maimai993",
+    "name": "Folia-CE",
     "email": "hjm184563@gmail.com"
   },
   "private": true,
@@ -110,7 +110,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "maimai993",
+        "owner": "Folia-CE",
         "repo": "folia-sonnet"
       }
     ],

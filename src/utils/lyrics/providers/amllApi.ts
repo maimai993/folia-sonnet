@@ -66,7 +66,7 @@ export const buildAmllApiSearchUrl = (params: AmllApiSearchParams, pageSize: num
     return `${AMLL_API_BASE_URL}/v1/lyrics/search?${search}`;
 };
 
-// 例：Folia/0.7.16-537fa57 (maimai993/folia-sonnet)。单测等没有构建常量的环境返回 null。
+// 例：Folia/0.7.16-537fa57 (Folia-CE/folia-sonnet)。单测等没有构建常量的环境返回 null。
 function getAmllApiUserAgent(): string | null {
     if (typeof __APP_VERSION__ === 'undefined') {
         return null;

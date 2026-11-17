@@ -39,7 +39,13 @@ describe('a press on the repeat button', () => {
         useAudioSettingsStore.setState({ loopMode: 'off' });
         useAudioSettingsStore.getState().handleToggleLoopMode(true);
         expect(useAudioSettingsStore.getState().loopMode).toBe('one');
+        /*
+         * fork 的四档循环：退出 FM 后从单曲循环往下走先进随机（fork 刻意的档位），
+         * 再回到顺序。FM 里没有随机档（上面两下已验过 FM 只在 不循环↔单曲 之间走）。
+         */
         useAudioSettingsStore.getState().handleToggleLoopMode(false);
+        expect(useAudioSettingsStore.getState().loopMode).toBe('shuffle');
+        useAudioSettingsStore.getState().handleToggleLoopMode();
         expect(useAudioSettingsStore.getState().loopMode).toBe('off');
         useAudioSettingsStore.getState().handleToggleLoopMode();
         expect(useAudioSettingsStore.getState().loopMode).toBe('all');

@@ -26,7 +26,7 @@ import {
 export const APP_UPDATE_MANIFEST_URL = 'https://cdn.tangbot.xyz/update.json';
 
 /** 打开发布页的兜底入口：清单里给了 page_url 就用清单的。 */
-export const APP_UPDATE_RELEASES_PAGE = `https://github.com/maimai993/folia-sonnet/releases`;
+export const APP_UPDATE_RELEASES_PAGE = `https://github.com/Folia-CE/folia-sonnet/releases`;
 
 /**
  * 请求超时。检查更新是个后台动作，网络对不上时不该让用户对着转圈等，

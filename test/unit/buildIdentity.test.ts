@@ -56,9 +56,9 @@ describe('normalizeBuildCommit', () => {
 });
 
 describe('resolveBuildKind', () => {
-    const upstreamCi = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'maimai993/folia-sonnet' };
+    const upstreamCi = { GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'Folia-CE/folia-sonnet' };
 
-    it('only treats GitHub Actions runs of the upstream repository as official', () => {
+    it('only treats GitHub Actions runs of the official repository as official', () => {
         expect(resolveBuildKind(upstreamCi)).toEqual({ kind: 'official', host: null });
     });
 
@@ -72,7 +72,9 @@ describe('resolveBuildKind', () => {
 
     it('marks fork CI and local builds as unofficial', () => {
         expect(resolveBuildKind({ GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: 'someone/folia-major' }).kind).toBe('unofficial');
+        expect(resolveBuildKind({ GITHUB_REPOSITORY: 'someone-else/folia-sonnet' }).kind).toBe('unofficial');
         expect(resolveBuildKind({ GITHUB_REPOSITORY: 'maimai993/folia-sonnet' }).kind).toBe('unofficial');
+        expect(resolveBuildKind({ FOLIA_BUILD_REPO: 'Folia-CE-not-this-one/folia' }).kind).toBe('unofficial');
         expect(resolveBuildKind({ FOLIA_BUILD_REPO: 'maimai993/folia-sonnet' }).kind).toBe('unofficial');
         expect(resolveBuildKind({}).kind).toBe('unofficial');
     });

@@ -117,6 +117,21 @@ export interface DirectorModeSpec {
  * SONNET_CAMERA_INTENSITY_MAX (types.ts, which explains why).
  */
 export const MODE_PARAMS: Record<string, DirectorModeSpec> = {
+    metaphor: {
+        setter: 'handleSetMetaphorTuning',
+        params: {
+            cutPace: { kind: 'number', min: 0.4, max: 2, zh: '切换节奏' },
+            cameraMotion: { kind: 'number', min: 0, max: 2, zh: '镜头运动' },
+            flow: { kind: 'number', min: 0, max: 2, zh: '流动感' },
+            blobs: { kind: 'number', min: 0, max: 2, zh: '色块量' },
+            halftone: { kind: 'number', min: 0.5, max: 2.5, zh: '半调强度' },
+            grain: { kind: 'number', min: 0, max: 2, zh: '颗粒强度' },
+            negative: { kind: 'boolean', zh: '负片' },
+            flip: { kind: 'boolean', zh: '翻转' },
+            keywordColors: { kind: 'boolean', zh: '关键词着色' },
+            transitions: { kind: 'boolean', zh: '转场' },
+        },
+    },
     classic: {
         setter: 'handleSetClassicTuning',
         params: {

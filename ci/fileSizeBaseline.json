@@ -1,10 +1,10 @@
 {
-  "src/App.tsx": 2990,
-  "src/components/app/scratchpad/ScratchpadCanvas.tsx": 871,
-  "src/components/FloatingPlayerControls.tsx": 1175,
-  "src/components/modal/SettingsModal.tsx": 1479,
-  "src/components/visualizer/pendolo/VisualizerPendolo.tsx": 862,
-  "src/components/visualizer/settingsPanels.tsx": 923,
-  "src/library/suites/grid/artist/ArtistGridView.tsx": 1580,
-  "src/library/suites/grid/collection/GridView.tsx": 2318
+    "src/App.tsx": 2990,
+    "src/components/app/scratchpad/ScratchpadCanvas.tsx": 871,
+    "src/components/FloatingPlayerControls.tsx": 1175,
+    "src/components/modal/SettingsModal.tsx": 1496,
+    "src/components/visualizer/pendolo/VisualizerPendolo.tsx": 862,
+    "src/components/visualizer/settingsPanels.tsx": 923,
+    "src/library/suites/grid/artist/ArtistGridView.tsx": 1580,
+    "src/library/suites/grid/collection/GridView.tsx": 2318
 }

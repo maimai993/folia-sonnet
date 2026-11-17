@@ -80,7 +80,7 @@ describe('AppDatabase native v6 migration', () => {
 
         await appDatabase.open();
 
-        expect(appDatabase.verno).toBe(1);
+        expect(appDatabase.verno).toBe(11);
         expect(await getSessionData()).toMatchObject({ fileName: 'song.mp3' });
         expect(await getFromCache('last_song')).toEqual({ id: 42 });
         expect(await getFromCache('user_profile')).toEqual({ userId: 7 });
@@ -121,7 +121,7 @@ describe('AppDatabase native v6 migration', () => {
         await appDatabase.open();
 
         const storedSong = await appDatabase.local_music.get('legacy-cover-song');
-        expect(appDatabase.verno).toBe(1);
+        expect(appDatabase.verno).toBe(11);
         expect((storedSong as typeof storedSong & { embeddedCover?: Blob })?.embeddedCover).toBeInstanceOf(Blob);
         expect(appDatabase.local_music.schema.indexes.map(index => index.name)).toContain('localCoverAssetId');
         expect(await appDatabase.local_cover_assets.count()).toBe(0);
@@ -172,7 +172,7 @@ describe('AppDatabase native v6 migration', () => {
         await appDatabase.open();
 
         const key = 'lib/artist/album\u0000\u0000album';
-        expect(appDatabase.verno).toBe(1);
+        expect(appDatabase.verno).toBe(11);
         expect(appDatabase.local_music.schema.indexes.map(index => index.name)).toContain('albumContextKey');
         expect((await appDatabase.local_music.get('with-album'))?.albumContextKey).toBe(key);
         expect((await appDatabase.local_music.get('without-album'))?.albumContextKey).toBeUndefined();
