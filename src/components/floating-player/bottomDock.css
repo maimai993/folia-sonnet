@@ -90,7 +90,7 @@
 
 .compact-capsule[data-compact-phase='close'] .compact-reveal,
 .compact-capsule[data-compact-phase='close'] .compact-swap {
-    animation: compact-conceal 180ms ease-in forwards;
+    animation: compact-conceal 280ms var(--dock-ease-in-out) forwards;
 }
 
 /* 最下一行中间那一块（收起时的歌名、展开时的两个槽位）换的时候淡入，不瞬间替换。 */
