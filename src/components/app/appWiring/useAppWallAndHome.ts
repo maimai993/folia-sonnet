@@ -38,7 +38,7 @@ export const useAppWallAndHome = (model: Input) => {
         handlePreviewVolume, handleQueueAddAndPlay, isGeneratingTheme, localLibraryCatalog, localMusicState,
         localPlaylists, localSongs, moveQueueSong, moveQueueSongToEnd, moveQueueSongToNext,
         navidromeFocusedAlbumIndex, navigateFromPlayerCapsule, navigateToLattice, navigateToPlayer, navigateToSearch,
-        onRefreshLocalSongs, openHomeCollection, openStagePlayer, playOnlineQueueFromStart, playQueue, playSong,
+        onRefreshLocalSongs, openHomeCollection, openStagePlayer, playOnlineQueueFromStart, playOnlineQueueShuffled, playQueue, playSong,
         playlists, popCollectionTo, pushCollection, refreshActiveProviderPlaylists, removeQueueSong,
         saveCurrentQueueAsLocalPlaylist, setFocusedPlaylistIndex, setLocalMusicState, setNavidromeFocusedAlbumIndex,
         setQueueOrder, shuffleQueue, stageSource, theme, togglePlay, user
@@ -88,6 +88,7 @@ export const useAppWallAndHome = (model: Input) => {
         openStagePlayer,
         theme,
         playAll: playOnlineQueueFromStart,
+        shufflePlayAll: playOnlineQueueShuffled,
         addAllToQueue: addOnlineSongsToQueue,
         addSongToQueue: addOnlineSongToQueue,
         onStatusMessage: setStatusMsg,

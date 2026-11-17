@@ -16,8 +16,8 @@ export type LatticePlaybackActions = {
     loopMode: PlayerControlSlotContext['loopMode'];
     invokeCommandById: PlayerControlSlotContext['invokeCommandById'];
     canInvokeCommandById: PlayerControlSlotContext['canInvokeCommandById'];
-    /** 私人 FM 的「不喜欢」：记下不喜欢并切到下一首（与播放页电台面板的垃圾桶同一个动作）。 */
-    fmDislike: () => void;
+    /** 私人 FM 的「不喜欢」：记下不喜欢并切到下一首（与播放页电台面板的垃圾桶同一个动作）。可选：安卓构建的命令面板上下文没接它时省略。 */
+    fmDislike?: () => void;
     isStageActive?: boolean;
     disabled?: boolean;
 };
@@ -79,7 +79,7 @@ export default function LatticePlaybackProvider({ actions, currentSong, queue, l
             invokeCommandById: actions.invokeCommandById,
             canInvokeCommandById: actions.canInvokeCommandById,
             isFmMode: actions.playback.isFmMode,
-            onDislike: actions.fmDislike,
+            onDislike: actions.fmDislike ?? (() => {}),
             canDislike: actions.playback.isFmMode && !actions.disabled && !actions.isStageActive && canDislikeCurrentSong(currentSong),
         };
     }, [actions, currentSong, lyrics, queue]);

@@ -271,7 +271,7 @@ declare global {
     isPlaying: boolean;
     title?: string | null;
     artist?: string | null;
-    loopMode?: 'off' | 'all' | 'one';
+    loopMode?: 'off' | 'all' | 'one' | 'shuffle';
     canCycleLoop?: boolean;
   }
 

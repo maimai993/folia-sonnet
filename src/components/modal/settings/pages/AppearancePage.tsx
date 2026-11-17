@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { ChosenSceneName } from '../../../scenes/settings/SceneWindow';
@@ -8,11 +8,11 @@ import { openSettings } from '../../../../stores/useSettingsModalStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
 import { Button, Group, Reveal, Row, Segmented, Toggle, Value, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
-import { settingsAnchorSubview } from '../navigation/settingsAnchorModel';
+import { settingsAnchorSubview } from '../../../../utils/settingsAnchorModel';
 import { useSettingsPage } from './settingsPageContext';
 
 // src/components/modal/settings/pages/AppearancePage.tsx
-// The 外观 page: which lyric animation the player uses, which scene (its window holds each scene's
+// The 澶栬 page: which lyric animation the player uses, which scene (its window holds each scene's
 // settings and sound tracing), light or dark, the colour theme, and how a
 // song's own theme is made and applied. The AI provider those themes are generated with is not
 // here: it is one connection shared by every AI feature, on the AI service page (pages/AiServicePage).

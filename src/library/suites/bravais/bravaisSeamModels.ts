@@ -1,6 +1,4 @@
 import type { BravaisFormState } from './bravaisFormModel';
-import type { SongSortDirection, SongSortField } from '../../../utils/songSorting';
-import type { SongSortPreset } from '../../core/collection/songSortOptions';
 import type { DailyStyleGroup, DailyStyleSelection } from '../../../types/onlineMusic';
 import type { LucideIcon } from 'lucide-react';
 
@@ -183,16 +181,13 @@ export type BravaisWallHint = {
     body?: string;
 };
 
-/**
- * 列表面板工具行的排序。两项都与网格侧栏用的是同一组控件、同一张预设表，
- * 所以这里给的是预设本身而不是「value + options」——网页下拉不需要字符串键。
- */
+/** 列表面板工具行的排序（本地文件夹才有）。 */
 export type BravaisListSort = {
-    presets: readonly SongSortPreset[];
-    field: SongSortField;
-    direction: SongSortDirection;
+    field: string;
+    fields: readonly { value: string; label: string }[];
+    direction: 'asc' | 'desc';
     directionLabel: string;
-    selectPreset: (preset: SongSortPreset) => void;
+    setField: (field: string) => void;
     toggleDirection: () => void;
 };
 

@@ -70,6 +70,14 @@ export type PlaybackEntryViewState = {
     requestPlaybackEntryViewPrompt: (options?: { withLibrarySuite?: boolean; withDeviceType?: boolean }) => boolean;
     /** Closes the prompt and records both questions as answered, so it never opens again. */
     closePlaybackEntryViewPrompt: () => void;
+
+    /*
+     * 私人 FM 的「为什么进了标准播放页」提示（LatticeFmNotice）：token 是显示令牌，
+     * 每次要提示就 +1（组件以 token 为 key 重置计时），dismiss 清零。dev 独有。
+     */
+    latticeFmNoticeToken: number;
+    showLatticeFmNotice: () => void;
+    dismissLatticeFmNotice: () => void;
 };
 
 export const usePlaybackEntryViewStore = create<PlaybackEntryViewState>((set, get) => ({
@@ -109,9 +117,17 @@ export const usePlaybackEntryViewStore = create<PlaybackEntryViewState>((set, ge
         setStoredBoolean(LIBRARY_SUITE_PROMPT_SEEN_KEY, true);
         set({ isPlaybackEntryViewPromptOpen: false, hasChosenPlaybackEntryView: true, hasSeenLibrarySuitePrompt: true });
     },
+
+    latticeFmNoticeToken: 0,
+    showLatticeFmNotice: () => set({ latticeFmNoticeToken: Date.now() }),
+    dismissLatticeFmNotice: () => set({ latticeFmNoticeToken: 0 }),
 }));
 
 /** Module-level handle for the assembly layer; it is an action, so it needs no subscription. */
 export const requestPlaybackEntryViewPrompt = (options?: { withLibrarySuite?: boolean; withDeviceType?: boolean }) => (
     usePlaybackEntryViewStore.getState().requestPlaybackEntryViewPrompt(options)
+);
+
+export const showLatticeFmNotice = () => (
+    usePlaybackEntryViewStore.getState().showLatticeFmNotice()
 );

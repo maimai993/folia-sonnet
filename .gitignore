@@ -167,3 +167,5 @@ public/nebbia-strokes.json
 # ignore workbuddy
 .workbuddy/
 HANDOFF.md
+dev/folia-find-damage.cjs
+dev/folia-merge-locale.cjs

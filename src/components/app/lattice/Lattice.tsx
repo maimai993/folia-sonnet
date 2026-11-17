@@ -43,6 +43,8 @@ type LatticeProps = {
     controls: LatticePlaybackActions;
     lyrics: LyricData | null;
     lyricSource: LatticeLyricSource;
+    /** 隐喻等样式的关键字着色总开关（上游 v0.7.29 改为 prop 注入；不传时组件自己读 store）。 */
+    lyricKeywordColoringEnabled?: boolean;
     currentSong: SongResult | null;
     playerState: PlayerState;
     currentTime: MotionValue<number>;
@@ -71,6 +73,7 @@ export default function Lattice({
     controls,
     lyrics,
     lyricSource,
+    lyricKeywordColoringEnabled,
     currentSong,
     playerState,
     currentTime,
@@ -92,7 +95,9 @@ export default function Lattice({
     countRender('Lattice');
     const { t } = useTranslation();
     // 关键词着色走全局开关（useVisualizerSettingsStore）——曾看莫奈的 tuning，已被收编。
-    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    // probe / 上游调用方以 prop 注入时优用 prop。
+    const keywordColoringEnabled = lyricKeywordColoringEnabled
+        ?? useVisualizerSettingsStore(state => state.keywordColoringEnabled);
     const vignette = useLatticeSettingsStore(state => state.latticeVignette);
     const lightsOn = useLatticeSettingsStore(state => state.latticeLightsOn);
     const posterTintEnabled = useLatticeSettingsStore(state => state.latticePosterTintEnabled);

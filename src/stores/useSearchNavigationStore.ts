@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { getNavidromeConfig, navidromeApi } from '../services/navidromeService';
 import type { HomeViewTab, LocalSong, SongResult, UnifiedSong } from '../types';
-import { DEFAULT_ONLINE_PROVIDER_ID } from '../types/onlineMusic';
+import { DEFAULT_ONLINE_PROVIDER_ID, OnlineProviderError } from '../types/onlineMusic';
 import type { OmniCollection, OmniSearchKind, OnlineProviderId } from '../types/onlineMusic';
 import {
     applyLocalLibraryEntityDisplay,
@@ -11,6 +11,7 @@ import {
 import { omni } from '../services/onlineMusic/omni';
 import { isLocalPlaybackSong, isNavidromePlaybackSong } from '../utils/appPlaybackGuards';
 import { sanitizeSearchHistory, withSearchHistoryQuery, withoutSearchHistoryQuery } from '../utils/searchHistory';
+import { noteProviderAuthExpired } from '../services/onlineMusic/authExpiry';
 import { getStoredString, setStoredString } from './storagePrimitives';
 
 const LAST_HOME_VIEW_TAB_KEY = 'last_home_view_tab';
@@ -70,6 +71,11 @@ interface SearchNavigationState {
     hasMore: boolean;
     scrollTop: number;
     searchCache: Record<string, SearchCacheEntry>;
+    /** 搜索结果条（底部浮出的那一条）是否被用户收起。dev 独有。 */
+    isResultsBarHidden: boolean;
+    setResultsBarHidden: (hidden: boolean) => void;
+    /** 哪个在线平台的登录刚过期（搜索页顶上那条提示）；null 是没有。dev 独有。 */
+    searchAuthExpiredProvider: OnlineProviderId | null;
     /**
      * 搜过的词，最近的在前（跨会话保留）。只由 submitSearch 记：所有搜索入口都经过它，
      * 所以这里不提供「记一条」的动作，界面只能读、删一条或清空。
@@ -277,6 +283,9 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
     hasMore: false,
     scrollTop: 0,
     searchCache: {},
+    isResultsBarHidden: false,
+    setResultsBarHidden: (hidden) => set(state => (state.isResultsBarHidden === hidden ? state : { isResultsBarHidden: hidden })),
+    searchAuthExpiredProvider: null,
     searchHistory: readSearchHistory(),
     forgetSearchHistoryQuery: (query) => {
         const current = get().searchHistory;
@@ -334,7 +343,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             isSearchOpen: true,
         };
     }),
-    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home' }),
+    hideSearchOverlay: () => set({ isSearchOpen: false, searchReturnView: 'home', isResultsBarHidden: false }),
     keepSearchSourceWithin: (sources, fallback) => {
         const state = get();
         if (sources.includes(state.searchSourceTab)) return false;
@@ -417,6 +426,15 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
             return true;
         } catch (error) {
             console.error('[SearchStore] submitSearch failed:', error);
+            // 登录过期：记下平台，顺手把账号标成过期（首页和账户面板那套「登录已过期」会亮起来），
+            // 展示层据此把提示换成能点名平台的那一句。dev 独有。
+            const authProviderId = error instanceof OnlineProviderError
+                && error.code === 'auth-required'
+                ? (error.providerId ?? sourceTab)
+                : null;
+            if (authProviderId) {
+                noteProviderAuthExpired(authProviderId);
+            }
             if (get().requestId !== requestId) {
                 return false;
             }
@@ -429,6 +447,7 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
                 isSearching: false,
                 scrollTop: 0,
                 searchError: error instanceof Error ? error.message : 'search_failed',
+                searchAuthExpiredProvider: authProviderId,
             });
             return true;
         }

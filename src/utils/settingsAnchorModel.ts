@@ -11,22 +11,15 @@ import type { SettingsSubviewId } from '../stores/useSettingsModalStore';
 export const SETTINGS_ANCHOR_DEFINITIONS = {
     // pages/AppearancePage
     lyricsRenderer: { section: 'appearance' },
-    // 歌词动态壁纸那一节（fork 独有，只有安卓画；见 LyricsWallpaperSettingsSection）。
-    lyricsWallpaper: { section: 'appearance' },
-    // 显示那几项（fork 独有；设备类型与横竖屏只有安卓画，运行时判断在那两个组件里）。
-    // 液态玻璃的开关与参数搬去了「性能与动效」页那一组（它同时是性能设置），锚点见表里 graphics 那一段。
-    lyricFlat: { section: 'appearance' },
+    // 姝岃瘝鍔ㄦ€佸绾搁偅涓€鑺傦紙fork 鐙湁锛屽彧鏈夊畨鍗撶敾锛涜 LyricsWallpaperSettingsSection锛夈€?    lyricsWallpaper: { section: 'appearance' },
+    // 鏄剧ず閭ｅ嚑椤癸紙fork 鐙湁锛涜澶囩被鍨嬩笌妯珫灞忓彧鏈夊畨鍗撶敾锛岃繍琛屾椂鍒ゆ柇鍦ㄩ偅涓や釜缁勪欢閲岋級銆?    // 娑叉€佺幓鐠冪殑寮€鍏充笌鍙傛暟鎼幓浜嗐€屾€ц兘涓庡姩鏁堛€嶉〉閭ｄ竴缁勶紙瀹冨悓鏃舵槸鎬ц兘璁剧疆锛夛紝閿氱偣瑙佽〃閲?graphics 閭ｄ竴娈点€?    lyricFlat: { section: 'appearance' },
     deviceType: { section: 'appearance' },
-    // 原来这里还有一条 `phoneFit`（「手机适配」总开关）。那一行按用户要求删掉了 ——
-    // 打开也不生效，而它门着的「横竖屏兼容」也一并换成了上面 `deviceType` 与
-    // `forceLandscape` 两行（见 AndroidForceLandscapeSetting）。锚点跟着删，
-    // 留着就是一条指向空处的深链：指令照样能跑，只是落不到任何一行上。
-    // 云缓存那两项（fork 独有，AiProviderSettings 那块里的；只有非桌面才画）。
-    cloudCache: { section: 'appearance' },
+    // 鍘熸潵杩欓噷杩樻湁涓€鏉?`phoneFit`锛堛€屾墜鏈洪€傞厤銆嶆€诲紑鍏筹級銆傞偅涓€琛屾寜鐢ㄦ埛瑕佹眰鍒犳帀浜?鈥斺€?    // 鎵撳紑涔熶笉鐢熸晥锛岃€屽畠闂ㄧ潃鐨勩€屾í绔栧睆鍏煎銆嶄篃涓€骞舵崲鎴愪簡涓婇潰 `deviceType` 涓?    // `forceLandscape` 涓よ锛堣 AndroidForceLandscapeSetting锛夈€傞敋鐐硅窡鐫€鍒狅紝
+    // 鐣欑潃灏辨槸涓€鏉℃寚鍚戠┖澶勭殑娣遍摼锛氭寚浠ょ収鏍疯兘璺戯紝鍙槸钀戒笉鍒颁换浣曚竴琛屼笂銆?    // 浜戠紦瀛橀偅涓ら」锛坒ork 鐙湁锛孉iProviderSettings 閭ｅ潡閲岀殑锛涘彧鏈夐潪妗岄潰鎵嶇敾锛夈€?    cloudCache: { section: 'appearance' },
     cloudCacheBaseUrl: { section: 'appearance' },
     themePresets: { section: 'appearance' },
 
-    // pages/AiServicePage — the one AI connection every AI feature reads
+    // pages/AiServicePage 鈥?the one AI connection every AI feature reads
     electronSettings: { section: 'ai' },
 
     // pages/PlayerPage
@@ -41,7 +34,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // the Bravais group only while bravais is the one in effect.
     librarySuite: { section: 'home' },
     bravaisSettings: { section: 'home' },
-    // 速记簿那一组（fork 独有）：总开关、画布与排序。
+    // 閫熻绨块偅涓€缁勶紙fork 鐙湁锛夛細鎬诲紑鍏炽€佺敾甯冧笌鎺掑簭銆?
     scratchpadSettings: { section: 'home' },
     homeTabsVisibility: { section: 'home' },
     grid3dCardStyle: { section: 'home' },
@@ -63,8 +56,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     languageSettings: { section: 'general' },
     ponderHints: { section: 'general' },
     pinnedCommands: { section: 'interaction' },
-    // 屏幕常亮（fork 独有，只有安卓画；见 AndroidScreenAwakeSetting）。
-    keepScreenAwake: { section: 'general' },
+    // 灞忓箷甯镐寒锛坒ork 鐙湁锛屽彧鏈夊畨鍗撶敾锛涜 AndroidScreenAwakeSetting锛夈€?    keepScreenAwake: { section: 'general' },
 
     // pages/GeneralPage (start-up and window)
     labWindowAndTools: { section: 'general' },
@@ -75,7 +67,7 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     customShortcut: { section: 'interaction' },
     globalShortcuts: { section: 'interaction' },
 
-    // pages/IntegrationPage — the desktop app and the web build draw stage mode with different
+    // pages/IntegrationPage 鈥?the desktop app and the web build draw stage mode with different
     // rows; it is one destination.
     discordRichPresence: { section: 'integration' },
     obsBrowserSource: { section: 'integration' },
@@ -104,13 +96,12 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     // pages/GraphicsPage; the render GPU row only in the Windows desktop app.
     graphicsPerformance: { section: 'graphics' },
     graphicsMotion: { section: 'graphics' },
-    // 歌词画布分辨率与抗锯齿那一行（见 renderQuality/LyricRenderQualityRows）。
+    // 姝岃瘝鐢诲竷鍒嗚鲸鐜囦笌鎶楅敮榻块偅涓€琛岋紙瑙?renderQuality/LyricRenderQualityRows锛夈€?
     lyricRenderScale: { section: 'graphics' },
     gpuPreference: { section: 'graphics' },
-    // HiFi 引擎那一组（fork 独有，只在桌面 Electron 里画）。
+    // HiFi 寮曟搸閭ｄ竴缁勶紙fork 鐙湁锛屽彧鍦ㄦ闈?Electron 閲岀敾锛夈€?
     hifiEngine: { section: 'playback' },
-    // 液态玻璃那一组（fork 独有）：总开关、预设、参数与效果开关。
-    liquidGlass: { section: 'graphics' },
+    // 娑叉€佺幓鐠冮偅涓€缁勶紙fork 鐙湁锛夛細鎬诲紑鍏炽€侀璁俱€佸弬鏁颁笌鏁堟灉寮€鍏炽€?    liquidGlass: { section: 'graphics' },
     liquidGlassEnabled: { section: 'graphics' },
 
     // pages/ModsPage

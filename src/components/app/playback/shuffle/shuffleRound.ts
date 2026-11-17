@@ -97,7 +97,7 @@ export const decideRoundStep = ({
     keys: readonly string[];
     currentKey: string;
     countedKeys: readonly string[];
-    loopMode: 'off' | 'all' | 'one';
+    loopMode: 'off' | 'all' | 'one' | 'shuffle';
 }): { kind: 'none' } | { kind: 'write'; state: ShuffleRoundState } | { kind: 'reshuffle' } => {
     if (!isRoundQueue(state, keys) || !keys.includes(currentKey)) return { kind: 'none' };
     const played = state.played.includes(currentKey) ? state.played : [...state.played, currentKey];

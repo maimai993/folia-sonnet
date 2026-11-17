@@ -21,6 +21,7 @@ import { chooseLibrarySuite, getActiveLibrarySuiteId, listLibrarySuiteOptions } 
 import { isBravaisLibraryActive } from '../../../library/app/bravaisLibraryActive';
 import { isGridLibraryActive } from '../../../library/app/gridLibraryActive';
 import { useLibraryWallLookStore } from '../../../stores/useLibraryWallLookStore';
+import { useGlassSurfaceSettingsStore } from '../../../stores/useGlassSurfaceSettingsStore';
 import { usePonderStore } from '../../../stores/usePonderStore';
 import { useHomeLayoutSettingsStore } from '../../../stores/useHomeLayoutSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
@@ -112,6 +113,12 @@ export const buildSettingsCommandContext = (
         toggleLibraryWallSeamClear: () => {
             const wall = useLibraryWallLookStore.getState();
             wall.setSeamClear(!wall.seamClear);
+        },
+        // 液态玻璃的总开关：现读 store，参数面板开着时也能跟上。（dev 独有）
+        liquidGlassEnabled: () => useGlassSurfaceSettingsStore.getState().liquidGlassEnabled,
+        toggleLiquidGlass: () => {
+            const glass = useGlassSurfaceSettingsStore.getState();
+            glass.setLiquidGlassEnabled(!glass.liquidGlassEnabled);
         },
         libraryWallSeamStyle: () => useLibraryWallLookStore.getState().seamStyle,
         setLibraryWallSeamStyle: style => useLibraryWallLookStore.getState().setSeamStyle(style),
@@ -218,6 +225,9 @@ export const buildSettingsCommandContext = (
         toggleAutoSkipUnplayable: () => audio.handleToggleAutoSkipUnplayable(
             !useAudioSettingsStore.getState().autoSkipUnplayable,
         ),
+        toggleBackgroundSilentSkip: () => audio.handleToggleBackgroundSilentSkip(
+            !useAudioSettingsStore.getState().backgroundSilentSkip,
+        ),
         toggleShuffleRoundNoRepeat: () => audio.handleToggleShuffleRoundNoRepeat(
             !useAudioSettingsStore.getState().shuffleRoundNoRepeat,
         ),
@@ -284,6 +294,8 @@ export const buildSettingsCommandContext = (
         sleepTimerMinutes: sleepTimer.sleepTimerMinutes,
         setSleepTimerMinutes: sleepTimer.handleSetSleepTimerMinutes,
         sleepTimerDeadlineMs: sleepTimer.sleepTimerDeadlineMs,
+        sleepTimerEndAction: sleepTimer.sleepTimerEndAction,
+        setSleepTimerMinutesMode: () => sleepTimer.handleSetSleepTimerMode('minutes'),
         canGenerateAITheme: deps.canGenerateAITheme,
         isGeneratingTheme: deps.isGeneratingTheme,
         generateAITheme: deps.generateAITheme,

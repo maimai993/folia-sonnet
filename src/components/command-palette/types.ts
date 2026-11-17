@@ -13,7 +13,7 @@ import type { LibraryDirectorySurfaceHandle } from '../../library/core/directory
 import type { LibraryArtistSurfaceHandle } from '../../library/core/artist/artist.contract';
 import type { LibrarySuiteChromeHandle } from '../../library/core/suite/suiteChrome.contract';
 import { type SettingsModalInitialTab, type SettingsSubviewId, type VisualizerSettingsSection } from '../../stores/useSettingsModalStore';
-import type { SettingsAnchorId } from '../modal/settings/navigation/settingsAnchorModel';
+import type { SettingsAnchorId } from '../../utils/settingsAnchorModel';
 import type { LyricStaffAbsorbMode, LyricStaffPolicy } from '../../utils/lyrics/staffCreditsPolicy';
 import type { AudioEqualizerModeId } from '../../utils/audioEqualizer';
 import type { ThemeGenerationSource } from '../../services/themePreferences';
@@ -80,7 +80,7 @@ export type CommandPaletteCommand = {
     /** Kept out of match results, the all-commands list, and the pinned-command picker. */
     hidden?: boolean;
     /** Global shortcut that opens the palette straight into this command. `ctrl` means the
-     *  platform's primary modifier — Ctrl on Windows/Linux, Cmd on macOS. `alt` is legal but
+     *  platform's primary modifier 鈥?Ctrl on Windows/Linux, Cmd on macOS. `alt` is legal but
      *  unclaimed: the listener's own shortcut lives on Alt, and checks itself against these. */
     openHotkey?: { key: string; ctrl?: boolean; alt?: boolean };
     /** Vim-style key sequence that runs this command from execute mode. Omit for anything
@@ -105,7 +105,7 @@ export type CommandPaletteCommand = {
     closeAfterExecute?: boolean;
     /**
      * Offered in the row that floats above the player bar. Only for things done to what is playing
-     * right now (like, shuffle, volume, the lyric style…), never settings or navigation: the row is
+     * right now (like, shuffle, volume, the lyric style鈥?, never settings or navigation: the row is
      * not the palette's frequent list. The command declares it itself, so there is no list to keep.
      * 'mouse-only' leaves it out of the row a finger opens (volume: a phone has its own volume keys).
      */
@@ -158,7 +158,7 @@ export type CommandPaletteSearchContext = {
         };
         returnView?: SearchReturnView;
     }) => Promise<boolean>;
-    /** 搜过的词，最近的在前（useSearchNavigationStore 的 searchHistory）；搜索命令把它们列在输入行下面。 */
+    /** 鎼滆繃鐨勮瘝锛屾渶杩戠殑鍦ㄥ墠锛坲seSearchNavigationStore 鐨?searchHistory锛夛紱鎼滅储鍛戒护鎶婂畠浠垪鍦ㄨ緭鍏ヨ涓嬮潰銆?*/
     searchHistory: () => readonly string[];
 };
 
@@ -166,7 +166,7 @@ export type CommandPalettePlaybackContext = {
     volume: number;
     isMuted: boolean;
     setVolume: (volume: number) => void;
-    /** Moves the volume by `delta` from its value at the moment of the call, clamped to 0–1. */
+    /** Moves the volume by `delta` from its value at the moment of the call, clamped to 0鈥?. */
     stepVolume: (delta: number) => void;
     previewVolume: (volume: number) => void;
     togglePlay: () => void;
@@ -197,8 +197,8 @@ export type CommandPalettePlaybackContext = {
     toggleMute: () => void;
     /**
      * The like/star action from the controls tab. It travels here rather than staying inside the
-     * panel that drew the button, so a shortcut can be bound to it. The finer refusals — a stage
-     * track, a provider that has no like — stay inside the action, which already says so in a
+     * panel that drew the button, so a shortcut can be bound to it. The finer refusals 鈥?a stage
+     * track, a provider that has no like 鈥?stay inside the action, which already says so in a
      * status message; only "there is no song" is worth withholding the command for.
      */
     toggleSongLike: () => void | Promise<void>;
@@ -206,7 +206,7 @@ export type CommandPalettePlaybackContext = {
     isSongLiked: boolean;
     /** Opens the playlist picker for the current song; it no longer needs the panel to be up. */
     openAddToPlaylist: () => void;
-    /** Whether there is anywhere to put it — see AddToPlaylistHost, which answers this. */
+    /** Whether there is anywhere to put it 鈥?see AddToPlaylistHost, which answers this. */
     canAddCurrentSongToPlaylist: boolean;
     openAudioEqualizer: () => void;
     applyAudioSoundPreset: (modeId: AudioEqualizerModeId) => void;
@@ -301,15 +301,18 @@ export type CommandPaletteSettingsContext = {
     /** bravais wall transparency (useLibraryWallLookStore); read live. Not part of appearance import / export. */
     libraryWallLook: () => LibraryWallLook;
     setLibraryWallLook: (look: LibraryWallLook) => void;
-    /** Windows per 12-slot block while the look is partial, 1–6; read live. */
+    /** Windows per 12-slot block while the look is partial, 1鈥?; read live. */
     libraryWallWindowsPerBlock: () => number;
-    /** Clamps to 1–6 before storing. */
+    /** Clamps to 1鈥? before storing. */
     setLibraryWallWindowsPerBlock: (windowsPerBlock: number) => void;
     /** bravais collection tiles' stack edges (useLibraryWallLookStore.collectionStackEdges): flips the stored value. */
     toggleLibraryWallStackEdges: () => void;
     /** bravais info strip always see-through (useLibraryWallLookStore.seamClear); read live. */
     libraryWallSeamClear: () => boolean;
     toggleLibraryWallSeamClear: () => void;
+    /** 娑叉€佺幓鐠冪殑鎬诲紑鍏筹紙useGlassSurfaceSettingsStore.liquidGlassEnabled锛夛紱鐜拌銆?*/
+    liquidGlassEnabled: () => boolean;
+    toggleLiquidGlass: () => void;
     /** bravais solid info strip preset (useLibraryWallLookStore.seamStyle); read live. Ignored while the strip is see-through. */
     libraryWallSeamStyle: () => LibraryWallSeamStyle;
     setLibraryWallSeamStyle: (style: LibraryWallSeamStyle) => void;
@@ -321,7 +324,7 @@ export type CommandPaletteSettingsContext = {
     setLibraryWallSeamDirection: (direction: LibraryWallSeamDirection) => void;
     ponderHintVisibility: PonderHintVisibility;
     setPonderHintVisibility: (visibility: PonderHintVisibility) => void;
-    /** 触屏上那颗思索按钮显不显示。它是触屏唯一的入口，所以关掉是一个明确的选择。 */
+    /** 瑙﹀睆涓婇偅棰楁€濈储鎸夐挳鏄句笉鏄剧ず銆傚畠鏄Е灞忓敮涓€鐨勫叆鍙ｏ紝鎵€浠ュ叧鎺夋槸涓€涓槑纭殑閫夋嫨銆?*/
     togglePonderTouchButton: () => void;
     toggleRememberHomeCardPosition: () => void;
     startPlayerBottomBarPositioning: () => void;
@@ -332,9 +335,9 @@ export type CommandPaletteSettingsContext = {
     /** A getter: the full-bleed toggle it gates on flips with nothing re-rendering the context. */
     canUseGridViewSquareCards: () => boolean;
     toggleLatticeVignette: () => void;
-    /** Lattice 的墙面形态在海报墙和电台墙之间切换（useLatticeSettingsStore.latticeWallForm；私人 FM 下总是电台墙）。 */
+    /** Lattice 鐨勫闈㈠舰鎬佸湪娴锋姤澧欏拰鐢靛彴澧欎箣闂村垏鎹紙useLatticeSettingsStore.latticeWallForm锛涚浜?FM 涓嬫€绘槸鐢靛彴澧欙級銆?*/
     toggleLatticeWallForm: () => void;
-    /** 普通队列的电台墙上，接下来的歌显示为问号卡（useLatticeSettingsStore.latticeRadioHideUpcoming）：翻转存着的值。 */
+    /** 鏅€氶槦鍒楃殑鐢靛彴澧欎笂锛屾帴涓嬫潵鐨勬瓕鏄剧ず涓洪棶鍙峰崱锛坲seLatticeSettingsStore.latticeRadioHideUpcoming锛夛細缈昏浆瀛樼潃鐨勫€笺€?*/
     toggleLatticeRadioHideUpcoming: () => void;
     /** Number only the playing song on the queue collage and the bravais wall (useLatticeSettingsStore.latticeBadgeCurrentOnly): flips the stored value. */
     toggleLatticeBadgeCurrentOnly: () => void;
@@ -367,6 +370,8 @@ export type CommandPaletteSettingsContext = {
     togglePlaybackFade: () => void;
     /** Whether restricted songs and unknown failures count down to a skip, like taken-down ones. */
     toggleAutoSkipUnplayable: () => void;
+    /** Whether an unplayable song in the background is skipped without waiting for the foreground (Android). */
+    toggleBackgroundSilentSkip: () => void;
     toggleShuffleRoundNoRepeat: () => void;
     /**
      * Whether this build can watch the imported local folders at all. A getter because the answer
@@ -382,7 +387,7 @@ export type CommandPaletteSettingsContext = {
      */
     canReportPlayback: () => boolean;
     togglePlaybackReport: () => void;
-    /** 自动 AI 分词: segment songs with no saved split by themselves (issue #960). */
+    /** 鑷姩 AI 鍒嗚瘝: segment songs with no saved split by themselves (issue #960). */
     toggleAutoAiLyricSegmentation: () => void;
     toggleKeepProviderWordTiming: () => void;
     voiceInputPauseSupported: boolean;
@@ -390,7 +395,7 @@ export type CommandPaletteSettingsContext = {
     modSystemEnabled: boolean;
     toggleVoiceInputPause: () => void;
     togglePreventDisplaySleepDuringPlayback: () => void;
-    /** 后台节流: throttle the window and hold the lyric animation while it is minimised or hidden (main process applies it). */
+    /** 鍚庡彴鑺傛祦: throttle the window and hold the lyric animation while it is minimised or hidden (main process applies it). */
     toggleBackgroundThrottling: () => void;
     toggleWallpaperMode: () => void;
     /** Close button hides the main window to the tray instead of quitting (main process owns it). */
@@ -422,6 +427,13 @@ export type CommandPaletteSettingsContext = {
     sleepTimerMinutes: number;
     setSleepTimerMinutes: (minutes: number) => void;
     sleepTimerDeadlineMs: number | null;
+    /** 鍒扮偣涔嬪悗骞蹭粈涔堛€傛帶鍒堕潰鏉块偅涓€琛岀幇鍦ㄨ兘閫夛紝鍛戒护闈㈡澘鍙寜瀹冩樉绀烘彁绀鸿銆?*/
+    sleepTimerEndAction: 'pause' | 'quit';
+    /**
+     * 鎶婂畾鏃舵柟寮忔尓鍥炪€屽垎閽熷悗銆嶃€?     *
+     * 鎺у埗闈㈡澘閲屽彲浠ユ妸鏂瑰紡鍒囨垚銆屽皬鏃躲€嶆垨銆屽畾鏃讹紙鍑犵偣锛夈€嶏紝閭ｆ椂杩欎袱杈圭殑 hours / minutes
+     * 涓嶅啀椹卞姩鍊掕鏃讹紱鍛戒护闈㈡澘涓€鏀规椂闀垮氨鎶婃柟寮忔媺鍥炴潵锛屾渶鍚庝竴娆℃敼鍔ㄤ负鍑嗭紝涓嶄細浜掔浉鎵撴灦銆?     */
+    setSleepTimerMinutesMode: () => void;
     canGenerateAITheme: boolean;
     isGeneratingTheme: boolean;
     generateAITheme: () => void;
@@ -429,10 +441,10 @@ export type CommandPaletteSettingsContext = {
     canOpenThemeQuickEditor: boolean;
     themeGenerationSource: ThemeGenerationSource;
     setThemeGenerationSource: (source: ThemeGenerationSource) => void;
-    /** 开头制作人员信息的处理策略；命令只负责在三态之间轮换。 */
+    /** 寮€澶村埗浣滀汉鍛樹俊鎭殑澶勭悊绛栫暐锛涘懡浠ゅ彧璐熻矗鍦ㄤ笁鎬佷箣闂磋疆鎹€?*/
     lyricStaffPolicy: LyricStaffPolicy;
     cycleLyricStaffPolicy: () => void;
-    /** 署名块是否吸收相邻行；命令只负责在三态之间轮换。 */
+    /** 缃插悕鍧楁槸鍚﹀惛鏀剁浉閭昏锛涘懡浠ゅ彧璐熻矗鍦ㄤ笁鎬佷箣闂磋疆鎹€?*/
     lyricStaffAbsorbMode: LyricStaffAbsorbMode;
     cycleLyricStaffAbsorbMode: () => void;
     /** The FOLIA smart-transition switches, stated in each command's title the way the pickers do. */
@@ -513,14 +525,14 @@ export type CommandPaletteVisualizerContext = {
     setVisualizerBackgroundMode: (mode: VisualizerBackgroundMode) => void;
     setMonetBackgroundTuning: (patch: Partial<MonetBackgroundTuning>) => void;
     setLatentBackgroundTuning: (patch: Partial<LatentBackgroundTuning>) => void;
-    /** 雾笺: the next window scene (the front glass changes to that scene's usual pair, as in its settings) and the next front glass; each returns what it switched to. */
+    /** 闆剧: the next window scene (the front glass changes to that scene's usual pair, as in its settings) and the next front glass; each returns what it switched to. */
     cycleNebbiaBehind: () => NebbiaBehind;
     cycleNebbiaGlass: () => NebbiaGlass;
     /** The built-in video layer behind the lyrics. */
     toggleVideoLayer: () => void;
-    /** 智能动感模式 (the beat FX in every mode and background that draws them): off, stored results only, or on. */
+    /** 鏅鸿兘鍔ㄦ劅妯″紡 (the beat FX in every mode and background that draws them): off, stored results only, or on. */
     setSmartBeatMode: (mode: SmartBeatMode) => void;
-    /** 智能动感模式 on / off, as v0.7.21 shipped it: any mode that plays goes off, off goes fully on. */
+    /** 鏅鸿兘鍔ㄦ劅妯″紡 on / off, as v0.7.21 shipped it: any mode that plays goes off, off goes fully on. */
     toggleSmartBeat: () => void;
     /** Opens the file picker for the video layer; resolves to the picked name, or null when cancelled. */
     pickVideoLayerFile: () => Promise<string | null>;
@@ -543,28 +555,28 @@ export type CommandPaletteVisualizerContext = {
 export type CommandPaletteScopeContext = {
     view: AppView;
     /**
-     * The surface that reads typed characters right now, if any — a home grid, today. `filter-view`
+     * The surface that reads typed characters right now, if any 鈥?a home grid, today. `filter-view`
      * writes through it; every other command ignores it.
      */
     filter: CommandFilterHandle | null;
     /**
-     * The track grid on screen, if any. Carries what only it knows — its filtered set, its sort
-     * choice, its two panels — plus the collection maintenance its own branch allows.
+     * The track grid on screen, if any. Carries what only it knows 鈥?its filtered set, its sort
+     * choice, its two panels 鈥?plus the collection maintenance its own branch allows.
      */
     grid: GridSurfaceHandle | null;
     /**
      * The home directory on screen (the grid's GridMap), if any: its batch selection and hidden view.
-     * Separate from `grid` — a directory selects cards, a track grid sorts and maintains a collection.
+     * Separate from `grid` 鈥?a directory selects cards, a track grid sorts and maintains a collection.
      */
     directory: LibraryDirectorySurfaceHandle | null;
     /**
      * The artist page on screen, if any: its top songs, reload / album retry and local entity editing.
-     * Separate from `grid` — an artist page has no track list to sort or maintain.
+     * Separate from `grid` 鈥?an artist page has no track list to sort or maintain.
      */
     artist: LibraryArtistSurfaceHandle | null;
     /**
-     * The library suite whose own chrome is on screen, if any (B2): its suite-only actions — seam levels,
-     * panels, locating the playing song — declared in the suite manifest's `chromeActions`. Registered by
+     * The library suite whose own chrome is on screen, if any (B2): its suite-only actions 鈥?seam levels,
+     * panels, locating the playing song 鈥?declared in the suite manifest's `chromeActions`. Registered by
      * the suite while interactive (useLibrarySuiteChromeRegistration); only that suite's commands apply.
      */
     chrome: LibrarySuiteChromeHandle | null;

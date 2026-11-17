@@ -14,7 +14,7 @@ const testAiConnection = vi.fn().mockResolvedValue({ ok: true, durationMs: 1, te
 const base: ElectronSettingsState = {
     AI_PROVIDER: 'openai', AI_PROVIDER_PRESET: 'custom', OPENAI_API_URL: '', OPENAI_API_MODEL: 'selected-model',
     OPENAI_API_KEY: 'draft-key', OPENAI_API_TEMPERATURE: '0.7', OPENAI_API_STREAM: false,
-    GEMINI_API_KEY: '', GEMINI_API_MODEL: 'gemini-selected', USE_SYSTEM_PROXY_FOR_AI: false,
+    GEMINI_API_KEY: '', GEMINI_API_URL: '', GEMINI_API_MODEL: 'gemini-selected', USE_SYSTEM_PROXY_FOR_AI: false,
     ENABLE_UPDATE_CHECK: true, ENABLE_AUTO_UPDATE: false, UPDATE_CHANNEL: 'realeco',
     STAGE_MODE_SOURCE: '', DISCORD_RICH_PRESENCE_ENABLED: false,
 };

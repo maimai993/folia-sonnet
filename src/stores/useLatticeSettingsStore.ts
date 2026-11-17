@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
+// @note lattice_wall_form、lattice_radio_hide_upcoming 同上（2026-11-15）：Lattice 的墙面形态（海报墙 / 电台墙）与电台墙的问号卡，
+// OBS 页面上看不到这面墙，按同一个决定不进外观配置导入导出。
+const LATTICE_WALL_FORM_KEY = 'lattice_wall_form';
+const LATTICE_RADIO_HIDE_UPCOMING_KEY = 'lattice_radio_hide_upcoming';
+
+/** Lattice 画播放队列的形态：海报墙（PosterWall），或一圈卡牌的电台墙（radio/RadioWall）。私人 FM 下总是电台墙。 */
+export type LatticeWallForm = 'poster' | 'radio';
+
+const readWallForm = (): LatticeWallForm => (getStoredString(LATTICE_WALL_FORM_KEY, 'poster') === 'radio' ? 'radio' : 'poster');
 
 // src/stores/useLatticeSettingsStore.ts
 // Persistent queue-collage preferences. Deliberately separate from useLatticeControlsStore: that
@@ -8,9 +17,8 @@ import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } 
 // @note lattice_vignette、lattice_auto_focus_on_song_change、lattice_lights_on、lattice_poster_tint_*（4 个）、wall_tools_queue_island_open 是用户明确决定「不进外观配置导入导出」的设置（2026-11-08）：配置码也用于 web 版 OBS 链接，
 // 只加 OBS 页面看得到的，这些在 OBS 页面上看不到。不要按 settings-feature-integration「视觉设置必须进
 // buildCurrentConfig / compressConfig / decompressConfig / validKeys / handleImportConfig」的规则把它们补进短码或 JSON。
-// @note lattice_wall_form、lattice_radio_hide_upcoming 同上（2026-11-15）：Lattice 的墙面形态（海报墙 / 电台墙）与电台墙的问号卡，
-// OBS 页面上看不到这面墙，按同一个决定不进外观配置导入导出。
 
+const LATTICE_PERFORMANCE_MODE_KEY = 'lattice_performance_mode';
 const LATTICE_VIGNETTE_KEY = 'lattice_vignette';
 const LATTICE_AUTO_FOCUS_ON_SONG_CHANGE_KEY = 'lattice_auto_focus_on_song_change';
 const LATTICE_LIGHTS_ON_KEY = 'lattice_lights_on';
@@ -20,16 +28,21 @@ const LATTICE_POSTER_TINT_COLOR_KEY = 'lattice_poster_tint_color';
 const LATTICE_POSTER_TINT_INTENSITY_KEY = 'lattice_poster_tint_intensity';
 const LATTICE_BADGE_CURRENT_ONLY_KEY = 'lattice_badge_current_only';
 const WALL_TOOLS_QUEUE_ISLAND_OPEN_KEY = 'wall_tools_queue_island_open';
-const LATTICE_WALL_FORM_KEY = 'lattice_wall_form';
-const LATTICE_RADIO_HIDE_UPCOMING_KEY = 'lattice_radio_hide_upcoming';
-
-/** Lattice 画播放队列的形态：海报墙（PosterWall），或一圈卡牌的电台墙（radio/RadioWall）。私人 FM 下总是电台墙。 */
-export type LatticeWallForm = 'poster' | 'radio';
-
-const readWallForm = (): LatticeWallForm => (getStoredString(LATTICE_WALL_FORM_KEY, 'poster') === 'radio' ? 'radio' : 'poster');
+const WALL_ZOOM_KEY = 'wall_zoom';
 const DEFAULT_POSTER_TINT_COLOR = '#161419';
 
 const clampPosterTintIntensity = (value: number) => Math.max(0, Math.min(1, value));
+/**
+ * 墙面缩放倍率：1 = 尺寸断点算出来的那一档（getScale / getBravaisScale）。双指捏合与 Ctrl+滚轮改它。
+ * 上下限与 WALL_ZOOM 一致，只在这里再夹一道，免得旧值 / 手改的值把墙推到看不见。
+ */
+export const WALL_ZOOM_MIN = 0.45;
+export const WALL_ZOOM_MAX = 2.6;
+export const clampWallZoom = (value: number) => (
+    Number.isFinite(value) ? Math.max(WALL_ZOOM_MIN, Math.min(WALL_ZOOM_MAX, value)) : 1
+);
+
+const getStoredWallZoom = () => clampWallZoom(Number(getStoredString(WALL_ZOOM_KEY, '1')));
 const normalizePosterTintColor = (value: string) => (
     /^#[0-9a-f]{6}$/i.test(value.trim()) ? value.trim().toLowerCase() : DEFAULT_POSTER_TINT_COLOR
 );
@@ -40,6 +53,12 @@ const getStoredPosterTintIntensity = () => {
 };
 
 export type LatticeSettingsState = {
+    /**
+     * 性能优先（默认开）：只保留翻牌 / 入场波次 / 缝的展开收起，其余装饰效果全部让路 ——
+     * 全屏噪点混合、海报的多层叠层与阴影过渡、悬停滤镜、暗角与光晕一并关掉，封面降一档分辨率，
+     * 拼贴的裁剪余量与相机行程都收窄。见 components/wall/wall.css 的 .is-performance 一段。
+     */
+    latticePerformanceMode: boolean;
     latticeVignette: boolean;
     autoFocusOnSongChange: boolean;
     latticeLightsOn: boolean;
@@ -47,6 +66,11 @@ export type LatticeSettingsState = {
     latticePosterTintUseCustomColor: boolean;
     latticePosterTintColor: string;
     latticePosterTintIntensity: number;
+    /**
+     * 墙面的缩放倍率（Lattice 队列拼贴与 bravais 资料库墙共用一份）：双指捏合 / Ctrl+滚轮改它，
+     * 落定时写进这里，下次进墙还是这个倍率。基准档位仍按视口宽度断点走，所以换设备不会失真。
+     */
+    wallZoom: number;
     /**
      * 封面墙上只给正在播放的那首留序号角标（#930）：队列拼贴（Lattice）与 bravais 墙面上其他歌曲卡片的纯数字序号不画，
      * 歌单 / 文件夹等卡片的类型标签照旧。默认关（保持原样）。放在这个 store 里，两面墙读同一份。
@@ -58,11 +82,11 @@ export type LatticeSettingsState = {
      * 放在这个 store 里，bravais ↔ Lattice 交接时两面墙读同一份。
      */
     wallToolsQueueIslandOpen: boolean;
-    /** 普通队列用哪种墙（私人 FM 下不看它，总是电台墙）。默认海报墙。 */
+    /** 普通队列用哪种墙（私人 FM 下不看它，总是电台墙）。默认海报墙。（上游 v0.7.29） */
     latticeWallForm: LatticeWallForm;
     /**
-     * 普通队列的电台墙上，接下来的歌也背面朝上（隔着棱纹玻璃的模糊封面、曲名打码），轮到时才翻开。默认关：普通队列
-     * 接下来放什么是知道的，直接显示封面。私人 FM 下不看它，接下来的歌总是背面朝上。
+     * 普通队列的电台墙上，接下来的歌也背面朝上（隔着棱纹玻璃的模糊封面、曲名打码），轮到时才翻开。默认关。
+     * 私人 FM 下不看它，接下来的歌总是背面朝上。（上游 v0.7.29）
      */
     latticeRadioHideUpcoming: boolean;
     handleSetLatticeWallForm: (form: LatticeWallForm) => void;
@@ -75,10 +99,13 @@ export type LatticeSettingsState = {
     handleSetLatticePosterTintColor: (color: string) => void;
     handleSetLatticePosterTintIntensity: (intensity: number) => void;
     handleToggleLatticeBadgeCurrentOnly: (enabled: boolean) => void;
+    handleToggleLatticePerformanceMode: (enabled: boolean) => void;
+    handleSetWallZoom: (zoom: number) => void;
     setWallToolsQueueIslandOpen: (open: boolean) => void;
 };
 
 export const useLatticeSettingsStore = create<LatticeSettingsState>(set => ({
+    latticePerformanceMode: getStoredBoolean(LATTICE_PERFORMANCE_MODE_KEY, true),
     latticeVignette: getStoredBoolean(LATTICE_VIGNETTE_KEY, true),
     autoFocusOnSongChange: getStoredBoolean(LATTICE_AUTO_FOCUS_ON_SONG_CHANGE_KEY, true),
     latticeLightsOn: getStoredBoolean(LATTICE_LIGHTS_ON_KEY, true),
@@ -87,6 +114,7 @@ export const useLatticeSettingsStore = create<LatticeSettingsState>(set => ({
     latticePosterTintColor: normalizePosterTintColor(getStoredString(LATTICE_POSTER_TINT_COLOR_KEY, DEFAULT_POSTER_TINT_COLOR)),
     latticePosterTintIntensity: getStoredPosterTintIntensity(),
     latticeBadgeCurrentOnly: getStoredBoolean(LATTICE_BADGE_CURRENT_ONLY_KEY, false),
+    wallZoom: getStoredWallZoom(),
     wallToolsQueueIslandOpen: getStoredBoolean(WALL_TOOLS_QUEUE_ISLAND_OPEN_KEY, false),
     latticeWallForm: readWallForm(),
     latticeRadioHideUpcoming: getStoredBoolean(LATTICE_RADIO_HIDE_UPCOMING_KEY, false),
@@ -131,6 +159,15 @@ export const useLatticeSettingsStore = create<LatticeSettingsState>(set => ({
     handleToggleLatticeBadgeCurrentOnly: (enabled) => {
         set({ latticeBadgeCurrentOnly: enabled });
         setStoredBoolean(LATTICE_BADGE_CURRENT_ONLY_KEY, enabled);
+    },
+    handleToggleLatticePerformanceMode: (enabled) => {
+        set({ latticePerformanceMode: enabled });
+        setStoredBoolean(LATTICE_PERFORMANCE_MODE_KEY, enabled);
+    },
+    handleSetWallZoom: (zoom) => {
+        const normalized = clampWallZoom(zoom);
+        set({ wallZoom: normalized });
+        setStoredString(WALL_ZOOM_KEY, String(normalized));
     },
     setWallToolsQueueIslandOpen: (open) => {
         set({ wallToolsQueueIslandOpen: open });

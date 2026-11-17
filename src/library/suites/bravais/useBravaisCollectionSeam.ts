@@ -10,8 +10,6 @@ import { resolveCollectionDescription } from '../../core/collection/collectionDe
 import { describeDailyStyle, sameDailyStyle } from '../../core/collection/dailyStyle';
 import type { CollectionActions } from '../../core/collection/mutations/useCollectionActions';
 import type { CollectionView } from '../../core/collection/useCollectionView';
-import { type SongSortPreset } from '../../core/collection/songSortOptions';
-import type { SongSortDirection, SongSortField } from '../../../utils/songSorting';
 import type { LocalSongFolderSortDirection, LocalSongFolderSortField } from '../../../utils/localSongSorting';
 import type { DailyStyleSelection } from '../../../types/onlineMusic';
 import { projectCollectionStatus, resolveWallPeriodCount } from './bravaisCollectionStatus';
@@ -49,12 +47,10 @@ export type BravaisCollectionSeamInput = {
     setQuery: (query: string) => void;
     sort: {
         supported: boolean;
-        field: SongSortField;
-        direction: SongSortDirection;
-        /** 这个列表排得了的项，与网格菜单同源（按数据来源算能力，见 songSortOptions）。 */
-        presets: readonly SongSortPreset[];
-        setPreset: (preset: SongSortPreset) => void;
-        setDirection: (direction: SongSortDirection) => void;
+        field: LocalSongFolderSortField;
+        direction: LocalSongFolderSortDirection;
+        setField: (field: LocalSongFolderSortField) => void;
+        setDirection: (direction: LocalSongFolderSortDirection) => void;
     };
     trackByKey: ReadonlyMap<string, SongResult>;
     forms: Forms;
@@ -111,7 +107,6 @@ export const useBravaisCollectionSeam = (input: BravaisCollectionSeamInput) => {
     const status = projection.status;
     const syncLine = projection.sync && (projection.sync.onResume && !declares('resume-sync') ? { ...projection.sync, onResume: undefined } : projection.sync);
 
-    // 「⋯ 更多」：低频的集合动作（重新拉取、改名、加入歌单、重扫、整理、导出、实体信息、设置封面、删除）。
     // 重新拉取：画在元数据行（「N 首」）上，不进「⋯ 更多」。
     const reloadCapability = actions.capabilities.reload;
     const reload = useMemo<BravaisSeamReload | undefined>(() => (declares('reload') && reloadCapability.supported ? {
@@ -345,16 +340,16 @@ export const useBravaisCollectionSeam = (input: BravaisCollectionSeamInput) => {
         panelTitle: t('libraryBravaisCollection.panelTitle'),
         listCrumb: t('libraryBravaisCollection.listCrumb'),
         sort: sortInput.supported && declares('sort') ? {
-            // 与网格侧栏同一组控件、同一张预设表：每一项自带方向，网页自己画菜单。
-            presets: sortInput.presets,
             field: sortInput.field,
+            fields: [
+                { value: 'fileName', label: t('localMusic.sortByFileName') },
+                { value: 'fileLastModified', label: t('localMusic.sortByModifiedDate') },
+                { value: 'albumTrack', label: t('localMusic.sortByAlbumTrack') },
+            ],
             direction: sortInput.direction,
             directionLabel: sortInput.direction === 'asc' ? t('localMusic.sortAscending') : t('localMusic.sortDescending'),
-            selectPreset: preset => latest.current.sort.setPreset(preset),
-            toggleDirection: () => {
-                const sort = latest.current.sort;
-                sort.setDirection(sort.direction === 'asc' ? 'desc' : 'asc');
-            },
+            setField: field => latest.current.sort.setField(field as LocalSongFolderSortField),
+            toggleDirection: () => latest.current.sort.setDirection(latest.current.sort.direction === 'asc' ? 'desc' : 'asc'),
         } : undefined,
         menuFor: key => {
             const { offers: has, trackByKey } = latest.current;

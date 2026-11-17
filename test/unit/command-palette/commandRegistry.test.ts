@@ -91,6 +91,11 @@ const createContext = (overrides: CommandPaletteContextOverrides = {}): CommandP
         },
         settings: {
             toggleRememberHomeCardPosition: vi.fn(),
+            liquidGlassEnabled: vi.fn(() => false),
+            toggleLiquidGlass: vi.fn(),
+            toggleBackgroundSilentSkip: vi.fn(),
+            sleepTimerEndAction: 'pause' as const,
+            setSleepTimerMinutesMode: vi.fn(),
             openSettings: vi.fn(),
             lyricStaffPolicy: 'smart' as const,
             cycleLyricStaffPolicy: vi.fn(),

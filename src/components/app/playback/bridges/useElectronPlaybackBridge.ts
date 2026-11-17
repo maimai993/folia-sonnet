@@ -64,7 +64,7 @@ type UseElectronPlaybackBridgeOptions = {
      * already does with the displayed track.
      */
     getDisplayAudioElement?: () => HTMLAudioElement | null;
-    effectiveLoopMode: 'off' | 'all' | 'one';
+    effectiveLoopMode: 'off' | 'all' | 'one' | 'shuffle';
     isNowPlayingStageActive: boolean;
     externalTrackTitle: string | null;
     externalTrackArtist: string | null;

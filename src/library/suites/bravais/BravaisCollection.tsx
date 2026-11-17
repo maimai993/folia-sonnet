@@ -10,6 +10,8 @@ import { resolveTrackAlbumLink, resolveTrackArtistLinks } from '../../core/share
 import { useCollectionResourceState } from '../../core/collection/resource/useCollectionResourceState';
 import { useCollectionView } from '../../core/collection/useCollectionView';
 import { useTrackSorting } from '../../core/collection/useTrackSorting';
+import type { SongSortField } from '../../../utils/songSorting';
+import type { LocalSongFolderSortField } from '../../../utils/localSongSorting';
 import { useCollectionActions } from '../../core/collection/mutations/useCollectionActions';
 import { useCollectionMutationSnapshot } from '../../core/collection/mutations/useCollectionMutations';
 import { useGridSurfaceRegistration } from '../../../hooks/useGridSurfaceRegistration';
@@ -191,11 +193,15 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
         committedQuery: filter.committedQuery,
         setQuery: filter.setQuery,
         sort: {
-            supported: supportsTrackSorting,
-            field: sorting.field,
-            direction: sorting.direction,
-            presets: sorting.presets,
-            setPreset: sorting.applyPreset,
+            // 缝面板的排序行只有本地文件夹用得上（seam hook 只在 declares('sort') 且受支持时输出），
+            // 字段集合是本地三项（fileName / fileLastModified / albumTrack）。通用排序（在线歌单等）
+            // 的入口走列表上方那套 TrackSortMenu，不走这里。
+            supported: supportsLocalTrackSorting,
+            field: sorting.supported && sorting.field !== 'none'
+                ? (sorting.field as LocalSongFolderSortField)
+                : 'fileName',
+            direction: sorting.direction === 'desc' ? 'desc' : 'asc',
+            setField: field => sorting.setField(field as SongSortField),
             setDirection: sorting.setDirection,
         },
         trackByKey,
