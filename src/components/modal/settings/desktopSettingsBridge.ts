@@ -2,7 +2,7 @@
 // 设置窗启动时「能不能向主进程读桌面设置」的判断。
 //
 // 只问 `window.electron` 在不在是不够的：安卓为了让模组能用，会在同一个对象上装一份
-// 只有 `mods` / `appleMusicRequest` 的 shim（src/mods/android/androidModsBridge.ts），
+// 只有 `mods` 与音乐平台请求的 shim（src/mods/android/androidModsBridge.ts），
 // 没有 `platform`，也没有 `getSettings` / `getCacheDirectory`。按对象存在与否判的话，
 // 安卓上一打开设置就 `electron.getSettings is not a function` 崩掉（界面表现为设置页
 // 突然变成一块报错回退）。所以这里按方法逐个判，缺一个就当「读不到」。
