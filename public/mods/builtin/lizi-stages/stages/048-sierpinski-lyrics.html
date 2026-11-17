@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>谢尔宾斯基</title>
+<style>
+  html,body{margin:0;height:100%;background:#03070a;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+        font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(150,205,200,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '谢尔宾斯基',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ===========================================================================
+   048 · 谢尔宾斯基 —— 镜头一直在往**空洞**里掉
+   ---------------------------------------------------------------------------
+   核心机制：**谢尔宾斯基三角的自相似下潜**。
+   只有这类分形能做"无限放大"：三个角上的半尺寸子三角
+   **各自又是一整座谢尔宾斯基**，所以"放大 2 倍"和"换到那个子三角"是同一件事。
+     · 相机在一个格子里从 1 倍推到 2 倍（u: 0→1），同时把镜头**连续地**
+       平移向选中那个角的形心：u=1 时子格正好铺满屏幕、形心正好落在屏幕中心，
+       于是可以把"当前格"换成"子格"、u 归零 —— 无缝，永远掉不完；
+       这两件事必须同步插值，否则每次换格都会跳一下；
+     · 换到哪个角由序列决定（不吃随机数），每轮路线不同但可复现；
+     · **无限下潜的坐标策略**：绝对坐标只保留 6 次下潜。第 6 层时把 6 层前的格子
+       映射回 ROOT 形状（q'=(q-O)*k、s'=s/k，同一仿射变换的两支，整帧投影恒等、无接缝），
+       于是世界坐标永远 O(1)，不会掉到 2 分钟就因 float64 精度每格整幅平移；
+       递归上限也随之改成"当前格相对深度 + DEPTH"，任何时刻都有同样 DEPTH 层细节，
+       所以 5 分钟、甚至几十分钟都是同一套画面质量，块数也不会越掉越少；
+     · 画**线框**：中间被挖掉的空洞才是主角，实体只是骨架外面的空气。
+
+   性能（踩过的两个坑）：
+     ① 从根三角无限制递归，深一层就宽 3 倍，铺满屏幕的三角要十几层才到像素级
+        → 一次要遍历几十万个三角，实测 1.7fps。现在递归深度写死（DEPTH 层）；
+     ② 整层再按 30Hz 画进离屏画布，每帧只做一次不透明整块拷贝 ——
+        相机平移是慢动作，30Hz 肉眼无差。两层加起来实测 60fps。
+
+   歌词怎么演：**正在唱的那句永远钉在屏幕中央**（字号按字宽拟合，保证读得出来）；
+   它被下一句顶掉的瞬间，会换算成世界坐标钉在空间里，于是随着镜头继续下潜
+   被推向外圈、越来越大、越来越暗 —— 前面几句就成了深度里的回声。
+   "换句"在这里不是淡入淡出，是**"这句被留在了身后的空间里"**。
+
+   和已有形态的区别：055 递归方块也是递归细分，但它是**在平面上摆出来的**；
+   这里是**相机真的在往里走**（自相似 + 连续换格），没有边界也没有回头。
+   和 018 无限缩放的区别：018 是图案的幂律缩放，这里是**分形骨架的有限递归**，
+   每一层的空洞都在同样的位置重复出现。
+
+   精修记录：① 逐字时刻集中在 charTimes()——chars 只在长度与正文相等且时间可解析时
+      采信并做单调钳位；否则 line.t + dur*k/n 均分回退。② 句子从"单行缩到 21px"改为
+      1~3 行自适应（41 字时约 34px、3 行），当前字带 0.4s 回弹，进场 0.35s 缩放淡入。
+      ③ 镜头除了往空洞里掉，再加一层极慢的构图漂移（panX/panY）；踩拍时骨架、
+      当前格、句子一起亮。
+      分词：不接 —— 句子的时间轴已经逐字给到，词边界在这套"掉进空洞"的镜头里
+      看不出差别，没必要多读一份 segdict。
+   ========================================================================== */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+
+let W = 0, H = 0, DPR = 1, CX = 0, CY = 0;
+let accent = [120, 220, 210];
+const PI = Math.PI, TAU = PI * 2;
+const H3 = Math.sqrt(3) / 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rgba = (r, g, b, a) => 'rgba(' + (clamp(r, 0, 255) | 0) + ',' + (clamp(g, 0, 255) | 0) + ',' + (clamp(b, 0, 255) | 0) + ',' + a + ')';
+const ease = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t) * 0.55 + (t * t * t * (t * (t * 6 - 15) + 10)) * 0.45; };
+
+/* ================= 世界：根格 + 相机 ================= */
+const ROOT = [0, 0, 1, 0, 0.5, H3];
+let cell = ROOT.slice();
+let s = 700;
+let camX = 0.5, camY = H3 / 3;
+let fromX = camX, fromY = camY, toX = camX, toY = camY;
+let u = 0, diveK = 1, diveCount = 0;
+let pulse = 0, t0 = 0, Seff = 700;
+let panX = 0, panY = 0;                // 极慢的构图漂移（镜头语言，跟分形一起动）
+let relDepth = 0;                      // 当前格相对"当前根"的深度（walk 从根起算）
+let sinceRebase = 0;                   // 距上次坐标重整又下了几层
+let cycleCell = ROOT.slice();          // 上次重整时的当前格：下一轮它成为新根
+let childCell = null;                  // 本次下潜的目标子格（高亮交叉淡入用）
+let walkMax = 0;                       // 本帧递归上限 = relDepth + DEPTH（renderBoard 里设）
+const DEPTH = 7;                       // 每格往下再画 7 层（3^7 = 2187 个叶子）
+const CYCLE = 6;                       // 每 6 次下潜重整一次坐标，保证永远有界
+
+function centroidOf(t) { return [(t[0] + t[2] + t[4]) / 3, (t[1] + t[3] + t[5]) / 3]; }
+function edgeLenOf(t) { return Math.hypot(t[2] - t[0], t[3] - t[1]); }
+function mapTri(t, ox, oy, k) {
+  return [(t[0] - ox) * k, (t[1] - oy) * k, (t[2] - ox) * k,
+          (t[3] - oy) * k, (t[4] - ox) * k, (t[5] - oy) * k];
+}
+function childTri(t, k) {
+  const ax = t[0], ay = t[1], bx = t[2], by = t[3], cx = t[4], cy = t[5];
+  if (k === 0) return [ax, ay, (ax + bx) / 2, (ay + by) / 2, (ax + cx) / 2, (ay + cy) / 2];
+  if (k === 1) return [(ax + bx) / 2, (ay + by) / 2, bx, by, (bx + cx) / 2, (by + cy) / 2];
+  return [(ax + cx) / 2, (ay + cy) / 2, (bx + cx) / 2, (by + cy) / 2, cx, cy];
+}
+function beginDive() {
+  const m = diveCount % 5;
+  diveK = m === 0 ? 0 : m === 1 ? 1 : m === 2 ? 2 : m === 3 ? 1 : 2;
+  childCell = childTri(cell, diveK);
+  const cc = centroidOf(childCell);
+  fromX = camX; fromY = camY;
+  toX = cc[0]; toY = cc[1];
+  u = 0;
+}
+/* 坐标重整（约每 3.4s×6 一次）：把 6 层前的格子 cycleCell 映射回 ROOT 的形状。
+   坐标取 q'=(q-O)*k、尺度取 s'=s/k —— 同一个仿射变换的两支，投影 (q-cam)*s 逐点恒等，
+   所以换帧那一帧没有接缝；之后世界坐标回到 O(1)，float64 不再随层数累积漂移。
+   重整之后当前格相对新根仍是第 CYCLE 层，故 relDepth=CYCLE。 */
+function rebaseWorld() {
+  const ox = cycleCell[0], oy = cycleCell[1];
+  const k = 1 / edgeLenOf(cycleCell);            // 让 cycleCell 正好放大成 ROOT
+  cell = mapTri(cell, ox, oy, k);
+  camX = (camX - ox) * k; camY = (camY - oy) * k;
+  fromX = (fromX - ox) * k; fromY = (fromY - oy) * k;
+  toX = (toX - ox) * k; toY = (toY - oy) * k;
+  s /= k;
+  cycleCell = cell.slice();                      // 下一轮的根 = 这一刻的当前格（6 层后它正好是祖先）
+  relDepth = CYCLE;
+  sinceRebase = 0;
+}
+function commitDive() {
+  cell = childCell || childTri(cell, diveK);
+  s *= 2;
+  camX = toX; camY = toY;
+  diveCount++; relDepth++; sinceRebase++;
+  if (sinceRebase >= CYCLE) rebaseWorld();
+  beginDive();
+}
+
+/* ================= 歌词：当前句居中，旧句钉进世界 ================= */
+const om = document.createElement('canvas').getContext('2d');
+const FONT = (fs) => '900 ' + fs.toFixed(1) + 'px ui-sans-serif,system-ui,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+let shells = [];          // { rows, fsPx, lh, chars, ct, yrc } —— 当前句居中，旧句涨大淡出
+let curShell = null;
+let curLine = null;
+
+/* 逐字时刻：chars 与正文逐字对齐（长度相等 + 时间可解析）才采信，并单调钳位；
+   否则 line.t + dur*k/n 均分回退 —— 缺 chars 绝不能报错。 */
+function charTimes(line, n) {
+  const out = new Float32Array(n);
+  const txt = line ? (line.text || '') : '';
+  const chs = line ? line.chars : null;
+  const base = line ? line.t : 0;
+  const dur = line ? (line.dur || 4) : 4;
+  let ok = !!(chs && chs.length === txt.length && txt.length === n && n > 0);
+  if (ok) {
+    let prev = -1e9;
+    for (let k = 0; k < n; k++) {
+      const c = chs[k];
+      if (!c || !isFinite(c.t)) { ok = false; break; }
+      if (c.t > prev) prev = c.t;
+      out[k] = prev;
+    }
+  }
+  if (!ok) for (let k = 0; k < n; k++) out[k] = base + dur * k / Math.max(1, n);
+  return { t: out, yrc: ok };
+}
+
+/* 折行：按宽度切，中文按字切 */
+function wrapAt(s, fs, availW) {
+  om.font = FONT(fs);
+  const out = [];
+  let cur = '';
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (cur && om.measureText(cur + ch).width > availW) {
+      const sp = cur.lastIndexOf(' ');
+      if (sp > cur.length * 0.45) { out.push(cur.slice(0, sp)); cur = cur.slice(sp + 1) + ch; }
+      else { out.push(cur); cur = ch; }
+    } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/* 一句 = 1~3 行。41 字必须先折行再定字号：单行硬缩会缩成一条细线（读不出来）。 */
+function makeShell(text, line) {
+  const str = (text || '').replace(/\s+/g, ' ').trim();
+  if (!str) return null;
+  const availW = Math.min(W * 0.80, 1160);
+  const availH = Math.min(H * 0.60, 460);
+  om.font = FONT(100);
+  const w100 = Math.max(1, om.measureText(str).width);
+  let best = 0;
+  for (let nl = 1; nl <= 3; nl++) {
+    const f = Math.min(availW * nl / (w100 / 100), availH / (nl * 1.22), 170);
+    if (f > best) best = f;
+  }
+  let fs = Math.max(14, best);
+  let rows = wrapAt(str, fs, availW);
+  let guard = 0;
+  while (rows.length > 3 && fs > 12 && guard++ < 40) { fs *= 0.92; rows = wrapAt(str, fs, availW); }
+  const lh = fs * 1.22;
+  om.font = FONT(fs);
+  const rowObjs = [];
+  const flat = [];
+  let idx = 0;
+  for (const r of rows) {
+    const chars = [];
+    let x = 0;
+    for (const ch of r) {
+      const w = om.measureText(ch).width;
+      chars.push({ ch, x, w, i: idx++ });
+      flat.push(ch);
+      x += w;
+    }
+    rowObjs.push({ chars, w: x });
+  }
+  const ct = charTimes(line, idx);
+  return { rows: rowObjs, fsPx: fs, lh, chars: flat, ct: ct.t, yrc: ct.yrc, n: idx, bob: Math.random() * 6.28 };
+}
+
+/* 把"当前句"换算成世界坐标（换句那一刻调用）：它从此留在身后的空间里 */
+function pinShell(t) {
+  if (!t) return;
+  t.ax = camX + (CX - CX) / Seff;      // 屏幕中心 = 相机位置
+  t.ay = camY + (CY - CY) / Seff;
+  t.wfs = t.fsPx / Seff;
+}
+
+/* ================= 节奏 ================= */
+let lines = [];
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+let curIdx = -1, brewIdx = -1, lastT = -1;
+const LEAD = 1.3, MAXS = 5;
+
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) { curIdx = -1; brewIdx = -1; curLine = null; shells = []; curShell = null; }
+  lastT = T;
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    brewIdx = -1;
+    if (ci >= 0) {
+      curLine = lines[ci];
+      pinShell(curShell);                       // 上一句留在空间里
+      const sh = makeShell(curLine.text || '', curLine);
+      if (sh) { shells.push(sh); curShell = sh; if (shells.length > MAXS) shells.shift(); }
+      hint.style.opacity = '0';
+    } else { curLine = null; curShell = null; }
+  }
+  const nx = curIdx + 1;
+  if (nx < lines.length && brewIdx !== nx) {
+    const gap = lines[nx].t - (curIdx >= 0 ? lines[curIdx].t : lines[nx].t - 4);
+    const lead = Math.min(LEAD, Math.max(0.45, gap * 0.55));
+    if (T >= lines[nx].t - lead) brewIdx = nx;
+  }
+}
+
+/* ================= 分形层：30Hz 画进离屏画布 ================= */
+let board = null, bctx = null, vigGrd = null;
+const CL = 1e5;
+const cl = (v) => v < -CL ? -CL : v > CL ? CL : v;
+const M = 8;
+const pA = [0, 0], pB = [0, 0], pC = [0, 0];
+
+function project(ax, ay, out) {
+  out[0] = cl(CX + panX + (ax - camX) * Seff);
+  out[1] = cl(CY + panY + (ay - camY) * Seff);
+}
+
+function walk(lineP, leafP, ax, ay, bx, by, cx2, cy2, depth) {
+  project(ax, ay, pA); project(bx, by, pB); project(cx2, cy2, pC);
+  const p0x = pA[0], p0y = pA[1], p1x = pB[0], p1y = pB[1], p2x = pC[0], p2y = pC[1];
+  const mnx = Math.min(p0x, p1x, p2x), mxx = Math.max(p0x, p1x, p2x);
+  const mny = Math.min(p0y, p1y, p2y), mxy = Math.max(p0y, p1y, p2y);
+  if (mxx < -M || mnx > W + M || mxy < -M || mny > H + M) return;   // 整棵子树都看不见
+
+  const e = Math.max(Math.hypot(p1x - p0x, p1y - p0y), Math.hypot(p2x - p1x, p2y - p1y), Math.hypot(p0x - p2x, p0y - p2y));
+  /* walkMax = 当前格相对根的深度 + DEPTH：无论已经掉了多少层，当前格往下都还有 DEPTH 层 */
+  if (depth >= walkMax || e < 3) { leafP.moveTo(p0x, p0y); leafP.lineTo(p1x, p1y); leafP.lineTo(p2x, p2y); leafP.closePath(); return; }
+  lineP.moveTo(p0x, p0y); lineP.lineTo(p1x, p1y); lineP.lineTo(p2x, p2y); lineP.closePath();
+
+  const mabx = (ax + bx) / 2, maby = (ay + by) / 2;
+  const mbcx = (bx + cx2) / 2, mbcy = (by + cy2) / 2;
+  const mcax = (cx2 + ax) / 2, mcay = (cy2 + ay) / 2;
+  walk(lineP, leafP, ax, ay, mabx, maby, mcax, mcay, depth + 1);
+  walk(lineP, leafP, mabx, maby, bx, by, mbcx, mbcy, depth + 1);
+  walk(lineP, leafP, mcax, mcay, mbcx, mbcy, cx2, cy2, depth + 1);
+}
+
+function renderBoard() {
+  const g = bctx;
+  g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  g.fillStyle = '#03070a';
+  g.fillRect(0, 0, W, H);
+  if (vigGrd) { g.fillStyle = vigGrd; g.fillRect(0, 0, W, H); }
+
+  const linesP = new Path2D(), leavesP = new Path2D();
+  walkMax = relDepth + DEPTH;
+  walk(linesP, leavesP, ROOT[0], ROOT[1], ROOT[2], ROOT[3], ROOT[4], ROOT[5], 0);
+
+  /* 线框：所有层的三角轮廓合成一条路径一次描边（逐条 stroke 会慢一个数量级） */
+  g.strokeStyle = rgba(accent[0] + 30, accent[1] + 20, accent[2] + 30, 0.38 + pulse * 0.18);
+  g.lineWidth = 1;
+  g.stroke(linesP);
+  /* 最细一层给一点点填充，画面才有"实体"的密度；空洞要压得比它更暗 */
+  g.fillStyle = rgba(accent[0] + 10, accent[1] + 20, accent[2] + 10, 0.075);
+  g.fill(leavesP);
+
+  /* 当前这一格：它是"我们现在所在的那扇窗"。
+     换格时父格(1-u)淡出、子格(u)淡入：一次下潜里两框的投影在 u=1/u=0 处重合，
+     所以不再出现"啪"地换一个框的硬跳。 */
+  const hiA = 0.32 + pulse * 0.26;
+  const hiTri = (t, a) => {
+    if (a <= 0.01) return;
+    project(t[0], t[1], pA); project(t[2], t[3], pB); project(t[4], t[5], pC);
+    g.beginPath();
+    g.moveTo(pA[0], pA[1]); g.lineTo(pB[0], pB[1]); g.lineTo(pC[0], pC[1]); g.closePath();
+    g.strokeStyle = rgba(accent[0] + 90, accent[1] + 40, accent[2] + 70, hiA * a);
+    g.lineWidth = 1.6;
+    g.stroke();
+  };
+  hiTri(cell, 1 - u);
+  if (childCell) hiTri(childCell, u);
+}
+
+/* ================= 主循环 ================= */
+let boardAcc = 1, last = performance.now();
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+  timing(T);
+  if (pulse > 0) { pulse *= Math.exp(-dt * 4.2); if (pulse < 0.004) pulse = 0; }
+
+  u += dt * (0.295 + pulse * 0.30);
+  while (u >= 1) { u -= 1; commitDive(); if (!isFinite(s) || Math.abs(s) > 1e300) reset(); }
+  const et = ease(u);
+  camX = fromX + (toX - fromX) * et;
+  camY = fromY + (toY - fromY) * et;
+  Seff = s * Math.pow(2, u);
+
+  boardAcc += dt;
+  if (boardAcc >= 0.033) { boardAcc = 0; renderBoard(); }
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (board) ctx.drawImage(board, 0, 0, W, H);
+  else { ctx.fillStyle = '#03070a'; ctx.fillRect(0, 0, W, H); }
+
+  /* ---- 句子：当前句钉在中央（长句折成 1~3 行），被顶掉的旧句立刻涨大、变暗、飞出画面 ---- */
+  panX = Math.sin(t0 * 0.131) * W * 0.013 + Math.sin(t0 * 0.047 + 1.7) * W * 0.006;
+  panY = Math.cos(t0 * 0.103) * H * 0.011;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const nS = shells.length;
+  for (let i = 0; i < nS; i++) {
+    const sh = shells[i];
+    const isCur = sh === curShell;
+    const age = nS - 1 - i;
+    /* 旧句按 2.2 的整数次幂涨大：三句之内就飞出屏幕，留下"被落在身后"的错觉 */
+    const gk = isCur ? 1 : Math.pow(2.2, age);
+    const fsBig = sh.fsPx * gk;
+    if (!isCur && (fsBig > 2600 || age > 2)) continue;
+    const a = isCur ? 1 : Math.max(0, 0.22 - (age - 1) * 0.09);
+    if (a <= 0.01) continue;
+    const px = CX + (isCur ? panX : 0), py = CY + (isCur ? panY : 0);
+    const ct = sh.ct;
+    /* 进场：开唱那一刻 0.35s 内从 1.05 缩到 1 并淡入（旧句不参与） */
+    const app = isCur ? clamp((T - (curLine ? curLine.t : T)) / 0.35, 0, 1) : 1;
+    const ease = app * app * (3 - 2 * app);
+    const pop = 1 + 0.05 * (1 - ease);
+    const lh = sh.lh * gk;
+    const blockH = sh.rows.length * lh;
+    let curCh = -1;
+    if (isCur) for (let k = 0; k < sh.n; k++) if (T >= ct[k]) curCh = k;
+
+    ctx.save();
+    ctx.globalAlpha = a;
+    if (isCur) { ctx.translate(px, py); ctx.scale(pop, pop); ctx.translate(-px, -py); }
+    let y = py - blockH / 2 + lh / 2;
+    let lastFs = -1;
+    for (let r = 0; r < sh.rows.length; r++) {
+      const row = sh.rows[r];
+      const left = px - row.w * gk / 2;
+      for (let q = 0; q < row.chars.length; q++) {
+        const ch = row.chars[q];
+        const k = ch.i;
+        let fsz = fsBig, isHot = false, sung = false;
+        if (isCur) {
+          const since = T - ct[k];
+          sung = since >= 0;
+          if (k === curCh) {
+            isHot = true;
+            fsz *= 1 + 0.10 * (1 - clamp(since / 0.42, 0, 1));
+          }
+        }
+        if (fsz !== lastFs) { ctx.font = FONT(fsz); lastFs = fsz; }
+        const x = left + (ch.x + ch.w / 2) * gk;
+        ctx.fillStyle = isCur
+          ? (isHot ? 'rgba(240,255,252,0.98)'
+            : sung ? rgba(accent[0] + 60, accent[1] + 70, accent[2] + 60, 0.90)
+              : rgba(150, 205, 200, 0.44))
+          : rgba(accent[0] + 20, accent[1] + 30, accent[2] + 20, 0.86);
+        ctx.fillText(ch.ch, x, y);
+      }
+      y += lh;
+    }
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  requestAnimationFrame(frame);
+}
+
+/* ================= 尺寸 / 通信 ================= */
+function buildBoard() {
+  board = document.createElement('canvas');
+  board.width = Math.round(W * DPR); board.height = Math.round(H * DPR);
+  bctx = board.getContext('2d', { alpha: false });
+  vigGrd = bctx.createRadialGradient(CX, CY, 0, CX, CY, Math.max(W, H) * 0.82);
+  vigGrd.addColorStop(0, rgba(accent[0] * 0.42, accent[1] * 0.5, accent[2] * 0.55, 0.20));
+  vigGrd.addColorStop(0.52, 'rgba(3,8,10,0)');
+  vigGrd.addColorStop(1, 'rgba(1,3,5,0.90)');
+  boardAcc = 1;
+}
+
+function reset() {
+  cell = ROOT.slice();
+  s = Math.min(W, H) * 1.02;
+  camX = 0.5; camY = H3 / 3;
+  fromX = camX; fromY = camY;
+  u = 0; diveCount = 0;
+  relDepth = 0; sinceRebase = 0; cycleCell = ROOT.slice();
+  beginDive();
+  shells = []; curShell = null;
+}
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  CX = W / 2; CY = H / 2;
+  buildBoard();
+  if (!isFinite(s) || s <= 0) reset();
+  /* 换尺寸后按新画布重排当前句（时间轴不动，唱到哪还是哪） */
+  if (curLine && curShell) {
+    const sh = makeShell(curLine.text || '', curLine);
+    if (sh) { shells[shells.length - 1] = sh; curShell = sh; }
+  }
+}
+addEventListener('resize', resize);
+
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    if (p.accent) { accent = p.accent; buildBoard(); }
+    curIdx = -1; brewIdx = -1; lastT = -1;
+    curLine = null; pulse = 0;
+    reset();
+    clockT = 0; clockAt = performance.now(); playing = false;
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 相干：整座骨架一起亮一下 + 相机往前多掉一点 */
+    const lv = d.payload && d.payload.level ? d.payload.level : 0.5;
+    pulse = (window.__liziShake === false) ? 0 : (0.35 + lv * 0.65);
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+resize();
+reset();
+requestAnimationFrame(frame);
+
+window.__stage = () => ({
+  lines: lines.length, curIdx, brewIdx, T: +now().toFixed(2),
+  u: +u.toFixed(3), dives: diveCount, shells: shells.length, seff: +Seff.toFixed(1),
+  yrc: !!(curShell && curShell.yrc), yrcLen: curLine && curLine.chars ? curLine.chars.length : 0,
+  rows: curShell ? curShell.rows.length : 0, fs: curShell ? +curShell.fsPx.toFixed(1) : 0
+});
+</script>
+</body>
+</html>

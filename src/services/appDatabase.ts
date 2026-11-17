@@ -3,6 +3,7 @@ import type { LocalSong } from '../types';
 import type { LocalLibraryAssignment, LocalLibraryEntity } from '../types/localLibrary';
 import type { LocalCoverAsset } from '../types/localCover';
 import { migrateLegacyLocalSongRecords } from './localLibraryV8Migration';
+import { getLocalSongAlbumContextKey } from '../utils/localLibraryNames';
 import type { ArchivePlay } from './listeningArchive/types';
 
 // src/services/appDatabase.ts
@@ -116,6 +117,34 @@ export class AppDatabase extends Dexie {
       local_cover_assets: 'id',
       listeningArchivePlays: 'id, startedAt, songKey, [startedAt+songKey]',
     });
+
+    // albumContextKey (上游 v0.7.29 的 v1 迁移，这里重编号为 v11 以排在我们的 v10 之后)：
+    // the import-time folder + album key, so assigning an imported batch finds same-folder
+    // albums by index instead of reading every song. Existing records get it once here; writes keep it current.
+    this.version(11).stores({
+      session: '',
+      api_cache: 'key',
+      user_cache: 'key',
+      media_cache: 'key',
+      metadata_cache: 'key',
+      local_music: 'id, localCoverAssetId, albumContextKey',
+      theme_registry: 'fingerprint',
+      local_library_entities: 'id, kind, *normalizedAliases, mergedInto, needsReview, createdAt',
+      local_library_assignments: 'songId, *artistEntityIds, albumEntityId, artistOrigin, albumOrigin',
+      local_cover_assets: 'id',
+      listeningArchivePlays: 'id, startedAt, songKey, [startedAt+songKey]',
+    }).upgrade(transaction => transaction.table<LocalSong, string>('local_music').toCollection().modify(song => {
+      // A malformed record must not fail the upgrade (the database would not open); it simply gets no key
+      // and is still grouped by its album name, only without the same-folder hint.
+      let albumContextKey: string | undefined;
+      try {
+        albumContextKey = getLocalSongAlbumContextKey(song);
+      } catch {
+        albumContextKey = undefined;
+      }
+      if (albumContextKey) song.albumContextKey = albumContextKey;
+      else delete song.albumContextKey;
+    }));
 
     this.on('versionchange', event => {
       this.close();

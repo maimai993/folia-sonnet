@@ -26,22 +26,14 @@ import type { LibraryLocalCatalogSnapshot } from '../../../core/home/home.contra
 import type { LibraryHomeResources } from '../../../core/home/homeModel.contract';
 import type { LibraryHomeExtraTab, LibraryDeclaredActions } from '../../../core/suite/suite.contract';
 import type { LibraryHomeCard, LibraryHomeListState } from '../../../core/home/homeModel.contract';
-import { LxSquareToolbar } from '@/components/lxmusic/LxSquareToolbar';
-import { LxChartBoard } from '@/components/lxmusic/LxChartBoard';
-import { LxAlbumWall } from '@/components/lxmusic/LxAlbumWall';
-import { lxChartCollectionId } from '@/services/onlineMusic/lxmusic/lxmusicProvider';
 import { useLibraryHomeSources } from '../../../core/home/useLibraryHomeSources';
 import { useLibraryHomeOnline } from '../../../core/home/online/useLibraryHomeOnline';
 import { useLibraryHomeActions } from '../../../core/home/useLibraryHomeActions';
 import { useLibraryHomeDirectory } from '../../../core/home/useLibraryHomeDirectory';
 import { useLibraryHomeListRegistration, useLibraryHomeTabsRegistration } from '../../../core/home/useLibraryHomeSurfaceRegistration';
 import { cycleIndex } from '../../../core/home/homeSources';
-import { useLibraryHomeCloudThemeEntry } from '../../../core/directory/useLibraryHomeCloudTheme';
-import { useLibraryAccountProviders } from '../../../core/account/useLibraryAccount';
-import { resolveProviderSelectLabel } from '../../../core/account/accountRules';
-import { translateHomeMessage } from '../../../core/home/homeSources';
+import HomeSearchHistory from './HomeSearchHistory';
 import { useUpdateIndicator } from '../../../../hooks/useUpdateIndicator';
-import { Button, TextField } from '../../../../components/ui';
 
 // src/library/suites/grid/home/Grid3D.tsx
 // Glassmorphic interactive desktop home view replacing the legacy 3D carousel.
@@ -150,11 +142,17 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         setSearchQuery,
         isSearching,
         submitSearch,
+        searchHistory,
+        forgetSearchHistoryQuery,
+        clearSearchHistory,
     } = useSearchNavigationStore(useShallow(state => ({
         searchQuery: state.searchQuery,
         setSearchQuery: state.setSearchQuery,
         isSearching: state.isSearching,
         submitSearch: state.submitSearch,
+        searchHistory: state.searchHistory,
+        forgetSearchHistoryQuery: state.forgetSearchHistoryQuery,
+        clearSearchHistory: state.clearSearchHistory,
     })));
 
     // 来源、页签与在线列表都来自 Library Core 的首页模型（core/home/homeSources、homeCards 与首页资源）；
@@ -197,17 +195,10 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     const gridRootRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
     const [scanDetailsExpanded, setScanDetailsExpanded] = useState(false);
+    // 点开搜索框时贴在它下面的历史：数据是 useSearchNavigationStore 的 searchHistory，由 submitSearch 记。
+    const [isSearchHistoryOpen, setIsSearchHistoryOpen] = useState(false);
 
     const showUpdateIndicator = useUpdateIndicator();
-
-    // 「AI 主题」页签：不铺墙，直接开那一屏的曲目列表（云端没有歌单可列）。
-    useLibraryHomeCloudThemeEntry({
-        tab: homeViewTab,
-        enabled: isInteractive,
-        onOpenCollection: collection => onOpenGridView?.(collection),
-        label: t('home.aiTheme'),
-        notice: t('home.aiThemeNotice'),
-    });
 
     // Reset focused index when switching tabs.
     useEffect(() => {
@@ -252,9 +243,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
     });
 
     // Search committed callback
-    const handleSearch = async (e?: React.FormEvent) => {
-        e?.preventDefault();
-        const query = searchQuery.trim();
+    // 提交一个词：搜索（submitSearch 顺带记进历史）、把首页让给结果页。
+    // 从历史标签点进来时直接带着那一条走，不必等 setSearchQuery 落进 state。
+    const runSearch = async (rawQuery: string) => {
+        const query = rawQuery.trim();
+        setIsSearchHistoryOpen(false);
         if (!query) return;
 
         const searchSource = isOnlineTab ? activeProviderId : resolveSearchSource(homeViewTab);
@@ -271,6 +264,11 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         if (didSearch) {
             onSearchCommitted(query, searchSource);
         }
+    };
+
+    const handleSearch = (e?: React.FormEvent) => {
+        e?.preventDefault();
+        void runSearch(searchQuery);
     };
 
     const isSearchingActive = isSearching;
@@ -319,14 +317,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
         >
 
             {/* Main Header Container (Fades out when sliding/interacting) */}
-            <div data-folia-home-header="true" className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
+            {/* 安全区：这一块自己没有内边距（p-4/p-8 在里层 grid 上），所以用 pad 往下让出
+                摄像头/状态栏那一条；网格首页的标题、设置按钮、搜索框与页签都在这里面。 */}
+            <div data-folia-safe-top="pad" className="transition-opacity duration-300 ease-in-out z-20 opacity-100 select-none">
                 <div className="grid grid-cols-2 md:grid-cols-3 items-center w-full max-w-7xl mx-auto p-4 md:p-8 gap-y-4 md:gap-y-0">
                     {/* Left title and settings */}
                     <div className="flex items-center justify-start order-1 md:order-none">
                         <h1 className="text-2xl font-bold tracking-tight opacity-90 flex items-center gap-3">
                             Folia
                         </h1>
-                        <Button
+                        <button
                             onClick={() => onOpenSettings?.('help')}
                             className={`relative flex items-center gap-1.5 p-2 rounded-full hover:bg-white/10 transition-all ml-4 ${showUpdateIndicator
                                     ? 'opacity-90 hover:opacity-100'
@@ -340,14 +340,14 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     {t('options.updateAvailable')}
                                 </span>
                             )}
-                        </Button>
+                        </button>
                         {scanProgress?.active && (
                             <div
                                 className="relative ml-3"
                                 onMouseEnter={() => setScanDetailsExpanded(true)}
                                 onMouseLeave={() => setScanDetailsExpanded(false)}
                             >
-                                <Button
+                                <button
                                     onClick={() => setScanDetailsExpanded(prev => !prev)}
                                     className="relative rounded-full p-px transition-all"
                                     style={{
@@ -364,7 +364,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             {scanProgressPercent}%
                                         </span>
                                     </div>
-                                </Button>
+                                </button>
                                 <AnimatePresence>
                                     {scanDetailsExpanded && (
                                         <motion.div
@@ -401,16 +401,8 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                     </div>
 
                     {/* Center Tab Switcher */}
-                    {/*
-                        `min-w-0` 不能省：grid item 的默认 min-width 是 auto，会按内容撑开，
-                        胶囊上的 overflow-x 就永远不会生效，页签依旧被父级 overflow-hidden 裁掉。
-                        窄屏（安卓 480px）下 8 个页签放不进一屏，胶囊自己横向滚，滑得到最后一个。
-                    */}
-                    <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1 min-w-0">
-                        <div
-                            className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center max-w-full overflow-x-auto overflow-y-hidden overscroll-x-contain`}
-                            style={{ scrollbarWidth: 'none' }}
-                        >
+                    <div className="flex justify-center order-3 md:order-none col-span-2 md:col-span-1">
+                        <div className={`relative ${navPillBg} backdrop-blur-md p-1 rounded-full scale-90 md:scale-100 origin-center`}>
                             <div className="inline-flex items-center gap-0">
                                 {homeTabs.map((tab) => {
                                     const isActive = homeViewTab === tab.key;
@@ -420,7 +412,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                             title={tab.disabledReason || tab.label}
                                             className="inline-flex"
                                         >
-                                            <Button
+                                            <button
                                                 disabled={Boolean(tab.disabledReason)}
                                                 aria-label={tab.disabledReason || tab.label}
                                                 onClick={() => {
@@ -437,24 +429,24 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                                     />
                                                 )}
                                                 <span className="relative z-10">{tab.label}</span>
-                                            </Button>
+                                            </button>
                                         </span>
                                     );
                                 })}
                                 {props.extraTabs?.map(tab => (
-                                    <Button key={tab.id} type="button" onClick={tab.select}
+                                    <button key={tab.id} type="button" onClick={tab.select}
                                         className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium whitespace-nowrap ${navPillInactiveText}`}>
                                         {tab.label}
-                                    </Button>
+                                    </button>
                                 ))}
                                 {stageEnabled && (
-                                    <Button
+                                    <button
                                         onClick={() => onOpenStagePlayer?.()}
                                         data-stage-active={stageIsActive ? 'true' : 'false'}
                                         className={`relative inline-flex items-center justify-center px-4 py-1.5 rounded-full text-xs md:text-sm font-medium transition-colors duration-300 whitespace-nowrap ${navPillInactiveText}`}
                                     >
                                         <span className="relative z-10">{t('home.stage')}</span>
-                                    </Button>
+                                    </button>
                                 )}
                                 {/* 播放队列的海报视图和 Stage 一样属于「去哪儿」，所以它在这一排，
                                     而不是标题旁的工具图标。没有在播歌曲时队列也是空的，直接不出现。
@@ -463,7 +455,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     在「探索」页签上它打开的是同一面墙，铺的是探索页的条目（探索拼贴）：
                                     探索页有条目可铺时出现，不看有没有在播歌曲。 */}
                                 {onOpenLattice && (opensExploreWall ? hasExploreWall : currentTrack) && (
-                                    <Button
+                                    <button
                                         onClick={() => onOpenLattice(opensExploreWall ? 'explore' : 'queue')}
                                         data-testid="home-lattice-pill"
                                         title={t(opensExploreWall ? 'home.latticeExplore' : 'home.lattice')}
@@ -477,7 +469,7 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                         >
                                             {t(opensExploreWall ? 'home.latticeExplore' : 'home.latticeLabel')}
                                         </span>
-                                    </Button>
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -485,7 +477,16 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
 
                     {/* Right Search Bar */}
                     <div className="flex justify-end order-2 md:order-none">
-                        <form onSubmit={handleSearch} className="relative w-full md:w-56 transition-all focus-within:md:w-72">
+                        <form
+                            onSubmit={handleSearch}
+                            className="relative w-full md:w-56 transition-all focus-within:md:w-72"
+                            onBlur={event => {
+                                // 焦点离开整块（连面板一起）才收起，点到面板里的标签不算离开。
+                                if (!event.currentTarget.contains(event.relatedTarget)) {
+                                    setIsSearchHistoryOpen(false);
+                                }
+                            }}
+                        >
                             {isSearchingActive ? (
                                 <Loader2 className="absolute left-3 top-1/2 w-4 h-4 animate-spin opacity-40 -mt-2" />
                             ) : (
@@ -494,28 +495,50 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                                     onClick={() => handleSearch()}
                                 />
                             )}
-                            <TextField
+                            <input
                                 ref={searchInputRef}
                                 type="text"
                                 placeholder={homeViewTab === 'local' ? t('home.searchLocal') : homeViewTab === 'navidrome' ? t('home.searchNavidrome') : t('home.searchDatabase')}
                                 value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
+                                onFocus={() => setIsSearchHistoryOpen(true)}
+                                onKeyDown={event => {
+                                    if (event.key === 'Escape' && isSearchHistoryOpen) {
+                                        event.stopPropagation();
+                                        setIsSearchHistoryOpen(false);
+                                    }
+                                }}
+                                aria-expanded={isSearchHistoryOpen && searchHistory.length > 0}
+                                aria-controls="home-search-history"
                                 className={`w-full ${inputBg} border border-white/10 rounded-full py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-white/20 transition-all placeholder:text-current placeholder:opacity-40 select-text`}
                                 style={{ color: 'var(--text-primary)' }}
                             />
+                            <AnimatePresence>
+                                {isSearchHistoryOpen && searchHistory.length > 0 && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -6 }}
+                                        transition={{ duration: 0.16 }}
+                                        className="absolute right-0 top-full z-40 mt-2"
+                                    >
+                                        <HomeSearchHistory
+                                            items={searchHistory}
+                                            onPick={item => {
+                                                setSearchQuery(item);
+                                                void runSearch(item);
+                                            }}
+                                            onRemove={forgetSearchHistoryQuery}
+                                            onClear={clearSearchHistory}
+                                            isDaylight={isDaylight}
+                                        />
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
                         </form>
                     </div>
                 </div>
             </div>
-
-            {/* 洛雪的歌单页：它在别家没有「我的歌单」这东西，这一屏是四家的公开广场，
-                所以要有一条能换平台、换排序、换分类的筛选。别的平台不出现这一条。 */}
-            {/* 洛雪筛选条固定占一段高度（三行胶囊都放得下）：上面多一行少一行，下面卡片行的中线都不动。 */}
-            {activeProviderId === 'lxmusic' && homeViewTab === 'playlist' && (
-                <div className="w-full mx-auto px-2 shrink-0 overflow-hidden" style={{ height: 84 }}>
-                    <LxSquareToolbar />
-                </div>
-            )}
 
             {/* Desktop Canvas Surface */}
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
@@ -532,31 +555,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                 ) : isOnlineTab && activeAccountView === 'guest' ? (
                     // One button: it opens the sign-in window, where the platform is chosen.
                     <HomeLoginPanel account={account} />
-                ) : isOnlineTab && activeProviderId === 'lxmusic' && homeViewTab === 'radio' ? (
-                    // 洛雪没有「推荐内容」这回事：它的推荐页就是排行榜——先出平台行，选了哪家才展开那家的榜单清单。
-                    <LxChartBoard
-                        onOpenChart={chart => onOpenGridView?.(createOnlineGridViewCollection({
-                            providerId: 'lxmusic',
-                            id: lxChartCollectionId(chart.platform, chart.id),
-                            name: chart.name,
-                            type: 'playlist',
-                            coverUrl: chart.coverUrl,
-                            providerData: { platform: chart.platform, nativeId: chart.id, kind: 'chart' },
-                        } as unknown as ProviderCollection, activeProviderId))}
-                    />
-                ) : isOnlineTab && activeProviderId === 'lxmusic' && homeViewTab === 'albums' ? (
-                    // 洛雪也没有「用户专辑库」，但收藏的歌各自属于某张专辑：这一页是那些专辑的封面墙，
-                    // 点一张直接进那家的专辑页（曲目与播放都在那里）。
-                    <LxAlbumWall
-                        onOpenAlbum={(platform, albumId, name, coverUrl) => onOpenGridView?.(createOnlineGridViewCollection({
-                            providerId: 'lxmusic',
-                            id: `${platform}:${albumId}`,
-                            name,
-                            type: 'album',
-                            coverUrl,
-                            providerData: { platform, nativeId: albumId, kind: 'album' },
-                        } as unknown as ProviderCollection, activeProviderId))}
-                    />
                 ) : homeViewTab === 'explore' ? (
                     online.canUseExplore && (
                         <ExploreSurface
@@ -574,7 +572,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         focusMemoryScope={JSON.stringify(['online', activeProviderId, activeUser?.id ?? null, homeViewTab])}
                         title={onlineList.title}
                         mapButtonLabel={t('home.allAlbums')}
-                        hideMapButton={activeProviderId === 'lxmusic'}
                         items={onlineList.items}
                         focusedIndex={focusedIndex}
                         onFocusedIndexChange={setFocusedIndex}
@@ -589,10 +586,6 @@ export const Grid3D: React.FC<Grid3DProps> = (props) => {
                         directoryKey={directoryKey}
                         declaredHomeActions={declaredActions}
                     />
-                ) : homeViewTab === 'cloud' ? (
-                    // 「AI 主题」：这一屏的曲目列表自己开（useLibraryHomeCloudThemeEntry），
-                    // 首页这层留空 —— 铺一面墙只会挡住刚打开的那层。
-                    null
                 ) : homeViewTab === 'local' ? (
                     <div className="w-full h-full flex-1">
                         <LocalGrid3DView

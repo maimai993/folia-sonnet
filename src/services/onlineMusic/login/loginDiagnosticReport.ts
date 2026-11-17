@@ -206,7 +206,7 @@ export const formatLoginDiagnosticReport = ({
     '```',
 ].join('\n');
 
-const FOLIA_NEW_ISSUE_URL = 'https://github.com/maimai993/folia-sonnet/issues/new';
+const FOLIA_NEW_ISSUE_URL = 'https://github.com/Folia-CE/folia-sonnet/issues/new';
 // GitHub 对过长的 new-issue 链接会直接报错；超过这个长度就不把报告塞进链接，改让用户粘贴剪贴板里的内容。
 const MAX_ISSUE_URL_LENGTH = 7000;
 

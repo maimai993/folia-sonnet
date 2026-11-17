@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CSS 立方体</title>
+<style>
+  html,body{margin:0;height:100%;background:#05060a;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+        font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(150,158,190,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: 'CSS 立方体',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ===========================================================================
+   031 · CSS 立方体 —— 字被"贴"在自转立方体的面上
+   ---------------------------------------------------------------------------
+   核心机制：**真正的 3D 透视投影 + 面朝向光照**。
+   每个采样点先变成"面局部坐标 (nu,nv)"，再由面的三根轴换算成 3D 向量，
+   经 rotY / rotX 旋转后用 CAM/(CAM-z) 做透视除法落到屏幕。
+   于是：
+     · 点的亮度 = 面法线朝向（正对镜头亮、侧面暗）—— 这是"朝向决定明暗"，
+       不是 007 的"朝向对齐笔画切向"，也不是 001 的"被吸到采样点"；
+     · 每个点还带一份固定的 sheen 档位，复刻参考文件里
+       linear-gradient(118deg, .26 → .03@42% → -.16) 的面板高光；
+     · 整块立方体持续缓慢自转，换句时"翻面"：下一句所属的面会在
+       lead 秒内转到正面，字同时被一条从左到右的扫描线揭示出来。
+
+   精修记录（批次B）：① **面上字形折行** —— 长句单行采样会被压成一条
+   细长斜线（实测 41 字不可读），改为两行布局采样：glyphPoints 先把句子
+   均分为 ≤2 行（标点优先断开），两行一起画进离屏画布再采样，面内字号
+   自适应且行距可控。② **逐字 YRC 点亮** —— 每个采样点记录自己属于第几个
+   字，reveal 不再是匀速扫描线，而是"字到点、点才亮"：点亮时刻 = 该字的
+   chars[k].t（无 chars 按 t + dur*i/n 均分），点亮前点极暗、到点瞬间涨到
+   全亮再落回稳态。③ beat 棱光：踩拍时 12 条棱的描边一起增亮 + 字点整体
+   涨一档（相干，不逐点乱踢）。④ 无 chars/拖进度条补采样路径保持。
+   ========================================================================== */
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+
+let W = 0, H = 0, DPR = 1;
+let S = 260, SP = 218, CAM = 830;          // 立方体半棱长 / 面内字形半幅 / 相机距离
+let bg = null, shadowSpr = null, ox = 0, oy = 0;
+
+const PI = Math.PI, TAU = PI * 2;
+const MAXP = 2400;                          // 每个面最多这么多点
+const REVEAL = 0.55;                        // 扫描揭示时长（秒）
+const FADE = 0.9;                           // 上一面淡出时长（秒）
+
+/* 六个面。m 把面内归一化坐标 (nu,nv) 映射到面局部 3D：
+   每一维是 [源, 符号]，源 0=nu 1=nv 2=常数1；nu/nv 乘 SP，常数乘 S。
+   tx/ty = "把这个面转到正面"需要的 rotX / rotY（ty=null 表示 rotY 自由）。 */
+const FACES = [
+  { m: [[0, 1], [1, 1], [2, 1]],   tx: 0,      ty: 0,     hue: 0   },  // 前
+  { m: [[2, 1], [1, 1], [0, -1]],  tx: 0,      ty: -PI / 2, hue: 34 }, // 右
+  { m: [[0, 1], [2, -1], [1, 1]],  tx: -PI / 2, ty: null,  hue: -28 }, // 上
+  { m: [[0, -1], [1, 1], [2, -1]], tx: 0,      ty: PI,    hue: 62  },  // 后
+  { m: [[0, 1], [2, 1], [1, -1]],  tx: PI / 2,  ty: null,  hue: -50 }, // 下
+  { m: [[2, -1], [1, 1], [0, 1]],  tx: 0,      ty: PI / 2, hue: 128 }  // 左
+];
+for (const f of FACES) {
+  f.lx = new Float32Array(MAXP); f.ly = new Float32Array(MAXP); f.lz = new Float32Array(MAXP);
+  f.nu = new Float32Array(MAXP); f.lv = new Float32Array(MAXP);
+  f.lvl = new Uint8Array(MAXP);
+  f.ci = new Uint16Array(MAXP);             // 该采样点属于第几个字（逐字 YRC）
+  f.lat = new Float32Array(49 * 3);         // 面上的点阵（把立方体的"壳"显出来）
+  f.pc = 0; f.born = -1; f.ct = null; f.yrc = false;
+  f.col = []; f.fill = [];
+}
+
+/* 12 条棱 + 8 个角 */
+const CORNERS = [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]];
+const EDGES = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+/* 每个面的四个角（按上面 8 个角的索引） */
+const FACEQ = [
+  [4, 5, 6, 7],   // 前 z+
+  [5, 1, 2, 6],   // 右 x+
+  [0, 1, 5, 4],   // 上 y-
+  [1, 0, 3, 2],   // 后 z-
+  [3, 7, 6, 2],   // 下 y+
+  [0, 4, 7, 3]    // 左 x-
+];
+const cX = new Float32Array(8), cY = new Float32Array(8), cZ = new Float32Array(8);
+
+/* ---- 字形采样（两行布局）----
+   长句单行会被面宽压成细长斜线；先把句子按标点均分成 ≤2 行，
+   两行一起画进离屏画布再采样。返回 { pts, charIdx } —— charIdx[i]
+   是第 i 个采样点属于原文第几个字（逐字 YRC 点亮就靠它）。 */
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+const BREAK31 = /[\s，。！？、；：,.!?;:…—～·「」『』（）()《》【】]/;
+/* 行数按目标块 aspect 决定：宽 ≈ (L/R)·F、高 ≈ R·1.18·F，
+   要 aspect ≤ 2.2 需要 R ≥ √(L/2.6)。41 字 → 5 行，块接近 1.5:1，
+   等比归一化后才不会在方形面里被压扁。 */
+function splitRows31(text) {
+  const L = text.length;
+  if (L < 10) return [text];
+  const R = Math.max(2, Math.min(6, Math.ceil(Math.sqrt(L / 2.6))));
+  const rows = [];
+  let prev = 0;
+  for (let r = 1; r < R; r++) {
+    const ideal = prev + Math.round((L - prev) / (R - r + 1));
+    let i = ideal;
+    for (const d of [0, 1, 2, 3, -1, -2, -3]) {
+      const j = ideal + d;
+      if (j > prev && j < L && (BREAK31.test(text[j - 1]) || BREAK31.test(text[j]))) { i = j; break; }
+    }
+    i = Math.max(prev + 1, Math.min(L - (R - r), i));
+    rows.push(text.slice(prev, i));
+    prev = i;
+  }
+  rows.push(text.slice(prev));
+  return rows;
+}
+function glyphPoints(text) {
+  const rows = splitRows31(text);
+  const F = 88;
+  const maxW = Math.min(W * 0.60, 940);
+  octx.font = '800 ' + F + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  let w = 1;
+  for (const r of rows) w = Math.max(w, Math.ceil(octx.measureText(r).width) + 8);
+  const lh = F * 1.18;
+  const fs = w > maxW ? F * (maxW / w) : F;
+  const scale = fs / F;
+  const h = Math.ceil(lh * rows.length * scale) + 8;
+  const w2 = Math.ceil(w * scale) + 8;
+  off.width = w2; off.height = h;
+  octx.clearRect(0, 0, w2, h);
+  octx.font = '800 ' + fs + 'px "PingFang SC","Microsoft YaHei",system-ui,sans-serif';
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+  /* 逐字绘制并记录每个字的本体区（用来回填采样点的字归属）。
+     逐字画还会让 letter-spacing 天然一致，比整句画再二分更稳 */
+  const pts = [];
+  const charIdx = [];
+  const step = 2;
+  let y = h / 2 - (rows.length - 1) * lh * scale / 2;
+  let ci = 0;
+  for (const row of rows) {
+    const rw = octx.measureText(row).width;
+    let x = w2 / 2 - rw / 2;
+    for (let k = 0; k < row.length; k++, ci++) {
+      const ch = row[k];
+      if (ch === ' ') continue;
+      const cw = octx.measureText(ch).width;
+      /* 单字贴图：该字的包围盒（含左右 0.5px 余量） */
+      const bx = x, bw = cw;
+      octx.fillText(ch, x + cw / 2, y);
+      x += cw;
+      /* 采样这一字的小画布区域 → 直接换算成点 */
+      const gx0 = Math.max(0, Math.floor(bx - 1)), gx1 = Math.min(w2, Math.ceil(bx + bw + 1));
+      const gy0 = Math.max(0, Math.floor(y - fs * 0.72)), gy1 = Math.min(h, Math.ceil(y + fs * 0.72));
+      const img = octx.getImageData(gx0, gy0, gx1 - gx0, gy1 - gy0).data;
+      const gw = gx1 - gx0;
+      for (let yy = 0; yy < gy1 - gy0; yy += step)
+        for (let xx = 0; xx < gw; xx += step)
+          if (img[(yy * gw + xx) * 4 + 3] > 128) {
+            pts.push(gx0 + xx - w2 / 2, gy0 + yy - h / 2);
+            charIdx.push(ci);
+          }
+    }
+    y += lh * scale;
+  }
+  return { pts, charIdx };
+}
+
+/* 面内坐标 → 面局部 3D。lx/ly/lz 是三个独立数组，必须分别写，
+   不能用一个 out 数组连写三个分量。 */
+function localOf(f, nu, nv, out, o) {
+  for (let c = 0; c < 3; c++) {
+    const mm = f.m[c];
+    out[o + c] = mm[0] === 2 ? mm[1] * S : (mm[0] === 0 ? nu : nv) * mm[1] * SP;
+  }
+}
+function buildLocal(f) {
+  const m0 = f.m[0], m1 = f.m[1], m2 = f.m[2];
+  for (let i = 0; i < f.pc; i++) {
+    const nu = f.nu[i], nv = f.lv[i];
+    f.lx[i] = m0[0] === 2 ? m0[1] * S : (m0[0] === 0 ? nu : nv) * m0[1] * SP;
+    f.ly[i] = m1[0] === 2 ? m1[1] * S : (m1[0] === 0 ? nu : nv) * m1[1] * SP;
+    f.lz[i] = m2[0] === 2 ? m2[1] * S : (m2[0] === 0 ? nu : nv) * m2[1] * SP;
+  }
+}
+function buildLattice(f) {
+  let k = 0;
+  for (let a = 0; a < 7; a++) for (let b = 0; b < 7; b++) {
+    const nu = -0.86 + a * 0.2867, nv = -0.86 + b * 0.2867;
+    localOf(f, nu, nv, f.lat, k * 3); k++;
+  }
+}
+
+/* ---- 背景 / 地面光斑（预渲染，绝不逐帧造渐变） ---- */
+function buildBG() {
+  bg = document.createElement('canvas');
+  bg.width = Math.max(4, Math.round(W)); bg.height = Math.max(4, Math.round(H));
+  const g = bg.getContext('2d');
+  const w = bg.width, h = bg.height, m = Math.max(w, h);
+  g.fillStyle = '#05060a'; g.fillRect(0, 0, w, h);
+  let r = g.createRadialGradient(w * 0.5, h * 0.16, 0, w * 0.5, h * 0.16, m * 0.62);
+  r.addColorStop(0, '#131a2e'); r.addColorStop(0.6, 'rgba(5,6,10,0)');
+  g.fillStyle = r; g.fillRect(0, 0, w, h);
+  r = g.createRadialGradient(w * 0.82, h * 0.9, 0, w * 0.82, h * 0.9, m * 0.5);
+  r.addColorStop(0, '#1a1030'); r.addColorStop(0.66, 'rgba(5,6,10,0)');
+  g.fillStyle = r; g.fillRect(0, 0, w, h);
+}
+function buildShadow() {
+  const n = 128;
+  shadowSpr = document.createElement('canvas'); shadowSpr.width = n; shadowSpr.height = n;
+  const g = shadowSpr.getContext('2d');
+  const r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  r.addColorStop(0, 'rgba(96,116,255,0.30)');
+  r.addColorStop(0.5, 'rgba(96,116,255,0.11)');
+  r.addColorStop(1, 'rgba(96,116,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, n, n);
+}
+
+/* ---- 调色板：由封面主色推出 6 个面的色相，每个面 5 档明度 ---- */
+let accent = [150, 170, 255];
+function buildPalette() {
+  const r = accent[0] / 255, g = accent[1] / 255, b = accent[2] / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  let h0 = 0;
+  if (d > 1e-6) {
+    if (mx === r) h0 = 60 * (((g - b) / d) % 6);
+    else if (mx === g) h0 = 60 * ((b - r) / d + 2);
+    else h0 = 60 * ((r - g) / d + 4);
+  }
+  if (h0 < 0) h0 += 360;
+  for (const f of FACES) {
+    const h = ((h0 + f.hue) % 360 + 360) % 360;
+    f.col = [];
+    for (let L = 0; L < 5; L++) f.col.push('hsl(' + h.toFixed(0) + ', 88%, ' + (42 + L * 10) + '%)');
+    f.fill = [];
+    for (let i = 0; i < 5; i++) f.fill.push('hsla(' + h.toFixed(0) + ', 72%, 34%, ' + (0.05 + i * 0.05).toFixed(3) + ')');
+  }
+}
+
+function relayoutFaces() {
+  for (const f of FACES) { buildLocal(f); buildLattice(f); }
+}
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  S = Math.min(Math.min(W, H) * 0.28, W * 0.2);
+  SP = S * 0.84;
+  CAM = S * 3.2;
+  ox = W / 2; oy = H * 0.46;
+  buildBG(); buildShadow(); relayoutFaces();
+}
+buildPalette();
+resize();
+addEventListener('resize', resize);
+
+/* ---- 把一句词写进某个面 ---- */
+function fillFace(fi, text, bornAt, line) {
+  const f = FACES[fi];
+  const g = glyphPoints(text || '');
+  const pts = g.pts;
+  const pc = pts.length / 2;
+  if (!pc) { f.pc = 0; f.born = bornAt; f.ct = null; return; }
+  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+  for (let i = 0; i < pc; i++) {
+    const x = pts[i * 2], y = pts[i * 2 + 1];
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  const gw = Math.max(1, maxX - minX), gh = Math.max(1, maxY - minY);
+  /* 归一化：最长边铺满 [-1,1]；但短句不能被放大过头 ——
+     放大倍率 = k·SP·透视缩放，采样步长 2px 乘上它就是屏幕上的点距。
+     点距一旦超过颗粒直径（坑 ④），笔画就散成点阵，所以这里封顶。 */
+  const PS = CAM / (CAM - S);
+  const k = Math.min(2 / Math.max(gw, gh), 1.3 / (SP * PS));
+  const mx = (minX + maxX) / 2, my = (minY + maxY) / 2;
+  const n = Math.min(MAXP, pc);
+  /* 逐字 YRC 时刻表：chars[k].t，无 chars 按 t + dur*i/n 均分 */
+  const L = (text || '').length;
+  const chs = line && line.chars && line.chars.length === L ? line.chars : null;
+  const t0 = line ? line.t : bornAt;
+  const dur = Math.max(0.8, (line && line.dur) || 2.4);
+  const ct = new Float32Array(L);
+  let prev = 0;
+  for (let i = 0; i < L; i++) {
+    let t = chs && isFinite(+chs[i].t) ? +chs[i].t : t0 + dur * 0.80 * (i / Math.max(1, L));
+    if (!(t >= t0)) t = t0;
+    if (t < prev) t = prev;
+    prev = t;
+    ct[i] = t;
+  }
+  f.ct = ct; f.yrc = !!chs;
+  for (let i = 0; i < n; i++) {
+    const p = (Math.floor(i * pc / n) % pc) * 2;   // 等间隔取样，不能 (i%pc)*2
+    const nu = (pts[p] - mx) * k, nv = (pts[p + 1] - my) * k;
+    f.nu[i] = nu; f.lv[i] = nv;
+    f.ci[i] = g.charIdx[Math.floor(i * pc / n) % pc] || 0;   // 该点属于第几个字
+    /* sheen：复刻 CSS linear-gradient(118deg, .26 → .03@42% → -.16) */
+    const t = (nu * 0.883 + nv * 0.469 + 1) * 0.5;
+    const tc = t < 0 ? 0 : t > 1 ? 1 : t;
+    const sh = tc < 0.42 ? 0.26 + (0.03 - 0.26) * (tc / 0.42) : 0.03 + (-0.16 - 0.03) * ((tc - 0.42) / 0.58);
+    const lv = Math.round((sh + 0.16) / 0.42 * 4);
+    f.lvl[i] = lv < 0 ? 0 : lv > 4 ? 4 : lv;
+  }
+  f.pc = n; f.born = bornAt;
+  buildLocal(f);
+}
+
+/* ---- 节奏：1-10 的教训固化在这里 ----
+   ① 显示与酝酿分离 —— curIdx 只在句首切换，brewIdx 提前 lead 秒准备
+   ② 索引单调不回退 —— 时钟在 tick 之间外推、tick 一来会往回缩一点，
+      不锁单调的话句边界来回跳、同一句被反复重建
+   ③ 提前量自适应 —— 快歌早开始，慢歌不提前太多
+   ④ 只有拖进度条（时间明显倒退）才允许重置
+   ---------------------------------------------------------------- */
+let lines = [];
+let curIdx = -1, brewIdx = -1, lastT = -1;
+const LEAD = 1.3;
+
+/* 立方体姿态 */
+let rotX = -0.34, rotY = 0.55;
+let spin = null;                             // {t,dur,x0,y0,x1,y1}
+let wobX = 0, wobY = 0, wobVX = 0, wobVY = 0; // 踩拍的相干晃动（整块一起动）
+let liveFace = -1, fadeFace = -1, fadeAt = -1;
+let scrBox = null;
+
+const nearestTurn = (a, cur) => a + Math.round((cur - a) / TAU) * TAU;
+function startSpin(fi, dur) {
+  const f = FACES[fi];
+  const tx = nearestTurn(f.tx, rotX);
+  const ty = f.ty === null ? nearestTurn(0, rotY) : nearestTurn(f.ty, rotY);
+  spin = { t: 0, dur: Math.max(0.25, dur), x0: rotX, y0: rotY, x1: tx, y1: ty };
+}
+function clearAll() {
+  for (const f of FACES) { f.pc = 0; f.born = -1; }
+  liveFace = -1; fadeFace = -1; fadeAt = -1; spin = null;
+  wobX = wobY = wobVX = wobVY = 0; scrBox = null;
+}
+
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) { curIdx = -1; brewIdx = -1; clearAll(); }   // 只有拖进度条才回退
+  lastT = T;
+  /* 上/下两个面（ty=null）转到"正面"后字面在屏幕上被压成一条水平窄带
+     （法线朝上/朝下的几何特性），不能用来看字 —— 句子只轮流上 4 个侧面 */
+  const faceOf = (i) => [0, 1, 3, 5][((i % 4) + 4) % 4];
+  let ci = curIdx;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci !== curIdx) {
+    curIdx = ci;
+    brewIdx = -1;
+    if (ci >= 0) {
+      const fi = faceOf(ci);
+      /* 万一没来得及酝酿（两句挨得太近），这里补一次 */
+      if (FACES[fi].born !== lines[ci].t) fillFace(fi, lines[ci].text, lines[ci].t, lines[ci]);
+      fadeFace = liveFace; fadeAt = T;      // 上一面进入淡出，稍后显式释放
+      liveFace = fi;
+      /* 第一句（或没经过酝酿的句）切进来时立方体还停在待机姿态 ——
+         必须在这里补一次翻面，否则字面歪着、整句被斜切压扁 */
+      if (!spin) startSpin(fi, 0.6);
+    } else {
+      fadeFace = liveFace; fadeAt = T; liveFace = -1;
+    }
+    hint.style.opacity = lines.length ? (ci >= 0 ? '0' : '1') : '0.5';
+  }
+  const nx = curIdx + 1;
+  if (nx < lines.length && brewIdx !== nx) {
+    const gap = lines[nx].t - (curIdx >= 0 ? lines[curIdx].t : lines[nx].t - 4);
+    const lead = Math.min(LEAD, Math.max(0.45, gap * 0.55));
+    if (T >= lines[nx].t - lead) {
+      brewIdx = nx;
+      const fi = faceOf(nx);
+      fillFace(fi, lines[nx].text, lines[nx].t, lines[nx]);   // 提前把字贴到那个面上
+      startSpin(fi, lead);                          // 用同样的提前量把面转过来
+    }
+  }
+}
+
+/* ---- 时钟 ---- */
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+/* ---- 绘制：一个面 ---- */
+const NB = 5;
+const bX = [], bY = [], bN = new Int32Array(NB);
+const litX = new Float32Array(MAXP), litY = new Float32Array(MAXP);
+let litN = 0;
+for (let i = 0; i < NB; i++) { bX.push(new Float32Array(MAXP)); bY.push(new Float32Array(MAXP)); }
+
+function drawFace(fi, alpha, rv, T, isLive) {
+  const f = FACES[fi];
+  if (!f.pc || f.born < 0 || T < f.born || alpha <= 0.02) return;
+  const cy = Math.cos(poseY), sy = Math.sin(poseY);
+  const cx = Math.cos(poseX), sx = Math.sin(poseX);
+  /* 面法线朝向 → 明暗档位偏移（正对镜头 +2 档） */
+  const nx = f.m[0][0] === 2 ? f.m[0][1] : 0;
+  const ny = f.m[1][0] === 2 ? f.m[1][1] : 0;
+  const nz = f.m[2][0] === 2 ? f.m[2][1] : 0;
+  const x1 = nx * cy + nz * sy, z1 = -nx * sy + nz * cy;
+  const y1 = ny * cx - z1 * sx, z2 = ny * sx + z1 * cx;
+  if (z2 <= 0.02) return;                      // 背面剔除
+  const shift = z2 > 0.82 ? 2 : z2 > 0.45 ? 1 : 0;
+  bN.fill(0);
+  litN = 0;
+  let mnX = 1e9, mxX = -1e9, mnY = 1e9, mxY = -1e9;
+  const ct = f.ct;
+  for (let i = 0; i < f.pc; i++) {
+    /* 逐字 YRC：该字的时刻没到 → 点只是极暗的预备轮廓；到点 → 进点亮桶 */
+    if (ct) {
+      const cti = ct[f.ci[i] % ct.length];
+      if (T < cti) continue;                   // 未唱到：完全隐藏（预备期由翻转表达）
+      const since = T - cti;
+      if (since < 0.55) {                      // 点亮瞬间：涨一下，画进亮桶
+        const x = f.lx[i], y = f.ly[i], z = f.lz[i];
+        const ax = x * cy + z * sy, az = -x * sy + z * cy;
+        const ay = y * cx - az * sx, az2 = y * sx + az * cx;
+        const k2 = CAM / (CAM - az2);
+        const X = ox + ax * k2, Y = oy + ay * k2;
+        if (X >= -24 && X <= W + 24 && Y >= -24 && Y <= H + 24) {
+          litX[litN] = X; litY[litN] = Y; litN++;
+        }
+        if (X < mnX) mnX = X; if (X > mxX) mxX = X;
+        if (Y < mnY) mnY = Y; if (Y > mxY) mxY = Y;
+        continue;
+      }
+    } else if (f.nu[i] * 0.5 + 0.5 > rv) continue;   // 无时刻表：退回扫描揭示
+    const x = f.lx[i], y = f.ly[i], z = f.lz[i];
+    const ax = x * cy + z * sy, az = -x * sy + z * cy;
+    const ay = y * cx - az * sx, az2 = y * sx + az * cx;
+    const kk = CAM / (CAM - az2);
+    const X = ox + ax * kk, Y = oy + ay * kk;
+    if (X < -24 || X > W + 24 || Y < -24 || Y > H + 24) continue;
+    let b = f.lvl[i] + shift; if (b < 0) b = 0; else if (b > 4) b = 4;
+    const j = bN[b]++;
+    bX[b][j] = X; bY[b][j] = Y;
+    if (X < mnX) mnX = X; if (X > mxX) mxX = X;
+    if (Y < mnY) mnY = Y; if (Y > mxY) mxY = Y;
+  }
+  if (mxX > mnX && isLive) {                 // scrBox 只跟当前句，不跟正在淡出的那句
+    scrBox = { x: mnX, y: mnY, w: mxX - mnX, h: mxY - mnY };
+  }
+  ctx.globalAlpha = alpha;
+  const col = f.col;
+  for (let b = 0; b < NB; b++) {
+    const n = bN[b];
+    if (!n) continue;
+    const sz = 1.9 + b * 0.42, hf = sz * 0.5;
+    ctx.fillStyle = col[b];
+    const xs = bX[b], ys = bY[b];
+    for (let i = 0; i < n; i++) ctx.fillRect(xs[i] - hf, ys[i] - hf, sz, sz);
+  }
+  /* 点亮桶：刚被 YRC 点着的点又大又亮（白热），0.55s 内落回稳态 */
+  if (litN) {
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    for (let i = 0; i < litN; i++) ctx.fillRect(litX[i] - 1.6, litY[i] - 1.6, 3.2, 3.2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---- 绘制：整个立方体 ---- */
+function drawCube(T) {
+  const ry = poseY, rx = poseX;
+  const cy = Math.cos(ry), sy = Math.sin(ry), cx = Math.cos(rx), sx = Math.sin(rx);
+  for (let i = 0; i < 8; i++) {
+    const c = CORNERS[i];
+    const x = c[0] * S, y = c[1] * S, z = c[2] * S;
+    const ax = x * cy + z * sy, az = -x * sy + z * cy;
+    const ay = y * cx - az * sx, az2 = y * sx + az * cx;
+    const kk = CAM / (CAM - az2);
+    cX[i] = ox + ax * kk; cY[i] = oy + ay * kk; cZ[i] = az2;
+  }
+  /* 面：背面剔除后按深度从远到近填 */
+  const vis = [];
+  for (let fi = 0; fi < 6; fi++) {
+    const f = FACES[fi];
+    const nx = f.m[0][0] === 2 ? f.m[0][1] : 0;
+    const ny = f.m[1][0] === 2 ? f.m[1][1] : 0;
+    const nz = f.m[2][0] === 2 ? f.m[2][1] : 0;
+    const x1 = nx * cy + nz * sy, z1 = -nx * sy + nz * cy;
+    const y1 = ny * cx - z1 * sx, z2 = ny * sx + z1 * cx;
+    if (z2 <= 0.02) continue;
+    const b = z2 > 0.82 ? 4 : z2 > 0.6 ? 3 : z2 > 0.38 ? 2 : z2 > 0.18 ? 1 : 0;
+    vis.push([z2, fi, b]);
+  }
+  vis.sort((a, b) => a[0] - b[0]);
+  for (const v of vis) {
+    const fi = v[1];
+    const q = FACEQ[fi];
+    ctx.fillStyle = FACES[fi].fill[v[2]];
+    ctx.beginPath();
+    ctx.moveTo(cX[q[0]], cY[q[0]]);
+    ctx.lineTo(cX[q[1]], cY[q[1]]);
+    ctx.lineTo(cX[q[2]], cY[q[2]]);
+    ctx.lineTo(cX[q[3]], cY[q[3]]);
+    ctx.closePath();
+    ctx.fill();
+  }
+  /* 12 条棱：合成一条路径，一次描边。beat 时整圈棱光一起增亮（相干） */
+  const eg = 0.15 + 0.5 * edgeGlow;
+  ctx.strokeStyle = 'rgba(' + Math.min(255, accent[0] + 90) + ',' + Math.min(255, accent[1] + 90) +
+                    ',' + Math.min(255, accent[2] + 60) + ',' + eg.toFixed(3) + ')';
+  ctx.lineWidth = 1 + 1.1 * edgeGlow;
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const e = EDGES[i];
+    ctx.moveTo(cX[e[0]], cY[e[0]]);
+    ctx.lineTo(cX[e[1]], cY[e[1]]);
+  }
+  ctx.stroke();
+  /* 面上的点阵：把"壳"显出来，一次填完 */
+  ctx.fillStyle = 'rgba(150,170,255,0.15)';
+  for (const v of vis) {
+    const lat = FACES[v[1]].lat;
+    for (let i = 0; i < 49; i++) {
+      const x = lat[i * 3], y = lat[i * 3 + 1], z = lat[i * 3 + 2];
+      const ax = x * cy + z * sy, az = -x * sy + z * cy;
+      const ay = y * cx - az * sx, az2 = y * sx + az * cx;
+      const kk = CAM / (CAM - az2);
+      ctx.fillRect(ox + ax * kk - 0.9, oy + ay * kk - 0.9, 1.8, 1.8);
+    }
+  }
+  /* 字：当前面 + 正在淡出的上一面 */
+  if (liveFace >= 0) {
+    const f = FACES[liveFace];
+    let rv = (T - f.born) / REVEAL; if (rv > 1) rv = 1; else if (rv < 0) rv = 0;
+    drawFace(liveFace, 1, rv, T, true);
+  }
+  if (fadeFace >= 0 && fadeFace !== liveFace && fadeAt >= 0) {
+    const a = 1 - (T - fadeAt) / FADE;
+    if (a <= 0) { FACES[fadeFace].pc = 0; FACES[fadeFace].born = -1; fadeFace = -1; }  // 显式释放
+    else drawFace(fadeFace, a, 1, T, false);
+  }
+}
+/* ---- 主循环 ---- */
+let last = performance.now();
+let t0 = 0;
+let poseX = -0.34, poseY = 0.55;             // 本帧真正使用的姿态（基准 + 晃动 + 待机摇摆）
+let edgeGlow = 0;                            // beat 棱光包络（整圈棱一起亮）
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+  timing(T);
+
+  /* 翻面 */
+  if (spin) {
+    spin.t += dt;
+    let u = spin.t / spin.dur; if (u > 1) u = 1;
+    const e = u * u * (3 - 2 * u);
+    rotX = spin.x0 + (spin.x1 - spin.x0) * e;
+    rotY = spin.y0 + (spin.y1 - spin.y0) * e;
+    if (u >= 1) spin = null;
+  }
+  /* 踩拍的相干晃动：整块立方体一起晃，不是逐颗乱踢 */
+  wobVX += (-wobX * 46 - wobVX * 7.5) * dt;
+  wobVY += (-wobY * 46 - wobVY * 7.5) * dt;
+  wobX += wobVX * dt; wobY += wobVY * dt;
+  edgeGlow *= Math.exp(-dt * 4.5);           // 棱光包络衰减
+  poseX = rotX + wobX + Math.sin(t0 * 0.42) * 0.028;   // 待机时轻轻摇
+  poseY = rotY + wobY;
+
+  ctx.drawImage(bg, 0, 0, W, H);
+  const sw = Math.min(W * 0.5, 620), sh = sw * 0.19;
+  ctx.globalAlpha = 0.85;
+  ctx.drawImage(shadowSpr, ox - sw / 2, H * 0.79 - sh / 2 + Math.sin(t0 * 0.7) * 3, sw, sh);
+  ctx.globalAlpha = 1;
+
+  drawCube(T);
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; brewIdx = -1; lastT = -1;
+    if (p.accent) { accent = p.accent; buildPalette(); }
+    clearAll();
+    clockT = 0; clockAt = performance.now(); playing = false;
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 相干：整块立方体朝同一个方向晃一下，幅度很小（字不能被晃散）+ 棱光 */
+    const lv = d.payload && d.payload.level ? d.payload.level : 0.5;
+    const k = 0.34 * (0.45 + lv);
+    /* 震动关闭：整块立方体不再被踩拍晃一下；棱光保留 */
+    if (window.__liziShake !== false) { wobVX += k * 1.4; wobVY += k * 2.4; }
+    edgeGlow = Math.min(1, edgeGlow + 0.45 + 0.55 * lv);
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+
+window.__stage = () => ({
+  lines: lines.length, cur: curIdx, brew: brewIdx, t: +now().toFixed(2),
+  rotX: +rotX.toFixed(3), rotY: +rotY.toFixed(3),
+  live: liveFace, fade: fadeFace,
+  pts: FACES.map((f) => f.pc), scrBox,
+  yrc: liveFace >= 0 ? !!FACES[liveFace].yrc : false
+});
+</script>
+</body>
+</html>

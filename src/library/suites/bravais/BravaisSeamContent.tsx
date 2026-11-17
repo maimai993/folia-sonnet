@@ -1,11 +1,11 @@
 import React, { useCallback, useMemo } from 'react';
-import { ChevronLeft, FoldHorizontal, ListFilter, ListPlus, Maximize2, Play } from 'lucide-react';
+import { ChevronLeft, FoldHorizontal, ListFilter, ListPlus, Maximize2, Play, Shuffle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { BravaisLayer } from './bravaisLayer';
 import type { BravaisHomeShortcut } from './bravaisHomeModels';
 import type { BravaisSeamLevel } from './bravaisSeamLevel';
 import type { BravaisSeamContentVariant } from './bravaisSeamTarget';
-import { BravaisSeamCollectionMenu, BravaisSeamCollectionMeta, BravaisSeamMetaLine, BravaisSeamStar, BravaisSeamStatusLine } from './BravaisSeamCollection';
+import { BravaisSeamCollectionMenu, BravaisSeamCollectionMeta, BravaisSeamMetaLine, BravaisSeamStatusLine } from './BravaisSeamCollection';
 import { BravaisSeamSpineTitle, BravaisSeamTitleArea } from './BravaisSeamTitle';
 import BravaisSeamFilterField from './BravaisSeamFilterField';
 import { openBravaisFilter } from './useBravaisSeamFilter';
@@ -22,14 +22,15 @@ import BravaisSeamAlbumPoster from './BravaisSeamAlbumPoster';
 import { BravaisSeamFlipText } from './BravaisSeamFlip';
 import { BravaisSeamFullRow, BravaisSeamSpineRow } from './BravaisSeamRow';
 import BravaisSeamHomeRow from './BravaisSeamHomeRow';
-import { Button } from '../../../components/ui';
+import BravaisSeamPlayScope from './BravaisSeamPlayScope';
 
 // src/library/suites/bravais/BravaisSeamContent.tsx
 // 缝里的四套内容（设计稿 §5）：首页窄缝（竖排「书库」+ 竖排页签）、首页书脊、完整信息条（面包屑行、竖排标题、
 // 元数据、播放全部 / 加入队列）、书脊（返回、竖排标题、计数、播放、展开）。排版宽度由外层按「此刻渲染的这一套」定，
 // 这里只排内容。文案都来自层描述（已翻译）与 libraryBravais 的 key。界面文案：「收起」= 收成书脊，「折叠」= 折到侧边。
 // fb10：完整信息条的面包屑行只剩 ‹ 与面包屑（拿到整行宽度）；「收起」改成点标题区域（BravaisSeamTitle，书脊上点标题
-// 展开，两边一致），「折叠」挪进「⋯ 更多」的末尾；收藏星标在播放全部 / 加入队列那一行的末尾。
+// 展开，两边一致），「折叠」挪进「⋯ 更多」的末尾。方案 C（2026-11-13）：播放全部｜随机、加入队列一行，下面一排图标动作格
+// （收藏星标、列表、按优先级补上的集合动作、⋯，BravaisSeamCollectionMenu）；书脊的播放下面多一个随机播放。
 // B9：首页窄缝 / 书脊换成 BravaisSeamHome（页签、二级切换、工具按钮、管理隐藏、账户位），另有全局搜索框（search）；
 // 首页层的面板是目录树（BravaisDirectoryPanel），集合层的面板仍是歌曲列表。
 // 集合页的描述在标题下方（元数据行之后），与歌手页的「关于艺术家」共用 BravaisSeamAbout（同一套正文样式、
@@ -70,10 +71,10 @@ const verticalTitleSize = (title: string, base: number, min: number) => (
 const FoldButton: React.FC<{ onClick: () => void }> = ({ onClick }) => {
     const { t } = useTranslation();
     return (
-        <Button className="bravais-seam-icon" data-bravais-seam-action="hide" onClick={onClick}
+        <button type="button" className="bravais-seam-icon" data-bravais-seam-action="hide" onClick={onClick}
             aria-label={t('libraryBravais.seamFold')} title={t('libraryBravais.seamFold')}>
             <FoldHorizontal aria-hidden />
-        </Button>
+        </button>
     );
 };
 
@@ -88,10 +89,10 @@ const FullSeam: React.FC<{ layer: BravaisLayer; depth: number; actions: BravaisS
         <div className="bravais-seam-full">
             <div className="bravais-seam-crumbs">
                 {layer.onDone && (
-                    <Button className="bravais-seam-back" data-bravais-seam-action="back" onClick={layer.onDone}
+                    <button type="button" className="bravais-seam-back" data-bravais-seam-action="back" onClick={layer.onDone}
                         aria-label={t('libraryBravais.seamBack')} title={t('libraryBravais.seamBack')}>
                         <ChevronLeft aria-hidden />
-                    </Button>
+                    </button>
                 )}
                 <BravaisSeamCrumbs layer={layer} />
             </div>
@@ -113,18 +114,12 @@ const FullSeam: React.FC<{ layer: BravaisLayer; depth: number; actions: BravaisS
             {seam.status && <BravaisSeamFlipText as="div" flipKey={seam.status} className="bravais-seam-status" data-bravais-seam-status>{seam.status}</BravaisSeamFlipText>}
             {collection?.status && <BravaisSeamStatusLine status={collection.status} />}
             <div className="bravais-seam-actions is-scope">
-                {seam.onPlayScope && (
-                    <Button className="bravais-chrome-button is-primary" data-bravais-seam-action="play-scope" onClick={seam.onPlayScope}>
-                        <Play aria-hidden />{seam.scopeLabels?.play ?? t('libraryBravais.playAll')}
-                    </Button>
-                )}
+                <BravaisSeamPlayScope seam={seam} buttonClassName="bravais-chrome-button" />
                 {seam.onEnqueueScope && (
-                    <Button className="bravais-chrome-button" data-bravais-seam-action="enqueue-scope" onClick={seam.onEnqueueScope}>
+                    <button type="button" className="bravais-chrome-button" data-bravais-seam-action="enqueue-scope" onClick={seam.onEnqueueScope}>
                         <ListPlus aria-hidden />{seam.scopeLabels?.enqueue ?? t('libraryBravais.enqueueAll')}
-                    </Button>
+                    </button>
                 )}
-                {/* fb10：收藏星标是这一排动作的最后一个（图标按钮，靠右），不再在描述下面单独占一行。 */}
-                {collection?.subscribe && <BravaisSeamStar subscribe={collection.subscribe} />}
             </div>
             <BravaisSeamCollectionMenu collection={collection} onOpenList={actions.openList} fold={fold} />
         </div>
@@ -139,10 +134,10 @@ const SpineSeam: React.FC<{ layer: BravaisLayer; actions: BravaisSeamActions }> 
     return (
         <div className="bravais-seam-spine">
             {layer.onDone && (
-                <Button className="bravais-seam-icon" data-bravais-seam-action="back" onClick={layer.onDone}
+                <button type="button" className="bravais-seam-icon" data-bravais-seam-action="back" onClick={layer.onDone}
                     aria-label={t('libraryBravais.seamBack')} title={t('libraryBravais.seamBack')}>
                     <ChevronLeft aria-hidden />
-                </Button>
+                </button>
             )}
             <FoldButton onClick={() => actions.setLevel('hidden')} />
             <BravaisSeamSpineTitle title={seam.title} fontSize={verticalTitleSize(seam.title, 30, 18)} label={t('libraryBravais.seamRestore')}
@@ -150,22 +145,29 @@ const SpineSeam: React.FC<{ layer: BravaisLayer; actions: BravaisSeamActions }> 
             <BravaisSeamFlipText as="div" axis="y" flipKey={seam.meta} className="bravais-seam-vcount">{seam.meta}</BravaisSeamFlipText>
             {/* 过滤中：一个强调色的过滤图标（点它把缝临时展开、焦点进输入位；书脊上放不下输入框）。 */}
             {seam.filter?.query && (
-                <Button className="bravais-seam-icon is-filtering" data-bravais-seam-action="filter" onClick={openBravaisFilter}
+                <button type="button" className="bravais-seam-icon is-filtering" data-bravais-seam-action="filter" onClick={openBravaisFilter}
                     aria-label={seam.filter.placeholder} title={`${seam.filter.placeholder} · ${seam.filter.query}`}>
                     <ListFilter aria-hidden />
-                </Button>
+                </button>
             )}
             <div className="bravais-seam-spacer" />
             {seam.onPlayScope && (
-                <Button className="bravais-seam-icon" data-bravais-seam-action="play-scope" onClick={seam.onPlayScope}
+                <button type="button" className="bravais-seam-icon" data-bravais-seam-action="play-scope" onClick={seam.onPlayScope}
                     aria-label={seam.scopeLabels?.play ?? t('libraryBravais.playAll')} title={seam.scopeLabels?.play ?? t('libraryBravais.playAll')}>
                     <Play aria-hidden />
-                </Button>
+                </button>
             )}
-            <Button className="bravais-seam-icon" data-bravais-seam-action="expand" onClick={() => actions.setLevel('full')}
+            {/* 随机播放只跟着播放出现（与 BravaisSeamPlayScope 的两半同一条规则）。 */}
+            {seam.onPlayScope && seam.onShuffleScope && (
+                <button type="button" className="bravais-seam-icon" data-bravais-seam-action="shuffle-scope" onClick={seam.onShuffleScope}
+                    aria-label={t('playlist.shufflePlay')} title={t('playlist.shufflePlay')}>
+                    <Shuffle aria-hidden />
+                </button>
+            )}
+            <button type="button" className="bravais-seam-icon" data-bravais-seam-action="expand" onClick={() => actions.setLevel('full')}
                 aria-label={t('libraryBravais.seamExpand')} title={t('libraryBravais.seamExpand')}>
                 <Maximize2 aria-hidden />
-            </Button>
+            </button>
         </div>
     );
 };

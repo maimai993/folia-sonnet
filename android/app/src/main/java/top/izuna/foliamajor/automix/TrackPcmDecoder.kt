@@ -233,8 +233,20 @@ internal object TrackPcmDecoder {
                 maxSeconds * 1_000_000L
             }
             val fromUs = (fromSec * 1_000_000.0).toLong().coerceAtLeast(0L)
+            /*
+             * 解码到哪儿为止。
+             *
+             * 整曲那条路照旧：容器头说多长就解多长（但最多 maxSeconds）。
+             *
+             * 分段那条路**不能拿容器头的时长当上限**。视频站的 DASH 音轨（`.m4s`）容器头
+             * 里的 duration 常常是「第一个分片」的长度（几十秒），而不是整条流的长度；
+             * 拿它做上限，第一块之后就再也没东西可解 —— 分离出来的伴奏只有开头那几十秒，
+             * 而播放器按原曲长度放，于是整条时间轴看起来「变短了 / 后半段没声音」。
+             *
+             * 所以分段模式只认自己请求的那一段：上限 = fromUs + 请求的秒数。
+             */
             val limitUs = if (rangeSeconds > 0) {
-                minOf(durationUs, fromUs + (rangeSeconds * 1_000_000.0).toLong())
+                fromUs + (rangeSeconds * 1_000_000.0).toLong()
             } else {
                 minOf(durationUs, maxSeconds * 1_000_000L)
             }

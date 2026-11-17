@@ -54,6 +54,7 @@ const CLOSED_NAMES = [
     'stopMainWindowClickThroughUnlockHoverMonitor',
     'remoteControlWindow',
     'ytmSandbox',
+    'perfCheckHost',
     'refreshTrayMenu',
     // 汽水桥是 fork 独有的一份（惰性初始化，关主窗口时顺手 dispose）。
     'qishuiApiBridge',
@@ -138,6 +139,7 @@ describe('main.cjs: mpv stops when the page driving it is gone for good', () => 
             stopMainWindowClickThroughUnlockHoverMonitor: () => {},
             remoteControlWindow: null,
             ytmSandbox: { destroy: () => {} },
+            perfCheckHost: { close: () => {} },
             refreshTrayMenu: () => {},
             qishuiApiBridge: null,
             macDockMenu: { reset: () => {} },

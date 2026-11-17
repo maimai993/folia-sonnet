@@ -1,0 +1,66 @@
+{
+  "stage": "664 深渊标本",
+  "note": "标本板来源与授权。图已统一处理：裁切去裱边、反相为黑底发光、黑位归一化、长边 1600、JPEG q90。",
+  "items": [
+    {
+      "file": "664-frog.jpg",
+      "subject": "双蛙（仰/俯卧）",
+      "label": "FRÖSCHE IN BAUCH- UND RÜCKENLAGE",
+      "year": 1896,
+      "author": "Josef Maria Eder / Eduard Valenta",
+      "source": "The Metropolitan Museum of Art",
+      "license": "CC0",
+      "url": "https://commons.wikimedia.org/wiki/File:Fr%C3%B6sche_in_Bauch_und_R%C3%BCckenlage_MET_DP262483.jpg"
+    },
+    {
+      "file": "664-snake.jpg",
+      "subject": "蛇（完整骨骼）",
+      "label": "AESCULAP-SCHLANGE",
+      "year": 1896,
+      "author": "Josef Maria Eder / Eduard Valenta",
+      "source": "The Metropolitan Museum of Art",
+      "license": "CC0",
+      "url": "https://commons.wikimedia.org/wiki/File:Aesculap-Schlange_MET_DP262486.jpg"
+    },
+    {
+      "file": "664-flower.jpg",
+      "subject": "双花（透明花器）",
+      "label": "TWIN FLOWER",
+      "year": 2010,
+      "author": "Cadop",
+      "source": "Wikimedia Commons",
+      "license": "CC0",
+      "url": "https://commons.wikimedia.org/wiki/File:Twin_flower_Xray.jpg"
+    },
+    {
+      "file": "664-bird.jpg",
+      "subject": "鸟（翼/足/尾）",
+      "label": "AVES SPECIMEN",
+      "year": 1896,
+      "author": "William Henry Meadowcroft",
+      "source": "Wikimedia Commons",
+      "license": "Public domain",
+      "url": "https://commons.wikimedia.org/wiki/File:X-ray_of_a_bird_(1896).jpg"
+    },
+    {
+      "file": "664-pipefish.jpg",
+      "subject": "海龙（细长鱼）",
+      "label": "SYNGNATHUS CARINATUS",
+      "year": 2010,
+      "author": "California Academy of Sciences",
+      "source": "Wikimedia Commons",
+      "license": "CC0",
+      "url": "https://commons.wikimedia.org/wiki/File:Syngnathus_carinatus_radiograph.png"
+    },
+    {
+      "file": "664-hand.jpg",
+      "subject": "戴戒指的手",
+      "label": "HAND MIT RINGEN",
+      "year": 1896,
+      "author": "Arthur Schuster",
+      "source": "Wikimedia Commons",
+      "license": "CC BY 4.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Hand_with_ring_by_Arthur_Schuster.jpg"
+    }
+  ]
+}

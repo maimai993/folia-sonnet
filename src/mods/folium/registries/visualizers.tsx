@@ -67,6 +67,9 @@ const buildRegistryEntry = (id: string, modId: string, stored: StoredFoliumVisua
          */
         labelKey: `ui.modVisualizer.${stored.mode.split(':').join('.')}`,
         labelFallback,
+        // mod 声明的 glyph 是一段 SVG path 数据，画在宿主统一的 24×24 描边画框里；
+        // 没声明（或校验拒绝）就留空，modeGlyphs 会回落到通用字形。
+        glyph: stored.def.glyph ? <path d={stored.def.glyph} /> : undefined,
         previewSeed: stored.mode,
         previewStartOffset: 0,
         // The host draws the background a mod style asks for (hostLayers.background), as its shell does in visualizerRender.
@@ -104,12 +107,19 @@ export const visualizersRegistry = createFoliumRegistry<FoliumVisualizerDef, Sto
         if (def.settingsPanel !== undefined && typeof def.settingsPanel !== 'function') {
             throw new Error('visualizers.register: settingsPanel must be a mount function');
         }
+        // glyph 是一段 SVG path 的 d 字符串；不是字符串或过长就当没写（回落通用字形），
+        // 不让它把整条注册带崩，也不让一个超长属性进到 DOM。
+        let glyph = def.glyph;
+        if (glyph !== undefined && (typeof glyph !== 'string' || glyph.length > 2048)) {
+            console.warn(`[Folium] visualizers.register: ${id} has an invalid glyph, ignoring`);
+            glyph = undefined;
+        }
         const settings = sanitizeFoliumParams(def.settings, modId);
         if (def.settingsPanel && settings.length === 0) {
             throw new Error('visualizers.register: settingsPanel needs a settings schema (it decides keys, defaults and validation)');
         }
         return {
-            def,
+            def: glyph === def.glyph ? def : { ...def, glyph },
             mode: foliumVisualizerMode(id),
             settings,
             settingsAccess: settings.length > 0 ? createFoliumParamAccess(settingsScope(id), settings) : null,

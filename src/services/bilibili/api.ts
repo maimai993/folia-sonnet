@@ -299,6 +299,37 @@ const toHttps = (url: string | undefined): string => {
     return url.startsWith('http://') ? `https://${url.slice('http://'.length)}` : url;
 };
 
+/**
+ * 取一集番剧 / 电影的 cid。
+ *
+ * PGC 内容的 id 是 `ep_id`（分集）或 `season_id`（整季），**都不是 bvid**，所以
+ * `x/web-interface/view` 问不到它 —— 那条接口只认投稿。这里走 `pgc/view/web/season`：
+ * 传 `ep_id` 时它回的是这一集所在的那一季（`result.episodes`），在列表里按 id 找回
+ * 这一集自己的 cid。
+ *
+ * 为什么要这个：搜索出来的番剧 / 电影条目手上只有 season 级的信息，cid 要打开分集
+ * 才有。没有 cid 就取不了流 —— 用户点开搜索里的番剧是一片安静，日志里只有 no-audio。
+ *
+ * 取不到时回 0（调用方按「这一集放不了」处理，不要抛：搜索列表里点开一集失败
+ * 不该把整个播放流程打断）。
+ */
+export const fetchBilibiliEpisodeCid = async (epId: number): Promise<number> => {
+    if (!Number.isFinite(epId) || epId <= 0) return 0;
+    try {
+        type SeasonEnvelope = ApiEnvelope<never> & {
+            result?: { episodes?: Array<{ id?: number; ep_id?: number; cid?: number }> };
+        };
+        const body = await fetchJson<never>(`${API_BASE}/pgc/view/web/season?ep_id=${epId}`) as SeasonEnvelope;
+        if (body.code !== 0) return 0;
+        const episodes = body.result?.episodes ?? [];
+        const match = episodes.find(item => (item.id ?? item.ep_id) === epId) ?? episodes[0];
+        const cid = match?.cid;
+        return typeof cid === 'number' && cid > 0 ? cid : 0;
+    } catch {
+        return 0;
+    }
+};
+
 /** 取一条投稿的 cid（第一个分 P）与元信息。 */
 export const fetchBilibiliVideoInfo = async (bvid: string) => {
     const payload = unwrap(await fetchJson<ViewPayload>(`${API_BASE}/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`));
@@ -377,6 +408,10 @@ interface PlayUrlDash {
         }>;
     };
     durl?: Array<{ url?: string; backup_url?: string[] }>;
+    /** 这一次实际给的清晰度编号（qn）。 */
+    quality?: number;
+    /** 这一条投稿在站上现有的全部清晰度编号。 */
+    accept_quality?: number[];
     /**
      * 字幕。
      *
@@ -526,6 +561,41 @@ const qualityToQn: Record<string, number> = {
 };
 
 /**
+ * fnval 是**位掩码**：一位一件事，凑出来的数必须是合法组合。
+ *
+ * 早先这里写成 `2 + 4 + 8 + 128` —— 把 FLV / MP4 那几位（2、4、8）和 DASH 的分辨率位
+ * 混在一起，拼出一个站方不认的 142，接口直接回 -400「请求错误」。会员档听起来就是
+ * 「放不出来」。
+ */
+const FNVAL = {
+    dash: 16,
+    hdr: 64,
+    fourK: 128,
+    dolbyAudio: 256,
+    dolbyVision: 512,
+    eightK: 1024,
+} as const;
+
+/**
+ * 这一档要放开哪几位。
+ *
+ * 1080P+ / 1080P60 / 4K 都是**大会员档**：HDR / 4K / 杜比那几位不带上，站方就按
+ * 「只要普通 DASH」处理，回来的永远停在 1080P —— 也就是「开了会员也没有高清档」。
+ *
+ * AV1（2048）一直不要：它把候选列表撑大，而且挑中之后低端机解码直接卡成幻灯片。
+ */
+const fnvalFor = (quality: string): number => {
+    if (quality === 'hires') {
+        return FNVAL.dash | FNVAL.hdr | FNVAL.fourK | FNVAL.dolbyAudio
+            | FNVAL.dolbyVision | FNVAL.eightK;
+    }
+    if (quality === 'ultra' || quality === 'lossless') {
+        return FNVAL.dash | FNVAL.hdr | FNVAL.fourK | FNVAL.dolbyAudio | FNVAL.dolbyVision;
+    }
+    return FNVAL.dash;
+};
+
+/**
  * 取一条投稿的画面直链与声音直链。
  *
  * bilibili 的 DASH 本来就把画面和声音拆成两条流。以前只取画面、声音还是歌曲本身，
@@ -612,43 +682,27 @@ export const fetchBilibiliPlayUrl = async (
     /** 声音的候选地址（主地址在前）。 */
     audioUrls: string[];
     subtitles: PlayUrlSubtitle[];
+    /** 站方实际给的清晰度编号；界面据此说「这一档实际拿到多少」。 */
+    achievedQn: number;
 }> => {
-    /*
-     * 要哪些格式，跟着档位走。
-     *
-     * nval 是位掩码：以前固定写 4048，等于把 8K、杜比视界、AV1、AI 插帧全要了一遍。
-     * 这些格式**即使最后一条都不用**也会把候选列表撑大，而且一旦挑中 AV1，低端机上解码
-     * 直接卡成幻灯片 —— 用户报的「又糊又特别卡」就是这个。现在按档位只放开需要的：
-     * 基础档只要 mp4 + dash；1080P 起才加 HDR / 4K；4K 档才开始考虑 AV1。
-     *
-     * ourk 同理：只要没选到 4K 档就不开。
-     */
     /*
      * 没登录时最高只到 480P。
      *
      * 这不是我们设的限 —— 站内对未登录给的本来就只有这些，问 1080P 也不会给。
-     * 所以档位在这里先压下去：否则请求里带着高清参数、回来的却是 480P 的流，
-     * 挑轨那一步会以为「没找到要的清晰度」，白绕一圈。
-     *
-     * 登录之后仍然按用户选的那一档（默认 720P，见 pickBilibiliQuality）。
+     * 档位在这里压到 standard，挑轨那一侧才不会以为「没找到要的清晰度」白绕一圈。
      */
     const signedIn = await isBilibiliSignedIn();
     const effectiveQuality = signedIn ? quality : 'standard';
-    const wants4k = (qualityMaxHeight[effectiveQuality] ?? 720) > 1080;
     /*
-     * 要哪些格式回来。
+     * qn 用**用户要的那一档**，不是压下去之后的那一档。
      *
-     * 2=dash。比 720P 高一档起就把 4(hdr)、8(4K)、128(dolby) 一并要上 —— 这几档
-     * 都是**大会员档**（1080P+ / 1080P60 / 4K HDR），而 qn 已经是 112/116/120 了，
-     * 这里要是只要 dash，站方就按非会员处理、只回给你 1080P，用户会以为「会员白开了」。
-     * 要多了不会亏：pickVideoTrack 按 qn 对应的上限挑，多余的高码率轨不会被选中。
-     *
-     * 基础档仍只要 dash，别把 4K/杜比塞进低端机上那一档的候选里。
+     * 压成 standard 只影响挑轨（那一侧按档位上限筛），qn 跟着压就变成了「主动只要
+     * 720P」—— 站方连它能给的都不给了，会员账号进高清档也只能拿到 720P。
      */
-    const fnval = signedIn && (qualityMaxHeight[effectiveQuality] ?? 720) > 720
-        ? 2 + 4 + 8 + 128
-        : 2;
     const qn = qualityToQn[quality] ?? 64;
+    const fnval = fnvalFor(effectiveQuality);
+    // 只有 4K 档才开 fourk：开了它站方才会下发 2160 那批轨。
+    const wants4k = effectiveQuality === 'hires';
     let payload: PlayUrlDash;
     /*
      * 番剧 / 电影（PGC）走它自己那一套取流接口，不能用投稿的那条。
@@ -661,7 +715,7 @@ export const fetchBilibiliPlayUrl = async (
      */
     if (epId) {
         const pgcUrl = `${API_BASE}/pgc/player/web/playurl?ep_id=${epId}&cid=${cid}`
-            + `&qn=${qn}&fnval=${fnval <= 7 ? 16 : fnval}&fnver=0&fourk=${wants4k ? 1 : 0}`;
+            + `&qn=${qn}&fnval=${fnval}&fnver=0&fourk=${wants4k ? 1 : 0}`;
         type PgcEnvelope = ApiEnvelope<PlayUrlDash> & { result?: PlayUrlDash };
         const body = await fetchJson<PlayUrlDash>(pgcUrl) as PgcEnvelope;
         if (body.code !== 0) {
@@ -678,6 +732,7 @@ export const fetchBilibiliPlayUrl = async (
             audioUrl: pickAudioTrack(payload),
             audioUrls: pickAudioCandidates(payload),
             subtitles: payload.subtitle?.subtitles ?? [],
+            achievedQn: readAchievedQn(payload, qn),
         };
     }
     /*
@@ -710,7 +765,20 @@ export const fetchBilibiliPlayUrl = async (
         audioUrl: pickAudioTrack(payload),
         audioUrls: pickAudioCandidates(payload),
         subtitles: payload.subtitle?.subtitles ?? [],
+        achievedQn: readAchievedQn(payload, qn),
     };
+};
+
+/**
+ * 站方这次实际给的是哪一档。
+ *
+ * playurl 的响应里带着 `accept_quality`（这一条投稿在站上现有的全部清晰度）
+ * 和 `quality`（这一次给的）。界面拿来说「你要 1080P+，这条只到 1080P」，
+ * 比让用户对着一个不动的画面猜要好。
+ */
+const readAchievedQn = (payload: PlayUrlDash, askedQn: number): number => {
+    const given = payload.quality;
+    return typeof given === 'number' && given > 0 ? given : askedQn;
 };
 
 /**

@@ -6,10 +6,11 @@ import { hifiEngine } from '../../../services/hifi/hifiEngine';
 import { isHifiRoute } from '../../../services/hifi/hifiPlayback';
 import { selectHifiEngineConfig, useHifiSettingsStore } from '../../../stores/useHifiSettingsStore';
 import { NATIVE_PLAYBACK_ENABLED, nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
-import { isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
+import { addSourceReloadListener, isNativePlayerAvailable } from '../../../services/playbackEngine/nativePlayerPlugin';
 import { useAudioSettingsStore } from '../../../stores/useAudioSettingsStore';
 import { LyricData, StageLoopMode } from '../../../types';
 import { clampMediaVolume } from '../../../utils/appPlaybackHelpers';
+import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { createCoverUrlResolver } from '../../../utils/coverUrlResolver';
 import { writeLyricOffset } from '../../../utils/lyrics/lyricOffsetMemory';
 import { createLyricsSetter } from '../playback/createLyricsSetter';
@@ -211,6 +212,33 @@ export const useAppAudioOutput = (model: Input) => {
             autoplay: !element.paused && !element.ended,
         });
     }, [audioQuality, currentSong, audioRef, recoverOnlinePlaybackSource]);
+
+    /*
+     * 原生说「手上那条原曲地址不该再用了」：重新要一个。
+     *
+     * 切回「全部」时，原生不会把一条可能已过期的签名直链塞给播放器 —— 本地又没有
+     * 原曲的媒体缓存副本时，那就是一个读不出来的源（界面显示「全部」，却没有声音）。
+     * 这里走的是上面换档位用的同一条恢复路径，位置接着走，不从头开始。
+     *
+     * 事件只带 songKey，不带别的：先确认说的确实是此刻这一首，否则（用户已经切歌）
+     * 什么都不做 —— 不能拿旧歌的通知去换新歌的流。
+     */
+    useEffect(() => {
+        if (!isNativePlayerAvailable()) return undefined;
+        return addSourceReloadListener(event => {
+            const element = audioRef.current;
+            if (!element || !currentSong) return;
+            const askedKey = getPlaybackSongKey(currentSong);
+            if (event.songKey && event.songKey !== askedKey) return;
+            // 本地曲目 / 本地服务那类没有平台可问，重解析没有意义（原生那边也不会发）。
+            void recoverOnlinePlaybackSource({
+                force: true,
+                resumeAt: element.currentTime,
+                // 原来是暂停的就别因为这次补地址自己放起来。
+                autoplay: !element.paused && !element.ended,
+            });
+        });
+    }, [audioRef, currentSong, recoverOnlinePlaybackSource]);
 
     const getCoverUrl = useMemo(
         () => createCoverUrlResolver(cachedCoverUrl, currentSong),

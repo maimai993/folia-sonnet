@@ -24,8 +24,8 @@ import { Button as UiButton } from '@/components/ui';
 // and hands it the two dialogs it opens.
 
 // fork 的仓库，不是上游 chthollyphile/folia-major —— 同步上游时被带回原版过，别再让它落回去。
-const REPOSITORY_URL = 'https://github.com/maimai993/folia-sonnet';
-const REPOSITORY_NAME = 'maimai993/folia-sonnet';
+const REPOSITORY_URL = 'https://github.com/Folia-CE/folia-sonnet';
+const REPOSITORY_NAME = 'Folia-CE/folia-sonnet';
 const BUILD_KIND = getBuildKind();
 const VERSION_INFO = (__DOCKER_STACK_VERSION__
     ? `${__APP_VERSION_LABEL__} v${__APP_VERSION__} · Stack ${__DOCKER_STACK_VERSION__} · ${__COMMIT_HASH__}`

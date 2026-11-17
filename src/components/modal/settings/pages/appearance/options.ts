@@ -28,7 +28,13 @@ export const LYRICS_WALLPAPER: SettingsGroupDef = {
 
 export const THEME: SettingsGroupDef = { id: 'themePresets', titleKey: 'options.settingsHeadingTheme' };
 export const SONG_THEME: SettingsGroupDef = { id: 'songTheme', titleKey: 'options.settingsHeadingSongTheme' };
-export const AI: SettingsGroupDef = { id: 'electronSettings', titleKey: 'options.electronSettings', electronOnly: true };
+export const AI: SettingsGroupDef = { id: 'aiCredentials', titleKey: 'options.electronSettings', electronOnly: true };
+
+/**
+ * AI 歌词动画导演那一组（fork 独有）。那几行画在 AiProviderSettings 里、紧挨着 AI 凭证，
+ * 但声明在这里 —— 搜索索引只认各页声明的 OPTIONS，不声明就搜不到（用户反馈过）。
+ */
+export const AI_DIRECTOR: SettingsGroupDef = { id: 'aiDirectorGroup', titleKey: 'aiDirector.title', electronOnly: true };
 
 /**
  * 显示那一组（fork 独有）：歌词扁平两端都画；设备类型与横竖屏只有安卓有。
@@ -126,6 +132,16 @@ export const O = {
     openaiStream: option(AI, 'openaiApiStream', 'options.openaiApiStream'),
     openaiKey: option(AI, 'openaiApiKey', 'options.openaiApiKey'),
     aiProxy: option(AI, 'useSystemProxyAI', 'options.useSystemProxyAI'),
+    // AI 歌词动画导演（fork 独有）：让搜索也能找到这几行。
+    aiDirectorAuto: option(AI_DIRECTOR, 'aiDirectorAutoMode', 'aiDirector.allowAutoMode', {
+        noteKey: 'aiDirector.allowAutoModeDesc',
+    }),
+    aiDirectorParams: option(AI_DIRECTOR, 'aiDirectorAutoParams', 'aiDirector.allowAutoParams', {
+        noteKey: 'aiDirector.allowAutoParamsDesc',
+    }),
+    aiDirectorBlocked: option(AI_DIRECTOR, 'aiDirectorBlockedModes', 'aiDirector.blockedModes', {
+        noteKey: 'aiDirector.modeLockedHint',
+    }),
 };
 
 /** What the wallpaper section draws, which the search lists under the page. */

@@ -18,7 +18,6 @@ import { librarySuitePickerSurface } from '../surfaces/librarySuitePickerSurface
 import { libraryWallLookCommands } from './libraryWallLookCommands';
 import { openCurrentPagePonder } from '../../../services/ponder/pagePonderTarget';
 import { copyText } from '../../../utils/system/clipboard';
-import { LIQUID_GLASS_BLOCKED_BY_GPU_PREFERENCE } from '../../../shinoinject/liquidglass';
 
 // src/components/command-palette/commands/settingsCommands.ts
 // Commands in the `settings` group: settings subviews, app toggles, theme, sync, and desktop-only switches.
@@ -216,6 +215,19 @@ export const settingsCommands: CommandPaletteCommand[] = [
         },
     },
     {
+        id: 'transition-mode-automix',
+        isAvailable: context => (context ? context.settings.transitionMode !== 'automix' : true),
+        group: 'settings',
+        title: 'Transition mode: Folia Automix',
+        description: 'Analyse both tracks and mix them automatically',
+        keywords: ['automix', 'folia automix', 'transition mode automix', '自动混音', '过渡模式自动混音', 'gdmsauto'],
+        execute: (_input, context) => {
+            if (context.settings.transitionMode === 'automix') return false;
+            context.settings.setTransitionMode('automix');
+            return true;
+        },
+    },
+    {
         id: 'transition-performance-toggle',
         platform: ['electron'],
         // Hidden without a stem model, matching the disabled switch in the transition settings.
@@ -351,6 +363,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
         { isAvailable: context => context?.settings.canAutoScanLocalLibrary() ?? true },
     ),
     createSettingsCommand('settings-desktop', 'Desktop settings', 'Open desktop app settings', ['desktop', 'electron', '桌面', '桌面端'], 'options', 'desktop', { platform: ['electron'] }),
+    createSettingsCommand('settings-remote', 'Remote Control settings', 'Open the Remote Control window settings: its switches and lyric rows', ['remote control', 'remote window', 'mini player', 'remote lyrics', '遥控窗口', '遥控窗口设置', '迷你播放器', '遥控歌词'], 'options', 'remote', { platform: ['electron'] }),
     createSettingsAnchorCommand('settings-update-channel', 'Update channel', 'Choose the desktop app release channel', ['release channel', 'realeco', 'limo', 'cielo', '更新通道', '发布通道'], 'updateCheck', { platform: ['electron'] }),
     {
         id: 'desktop-toggle-voice-input-pause',
@@ -448,6 +461,15 @@ export const settingsCommands: CommandPaletteCommand[] = [
         context => context.settings.toggleRemoteControlTextShade(),
         { platform: ['electron'] },
     ),
+    createToggleCommand(
+        'desktop-toggle-remote-control-lyric-pairs',
+        'settings',
+        'Remote control: two lyric pairs',
+        'Toggle whether the remote control window also shows the next line at the bottom right when idle',
+        ['remote control lyrics', 'remote window lyrics', 'two lyric pairs', 'next line', 'four rows', '遥控窗口歌词', '两对歌词', '下一句', '四行歌词'],
+        context => context.settings.toggleRemoteLyricPairs(),
+        { platform: ['electron'] },
+    ),
     {
         // Pairs with the remote control click-through switch: while the window ignores the mouse this is the way back in.
         id: 'desktop-unlock-remote-control',
@@ -464,17 +486,6 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-graphics', 'Graphics settings', 'Open static mode, frame rate cap, Linux glow fix and reduced motion', ['graphics', 'performance', 'frame rate', 'fps', 'rendering', '图形', '图形设置', '性能', '帧率', '渲染'], 'options', 'graphics'),
     createSettingsAnchorCommand('settings-lyric-render-quality', 'Lyric canvas resolution and anti-aliasing', 'Jump to the resolution and anti-aliasing every canvas / WebGL lyric style follows by default', ['render quality', 'resolution', 'supersampling', 'anti-aliasing', 'msaa', 'dpr', 'pixel ratio', '分辨率', '超采样', '抗锯齿', '渲染倍率', '画质'], 'lyricRenderScale'),
     createSettingsAnchorCommand('settings-gpu-preference', 'Render GPU settings', 'Jump to the choice of graphics card the app renders on', ['render gpu', 'graphics card', 'discrete gpu', 'integrated gpu', 'dual gpu', '渲染显卡', '显卡', '独显', '核显', '双显卡'], 'gpuPreference', { platform: ['win'] }),
-    createToggleCommand(
-        'liquid-glass-toggle',
-        'settings',
-        'Liquid glass',
-        'Turn the edge-refracting glass on the interface panels on or off',
-        ['fluid glass', 'glass panels', 'refraction', '液态玻璃', '流体玻璃', '毛玻璃', '玻璃面板', '折射'],
-        context => context.settings.toggleLiquidGlass(),
-        // 渲染显卡选了「省电」时设置面板整组置灰（见 LiquidGlassGroup 的 GPU_BLOCKED），命令照同一判断隐藏。
-        { isAvailable: () => !LIQUID_GLASS_BLOCKED_BY_GPU_PREFERENCE },
-    ),
-    createSettingsAnchorCommand('settings-liquid-glass', 'Liquid glass settings', 'Jump to liquid glass strength, blur, presets and effects', ['liquid glass', 'glass strength', 'glass blur', 'glass preset', '液态玻璃', '玻璃强度', '玻璃模糊', '玻璃预设', '果冻', '光效'], 'liquidGlassEnabled'),
     gpuPreferenceCommand('auto', 'Render GPU: Auto', 'Let Windows choose the graphics card; applies after a restart', ['render gpu auto', 'default gpu', '渲染显卡自动', '显卡自动']),
     gpuPreferenceCommand('high-performance', 'Render GPU: High performance', 'Render on the discrete GPU; applies after a restart', ['render gpu high performance', 'discrete gpu', 'dedicated gpu', 'dgpu', 'nvidia', '渲染显卡高性能', '独显', '独立显卡']),
     gpuPreferenceCommand('low-power', 'Render GPU: Power saving', 'Render on the integrated GPU; applies after a restart', ['render gpu power saving', 'integrated gpu', 'igpu', 'battery', '渲染显卡省电', '核显', '集成显卡']),
@@ -655,6 +666,8 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-transparent', 'settings', 'Toggle transparency', 'Toggle transparent player background', ['transparent', 'transparency', '透明', '透明化'], context => context.settings.toggleTransparentBackground()),
     createToggleCommand('settings-toggle-daylight', 'settings', 'Toggle light/dark', 'Toggle theme daylight/midnight mode', ['daylight', 'midnight', 'light', 'dark', '明暗', '切换明暗', '日夜', '日间', '夜间'], context => context.settings.toggleDaylightMode(), { executeShortcut: 'd' }),
     createToggleCommand('settings-toggle-player-back-button', 'settings', 'Always show player back button', 'Toggle whether the player page back button stays visible', ['always show back button', 'player back button', 'back button', '返回按钮', '始终显示返回按钮', '播放页返回按钮', 'fanhui annniu', 'bofangye fanhui annniu', 'fh', 'bfyfh'], context => context.settings.toggleAlwaysShowPlayerBackButton()),
+    createToggleCommand('settings-toggle-lattice-wall-form', 'settings', 'Lattice radio wall', 'Switch the queue collage (Lattice) between the poster wall and the radio wall; Personal FM always uses the radio wall', ['lattice', 'radio wall', 'poster wall', 'lattice radio', 'wall form', 'queue collage', 'card ring', '电台墙', '海报墙', '墙面形态', '队列拼贴', '卡牌', '切换墙面'], context => context.settings.toggleLatticeWallForm()),
+    createToggleCommand('settings-toggle-lattice-radio-hide-upcoming', 'settings', 'Radio wall question marks', 'Show the songs not played yet on the radio wall of a plain queue face down, as question marks; Personal FM always does', ['lattice', 'radio wall', 'question mark', 'hide upcoming', 'face down', 'card back', 'queue collage', '电台墙', '问号', '问号卡', '隐藏接下来', '背面朝上', '翻牌', '队列拼贴'], context => context.settings.toggleLatticeRadioHideUpcoming()),
     createToggleCommand('settings-toggle-lattice-vignette', 'settings', 'Poster wall vignette', 'Turn the edge vignette on the queue collage (Lattice) and the library wall on or off', ['lattice', 'vignette', 'lattice vignette', 'queue collage vignette', 'collage vignette', 'library wall vignette', 'tile wall appearance', 'bravais', '暗角', '边缘暗角', '队列拼贴', '队列拼贴暗角', '拼贴暗角', '资料库墙', '海报墙暗角', '拼贴墙外观'], context => context.settings.toggleLatticeVignette()),
     createToggleCommand('settings-toggle-lattice-badge-current-only', 'settings', 'Number only the playing song', 'Hide the corner numbers on the song cards of the queue collage (Lattice) and the Bravais wall except the playing one', ['lattice', 'bravais', 'badge', 'number badge', 'track number', 'now playing badge', 'hide numbers', 'queue collage', 'library wall', 'tile wall appearance', '序号', '角标', '序号角标', '正在播放', '只显示正在播放', '隐藏序号', '队列拼贴', '资料库墙', '拼贴墙外观'], context => context.settings.toggleLatticeBadgeCurrentOnly()),
     createToggleCommand('settings-toggle-lattice-auto-focus', 'settings', 'Lattice auto-focus', 'Toggle whether the queue collage follows the playing song when tracks change', ['lattice', 'lattice auto focus', 'queue collage', 'follow playing song', 'follow track changes', 'poster wall follow', '队列拼贴', '切歌自动聚焦', '自动聚焦当前歌曲', '海报墙跟随'], context => context.settings.toggleLatticeAutoFocusOnSongChange()),
@@ -725,7 +738,7 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createToggleCommand('settings-toggle-transcode-fallback', 'settings', 'Transcode unsupported audio', 'Toggle Electron recovery for local and Navidrome audio Chromium cannot decode', ['ffmpeg', 'unsupported audio', 'decode fallback', '无法解码', '转码恢复'], context => context.settings.toggleTranscodeFallback(), { platform: ['electron'] }),
     createToggleCommand('settings-toggle-playback-fade', 'settings', 'Fade on pause and resume', 'Toggle the short fade when pausing and resuming playback', ['fade', 'fade in', 'fade out', 'pause fade', 'smooth pause', 'crossfade pause', '淡入淡出', '暂停淡出', '播放淡入', '渐入渐出'], context => context.settings.togglePlaybackFade()),
     createToggleCommand('settings-toggle-auto-skip-unplayable', 'settings', 'Skip unplayable songs', 'Toggle counting down to a skip when a song is restricted or fails for an unknown reason', ['auto skip', 'skip unavailable', 'skip restricted songs', 'cannot play', 'unplayable', 'vip only', '自动跳过', '跳过无法播放', '无法播放', '跳过会员歌曲', '跳过灰色歌曲', '播放失败跳过'], context => context.settings.toggleAutoSkipUnplayable()),
-    createToggleCommand('settings-toggle-background-silent-skip', 'settings', 'Skip silently in the background', 'Toggle skipping unplayable songs without a prompt while the app is in the background', ['background skip', 'silent skip', 'skip in background', 'background playback', '后台跳过', '静默跳过', '后台自动跳过'], context => context.settings.toggleBackgroundSilentSkip(), { platform: ['capacitor-android'] }),
+    createToggleCommand('settings-toggle-shuffle-round-no-repeat', 'settings', 'Shuffle in rounds', 'Toggle keeping songs heard this round after the rest when shuffling, and reshuffling a finished round under list loop', ['shuffle round', 'no repeat', 'shuffle without repeats', '一轮不重复', '洗牌不重复', '随机不重复', '打乱不重复'], context => context.settings.toggleShuffleRoundNoRepeat()),
     createToggleCommand('settings-toggle-bottom-subtitle-overlay', 'settings', 'Toggle bottom subtitle overlay', 'Show or hide the whole bottom subtitle overlay', [
             'bottom subtitle overlay',
             'subtitle overlay',

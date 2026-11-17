@@ -187,12 +187,21 @@ const writeSettings = () => {
  * 只影响「用户从没表过态」的情况 —— settings 里一旦有记录（无论开着还是关着），
  * 一律以记录为准，所以用户手动关掉之后不会被下一次启动又打开。
  */
-const BUILTIN_MOD_IDS = new Set(['mod-market', 'vinyl-disc', 'visualizer-jump', 'listening-archive']);
+const BUILTIN_MOD_IDS = new Set(['mod-market', 'vinyl-disc', 'visualizer-jump', 'listening-archive', 'lizi-stages']);
+
+/*
+ * 随包内置、且管理面板里对用户隐藏的「资源型」模组（LIZI 68 个歌词舞台）。
+ * 用户没有关闭入口，历史上又可能因为没有默认启用而被记过一次 enabled:false ——
+ * 那种记录是 bug 的产物，不是用户的选择，必须无条件恢复，否则 68 款样式永远出不来。
+ * 模组系统总开关仍然尊重（见下面 systemEnabled 那条）。
+ */
+const FORCED_BUILTIN_IDS = new Set(['lizi-stages']);
 
 const isEnabled = (modId) => {
     // 总开关关着的时候，单个模组的开关是「关是关，开也是关」—— 桌面端同理：
     // 总开关决定「要不要加载模组系统」，单个开关只在系统开着时才有意义。
     if (settings.systemEnabled !== true) return false;
+    if (FORCED_BUILTIN_IDS.has(modId)) return true;
     const record = settings.mods[modId];
     if (record) return record.enabled === true;
     return BUILTIN_MOD_IDS.has(modId);

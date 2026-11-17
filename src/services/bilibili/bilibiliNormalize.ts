@@ -89,6 +89,18 @@ export const bilibiliCidOf = (song: { id?: string | number } | null | undefined)
     const id = String(song?.id ?? '');
     if (!id.startsWith(BILIBILI_ID_PREFIX)) return null;
     const rest = id.slice(BILIBILI_ID_PREFIX.length);
+    /*
+     * ★ 番剧分集的 id 是 `ep:<epId>:<cid>`，cid 在**第二段**。
+     *
+     * 以前这里一律 `indexOf(':') + 1`，对投稿（`BV...:cid`）是对的，对分集却把
+     * `epId:cid` 整串拿去 Number()，结果是 NaN —— 这一集于是被判成「没有 cid」，
+     * getAudioSource 里 `if (!cid) return null` 直接放弃。
+     * 用户看到的正是「搜索出来的电影和番剧无论如何都放不出来」。
+     */
+    if (rest.startsWith('ep:')) {
+        const cidPart = Number(rest.split(':')[2]);
+        return Number.isFinite(cidPart) && cidPart > 0 ? cidPart : null;
+    }
     const colon = rest.indexOf(':');
     if (colon < 0) return null;
     const cid = Number(rest.slice(colon + 1));

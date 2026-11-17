@@ -164,3 +164,9 @@ public/nebbia-strokes.json
 /build/apple-music-native/
 # Coven: the supervisor session's local ledger (packages/coven/README.md)
 .coven/
+# ignore workbuddy
+.workbuddy/
+HANDOFF.md
+dev/folia-find-damage.cjs
+dev/folia-merge-locale.cjs
+tsc-errors.txt

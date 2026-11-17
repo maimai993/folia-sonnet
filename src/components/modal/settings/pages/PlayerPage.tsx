@@ -10,7 +10,6 @@ import { playerBottomBarLiveOffset } from '../../../../stores/motionSignals';
 import { useLatticeSettingsStore } from '../../../../stores/useLatticeSettingsStore';
 import { usePlaybackEntryViewStore } from '../../../../stores/usePlaybackEntryViewStore';
 import { usePlaybackStore } from '../../../../stores/usePlaybackStore';
-import { useRhineOverlayStore } from '../../../../stores/useRhineOverlayStore';
 import { usePlayerBottomBarLayoutStore } from '../../../../stores/usePlayerBottomBarLayoutStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { setStatusMessage } from '../../../../stores/useStatusMessageStore';
@@ -20,7 +19,6 @@ import { useTypographySettingsStore } from '../../../../stores/useTypographySett
 import { ensureVideoLayerFileRestored, useVideoLayerSettingsStore, VIDEO_LAYER_OPACITY_BOUNDS } from '../../../../stores/useVideoLayerSettingsStore';
 import { PLAYER_BOTTOM_BAR_BASE_OFFSET_PX, resolvePlayerBottomBarMaxOffset } from '../../../../utils/playerBottomBarLayout';
 import { Button, FoldedGroup, Group, PictureChoice, Reveal, Row, Segmented, Select, Slider, TextField, Toggle, Value, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
-import MarketEntryButton from './integration/market/MarketEntryButton';
 import { EntryViewPicture } from './pictures';
 import { useSettingsPage } from './settingsPageContext';
 
@@ -38,7 +36,8 @@ const PLAYER_UI: SettingsGroupDef = { id: 'labPlayerUi', titleKey: 'options.labP
 
 const O = {
     entryView: option(VIEW, 'playbackEntryViewChoice', 'options.playbackEntryView'),
-    rhineCardVisualizer: option(VIEW, 'rhineCardVisualizer', 'options.rhineCardVisualizer'),
+    wallForm: option(VIEW, 'latticeWallForm', 'options.latticeWallForm'),
+    radioHideUpcoming: option(VIEW, 'latticeRadioHideUpcoming', 'options.latticeRadioHideUpcoming'),
     vignette: option(VIEW, 'latticeSettings', 'options.latticeVignette'),
     tint: option(VIEW, 'latticePosterTint', 'options.latticePosterTint'),
     tintCustomColor: option(VIEW, 'latticePosterTintCustomColor', 'options.latticePosterTintCustomColor'),
@@ -82,17 +81,17 @@ const PlayerPage: React.FC = () => {
         playbackEntryView: state.playbackEntryView,
         setPlaybackEntryView: state.setPlaybackEntryView,
     })));
-    const { rhineCardVisualizer, handleToggleRhineCardVisualizer } = useRhineOverlayStore(useShallow(state => ({
-        rhineCardVisualizer: state.cardVisualizer,
-        handleToggleRhineCardVisualizer: state.handleToggleCardVisualizer,
-    })));
     const lattice = useLatticeSettingsStore(useShallow(state => ({
+        wallForm: state.latticeWallForm,
+        radioHideUpcoming: state.latticeRadioHideUpcoming,
         vignette: state.latticeVignette,
         tintEnabled: state.latticePosterTintEnabled,
         tintUseCustomColor: state.latticePosterTintUseCustomColor,
         tintColor: state.latticePosterTintColor,
         tintIntensity: state.latticePosterTintIntensity,
         badgeCurrentOnly: state.latticeBadgeCurrentOnly,
+        setWallForm: state.handleSetLatticeWallForm,
+        setRadioHideUpcoming: state.handleToggleLatticeRadioHideUpcoming,
         setVignette: state.handleToggleLatticeVignette,
         setTintEnabled: state.handleToggleLatticePosterTint,
         setTintUseCustomColor: state.handleToggleLatticePosterTintCustomColor,
@@ -212,15 +211,21 @@ const PlayerPage: React.FC = () => {
                         onChange={setPlaybackEntryView}
                     />
                 </Row>
-                <Row
-                    option={O.rhineCardVisualizer}
-                    note={t('options.rhineCardVisualizerDesc')}
-                >
-                    <Toggle
-                        checked={rhineCardVisualizer}
-                        onChange={handleToggleRhineCardVisualizer}
+                <Row option={O.wallForm} note={t('options.latticeWallFormDesc')}>
+                    <Segmented
+                        value={lattice.wallForm}
+                        options={[
+                            { value: 'poster', label: t('options.latticeWallForm_poster') },
+                            { value: 'radio', label: t('options.latticeWallForm_radio') },
+                        ]}
+                        onChange={lattice.setWallForm}
                     />
                 </Row>
+                <Reveal when={lattice.wallForm === 'radio'}>
+                    <Row sub option={O.radioHideUpcoming} hint={t('options.latticeRadioHideUpcomingDesc')}>
+                        <Toggle checked={lattice.radioHideUpcoming} onChange={lattice.setRadioHideUpcoming} />
+                    </Row>
+                </Reveal>
                 <Row option={O.vignette} note={t('options.latticeVignetteDesc')}>
                     <Toggle checked={lattice.vignette} onChange={lattice.setVignette} />
                 </Row>
@@ -371,8 +376,6 @@ const PlayerPage: React.FC = () => {
                             <Button onClick={() => void video.regrantLocalFile()}>{t('options.videoLayerRegrant')}</Button>
                         )}
                         <Button onClick={() => void pickVideo()}>{t('options.videoLayerPickFile')}</Button>
-                        {/* 视频层也要有市场入口：从这里直接挑视频，不用先去别的页面找。 */}
-                        <MarketEntryButton tab="background" />
                     </Row>
                 </Reveal>
                 <Reveal when={video.enabled}>

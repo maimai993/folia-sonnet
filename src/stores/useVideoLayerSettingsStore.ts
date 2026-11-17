@@ -180,8 +180,7 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
             set({ injectedUrl: url });
             // 注入了就把它露出来：用户点了「看这个视频」，看不到才是怪事。
             if (url) set({ videoLayerEnabled: true });
-        },
-        setVideoLayerEnabled: (enabled) => {
+        },        setVideoLayerEnabled: (enabled) => {
             set({ videoLayerEnabled: enabled });
             setStoredBoolean(VIDEO_LAYER_ENABLED_KEY, enabled);
         },

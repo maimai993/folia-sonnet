@@ -559,9 +559,15 @@ class FoliaWallpaperPlugin : Plugin() {
         val cropRight = call.getFloat("cropRight", 1f) ?: 1f
         val cropBottom = call.getFloat("cropBottom", 1f) ?: 1f
         Thread {
-            val key = WallpaperBackgroundImage.storeFromUrl(
-                context, url, rotation, cropLeft, cropTop, cropRight, cropBottom,
-            )
+            // 裸线程上没有别人兜底：任何 Throwable（含 OOM）漏出去都是未捕获异常、应用崩溃，且 Promise 永远不回（#364）。
+            val key = try {
+                WallpaperBackgroundImage.storeFromUrl(
+                    context, url, rotation, cropLeft, cropTop, cropRight, cropBottom,
+                )
+            } catch (error: Throwable) {
+                android.util.Log.w(TAG, "downloadImage failed", error)
+                null
+            }
             val out = JSObject()
             out.put("downloaded", key != null)
             call.resolve(out)

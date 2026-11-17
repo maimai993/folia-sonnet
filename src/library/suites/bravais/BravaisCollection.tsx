@@ -10,6 +10,8 @@ import { resolveTrackAlbumLink, resolveTrackArtistLinks } from '../../core/share
 import { useCollectionResourceState } from '../../core/collection/resource/useCollectionResourceState';
 import { useCollectionView } from '../../core/collection/useCollectionView';
 import { useTrackSorting } from '../../core/collection/useTrackSorting';
+import type { SongSortField } from '../../../utils/songSorting';
+import type { LocalSongFolderSortField } from '../../../utils/localSongSorting';
 import { useCollectionActions } from '../../core/collection/mutations/useCollectionActions';
 import { useCollectionMutationSnapshot } from '../../core/collection/mutations/useCollectionMutations';
 import { useGridSurfaceRegistration } from '../../../hooks/useGridSurfaceRegistration';
@@ -95,6 +97,7 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
         sortField: sorting.field,
         sortDirection: sorting.direction,
         playFiltered: actions.playScope,
+        shufflePlayFiltered: declaredActions.actions.includes('shuffle-scope') ? actions.shuffleScope : undefined,
         enqueueFiltered: actions.enqueueScope,
         collectFiltered: actions.capabilities.collect ? actions.collectScope : undefined,
         setSortField: sorting.setField,
@@ -190,11 +193,15 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
         committedQuery: filter.committedQuery,
         setQuery: filter.setQuery,
         sort: {
-            supported: supportsTrackSorting,
-            field: sorting.field,
-            direction: sorting.direction,
-            presets: sorting.presets,
-            setPreset: sorting.applyPreset,
+            // 缝面板的排序行只有本地文件夹用得上（seam hook 只在 declares('sort') 且受支持时输出），
+            // 字段集合是本地三项（fileName / fileLastModified / albumTrack）。通用排序（在线歌单等）
+            // 的入口走列表上方那套 TrackSortMenu，不走这里。
+            supported: supportsLocalTrackSorting,
+            field: sorting.supported && sorting.field !== 'none'
+                ? (sorting.field as LocalSongFolderSortField)
+                : 'fileName',
+            direction: sorting.direction === 'desc' ? 'desc' : 'asc',
+            setField: field => sorting.setField(field as SongSortField),
             setDirection: sorting.setDirection,
         },
         trackByKey,
@@ -260,6 +267,7 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
             onBack: () => latest.current.onBack(),
             onDone: () => latest.current.onDone(),
             onPlayScope: () => latest.current.actions.playScope(),
+            onShuffleScope: () => latest.current.actions.shuffleScope(),
             onEnqueueScope: () => latest.current.actions.enqueueScope(),
             clearFilter: () => latest.current.filter.setQuery(''),
         };
@@ -283,6 +291,7 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
 
     const scopeEnabled = actions.capabilities.scope.enabled;
     const declaresScope = declaredActions.actions.includes('play-scope');
+    const declaresShuffleScope = declaredActions.actions.includes('shuffle-scope');
     const declaresEnqueueScope = declaredActions.actions.includes('enqueue-scope');
     // 专辑页的海报信息（左边的凝彩海报）：只有专辑类型的集合有，详情盖在集合描述上。
     const totalTracks = snapshot?.detail?.trackCount ?? collection.trackCount ?? allItems.length;
@@ -317,12 +326,13 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
         // 过滤中显示「匹配 / 总数」（书脊上也是它）。
         meta: view.isFilterActive ? matchLabel : t('libraryBravais.trackCount', { count: allItems.length }),
         onPlayScope: declaresScope && scopeEnabled ? callbacks.onPlayScope : undefined,
+        onShuffleScope: declaresShuffleScope && scopeEnabled ? callbacks.onShuffleScope : undefined,
         onEnqueueScope: declaresEnqueueScope && scopeEnabled ? callbacks.onEnqueueScope : undefined,
         filter: seamFilter,
         collection: seamCollection,
         album: seamAlbum,
         artistSongs: seamArtistSongs,
-    }), [seamAlbum, seamArtistSongs, allItems.length, callbacks, declaresEnqueueScope, declaresScope, displayTitle, matchLabel, scopeEnabled, seamCollection, seamFilter, t, view.isFilterActive]);
+    }), [seamAlbum, seamArtistSongs, allItems.length, callbacks, declaresEnqueueScope, declaresScope, declaresShuffleScope, displayTitle, matchLabel, scopeEnabled, seamCollection, seamFilter, t, view.isFilterActive]);
 
     const layer = useMemo<BravaisLayer>(() => ({
         key: sessionKey,

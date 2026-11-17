@@ -15,12 +15,14 @@ import {
 } from '../aiCompletion';
 import type { AiCompletionTarget } from '../aiCompletion';
 import {
+    effectiveBlockedDirectorModes,
     formatParamValue,
     gateSatisfied,
     gatesFor,
     isBlockedDirectorMode,
     isInertValue,
     isKnownDirectorMode,
+    isLockedDirectorMode,
     modeLabel,
     sanitizeParams,
     tuningStateKey,
@@ -246,13 +248,15 @@ const currentModeOf = (state: VisualizerState): string => (
     typeof state?.visualizerMode === 'string' ? state.visualizerMode : 'classic'
 );
 
-/* An id the registry does not know is a hallucination; a mode the user blocked is
- * one the AI was never shown, so an answer naming it is treated the same way —
- * both degrade to the mode that is already playing. */
+/* An id the registry does not know is a hallucination; a mode the user blocked — or one
+ * the AI is never allowed to use at all (fork-only and mod modes) — is one the AI was
+ * never shown, so an answer naming it is treated the same way: both degrade to the mode
+ * that is already playing. */
 const validatedMode = (mode: unknown, fallback: string, blockedModes: readonly string[] = []): string => {
     const candidate = typeof mode === 'string' ? mode.trim() : '';
-    if (isKnownDirectorMode(candidate) && !isBlockedDirectorMode(candidate, blockedModes)) return candidate;
-    return fallback;
+    if (!isKnownDirectorMode(candidate) || isLockedDirectorMode(candidate)) return fallback;
+    if (isBlockedDirectorMode(candidate, effectiveBlockedDirectorModes(blockedModes))) return fallback;
+    return candidate;
 };
 
 interface ApplyResult {

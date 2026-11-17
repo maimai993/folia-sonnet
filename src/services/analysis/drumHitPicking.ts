@@ -48,9 +48,11 @@ const HIT_TOP = 0.99;
 const HIT_ONSET_FLOOR = 0.15;
 const PEAK_HALF = 3;
 const MIN_HIT_GAP = 0.09;
-const KICK_MAX_HZ = 150;
-const SNARE_MAX_HZ = 4000;
-const HAT_MIN_HZ = 6000;
+// 三条带的边界。Android 的 `DrumBandEdges.kt` 抄的是同一组数，test/unit/analysis/drumBandEdgesParity.test.ts
+// 读那份 Kotlin 源码对账：改这里就要同步改那边，反过来也一样（#344）。
+export const KICK_MAX_HZ = 150;
+export const SNARE_MAX_HZ = 4000;
+export const HAT_MIN_HZ = 6000;
 
 /** Energy frames: 10 ms at 44.1 kHz. */
 export const ENERGY_HOP = 441;

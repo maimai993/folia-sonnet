@@ -12,6 +12,7 @@ import { usePerfDiagnosticsStore } from './stores/usePerfDiagnosticsStore';
 import { installAndroidPhoneFitPreference, installDeviceProfilePreference } from './services/androidPhoneLayout';
 import { installHdrProjectionPreference } from './services/hdrProjection';
 import { installAndroidModsBridge } from './mods/android/androidModsBridge';
+import { isPerfCheckSurface } from './utils/appSurface';
 // import { installCoverSizeAudit } from './services/debug/coverSizeSamples';
 // @ts-ignore
 globalThis.Buffer = Buffer;
@@ -20,10 +21,12 @@ globalThis.Buffer = Buffer;
 installConsoleLogCapture();
 // Right after it, so the startup lines reach the runtime log file too and not only the in-memory
 // buffer. Both no-op off Electron. See services/debug/debugModule.ts.
-installDebugModule();
-installMemorySampleFeed();
-// 只在安卓原生端有作用；桌面/网页会立刻返回，不会碰 Capacitor。
-// 莱茵生命的原生桥由插件 load() 自启动，入口不再需要唤醒（分层边界：只有 registry 能碰 suite）。
+// Not in the performance check's window: the log pipe is the first-party windows' (the main process
+// refuses it there), and the check writes its result through its own channel (electron/perfCheck.cjs).
+if (!isPerfCheckSurface) {
+    installDebugModule();
+    installMemorySampleFeed();
+}
 // Cover size audit, left wired but switched off: it answered whether the provider CDNs honour the
 // size in a cover URL - they do - and that is not a question worth re-asking every session. The
 // collector and its panel are still in the tree, and `?probe=coverSizeAudit` still reaches them.

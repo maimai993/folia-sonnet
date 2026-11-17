@@ -12,6 +12,7 @@ import {
 } from './aiCloudCache';
 import { requestAiCompletion } from './aiCompletion';
 import {
+    effectiveBlockedDirectorModes,
     isBlockedDirectorMode,
     isKnownDirectorMode,
     listDirectorModes,
@@ -303,8 +304,11 @@ const buildStageContext = (request: StageRequest): StageContext => {
         songTitle: request.songTitle ?? song?.title ?? '',
     });
 
+    // 生效的禁区：用户勾掉的 + 永远不许 AI 用的（fork 与模组样式）—— 只用来过滤可选模式清单。
+    // 策略与指纹仍只认用户自己那份：锁死集合是这一版代码的常量，不该让它把服务端的缓存键
+    // 也一起换掉（换了等于所有人缓存全部作废，却没有任何决策上的差别）。
     const modes = listDirectorModes(translate)
-        .filter((mode) => !isBlockedDirectorMode(mode.id, blockedModes));
+        .filter((mode) => !isBlockedDirectorMode(mode.id, effectiveBlockedDirectorModes(blockedModes)));
     const policy = buildStagePolicy({ isPureMusic, hint, blocked: blockedModes });
 
     return {

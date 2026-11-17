@@ -51,7 +51,6 @@ const StoragePage: React.FC = () => {
     const [clearingSeparation, setClearingSeparation] = useState(false);
     // 分离出来的伴奏 / 清唱落在原生缓存里，用量同样上报到这个 store；
     // 进存储页问一次，和其余缓存一起量。
-    const vocalCachedCount = useAudioSettingsStore(state => state.vocalCancelCachedCount);
     const vocalCacheBytes = useAudioSettingsStore(state => state.vocalCancelCacheBytes);
     useEffect(() => {
         if (isCapacitorAndroid()) refreshInstrumentalStatus();
@@ -121,29 +120,6 @@ const StoragePage: React.FC = () => {
                 <Row label={t('options.cachedSongsCount')}>
                     <Value>{mediaCount} · {cacheSizes.media}</Value>
                 </Row>
-                {/*
-                 * 分轨的两行贴着放，紧挨在「清除」之上 —— 它们说的是同一件事（分离出来的
-                 * 那些音轨），中间隔开缓存目录 / 上限那几行就会看不出来是一组。
-                 */}
-                {isCapacitorAndroid() && (
-                    <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
-                        {/*
-                         * 只说用掉多少、存了几首。
-                         *
-                         * 上限那一截不再写了：这个上限不是能调的东西（它按曲库大小自己定），
-                         * 摆出来只会让人去找那个调不了的数字。
-                         */}
-                        {vocalCachedCount > 0 && (
-                            <Value>{t('account.vocalCancelCacheUsed', {
-                                count: vocalCachedCount,
-                                used: formatCacheSize(vocalCacheBytes),
-                            })}</Value>
-                        )}
-                        <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
-                            {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
-                        </Button>
-                    </Row>
-                )}
                 {isCapacitorAndroid() && (
                     <Row label={t('options.prebuildTracks')} hint={t('options.prebuildTracksDesc')}>
                         <Toggle checked={prebuildTracksEnabled} onChange={setPrebuildTracksEnabled} />
@@ -159,6 +135,20 @@ const StoragePage: React.FC = () => {
                     </Button>
                 )}
             >
+                {/*
+                 * 分离出来的伴奏 / 清唱单独一行，和上面那些缓存项摆在一起 ——
+                 * 它本来就是「缓存详情」里的一份，放在媒体缓存那一组反而看不出归谁管。
+                 *
+                 * 只报大小：存了几首是个会变的数，用户看这一行只想知道占了多少地方。
+                 */}
+                {isCapacitorAndroid() && (
+                    <Row label={t('options.separationCache')} hint={t('options.separationCacheClearDesc')}>
+                        <Value>{formatCacheSize(vocalCacheBytes)}</Value>
+                        <Button onClick={() => void clearSeparationCache()} disabled={clearingSeparation}>
+                            {clearingSeparation ? t('options.cacheClearing') : t('ui.clear')}
+                        </Button>
+                    </Row>
+                )}
                 {CACHE_ROWS.map(({ category, option }) => (
                     <Row key={category} option={option}>
                         <Value>{cacheSizes[category]}</Value>

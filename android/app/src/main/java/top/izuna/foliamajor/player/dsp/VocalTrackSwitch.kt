@@ -45,16 +45,38 @@ internal fun vocalTrackModeOf(mode: String?): VocalTrackMode? = when (mode) {
  * 现在两个维度都严格相等才放行：
  *   · 原曲地址 [FoliaNativePlayer.baseUrl] 必须还是这一趟生成用的那一个；
  *   · 装源时写进 MediaItem 的 songKey（[FoliaNativePlayer.currentMediaId]）必须
- *     还是这一个。没有 songKey 的老路径只比地址。
+ *     还是这一个。
+ *
+ * ★ 「没有 songKey 就只比地址」这条退路已经删掉。它本来是给老装源路径留的向下兼容，
+ * 但正是它让下面这几种情况漏了过去 —— 地址根本没变，变的只是「装进去的那个地址属于
+ * 哪一首」：
+ *   · 同一首歌重新装源（恢复进度、切画质、切码率）时 baseUrl 不变；
+ *   · 队列里两首歌解析出同一个直链（本地曲目、平台给了同一个 CDN 地址）。
+ * 这时上一首那趟任务跑完，地址比得过去，就把上一首的伴奏 / 清唱装到了当前播放器上，
+ * 用户听到的就是「切了人声 / 伴奏，放的却不是这首歌」。songKey 缺失时一律判不成立：
+ * 宁可这一趟白跑（下一次拨开关会重来），也不要放错歌。
  *
  * 同样是纯字符串比较，不碰 Android API，可直接进 JVM 单测。
  */
 internal fun stillPlayingGeneratedTrack(
-    currentBaseUrl: String?,
+    @Suppress("UNUSED_PARAMETER") currentBaseUrl: String?,
     currentMediaId: String,
-    buildUrl: String,
+    @Suppress("UNUSED_PARAMETER") buildUrl: String,
     buildSongKey: String?,
 ): Boolean {
-    if (currentBaseUrl != buildUrl) return false
-    return buildSongKey.isNullOrBlank() || currentMediaId == buildSongKey
+    /*
+     * ★ 以 songKey 为唯一身份判据。
+     *
+     * 原曲地址 baseUrl 是平台给的签名直链（B 站带 deadline=、音乐平台带 expires/token），
+     * 拆分要几十秒到几分钟，期间签名过期、切画质、MV 音轨注入/还原都会让 Web 重新装源，
+     * baseUrl 就变了。旧判据 `currentBaseUrl != buildUrl` 把这一种误判成「换了歌」，
+     * 拆分跑完不自动换源 —— 用户要手动再拨一次（走 reconcile 的缓存分支、只比 songKey）
+     * 才生效，正是「拆完不会自动切，点一下别的再点回来才行」。
+     *
+     * 身份其实由 songKey（平台 + 歌曲 id）唯一确定：上一首和这一首的 songKey 必然不同，
+     * 所以只比 songKey 就足够挡住 #378「上一首的分离结果装到当前这首」。
+     * 没有 songKey 的老路径无从确认身份，一律不放行。
+     */
+    if (buildSongKey.isNullOrBlank()) return false
+    return currentMediaId == buildSongKey
 }

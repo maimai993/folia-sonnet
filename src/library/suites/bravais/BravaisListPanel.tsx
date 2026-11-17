@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { ChevronLeft, ListPlus, Play } from 'lucide-react';
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronLeft, ListPlus } from 'lucide-react';
 import { List, useListRef, type RowComponentProps } from 'react-window';
 import { useTranslation } from 'react-i18next';
 import type { BravaisItem, BravaisLayer } from './bravaisLayer';
@@ -7,8 +7,7 @@ import { BravaisSeamStatusLine } from './BravaisSeamCollection';
 import BravaisSeamFilterField from './BravaisSeamFilterField';
 import { setBravaisLinkedKey, useBravaisUiStore } from './bravaisUiStore';
 import BravaisSeamCrumbs from './BravaisSeamCrumbs';
-import { TrackSortDirectionButton, TrackSortMenu } from '../../../components/shared/TrackSortMenu';
-import { Button } from '../../../components/ui';
+import BravaisSeamPlayScope from './BravaisSeamPlayScope';
 
 // src/library/suites/bravais/BravaisListPanel.tsx
 // 列表面板（设计稿 §5「面板」「歌曲列表」）：缝加宽到 min(420, 视口 − 52)，标题横排压在顶部，下面是工具行（本地文件夹的
@@ -99,37 +98,32 @@ const BravaisListPanel: React.FC<{ layer: BravaisLayer; depth: number; actions: 
     return (
         <div className="bravais-seam-panel" data-bravais-list={layer.key}>
             <div className="bravais-seam-crumbs">
-                <Button className="bravais-seam-back" data-bravais-seam-action="close-list" onClick={actions.close}
+                <button type="button" className="bravais-seam-back" data-bravais-seam-action="close-list" onClick={actions.close}
                     aria-label={t('libraryBravais.seamBack')} title={t('libraryBravais.seamBack')}>
                     <ChevronLeft aria-hidden />
-                </Button>
+                </button>
                 <BravaisSeamCrumbs layer={layer} panelLabel={entries?.listCrumb ?? ''} onClosePanel={actions.close} />
-                <Button className="bravais-seam-level" data-bravais-seam-action="hide" onClick={actions.fold}>
+                <button type="button" className="bravais-seam-level" data-bravais-seam-action="hide" onClick={actions.fold}>
                     {t('libraryBravais.seamFold')}
-                </Button>
+                </button>
             </div>
             {layer.seam.filter && <BravaisSeamFilterField filter={layer.seam.filter} variant="panel" />}
             <h2 className="bravais-panel-title" data-bravais-seam-title>{seam.title}</h2>
             <div className="bravais-seam-meta">{seam.meta}</div>
             {sort && (
                 <div className="bravais-panel-tools" data-bravais-list-sort>
-                    {/* 与网格侧栏同一个控件：网页自己画菜单，不弹浏览器 / 系统那套 spinner 弹窗。 */}
-                    <TrackSortMenu
-                        variant="label"
-                        presets={sort.presets}
-                        field={sort.field}
-                        direction={sort.direction}
-                        onSelect={sort.selectPreset}
-                    />
-                    <TrackSortDirectionButton
-                        className="bravais-seam-icon"
-                        data-bravais-list-sort-direction={sort.direction}
-                        direction={sort.direction}
-                        disabled={sort.field === 'none'}
-                        onDirectionChange={sort.toggleDirection}
-                        aria-label={sort.directionLabel}
-                        title={sort.directionLabel}
-                    />
+                    <select
+                        value={sort.field}
+                        aria-label={entries?.panelTitle}
+                        data-bravais-list-sort-field
+                        onChange={event => sort.setField(event.target.value)}
+                    >
+                        {sort.fields.map(field => <option key={field.value} value={field.value}>{field.label}</option>)}
+                    </select>
+                    <button type="button" className="bravais-seam-icon" data-bravais-list-sort-direction={sort.direction}
+                        onClick={sort.toggleDirection} aria-label={sort.directionLabel} title={sort.directionLabel}>
+                        {sort.direction === 'asc' ? <ArrowUpNarrowWide aria-hidden /> : <ArrowDownWideNarrow aria-hidden />}
+                    </button>
                 </div>
             )}
             <div className="bravais-panel-list" role="listbox" aria-label={entries?.panelTitle}>
@@ -147,15 +141,11 @@ const BravaisListPanel: React.FC<{ layer: BravaisLayer; depth: number; actions: 
                 ) : collection?.status && <BravaisSeamStatusLine status={collection.status} />}
             </div>
             <div className="bravais-seam-actions">
-                {seam.onPlayScope && (
-                    <Button className="bravais-chrome-button is-primary" data-bravais-seam-action="play-scope" onClick={seam.onPlayScope}>
-                        <Play aria-hidden />{seam.scopeLabels?.play ?? t('libraryBravais.playAll')}
-                    </Button>
-                )}
+                <BravaisSeamPlayScope seam={seam} buttonClassName="bravais-chrome-button" />
                 {seam.onEnqueueScope && (
-                    <Button className="bravais-chrome-button" data-bravais-seam-action="enqueue-scope" onClick={seam.onEnqueueScope}>
+                    <button type="button" className="bravais-chrome-button" data-bravais-seam-action="enqueue-scope" onClick={seam.onEnqueueScope}>
                         <ListPlus aria-hidden />{seam.scopeLabels?.enqueue ?? t('libraryBravais.enqueueAll')}
-                    </Button>
+                    </button>
                 )}
             </div>
         </div>

@@ -1,5 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { FileMusic, FolderPlus, RefreshCw, type LucideIcon } from 'lucide-react';
 import type { LocalLibraryGroup, LocalPlaylist, LocalSong } from '../../../types';
 import type { LibraryCollectionDescriptor } from '../../core/collection/collection.contract';
 import type { LibraryDirectoryBatchController, LibraryHiddenScope } from '../../core/directory/directory.contract';
@@ -27,12 +28,9 @@ import type { BravaisHomeTool } from './bravaisHomeModels';
 import type { BravaisSeamMenuItem } from './bravaisSeamModels';
 import type { BravaisHomeChrome } from './useBravaisHomeChrome';
 import BravaisHomeDirectory from './BravaisHomeDirectory';
-import LocalSongManagerDialog from '../../shared/LocalSongManagerDialog';
 import { availableLocalTabLabel, localWallHint, onlineWallHint } from './bravaisEmptyWallHint';
 import { useBravaisHomeAccount } from './useBravaisHomeAccount';
-import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
-import { isAndroidNativeRuntime } from '../../../services/nativeLocalMusic';
-import { TextField } from '../../../components/ui';
+import { quickPriority } from './bravaisSeamQuickCells';
 
 // src/library/suites/bravais/BravaisHomeSources.tsx
 // bravais 首页三个来源的墙（设计稿 §10.5）：在线（账户歌单 / 电台 / 收藏专辑）、本地（文件夹 / 专辑 / 歌手 / 歌单
@@ -54,12 +52,17 @@ type BravaisHomeSourceCommonProps = {
     onOpenGridView: (collection: LibraryCollectionDescriptor) => void;
 };
 
+/** 本地动作在工具格里的图标（方案 C：导入文件夹、刷新、导入歌单文件直接成格，BravaisSeamHomeTools）。 */
+const LOCAL_ACTION_ICONS: Record<string, LucideIcon> = {
+    'import-folder': FolderPlus,
+    'refresh-folders': RefreshCw,
+    'import-playlist': FileMusic,
+};
+
 const LOCAL_ACTION_IDS: Record<string, LibraryHomeActionId> = {
     'import-folder': 'home-import-folder',
     'refresh-folders': 'home-refresh-folders',
     'import-playlist': 'home-import-playlist',
-    'manage-songs': 'home-manage-songs',
-    'scan-device-music': 'home-scan-device-music',
 };
 
 export const BravaisHomeOnline: React.FC<BravaisHomeSourceCommonProps & {
@@ -137,10 +140,7 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
     directoryActions?: LibraryDirectoryBatchController;
 }> = ({ meta, localSongs, localPlaylists, catalog, activeRow, setActiveRow, treesResource, directoryActions, homeActions, onOpenGridView, ...common }) => {
     const { t } = useTranslation();
-    const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const playlistFileInputRef = useRef<HTMLInputElement>(null);
-    // 「管理歌曲」对话框：与网格本地页同一颗按钮、同一个对话框（整库删歌 / 改名的唯一入口）。
-    const [isManageOpen, setIsManageOpen] = useState(false);
     const directoryTrees = useLocalDirectoryTrees(treesResource, localSongs);
     const local = useLibraryHomeLocal({ localSongs, localPlaylists, catalog, activeRow });
     const { snapshot: actionState } = useLibraryHomeActions(homeActions);
@@ -152,24 +152,12 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
         reloadAllTrees: directoryTrees.reloadAll,
     });
     const activeSection = local.activeSection;
-    /*
-     * 「扫描设备音乐」与「管理歌曲」两条都由这里告诉 core 给不给：
-     *
-     * - 系统文件管理器挑不出「设备里已经收录的所有音乐」，安卓上只剩设备扫描这条能一次性收进来。
-     *   core 不做平台判定（那是宿主的事），所以按运行时传进去。
-     * - 「管理歌曲」的对话框是 suite 自己挂的（网格一直挂，墙上以前没挂），这里挂了才摆按钮 ——
-     *   否则会出现一颗点了没反应的按钮。
-     */
-    const localActions = resolveLocalHomeActions(actionState, {
-        deviceScan: isAndroidNativeRuntime(),
-        manageSongs: true,
-    }).filter(action => common.declaredActions.actions.includes(LOCAL_ACTION_IDS[action.id]));
+    const localActions = resolveLocalHomeActions(actionState)
+        .filter(action => common.declaredActions.actions.includes(LOCAL_ACTION_IDS[action.id]));
     const runAction = (id: string) => {
         if (id === 'import-folder') void homeActions.importFolder();
         else if (id === 'refresh-folders') void homeActions.refreshFolders();
         else if (id === 'import-playlist') playlistFileInputRef.current?.click();
-        else if (id === 'manage-songs') setIsManageOpen(true);
-        else if (id === 'scan-device-music') void homeActions.scanDeviceMusic();
     };
     const runActionRef = useRef(runAction);
     runActionRef.current = runAction;
@@ -208,7 +196,8 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
             : undefined,
     });
 
-    // 缝：四行是二级切换（整面翻牌，不换层）；「⋯」里是导入文件夹、刷新、导入歌单文件。
+    // 缝：四行是二级切换（整面翻牌，不换层）；导入文件夹、刷新、导入歌单文件带图标与优先级，在工具格的本页一组里直接成格
+    // （方案 C，BravaisSeamHomeTools），放不下的进「⋯」。
     const sections = useMemo(() => local.sections.map(section => ({
         key: section.key,
         label: section.label,
@@ -220,16 +209,14 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
         const section = sectionsRef.current.sections.find(candidate => candidate.key === key);
         if (section) sectionsRef.current.setActiveRow(section.row);
     }, []);
-    // 空库那一屏只留「导入文件夹」与「扫描设备音乐」—— 与网格空库那一屏同一组：
-    // 没有歌可管的「管理歌曲」和没有根可刷的「刷新」先收起来。
-    const menuActions = isEmptyLibrary
-        ? localActions.filter(action => action.id === 'import-folder' || action.id === 'scan-device-music')
-        : localActions;
-    const menuKey = menuActions.map(action => `${action.id}:${action.labelKey}:${action.disabled}`).join('|');
-    const menu = useMemo<BravaisSeamMenuItem[]>(() => menuActions.map(action => ({
+    const menuKey = localActions.map(action => `${action.id}:${action.labelKey}:${action.disabled}:${action.pending}`).join('|');
+    const menu = useMemo<BravaisSeamMenuItem[]>(() => localActions.map(action => ({
         id: `home-${action.id}`,
         label: t(action.labelKey),
         disabled: action.disabled,
+        icon: LOCAL_ACTION_ICONS[action.id],
+        priority: quickPriority(`home-${action.id}`),
+        busy: action.pending,
         run: () => runActionRef.current(action.id),
     // localActions 每次渲染都是新数组：按内容比较。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,7 +234,7 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
 
     return (
         <>
-            <TextField
+            <input
                 ref={playlistFileInputRef}
                 type="file"
                 accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl"
@@ -276,16 +263,6 @@ export const BravaisHomeLocal: React.FC<BravaisHomeSourceCommonProps & {
                 panelTitle={activeSection.label}
                 onOpen={onOpen}
                 shortcutCards={isEmptyLibrary ? NO_CARDS : shortcutCards}
-            />
-            <LocalSongManagerDialog
-                isOpen={isManageOpen}
-                songs={localSongs}
-                isDaylight={isDaylight}
-                onDelete={async (songIds) => {
-                    await homeActions.deleteLocalSongs(songIds);
-                }}
-                onRename={async (songId, name) => (await homeActions.renameLocalSong(songId, name)).ok}
-                onClose={() => setIsManageOpen(false)}
             />
         </>
     );

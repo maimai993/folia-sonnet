@@ -32,13 +32,29 @@ import okhttp3.Response
 object VideoStreamProxy {
     private const val TAG = "FoliaBilibili"
 
+    /** 最多留多少条流；超了从头开始丢（见 pruneIfCrowded）。 */
+    private const val MAX_ENTRIES = 24
+
     /** 一条要代理的流：一主多备。 */
     private class Entry(
         val urls: List<String>,
         val headers: Map<String, String>,
     )
 
-    private val entries = ConcurrentHashMap<String, Entry>()
+    /*
+     * 用 LinkedHashMap 记插入顺序，而不是随便一张 ConcurrentHashMap。
+     *
+     * ★ 这是「B 站视频整块黑屏」的根因。
+     *
+     * pruneIfCrowded 以前是 entries.keys.take(overflow) —— 在无序的 map 上，
+     * 这取到的是**任意**几条，包括正在播的那一条。队列预取会一口气登记十几条流
+     * （每个 bvid × 清晰度 × cid 各一条），很容易超过 24 条上限；一旦把播放中的
+     * 那条挤掉，播放器再读就是 404，<video> 报 MEDIA_ERR_SRC_NOT_SUPPORTED，
+     * 画面上什么都没有 —— 用户看到的就是「切到 MV 之后整个应用黑屏」。
+     *
+     * 换成 LinkedHashMap：最早的排在最前，淘汰从头开始，也就是真正的 LRU 顺序。
+     */
+    private val entries = java.util.Collections.synchronizedMap(LinkedHashMap<String, Entry>())
     private var server: ServerSocket? = null
     private val started = AtomicBoolean(false)
 
@@ -97,6 +113,7 @@ object VideoStreamProxy {
         val token = Integer.toHexString((usable[0] + System.nanoTime()).hashCode()) +
             System.nanoTime().toString(36)
         entries[token] = Entry(usable, headers)
+        pruneIfCrowded()
         return "http://127.0.0.1:$listening/stream/$token"
     }
 
@@ -104,6 +121,53 @@ object VideoStreamProxy {
     fun forget(url: String) {
         val token = url.substringAfterLast("/stream/", "")
         if (token.isNotEmpty()) entries.remove(token)
+    }
+
+    /**
+     * 本机中转地址 → 它背后那条真实地址（主地址）。
+     *
+     * 缓存、分离、分析这几条路都要**直接**从 CDN 取字节：拿中转地址去下载，下到的
+     * 可能是一条已经过期、或者中转已经忘掉的流（那是一段 404 文本），而且中转本身
+     * 是给播放器流式读的，不是给一次性整份下载用的。
+     *
+     * 不是中转地址（或者那条流已经不在表里）就回 null，调用方照原样用。
+     */
+    fun directUrlFor(url: String): String? {
+        val prefix = "http://127.0.0.1:"
+        if (!url.startsWith(prefix)) return null
+        val token = url.substringAfterLast("/stream/", "")
+        if (token.isEmpty() || token == url) return null
+        return entries[token]?.urls?.firstOrNull()
+    }
+
+    /**
+     * 表长了就清一批。
+     *
+     * 一条流一个 token，切歌不清理的话这张表会一直涨（每次换画质都会重新登记一条）。
+     * 表不大时什么都不做：正常的播放会一直命中同一条，频繁清理反而让正在放的流断掉。
+     */
+    /** 正在被读的流：淘汰时跳过它们（见 pruneIfCrowded）。 */
+    private val busyStreams = ConcurrentHashMap.newKeySet<String>()
+
+    private fun pruneIfCrowded() {
+        var overflow = entries.size - MAX_ENTRIES
+        if (overflow <= 0) return
+        /*
+         * 从最早登记的往后丢，但**跳过正在被读的那几条**。
+         *
+         * 「正在被读」= 已经有连接挂在上面的（busyStreams）。一条 MV 会连着读好几分钟，
+         * 而队列预取在这几分钟里会不断登记新流 —— 只按顺序淘汰，早晚轮到现在这条。
+         */
+        val snapshot = synchronized(entries) { entries.keys.toList() }
+        val doomed = ArrayList<String>(overflow)
+        for (token in snapshot) {
+            if (overflow <= 0) break
+            if (busyStreams.contains(token)) continue
+            doomed += token
+            overflow -= 1
+        }
+        doomed.forEach { entries.remove(it) }
+        if (doomed.isNotEmpty()) Log.i(TAG, "video proxy dropped ${doomed.size} old streams")
     }
 
     private fun acceptLoop(socket: ServerSocket) {
@@ -127,7 +191,9 @@ object VideoStreamProxy {
                 val input = socket.getInputStream()
                 val requestLine = readLine(input) ?: return
                 // 第一行是 `GET /stream/<token> HTTP/1.1`。
-                val path = requestLine.split(' ').getOrNull(1) ?: return
+                val parts = requestLine.split(' ')
+                val method = parts.getOrNull(0)?.uppercase() ?: "GET"
+                val path = parts.getOrNull(1) ?: return
                 var range: String? = null
                 // 把请求头读完（不读干净，后面的写会被 TCP 缓冲搅乱）。
                 while (true) {
@@ -146,6 +212,23 @@ object VideoStreamProxy {
                     return
                 }
                 /*
+                 * 这次请求在读它期间，这条流不许被淘汰（见 pruneIfCrowded）。
+                 * 挂在这里而不是 register 里：真正「在用」的时刻是有人来读，
+                 * 登记只是在表里占个位。用完（finally）立刻放开。
+                 */
+                busyStreams.add(token)
+                /*
+                 * HEAD 只回头，不回体。
+                 *
+                 * `<video preload="metadata">` 一开始发的就是 HEAD：以前这里把它当 GET，
+                 * 照样把整段字节吐出去 —— 播放器只读头就关连接，剩下的字节全成了
+                 * 「连接被重置」，日志里一片 read ECONNRESET，而元数据还是没能拿到。
+                 */
+                if (method == "HEAD") {
+                    serveHead(entry, range, output)
+                    return
+                }
+                /*
                  * 按候选顺序试：一台回 403 就换下一台。
                  *
                  * `responded` 说的是「这条连接上已经出现过一个 HTTP 响应了」。它一旦为真，
@@ -155,22 +238,65 @@ object VideoStreamProxy {
                  */
                 var responded = false
                 var served = false
-                for (url in entry.urls) {
-                    if (served) break
-                    try {
-                        served = relay(url, entry.headers, range, output, onHead = { responded = true })
-                    } catch (error: Exception) {
-                        Log.w(TAG, "relay failed, trying the next address", error)
-                        // 已经把响应头吐出去的那条路不能再换地址重来（同一个连接上没法重开一个响应）。
-                        if (responded) return
-                        served = false
+                try {
+                    for (url in entry.urls) {
+                        if (served) break
+                        try {
+                            served = relay(url, entry.headers, range, output, onHead = { responded = true })
+                        } catch (error: Exception) {
+                            Log.w(TAG, "relay failed, trying the next address", error)
+                            // 已经把响应头吐出去的那条路不能再换地址重来（同一个连接上没法重开一个响应）。
+                            if (responded) return
+                            served = false
+                        }
                     }
+                    if (!served && !responded) writeSimple(output, "502 Bad Gateway", "no address answered")
+                } finally {
+                    // 这一次读完了，这条流可以重新参与淘汰（见 pruneIfCrowded）。
+                    busyStreams.remove(token)
                 }
-                if (!served && !responded) writeSimple(output, "502 Bad Gateway", "no address answered")
             }
         } catch (error: Exception) {
-            Log.w(TAG, "video proxy connection failed", error)
+            // 播放器主动断开（拖进度条、切歌）也是这条路径：Debug 级别就够了，别刷屏。
+            Log.d(TAG, "video proxy connection closed: ${error.message}")
         }
+    }
+
+    /**
+     * HEAD：只回头，不带字节。
+     *
+     * `<video>` 拿元数据（时长、能不能按字节跳）走的就是它；回一个 JSON 或者一段
+     * 文本会让播放器认为这条源不可用，于是画面一整块黑。
+     */
+    private fun serveHead(entry: Entry, range: String?, output: OutputStream) {
+        // 按候选顺序试，第一个回头的就是答案。
+        for (url in entry.urls) {
+            val builder = Request.Builder().url(url).head()
+            entry.headers.forEach { (name, value) -> builder.header(name, value) }
+            if (range != null) builder.header("Range", range)
+            try {
+                client.newCall(builder.build()).execute().use { opened ->
+                    if (opened.code == 403 || opened.code >= 500) return@use
+                    if (!opened.isSuccessful && opened.code != 206) return@use
+                    val head = StringBuilder()
+                    head.append("HTTP/1.1 200 OK\r\n")
+                    head.append("Content-Type: ")
+                        .append(opened.header("Content-Type") ?: "video/mp4").append("\r\n")
+                    head.append("Accept-Ranges: bytes\r\n")
+                    opened.header("Content-Length")?.let {
+                        head.append("Content-Length: ").append(it).append("\r\n")
+                    }
+                    head.append("Access-Control-Allow-Origin: *\r\n")
+                    head.append("Connection: close\r\n\r\n")
+                    output.write(head.toString().toByteArray())
+                    output.flush()
+                    return
+                }
+            } catch (error: Exception) {
+                Log.w(TAG, "head relay failed, trying the next address", error)
+            }
+        }
+        writeSimple(output, "502 Bad Gateway", "no address answered")
     }
 
     /**
@@ -222,6 +348,14 @@ object VideoStreamProxy {
             onHead()
 
             body.byteStream().use { source ->
+                /*
+                 * 中途断流（CDN 那头超时 / 用户拖走了）时这里会抛。
+                 *
+                 * 抛出去的语义是「这条流没读完」—— 由调用方区分：**已经吐过响应头**
+                 * 的话就不能再补任何东西了，直接把连接关掉（`connection.use` 会关），
+                 * 让播放器自己重开一条带新 Range 的连接。这里不吞异常，正是为了让
+                 * 调用方知道这条连接不能再用了。
+                 */
                 copyStream(source, output)
             }
             output.flush()

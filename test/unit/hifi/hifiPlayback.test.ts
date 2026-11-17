@@ -329,13 +329,17 @@ describe('beginHifiTrack', () => {
         expect(api.load.mock.calls.at(-1)?.[0].startSec).toBe(20);
     });
 
-    it('asks mpv to loop the file only in loop-one outside Personal FM', async () => {
+    it('asks mpv to loop the file in loop-one, Personal FM included', async () => {
         const { playback, playbackStore, api } = await setup();
         audio.state.loopMode = 'one';
         await playback.beginHifiTrack({ song: localPlaybackSong(), source: localSource(), startSec: 0 });
         expect(api.load.mock.calls.at(-1)?.[0].loopFile).toBe(true);
 
         playbackStore.setState({ isFmMode: true });
+        await playback.beginHifiTrack({ song: localPlaybackSong(), source: localSource(), startSec: 0 });
+        expect(api.load.mock.calls.at(-1)?.[0].loopFile).toBe(true);
+
+        audio.state.loopMode = 'all';
         await playback.beginHifiTrack({ song: localPlaybackSong(), source: localSource(), startSec: 0 });
         expect(api.load.mock.calls.at(-1)?.[0].loopFile).toBe(false);
     });
@@ -561,6 +565,10 @@ describe('clock and shim driving', () => {
         await playback.beginHifiTrack({ song: localPlaybackSong(), source: localSource(), startSec: 0 });
         const trackKey = track().current!.trackKey;
         const events = record(shim);
+        // 只固定 Date：下面推时钟时 sampledAtMs 取 Date.now()，而 applyHifiClock 处理时再取一次，
+        // 两次之间流逝的毫秒会被当成「路上耽搁」多外推（CI 上见过 baseSec 90.003），用例断言的是 90。
+        // afterEach 会 useRealTimers 还原，不会漏到别的用例。
+        vi.useFakeTimers({ toFake: ['Date'] });
 
         expect(playback.hifiTransport.isPaused()).toBe(true);
         await playback.hifiTransport.resume();

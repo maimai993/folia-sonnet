@@ -137,9 +137,24 @@ export const DEFAULT_MEDIA_CACHE_LIMIT_GB = 5;
 
 export type AudioQuality = AudioQualityPreference;
 
-export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => (
-    saved === 'standard' || saved === 'ultra' || saved === 'lossless' || saved === 'hires' ? saved : 'high'
-);
+/**
+ * 没有存过时用哪一档。
+ *
+ * `ultra` = 1080P（B 站）/ 超高音质（音乐平台）。以前默认是 `high`（720P），
+ * 在 B 站上就是「默认给 720P」—— 而视频站的曲目几乎都是 1080P 源，
+ * 默认看得清比默认省一点流量更重要。
+ *
+ * 只影响**没选过**的人：存过的那一档原样尊重。
+ */
+export const DEFAULT_AUDIO_QUALITY: AudioQuality = 'ultra';
+
+export const resolveStoredAudioQuality = (saved: string | null): AudioQuality => {
+    // 上一代网易云的那档叫 exhigh，含义就是现在的 high：迁移过来，不是回退到默认。
+    if (saved === 'exhigh') return 'high';
+    return saved === 'standard' || saved === 'high' || saved === 'ultra' || saved === 'lossless' || saved === 'hires'
+        ? saved
+        : DEFAULT_AUDIO_QUALITY;
+};
 
 /**
  * Reads the media cache toggle from the v2 key: default **on**.
@@ -147,61 +162,85 @@ export const resolveStoredAudioQuality = (saved: string | null): AudioQuality =>
  * 旧 key（folia_enable_media_cache / enable_media_cache）不再参与：那是上一代
  * 默认关的开关，新 key 一换，这一版的语义是「默认缓存，除非用户亲手关」。
  */
-export const readStoredEnableMediaCache = (): boolean => {
+/*
+ * 取得到就用 localStorage，取不到就 null。
+ *
+ * 这些 read* 大多在模块求值时就跑（store 的初始 state 用它们），所以拿不到存储不能抛，
+ * 只能当「没存过」。只判 `typeof window === 'undefined'` 不够：`window` 在、存储不在的
+ * 环境是有的（无痕/受限的 WebView、被裁掉存储的沙箱、测试里只为别的事 stub 的 window）。
+ */
+const storageOrNull = (): Storage | null => {
     if (typeof window === 'undefined') {
+        return null;
+    }
+    try {
+        return window.localStorage ?? null;
+    } catch {
+        return null;
+    }
+};
+
+export const readStoredEnableMediaCache = (): boolean => {
+    const storage = storageOrNull();
+    if (!storage) {
         return true;
     }
 
-    const stored = localStorage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
+    const stored = storage.getItem(ENABLE_MEDIA_CACHE_V2_KEY);
     return stored === null ? true : stored === 'true';
 };
 
 export const readStoredMediaCacheLimitGb = (): number => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return DEFAULT_MEDIA_CACHE_LIMIT_GB;
     }
 
-    const saved = localStorage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
+    const saved = storage.getItem(MEDIA_CACHE_LIMIT_GB_KEY);
     const parsed = saved === null ? NaN : Number(saved);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MEDIA_CACHE_LIMIT_GB;
 };
 
 const readStoredAudioQuality = (): AudioQuality => {
-    if (typeof window === 'undefined') {
-        return 'high';
+    const storage = storageOrNull();
+    if (!storage) {
+        return DEFAULT_AUDIO_QUALITY;
     }
 
-    const saved = localStorage.getItem('default_audio_quality');
+    const saved = storage.getItem('default_audio_quality');
     const quality = resolveStoredAudioQuality(saved);
     if (saved === 'exhigh') {
-        localStorage.setItem('default_audio_quality', 'high');
+        storage.setItem('default_audio_quality', 'high');
     }
     return quality;
 };
 
 const readStoredQueueAddBehavior = (): QueueAddBehavior => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'append';
     }
 
-    const saved = localStorage.getItem('queue_add_behavior');
+    const saved = storage.getItem('queue_add_behavior');
     return saved === 'next' ? 'next' : 'append';
 };
 
 const readStoredAudioOutputDeviceId = (): string => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return '';
     }
 
-    return localStorage.getItem('audio_output_device_id') ?? '';
+    return storage.getItem('audio_output_device_id') ?? '';
 };
 
 const readStoredLoopMode = (): 'off' | 'all' | 'one' | 'shuffle' => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 'off';
     }
 
-    const saved = localStorage.getItem('player_loop_mode');
+    const saved = storage.getItem('player_loop_mode');
     return saved === 'all' || saved === 'one' || saved === 'shuffle' ? saved : 'off';
 };
 
@@ -248,11 +287,12 @@ const COMMAND_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'command' };
 const HOST_ORIGIN: AudioEqualizerChangeOrigin = { kind: 'host' };
 
 const readStoredVolume = () => {
-    if (typeof window === 'undefined') {
+    const storage = storageOrNull();
+    if (!storage) {
         return 1;
     }
 
-    const saved = localStorage.getItem('player_volume');
+    const saved = storage.getItem('player_volume');
     const parsed = saved !== null ? parseFloat(saved) : 1;
     return Number.isFinite(parsed) ? parsed : 1;
 };
@@ -382,7 +422,10 @@ export type AudioSettingsState = {
     handleToggleMute: () => void;
     /** Sets the repeat mode and toasts it like the repeat button; the mode already in effect is a no-op. */
     handleSetLoopMode: (mode: 'off' | 'all' | 'one' | 'shuffle') => void;
-    handleToggleLoopMode: () => void;
+    handleToggleLoopMode: (isFmMode?: boolean) => void;
+    /** Shuffle in rounds: songs heard this round go after the rest; a finished round reshuffles under list loop. Off by default. (上游 v0.7.29) */
+    shuffleRoundNoRepeat: boolean;
+    handleToggleShuffleRoundNoRepeat: (enable: boolean) => void;
 };
 
 /*
@@ -464,7 +507,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     loopMode: readStoredLoopMode(),
     setAudioQuality: (quality) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('default_audio_quality', quality);
+            storageOrNull()?.setItem('default_audio_quality', quality);
         }
         set({ audioQuality: quality });
     },
@@ -475,13 +518,13 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleSetMediaCacheLimitGb: (gigabytes) => {
         const next = Number.isFinite(gigabytes) && gigabytes >= 0 ? gigabytes : DEFAULT_MEDIA_CACHE_LIMIT_GB;
         if (typeof window !== 'undefined') {
-            localStorage.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
+            storageOrNull()?.setItem(MEDIA_CACHE_LIMIT_GB_KEY, String(next));
         }
         set({ mediaCacheLimitGb: next });
     },
     handleSetQueueAddBehavior: (behavior) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('queue_add_behavior', behavior);
+            storageOrNull()?.setItem('queue_add_behavior', behavior);
         }
         set({ queueAddBehavior: behavior });
         setStatusMessage({
@@ -686,9 +729,9 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         }
 
         if (deviceId) {
-            localStorage.setItem('audio_output_device_id', deviceId);
+            storageOrNull()?.setItem('audio_output_device_id', deviceId);
         } else {
-            localStorage.removeItem('audio_output_device_id');
+            storageOrNull()?.removeItem('audio_output_device_id');
         }
     },
     handleSetAudioEqualizerSettings: (settings, origin = USER_ORIGIN) => (
@@ -758,7 +801,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     closeAudioEqualizer: () => set({ isAudioEqualizerOpen: false }),
     handleSetVolume: (val) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_volume', String(val));
+            storageOrNull()?.setItem('player_volume', String(val));
         }
         set({ volume: val });
     },
@@ -779,7 +822,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             return;
         }
         if (typeof window !== 'undefined') {
-            localStorage.setItem('player_loop_mode', mode);
+            storageOrNull()?.setItem('player_loop_mode', mode);
         }
         set({ loopMode: mode });
         /*
@@ -807,10 +850,16 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             nonce: Date.now(),
         });
     },
-    handleToggleLoopMode: () => {
+    handleToggleLoopMode: (isFmMode = false) => {
+        // 私人 FM 里只有 不循环 ↔ 单曲循环 两档：FM 的队列是电台给的，循环一圈没有意义，
+        // 也不进随机（上游 v0.7.29 的语义）。普通播放保持 fork 的四档：
         // 顺序（off）→ 列表循环（all）→ 单曲循环（one）→ 随机播放（shuffle）→ 回到顺序。
         // 随机放在最后：它是这一圈里唯一的「会把队列重排一遍」的模式，挨着顺序放容易误触。
         const prev = get().loopMode;
+        if (isFmMode) {
+            get().handleSetLoopMode(prev === 'one' ? 'off' : 'one');
+            return;
+        }
         const next = prev === 'off'
             ? 'all'
             : prev === 'all'
@@ -819,6 +868,11 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
                     ? 'shuffle'
                     : 'off';
         get().handleSetLoopMode(next);
+    },
+    shuffleRoundNoRepeat: getStoredBoolean('folia_shuffle_round_no_repeat', false),
+    handleToggleShuffleRoundNoRepeat: (enable) => {
+        setStoredBoolean('folia_shuffle_round_no_repeat', enable);
+        set({ shuffleRoundNoRepeat: enable });
     },
 }));
 
@@ -835,6 +889,8 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     autoJumpToVisualizerOnLaunch: state.autoJumpToVisualizerOnLaunch,
     enableTranscodeFallback: state.enableTranscodeFallback,
     neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
+    shuffleRoundNoRepeat: state.shuffleRoundNoRepeat,
+    handleToggleShuffleRoundNoRepeat: state.handleToggleShuffleRoundNoRepeat,
     playbackFadeEnabled: state.playbackFadeEnabled,
     audioOutputDeviceId: state.audioOutputDeviceId,
     audioEqualizerSettings: state.audioEqualizerSettings,

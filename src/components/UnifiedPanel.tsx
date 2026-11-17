@@ -21,6 +21,7 @@ import SongHeader from './panelTab/shell/SongHeader';
 import TabDock from './panelTab/shell/TabDock';
 import type { SongLike } from './panelTab/shell/LikeButton';
 import type { OnlineLyricsState } from '../types';
+import { useBilibiliMvStore } from '../stores/useBilibiliMvStore';
 import type { AudioQualityPreference } from '../types/onlineMusic';
 import type { ThemeSourceModel } from '../hooks/themeControllerState';
 import { getPlaybackSourceRef } from '../utils/appPlaybackGuards';
@@ -251,6 +252,16 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
         onToggleDaylight,
     } = account;
 
+    /*
+     * B 站下这一栏显示的是 MV store 那一份，不是 audioQuality。
+     *
+     * 两个值各管一半（音频流 / MV 画面，见 buildPlayerPanelModel 的 onAudioQualityChange），
+     * 而用户在设置页的 MV 子选项里改的正是 MV store 那一份 —— 面板要是照旧显示
+     * audioQuality，就会出现「设置里改成 1080P 了，面板还写着 720P」。
+     */
+    const mvQuality = useBilibiliMvStore(state => state.quality);
+    const displayedQuality = qualityIsPicture ? mvQuality : audioQuality;
+
     // 矮而宽（横过来的手机）：页签挪到右侧竖轨，把底边那一条让给页签内容（见 PanelShell）。
     const isWideShort = useIsWideShortViewport();
 
@@ -436,6 +447,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         playerState={playerState}
                         modeLabel={fmModeLabel}
                         onOpenModePicker={onOpenFmModePicker}
+                        onOpenLattice={queue.onOpenLattice}
                         onTogglePlay={onTogglePlay}
                         onNextTrack={onNextTrack}
                         onPrevTrack={onPrevTrack}
@@ -479,7 +491,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
             {currentTab === 'account' && (
                 <AccountTab
                     accountController={accountController}
-                    audioQuality={audioQuality}
+                    audioQuality={displayedQuality}
                     onAudioQualityChange={onAudioQualityChange}
                     onSyncData={onSyncData}
                     isSyncing={isSyncing}

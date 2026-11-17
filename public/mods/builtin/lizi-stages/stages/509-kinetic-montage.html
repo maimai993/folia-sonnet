@@ -1,0 +1,867 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>509 · 活字蒙太奇</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#0B0B0C;overflow:hidden}
+  body{-webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none}
+  canvas{position:fixed;left:0;top:0;display:block;width:100%;height:100%}
+</style>
+</head>
+<body>
+<canvas id="cv" aria-label="歌词舞台"></canvas>
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '活字蒙太奇',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================
+   509 · 活字蒙太奇 / Kinetic Montage
+   排版驱动的歌词舞台：一句一个镜头，镜头循环但机位各不相同。
+
+   六个镜头：MACRO 微距 / STRIP 胶片带 / GRID 网格 / VERTICAL 竖排
+             / INVERT 反白 / BREATH 呼吸
+   规则：每句前 35% 建构，后 65% 回到可读；字不做无意义抖动。
+   纯 canvas 2D，零外部请求，零素材，颗粒与溢边全部程序化生成。
+   ============================================================ */
+(function () {
+  "use strict";
+
+  /* ---------------- 1. 自检口：最外层、无条件、直接算 ---------------- */
+  var S = { lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: "" };
+  var SONG = { name: "", artists: "" };
+
+  var RM = false;
+  try { RM = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { RM = false; }
+
+  window.__stage = function () {
+    var i = S.idx, txt = "";
+    if (i >= 0 && i < S.lines.length && S.lines[i] && S.lines[i].text != null) txt = String(S.lines[i].text);
+    return {
+      lines: S.lines.length,
+      idx: i,
+      t: S.t,
+      playing: !!S.playing,
+      frames: S.frames,
+      js: Math.round(S.js * 100) / 100,
+      err: S.err,
+      text: txt,
+      gl: false,
+      rm: RM
+    };
+  };
+
+  var errAt = 0;
+  function logErr(e) {
+    var now = Date.now();
+    if (now - errAt < 1000) return;
+    errAt = now;
+    try { console.error(e); } catch (_) {}
+  }
+
+  function num(v, d) { var n = Number(v); return isFinite(n) ? n : d; }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clampByte(v) { v = Math.round(v); return v < 0 ? 0 : (v > 255 ? 255 : v); }
+  function easeOut(t) { t = clamp(t, 0, 1); return 1 - Math.pow(1 - t, 3); }
+  function easeInOut(t) { t = clamp(t, 0, 1); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+  function easeOutExpo(t) { t = clamp(t, 0, 1); return t >= 1 ? 1 : 1 - Math.pow(2, -9 * t); }
+  function smooth(a, b, x) { var t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+
+  /* ---------------- 2. 调色板 ---------------- */
+  var INK = "#0B0B0C";
+  var PAPER = "#F2EFE9";
+  var AC = [228, 68, 42];   // 朱红兜底
+
+  function accentAt(a) { return "rgba(" + AC[0] + "," + AC[1] + "," + AC[2] + "," + a + ")"; }
+  function accentRGB() { return "rgb(" + AC[0] + "," + AC[1] + "," + AC[2] + ")"; }
+  function accentOn(ground) {
+    if (ground === "paper") {
+      return "rgb(" + Math.round(AC[0] * 0.55) + "," + Math.round(AC[1] * 0.55) + "," + Math.round(AC[2] * 0.55) + ")";
+    }
+    return accentRGB();
+  }
+
+  /* ---------------- 3. ready：第一个 rAF 无条件发，只发一次 ---------------- */
+  var readySent = false;
+  function sendReady() {
+    if (readySent) return;
+    readySent = true;
+    try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); } catch (e) { logErr(e); }
+  }
+  requestAnimationFrame(sendReady);
+  setTimeout(sendReady, 800);
+
+  /* ---------------- 4. 画布 ---------------- */
+  var cv = document.getElementById("cv");
+  var ctx = null;
+  try { ctx = cv.getContext("2d", { alpha: false }); } catch (e) { ctx = null; }
+  if (!ctx) { try { ctx = cv.getContext("2d"); } catch (e2) { ctx = null; } }
+
+  var VW = 1440, VH = 900, DPR = 1, PORTRAIT = false;
+  var vign = null, glow = null;
+
+  function resize() {
+    var w = window.innerWidth || 1440, h = window.innerHeight || 900;
+    if (!isFinite(w) || w <= 0) w = 1440;
+    if (!isFinite(h) || h <= 0) h = 900;
+    VW = Math.round(w); VH = Math.round(h);
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    if (!isFinite(DPR) || DPR <= 0) DPR = 1;
+    PORTRAIT = VH > VW * 1.06;
+    if (cv) {
+      cv.width = Math.max(1, Math.round(VW * DPR));
+      cv.height = Math.max(1, Math.round(VH * DPR));
+      cv.style.width = VW + "px";
+      cv.style.height = VH + "px";
+    }
+    buildVignette();
+    comp = null; compIdx = -999;
+  }
+
+  function buildVignette() {
+    vign = null; glow = null;
+    if (!ctx) return;
+    try {
+      var r0 = Math.min(VW, VH) * 0.22, r1 = Math.max(VW, VH) * 0.80;
+      vign = ctx.createRadialGradient(VW * 0.5, VH * 0.5, r0, VW * 0.5, VH * 0.5, r1);
+      vign.addColorStop(0, "rgba(0,0,0,0)");
+      vign.addColorStop(1, "rgba(0,0,0,0.62)");
+    } catch (e) { vign = null; }
+    try {
+      glow = ctx.createRadialGradient(VW * 0.30, VH * 0.20, 0, VW * 0.36, VH * 0.30, Math.max(VW, VH) * 0.62);
+      glow.addColorStop(0, accentAt(0.10));
+      glow.addColorStop(0.55, accentAt(0.028));
+      glow.addColorStop(1, accentAt(0));
+    } catch (e) { glow = null; }
+  }
+
+  /* ---------------- 5. 字形度量 ---------------- */
+  var FONT_STACK = '"PingFang SC","Hiragino Sans GB","Source Han Sans SC","Noto Sans CJK SC","Microsoft YaHei","Heiti SC","SimHei",sans-serif';
+  var MONO_STACK = 'ui-monospace,"SFMono-Regular",Menlo,Consolas,"Courier New",monospace';
+  var mcache = Object.create(null);
+  var mcount = 0;
+
+  function charW(ch, size) {
+    if (!ctx) return size;
+    var k = Math.round(size * 4) + "|" + ch;
+    var v = mcache[k];
+    if (v !== undefined) return v;
+    try {
+      ctx.font = "900 " + size.toFixed(2) + "px " + FONT_STACK;
+      v = ctx.measureText(ch).width;
+    } catch (e) { v = size; }
+    if (!isFinite(v) || v <= 0) v = size;
+    mcache[k] = v;
+    if (++mcount > 6000) { mcache = Object.create(null); mcount = 0; }
+    return v;
+  }
+
+  function measureRun(chars, size, tr) {
+    var tot = 0;
+    for (var i = 0; i < chars.length; i++) {
+      tot += charW(chars[i], size);
+      if (i < chars.length - 1) tot += tr * size;
+    }
+    return tot;
+  }
+
+  function fitSize(chars, maxW, maxSize, tr) {
+    var s = maxSize;
+    var w = measureRun(chars, s, tr);
+    if (w > maxW && w > 0) s = s * maxW / w;
+    return Math.max(6, s);
+  }
+
+  function runItems(chars, size, tr, cy) {
+    var items = [];
+    var total = measureRun(chars, size, tr);
+    var x = (VW - total) * 0.5;
+    for (var i = 0; i < chars.length; i++) {
+      var w = charW(chars[i], size);
+      items.push({ ch: chars[i], x: x + w * 0.5, y: cy, w: w, size: size, rot: 0, accent: false });
+      x += w + tr * size;
+    }
+    return items;
+  }
+
+  function charsOf(text) {
+    var s = (text == null ? "" : String(text));
+    var a;
+    try { a = Array.from(s); } catch (e) { a = s.split(""); }
+    while (a.length && a[0] === " ") a.shift();
+    while (a.length && a[a.length - 1] === " ") a.pop();
+    return a;
+  }
+
+  /* ---------------- 6. 时间与揭示 ---------------- */
+  function lineDur(line) {
+    if (line && line.dur > 0) return line.dur;
+    var i = S.idx;
+    if (i >= 0 && S.lines[i + 1] && isFinite(S.lines[i + 1].t) && S.lines[i + 1].t > (line ? line.t : 0)) {
+      return S.lines[i + 1].t - line.t;
+    }
+    return 3.4;
+  }
+
+  function lineP(line) {
+    if (!line) return 0;
+    var d = lineDur(line);
+    if (d <= 0) return 1;
+    return clamp((S.t - line.t) / d, 0, 1);
+  }
+
+  function idxAt(t) {
+    var a = S.lines, lo = 0, hi = a.length - 1, best = -1;
+    while (lo <= hi) {
+      var m = (lo + hi) >> 1;
+      var lt = (a[m] && isFinite(a[m].t)) ? a[m].t : 0;
+      if (lt <= t + 0.02) { best = m; lo = m + 1; } else hi = m - 1;
+    }
+    return best;
+  }
+
+  function revealTimes(line, chars) {
+    var n = chars.length, out = [], i;
+    var cs = line.chars;
+    if (cs && cs.length) {
+      var first = cs[0];
+      var rel = !!(first && isFinite(first.t) && first.t < line.t - 0.08);
+      for (i = 0; i < n; i++) {
+        var j = (cs.length === n) ? i : Math.min(cs.length - 1, Math.floor(i * cs.length / n));
+        var rec = cs[j] || null;
+        var ct = (rec && isFinite(rec.t)) ? Number(rec.t) : null;
+        out.push(ct == null ? (line.t + i * 0.06) : (rel ? line.t + ct : ct));
+      }
+      return out;
+    }
+    var d = line.dur > 0 ? line.dur : 3.4;
+    for (i = 0; i < n; i++) out.push(line.t + d * 0.85 * i / Math.max(1, n));
+    return out;
+  }
+
+  /* ---------------- 7. 镜头构造 ---------------- */
+  var KINDS = ["macro", "strip", "grid", "vertical", "invert", "breath"];
+  var comp = null, compIdx = -999, compVer = -1, compVW = 0, compVH = 0, linesVer = 0;
+
+  function pickKind(i, chars) {
+    var k = KINDS[((i % KINDS.length) + KINDS.length) % KINDS.length];
+    if (k === "grid" && chars.length > 14) k = "macro";
+    if (k === "strip" && chars.length > 22) k = "macro";
+    if (k === "vertical" && chars.length > 16) k = "breath";
+    if (chars.length <= 2) k = "breath";
+    return k;
+  }
+
+  function titleComp() {
+    var c = { kind: "empty", ground: "ink", items: [], times: null, startT: S.t, dir: 1, size: 0, sub: "", note: "" };
+    var title = (SONG.name || "").trim();
+    var text = title;
+    if (!text) text = (S.lines.length ? "" : "暂无歌词");
+    if (!text) { c.kind = "silence"; return c; }
+    var chars = charsOf(text);
+    var size = fitSize(chars, VW * 0.80, Math.min(VH * 0.15, VW * 0.18), 0.04);
+    c.items = runItems(chars, size, 0.04, VH * 0.47);
+    c.size = size;
+    c.sub = title ? SONG.artists : "";
+    c.note = title ? "暂无歌词" : "";
+    return c;
+  }
+
+  function buildComp(idx, line) {
+    if (!line) return titleComp();
+
+    var c = { kind: "silence", ground: "ink", items: [], times: [], startT: num(line.t, 0), dir: (idx % 2 ? 1 : -1), size: 0, sub: "", note: "" };
+    var chars = charsOf(line.text);
+    c.times = revealTimes(line, chars);
+    if (!chars.length) return c;
+
+    var kind = pickKind(idx, chars);
+    c.kind = kind;
+    var n = chars.length, i, w, lx;
+    var cosA, sinA, total, step, sz, x0, cx, cy;
+
+    if (kind === "macro") {
+      sz = Math.min(VH * 0.60, VW * 0.90 / Math.max(1, n * 1.04));
+      sz = Math.max(sz, VH * 0.045);
+      c.size = sz;
+      c.items = runItems(chars, sz, -0.02, VH * 0.55);
+      var fi = Math.min(c.items.length - 1, idx % 3);
+      var f = c.items[fi] || { x: VW * 0.5, y: VH * 0.55 };
+      c.cam = {
+        fx: f.x, fy: f.y, fz: (PORTRAIT ? 1.9 : 2.2) + (idx % 3) * 0.22, frot: 0,
+        tx: VW * 0.5, ty: VH * 0.55, tz: 1, trot: 0, dur: 0.58
+      };
+
+    } else if (kind === "strip") {
+      sz = Math.min(VH * 0.21, VW * 0.92 / Math.max(1, n * 1.04));
+      sz = Math.max(sz, VH * 0.06);
+      c.size = sz;
+      c.items = runItems(chars, sz, 0.02, VH * 0.50);
+      c.echoes = [
+        { dy: -sz * 1.45, a: 0.12, s: 0.97 },
+        { dy: sz * 1.45, a: 0.12, s: 0.97 },
+        { dy: -sz * 0.80, a: 0.18, s: 1.0 }
+      ];
+      var dp = (idx % 2) ? 1 : -1;
+      c.cam = {
+        fx: VW * (0.5 - 0.045 * dp), fy: VH * 0.5, fz: 1.05, frot: 0,
+        tx: VW * (0.5 + 0.045 * dp), ty: VH * 0.5, tz: 1.0, trot: 0, dur: 0.9
+      };
+
+    } else if (kind === "grid") {
+      var rows = n > 8 ? 2 : 1;
+      var cols = Math.ceil(n / rows);
+      if (cols > 4) { cols = 4; rows = Math.ceil(n / cols); }
+      var fsz = Math.min(VH * 0.30, VW * 0.88 / Math.max(1, n * 1.04));
+      c.size = fsz;
+      c.items = runItems(chars, fsz, -0.01, VH * 0.55);
+      var cw = (VW * 0.82) / cols, chh = (VH * 0.48) / rows;
+      var gx0 = (VW - cw * cols) * 0.5, gy0 = VH * 0.5 - chh * rows * 0.5;
+      for (i = 0; i < c.items.length; i++) {
+        var it = c.items[i];
+        it.ox = gx0 + cw * (i % cols) + cw * 0.5;
+        it.oy = gy0 + chh * Math.floor(i / cols) + chh * 0.5;
+        it.os = Math.min(cw * 0.62, chh * 0.58);
+      }
+      c.grid = { cols: cols, rows: rows, cw: cw, ch: chh, x0: gx0, y0: gy0 };
+      c.cam = {
+        fx: VW * 0.5, fy: VH * 0.5, fz: 1.0, frot: 0,
+        tx: VW * 0.5, ty: VH * 0.5, tz: 1.03, trot: 0, dur: 0.9
+      };
+
+    } else if (kind === "vertical") {
+      sz = Math.min(VH * 0.128, (VH * 0.74) / Math.max(1, n * 1.16));
+      step = sz * 1.16;
+      cx = PORTRAIT ? VW * 0.50 : (idx % 2 ? VW * 0.30 : VW * 0.70);
+      var startY = (VH - step * n) * 0.5 + step * 0.5;
+      for (i = 0; i < n; i++) {
+        c.items.push({ ch: chars[i], x: cx, y: startY + i * step, w: charW(chars[i], sz), size: sz, rot: 0, accent: false });
+      }
+      c.size = sz;
+      c.guide = { x: cx - sz * 0.82, y0: startY - step * 0.62, y1: startY + (n - 1) * step + step * 0.62 };
+      c.cam = {
+        fx: VW * 0.5, fy: VH * 0.5, fz: 1.04, frot: 0,
+        tx: VW * 0.5, ty: VH * 0.5, tz: 1.0, trot: 0, dur: 0.9
+      };
+
+    } else if (kind === "invert") {
+      sz = Math.min(VH * 0.36, (VW * 0.94) / Math.max(1, n * 1.04));
+      total = measureRun(chars, sz, -0.01);
+      var ang = -0.085 + ((idx % 3) - 1) * 0.028;
+      cx = VW * 0.5; cy = VH * 0.54;
+      x0 = -total * 0.5; cosA = Math.cos(ang); sinA = Math.sin(ang);
+      var accI = Math.min(n - 1, 1);
+      for (i = 0; i < n; i++) {
+        w = charW(chars[i], sz);
+        lx = x0 + w * 0.5;
+        x0 += w - sz * 0.01;
+        c.items.push({
+          ch: chars[i], x: cx + lx * cosA, y: cy + lx * sinA,
+          w: w, size: sz, rot: ang, accent: (i === accI)
+        });
+      }
+      c.size = sz;
+      c.ground = "paper";
+      c.cam = {
+        fx: VW * 0.5, fy: VH * 0.5, fz: 1.07, frot: 0,
+        tx: VW * 0.5, ty: VH * 0.5, tz: 1.0, trot: 0, dur: 0.7
+      };
+
+    } else {
+      var trb = 0.10 + (idx % 3) * 0.035;
+      sz = fitSize(chars, VW * 0.80, Math.min(VH * 0.128, VW * 0.15), trb);
+      c.size = sz;
+      c.items = runItems(chars, sz, trb, VH * 0.53);
+      c.cam = {
+        fx: VW * 0.5, fy: VH * 0.5, fz: 1.0, frot: 0,
+        tx: VW * 0.5, ty: VH * 0.5, tz: 1.0, trot: 0, dur: 1
+      };
+    }
+
+    return c;
+  }
+
+  function getComp() {
+    var line = (S.idx >= 0 && S.idx < S.lines.length) ? S.lines[S.idx] : null;
+    if (comp && compIdx === S.idx && compVer === linesVer && compVW === VW && compVH === VH) return comp;
+    comp = buildComp(S.idx, line);
+    compIdx = S.idx; compVer = linesVer; compVW = VW; compVH = VH;
+    return comp;
+  }
+
+  /* ---------------- 8. 预烘焙：颗粒 ---------------- */
+  var grainPat = null;
+
+  function buildGrain() {
+    grainPat = null;
+    if (!ctx) return;
+    try {
+      var n = 180;
+      var gcv = document.createElement("canvas");
+      gcv.width = n; gcv.height = n;
+      var g = gcv.getContext("2d");
+      if (!g) return;
+      var img = g.createImageData(n, n);
+      if (!img || !img.data) return;
+      var d = img.data;
+      for (var i = 0; i < d.length; i += 4) {
+        var v = (Math.random() * 255) | 0;
+        d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 24;
+      }
+      g.putImageData(img, 0, 0);
+      grainPat = ctx.createPattern(gcv, "repeat");
+    } catch (e) { grainPat = null; logErr(e); }
+  }
+
+  /* ---------------- 9. 绘制 ---------------- */
+  var pulse = 0;
+
+  function applyCam(cam) {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.translate(VW * 0.5, VH * 0.5);
+    if (cam.rot) ctx.rotate(cam.rot);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x, -cam.y);
+  }
+
+  function camAt(c, linP) {
+    var out = { x: VW * 0.5, y: VH * 0.5, z: 1, rot: 0 };
+    var cam = c.cam;
+    if (!cam) return out;
+    var k = RM ? 1 : easeInOut(clamp(linP / (cam.dur || 0.55), 0, 1));
+    out.z = cam.fz + (cam.tz - cam.fz) * k;
+    out.x = cam.fx + (cam.tx - cam.fx) * k;
+    out.y = cam.fy + (cam.ty - cam.fy) * k;
+    out.rot = cam.frot + (cam.trot - cam.frot) * k;
+    if (!RM && window.__liziShake !== false) {
+      var age = S.t - (c.startT || 0);
+      var w = clamp(age / 0.30, 0, 1);
+      var e = 1 - easeOut(w);
+      if (e > 0.001) {
+        out.x += e * (c.dir || 1) * VW * 0.045;
+        out.z *= 1 + e * 0.018;
+      }
+      out.z *= 1 + pulse * 0.012;
+    }
+    return out;
+  }
+
+  function drawChar(it, color, alpha, scale, rot, ox, oy, bleed) {
+    try {
+      var fs = it.size.toFixed(2);
+      if (bleed) {
+        ctx.save();
+        ctx.translate(it.x + (ox || 0) + 1.0, it.y + (oy || 0) + 0.8);
+        ctx.rotate(rot || 0);
+        if (scale !== 1) ctx.scale(scale, scale);
+        ctx.globalAlpha = clamp(alpha * 0.20, 0, 1);
+        ctx.fillStyle = color;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "900 " + fs + "px " + FONT_STACK;
+        ctx.fillText(it.ch, 0, 0);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.translate(it.x + (ox || 0), it.y + (oy || 0));
+      ctx.rotate(rot || 0);
+      if (scale !== 1) ctx.scale(scale, scale);
+      ctx.globalAlpha = clamp(alpha, 0, 1);
+      ctx.fillStyle = color;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "900 " + fs + "px " + FONT_STACK;
+      ctx.fillText(it.ch, 0, 0);
+      ctx.restore();
+    } catch (e) { logErr(e); }
+  }
+
+  function drawRun(c, linP, ground, baseCol, dy, alphaMul, scaleMul) {
+    var items = c.items, kind = c.kind, n = items.length;
+    var bleed = (ground === "paper");
+    for (var i = 0; i < n; i++) {
+      var it = items[i];
+      var t = (c.times && c.times[i] != null) ? c.times[i] : null;
+      var age = (t == null) ? (S.t - (c.startT || 0)) : (S.t - t);
+      var rv = clamp(age / 0.24, 0, 1);
+      var sung = (t == null) ? true : (age >= 0);
+      var dim = (ground === "paper") ? 0.46 : 0.44;
+      var a = sung ? 1 : dim;
+      var s = 1, ox = 0, oy = 0;
+
+      if (kind === "macro") {
+        a = sung ? 1 : dim;
+      } else if (kind === "strip") {
+        oy = (1 - easeOutExpo(rv)) * (it.size * 0.5);
+        a = sung ? 1 : dim;
+      } else if (kind === "grid") {
+        var k1 = smooth(0.14, 0.58, linP);
+        var st = clamp(k1 * 1.35 - (i / Math.max(1, n)) * 0.35, 0, 1);
+        var kk = easeInOut(st);
+        ox = (lerp(it.ox, it.x, kk) - it.x);
+        oy = (lerp(it.oy, it.y, kk) - it.y);
+        s = lerp(it.os, it.size, kk) / it.size;
+        a = sung ? 1 : dim;
+      } else if (kind === "vertical") {
+        oy = (1 - easeOutExpo(rv)) * (-it.size * 0.55);
+        a = sung ? 1 : dim;
+      } else if (kind === "invert") {
+        oy = (1 - easeOutExpo(rv)) * (it.size * 0.42);
+        a = sung ? 1 : dim;
+      } else if (kind === "silence" || kind === "empty") {
+        a = 1;
+      } else {
+        a = sung ? 1 : dim;
+        a *= 0.94 + 0.06 * rv;
+      }
+
+      if (sung && t != null && rv < 1) s *= 1 + 0.10 * (1 - easeOut(rv));
+
+      var col = it.accent ? accentOn(ground) : baseCol;
+      var aa = a * alphaMul;
+      if (aa <= 0.004) continue;
+      drawChar(it, col, aa, s * scaleMul, it.rot || 0, ox, oy + dy, bleed);
+    }
+  }
+
+  function drawItems(c, linP, ground) {
+    if (!c.items || !c.items.length) return;
+    var baseCol = (ground === "paper") ? "rgb(11,11,12)" : "rgb(242,239,233)";
+    if (c.kind === "strip") {
+      var e = c.echoes || [];
+      for (var q = 0; q < e.length; q++) {
+        drawRun(c, linP, ground, baseCol, e[q].dy, e[q].a, e[q].s);
+      }
+      drawRun(c, linP, ground, baseCol, 0, 1, 1);
+      return;
+    }
+    drawRun(c, linP, ground, baseCol, 0, 1, 1);
+  }
+
+  function drawExtras(c, linP, ground) {
+    var stroke = (ground === "paper") ? "rgba(11,11,12," : "rgba(242,239,233,";
+    try {
+      if (c.kind === "grid" && c.grid) {
+        var k = smooth(0.14, 0.58, linP);
+        var a = (1 - k) * 0.28;
+        if (a > 0.006) {
+          var g = c.grid;
+          ctx.save();
+          ctx.strokeStyle = stroke + a + ")";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          var i, x, y;
+          for (i = 1; i < g.cols; i++) { x = g.x0 + g.cw * i; ctx.moveTo(x, g.y0); ctx.lineTo(x, g.y0 + g.ch * g.rows); }
+          for (i = 1; i < g.rows; i++) { y = g.y0 + g.ch * i; ctx.moveTo(g.x0, y); ctx.lineTo(g.x0 + g.cw * g.cols, y); }
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+      if (c.kind === "vertical" && c.guide) {
+        var gd = c.guide;
+        ctx.save();
+        ctx.strokeStyle = stroke + "0.26)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(gd.x, gd.y0);
+        ctx.lineTo(gd.x, gd.y1);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (c.kind === "breath") {
+        var w = VW * 0.16, cy = VH * 0.53;
+        ctx.save();
+        ctx.strokeStyle = stroke + "0.22)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(VW * 0.5 - w * 0.5, cy - VH * 0.10); ctx.lineTo(VW * 0.5 + w * 0.5, cy - VH * 0.10);
+        ctx.moveTo(VW * 0.5 - w * 0.5, cy + VH * 0.10); ctx.lineTo(VW * 0.5 + w * 0.5, cy + VH * 0.10);
+        ctx.stroke();
+        ctx.restore();
+      }
+      if (c.kind === "invert") {
+        var m = Math.min(VW, VH) * 0.055;
+        ctx.save();
+        ctx.strokeStyle = "rgba(11,11,12,0.14)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(m, m, VW - m * 2, VH - m * 2);
+        ctx.restore();
+      }
+      if (c.kind === "silence") {
+        ctx.save();
+        ctx.strokeStyle = stroke + "0.28)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(VW * 0.5 - VW * 0.06, VH * 0.5);
+        ctx.lineTo(VW * 0.5 + VW * 0.06, VH * 0.5);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } catch (e) { logErr(e); }
+  }
+
+  function drawGrain(ground) {
+    if (!grainPat) return;
+    try {
+      var ox = (window.__liziShake === false) ? 0 : Math.random() * 180, oy = (window.__liziShake === false) ? 0 : Math.random() * 180;
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.globalAlpha = (ground === "paper") ? 0.30 : 0.55;
+      ctx.translate(-ox, -oy);
+      ctx.fillStyle = grainPat;
+      ctx.fillRect(0, 0, VW + 180, VH + 180);
+      ctx.restore();
+    } catch (e) { logErr(e); }
+  }
+
+  function drawVignette(ground) {
+    if (!vign) return;
+    try {
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.globalAlpha = (ground === "paper") ? 0.30 : 1;
+      ctx.fillStyle = vign;
+      ctx.fillRect(0, 0, VW, VH);
+      ctx.restore();
+    } catch (e) { logErr(e); }
+  }
+
+  function drawMarks(c, ground) {
+    try {
+      var cutAge = S.t - (c.startT || 0);
+      var flash = (cutAge >= 0 && cutAge < 0.22) ? (1 - cutAge / 0.22) : 0;
+      var m = Math.max(18, Math.min(28, Math.min(VW, VH) * 0.03));
+      var L = Math.max(14, m * 0.9);
+      var isPaper = (ground === "paper");
+
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+      ctx.strokeStyle = isPaper
+        ? "rgba(11,11,12," + (0.22 + 0.55 * flash) + ")"
+        : "rgba(242,239,233," + (0.20 + 0.55 * flash) + ")";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      var cx2 = [m, VW - m, m, VW - m];
+      var cy2 = [m, m, VH - m, VH - m];
+      var sx2 = [1, -1, 1, -1];
+      var sy2 = [1, 1, -1, -1];
+      for (var i = 0; i < 4; i++) {
+        ctx.moveTo(cx2[i], cy2[i]); ctx.lineTo(cx2[i] + L * sx2[i], cy2[i]);
+        ctx.moveTo(cx2[i], cy2[i]); ctx.lineTo(cx2[i], cy2[i] + L * sy2[i]);
+      }
+      ctx.stroke();
+
+      var fs = Math.max(9, Math.min(12, VW * 0.008));
+      ctx.font = '600 ' + fs + 'px ' + MONO_STACK;
+      ctx.textBaseline = "alphabetic";
+      ctx.fillStyle = isPaper ? "rgba(11,11,12,0.45)" : "rgba(242,239,233,0.42)";
+      ctx.textAlign = "left";
+      var label = "509 · " + (S.idx >= 0 ? (S.idx + 1) : 0) + " / " + S.lines.length;
+      ctx.fillText(label, m + 4, m + L + fs + 6);
+      ctx.textAlign = "right";
+      ctx.fillText((c.kind || "").toUpperCase(), VW - m - 4, m + L + fs + 6);
+
+      ctx.restore();
+    } catch (e) { logErr(e); }
+  }
+
+  function drawSub(c) {
+    if (!c.sub) return;
+    try {
+      var fs = Math.max(11, Math.min(15, VW * 0.011));
+      ctx.save();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.font = '400 ' + fs + 'px ' + MONO_STACK;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(242,239,233,0.5)";
+      ctx.fillText(String(c.sub), VW * 0.5, VH * 0.585);
+      if (c.note) {
+        ctx.fillStyle = accentAt(0.75);
+        ctx.fillText(String(c.note), VW * 0.5, VH * 0.585 + fs * 2.2);
+      }
+      ctx.restore();
+    } catch (e) { logErr(e); }
+  }
+
+  function render() {
+    if (!ctx) return;
+    var c = getComp();
+    var line = (S.idx >= 0 && S.idx < S.lines.length) ? S.lines[S.idx] : null;
+    var linP = lineP(line);
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = (c.ground === "paper") ? PAPER : INK;
+    ctx.fillRect(0, 0, VW, VH);
+
+    if (glow && c.ground !== "paper") {
+      try { ctx.fillStyle = glow; ctx.fillRect(0, 0, VW, VH); } catch (e) {}
+    }
+
+    ctx.save();
+    applyCam(camAt(c, linP));
+    drawExtras(c, linP, c.ground);
+    drawItems(c, linP, c.ground);
+    ctx.restore();
+
+    drawGrain(c.ground);
+    drawVignette(c.ground);
+    drawMarks(c, c.ground);
+    drawSub(c);
+  }
+
+  /* ---------------- 10. 主循环 ---------------- */
+  var lastNow = 0;
+
+  function frame(now) {
+    var t0 = (window.performance && performance.now) ? performance.now() : Date.now();
+    S.frames++;
+    try {
+      if (!lastNow) lastNow = now;
+      var dt = (now - lastNow) / 1000;
+      lastNow = now;
+      if (!isFinite(dt) || dt < 0) dt = 0;
+      if (dt > 0.06) dt = 0.06;
+
+      if (S.playing) S.t += dt;
+      if (!(S.t >= 0)) S.t = 0;
+
+      var i = idxAt(S.t);
+      if (i !== S.idx) S.idx = i;
+
+      pulse *= Math.pow(0.004, dt);
+      if (pulse < 0.001) pulse = 0;
+
+      render();
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      logErr(e);
+    }
+    var t1 = (window.performance && performance.now) ? performance.now() : Date.now();
+    S.js = t1 - t0;
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------------- 11. 协议 ---------------- */
+  function setAccent(v) {
+    if (!Array.isArray(v) || v.length < 3) return;
+    var r = Number(v[0]), g = Number(v[1]), b = Number(v[2]);
+    if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return;
+    r = clampByte(r); g = clampByte(g); b = clampByte(b);
+    var lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    if (lum < 0.08) return;
+    AC = [r, g, b];
+    buildVignette();
+  }
+
+  function ingestInit(p) {
+    var song = (p && p.song) || {};
+    SONG.name = (song.name == null ? "" : String(song.name)).trim();
+    var art = song.artists;
+    if (Array.isArray(art)) {
+      var buf = [];
+      for (var k = 0; k < art.length && k < 12; k++) { if (art[k]) buf.push(String(art[k]).trim()); }
+      SONG.artists = buf.join(" / ");
+    } else {
+      SONG.artists = (art == null ? "" : String(art)).trim();
+    }
+
+    setAccent(p ? p.accent : null);
+
+    var raw = (p && Array.isArray(p.lines)) ? p.lines : [];
+    var out = [];
+    for (var i = 0; i < raw.length && i < 8000; i++) {
+      var l = raw[i];
+      if (!l || typeof l !== "object") continue;
+      out.push({
+        t: num(l.t, 0),
+        dur: Math.max(0, num(l.dur, 0)),
+        text: (l.text == null ? "" : String(l.text)),
+        chars: (Array.isArray(l.chars) && l.chars.length) ? l.chars : null
+      });
+    }
+    out.sort(function (a, b) { return a.t - b.t; });
+
+    S.lines = out;
+    linesVer++;
+    comp = null; compIdx = -999;
+    S.idx = idxAt(S.t);
+
+    if (typeof p.playing === "boolean") S.playing = p.playing;
+    else S.playing = true;
+  }
+
+  addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.__c100 !== 1) return;
+    var p = d.payload || {};
+    try {
+      if (d.type === "init") {
+        ingestInit(p);
+
+      } else if (d.type === "tick") {
+        var t = Number(p.time);
+        if (isFinite(t)) S.t = t < 0 ? 0 : t;
+        if (typeof p.playing === "boolean") S.playing = p.playing;
+
+      } else if (d.type === "beat") {
+        var lv = Number(p.level);
+        pulse = Math.max(pulse, isFinite(lv) ? clamp(lv, 0, 1) : 0.45);
+        if (p.index === 0) pulse = Math.max(pulse, 0.55);
+
+      } else if (d.type === "live") {
+        var lb = Number(p.level);
+        if (isFinite(lb)) pulse = Math.max(pulse, clamp(lb, 0, 1) * 0.45);
+      }
+    } catch (e) {
+      S.err = String((e && e.message) || e);
+      logErr(e);
+    }
+  });
+
+  /* ---------------- 12. 活动与键盘转发 ---------------- */
+  var lastAct = 0;
+  function pingActivity() {
+    var n = Date.now();
+    if (n - lastAct < 250) return;
+    lastAct = n;
+    try { parent.postMessage({ __c100: 1, type: "activity" }, "*"); } catch (e) {}
+  }
+
+  addEventListener("mousemove", pingActivity, { passive: true });
+  addEventListener("pointerdown", pingActivity, { passive: true });
+  addEventListener("touchstart", pingActivity, { passive: true });
+  addEventListener("keydown", function (e) {
+    if (e && (e.code === "Space" || e.key === " " || e.keyCode === 32)) {
+      if (e.preventDefault) e.preventDefault();
+      try { parent.postMessage({ __c100: 1, type: "key", payload: { key: "Space" } }, "*"); } catch (err) {}
+    }
+  });
+
+  /* ---------------- 13. 启动 ---------------- */
+  resize();
+  addEventListener("resize", function () { resize(); }, { passive: true });
+
+  setTimeout(function () { buildGrain(); }, 60);
+  setTimeout(function () { if (!grainPat) buildGrain(); }, 900);
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

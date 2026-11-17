@@ -352,6 +352,52 @@ public final class FoliaNodeRuntime {
     private static final String BUILTIN_MODS_ASSET = "public/mods/builtin";
 
     /**
+     * 随包升级时必须覆盖的内置模组：它们是纯资源（歌词舞台），用户没有修改入口，
+     * 也不该看到旧版本。其余内置模组仍按「存在就不动」处理，保留用户可能的改动。
+     */
+    private static final java.util.Set<String> BUILTIN_UPDATABLE_IDS =
+            java.util.Collections.singleton("lizi-stages");
+
+    /** 读 assets 里某个内置模组 mod.json 的 version（读不到返回 null）。 */
+    private static String assetModVersion(Context context, String id) {
+        try (java.io.InputStream in = context.getAssets()
+                .open(BUILTIN_MODS_ASSET + "/" + id + "/mod.json")) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+            org.json.JSONObject manifest = new org.json.JSONObject(out.toString("UTF-8"));
+            return manifest.optString("version", null);
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** 读已安装模组 mod.json 的 version（读不到返回 null）。 */
+    private static String readModVersion(File manifest) {
+        StringBuilder text = new StringBuilder();
+        try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                new java.io.InputStreamReader(new java.io.FileInputStream(manifest), "UTF-8"))) {
+            String line;
+            while ((line = reader.readLine()) != null) text.append(line).append('\n');
+            org.json.JSONObject json = new org.json.JSONObject(text.toString());
+            return json.optString("version", null);
+        } catch (Exception error) {
+            return null;
+        }
+    }
+
+    /** 删一整个目录（覆盖升级前先清掉旧的那份）。 */
+    private static void deleteRecursively(File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        if (!file.delete()) Log.w(TAG, "删不掉旧的内置模组文件：" + file);
+    }
+
+    /**
      * 启动时把内置模组「解压」到模组根目录。
      *
      * 以前它们是 `/mods/builtin/...` 的同源静态地址，由 ModRouteProcessor 直通 assets，
@@ -374,8 +420,18 @@ public final class FoliaNodeRuntime {
             int installed = 0;
             for (String id : ids) {
                 File target = new File(modsRoot, id);
-                // 已经有这一份（用户自己装的或上次落的），不覆盖。
-                if (new File(target, "mod.json").isFile()) continue;
+                File targetManifest = new File(target, "mod.json");
+                if (targetManifest.isFile()) {
+                    // 资源型内置模组（LIZI 68 舞台）：随包升级时必须覆盖，否则旧包里
+                    // 那份旧 client/host 会一直在用 —— 用户在面板里也看不到、改不了，
+                    // 更没法自己升级。按 mod.json 的 version 判断，版本变了才覆盖，
+                    // 避免每次启动都白白重写几十 MB 的舞台页面。
+                    if (!BUILTIN_UPDATABLE_IDS.contains(id)) continue;
+                    String assetVersion = assetModVersion(context, id);
+                    String installedVersion = readModVersion(targetManifest);
+                    if (assetVersion == null || assetVersion.equals(installedVersion)) continue;
+                    deleteRecursively(target);
+                }
                 try {
                     copyAssetFolder(context, BUILTIN_MODS_ASSET + "/" + id, target);
                     installed += 1;

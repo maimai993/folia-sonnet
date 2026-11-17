@@ -20,7 +20,6 @@ import {
 } from '../../../../utils/playbackSyncBridge';
 import { resolveStagePlayerPositionSec } from '../../../../utils/stagePlayerSnapshot';
 import { getPlaybackSongKey, getPlaybackSourceRef } from '../../../../utils/appPlaybackGuards';
-import { getNativeDevicePixelRatio } from '../../../../utils/renderPixelRatio';
 import { omni } from '../../../../services/onlineMusic/omni';
 import { createRemoteTrackTransitionFeed, type RemoteTrackTransitionFeed } from './remoteTrackTransitionFeed';
 import { buildRemoteQueueItems, isRemoteQueueCommand } from './remoteQueueFeed';
@@ -32,6 +31,8 @@ import { useAppChromeStore } from '../../../../stores/useAppChromeStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { useTypographySettingsStore } from '../../../../stores/useTypographySettingsStore';
+import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
+import { openSettings } from '../../../../stores/useSettingsModalStore';
 import { currentTime } from '../../../../stores/motionSignals';
 import { useRemoteControlActions } from '../../../../hooks/useRemoteControlActions';
 import { subscribeRemoteActions } from '../../../../mods/folium/registries/remoteActions';
@@ -144,6 +145,7 @@ export const useElectronPlaybackBridge = ({
     const transparentPlayerBackground = usePlayerChromeSettingsStore(state => state.transparentPlayerBackground);
     const isDaylight = useThemeSettingsStore(state => state.isDaylight);
     const subtitleContentMode = useTypographySettingsStore(state => state.subtitleContentMode);
+    const remoteLyricLayout = useDesktopSettingsStore(state => state.remoteControlLyricLayout);
     const activePlaybackContext = usePlaybackStore(state => state.activePlaybackContext);
     const audioSrc = usePlaybackStore(state => state.audioSrc);
     // On the HiFi route the clock and source below are read off the HiFi media shim instead of a deck.
@@ -314,6 +316,7 @@ export const useElectronPlaybackBridge = ({
         return {
             ...snapshot,
             clockRevision: remoteClockRevision.current,
+            remoteLyricLayout,
             ...(options.includeQueue
                 ? {
                     queue: buildRemoteQueueItems(playQueue, {
@@ -458,13 +461,8 @@ export const useElectronPlaybackBridge = ({
             ...buildTaskbarControlsFromPlaybackSyncBridge(model),
             title: isNowPlayingStageActive ? externalTrackTitle : model.hasTrack ? model.title : null,
             artist: isNowPlayingStageActive ? externalTrackArtist : model.hasTrack ? model.artist : null,
-            /*
-             * 系统任务栏/缩略图工具条只有 off / all / one 三档，没有 shuffle：
-             * 随机播放时按「列表循环」画那个按钮 —— 它表达的是「还会继续放下去」，
-             * 而 off 会让系统以为这是最后一首。
-             */
-            loopMode: model.loopMode === 'shuffle' ? 'all' : model.loopMode,
-            canCycleLoop: model.hasTrack && !model.isFmMode,
+            loopMode: model.loopMode,
+            canCycleLoop: model.hasTrack,
         }).catch((error) => {
             console.warn('[Electron] Failed to update playback controls', error);
         });
@@ -550,12 +548,11 @@ export const useElectronPlaybackBridge = ({
         const intervalId = window.setInterval(() => publish(), 500);
         const unsubscribeActions = subscribeRemoteActions(() => publish());
 
-        // 主进程用这个数决定 OBS 画面源的物理尺寸，所以只跟随真实屏幕，不跟渲染分辨率上限。
-        let lastReportedDpr = getNativeDevicePixelRatio();
+        let lastReportedDpr = window.devicePixelRatio || 1;
         const handleResize = () => {
             publish();
             // Only report DPR when it actually changes (avoids unnecessary IPC round-trips).
-            const currentDpr = getNativeDevicePixelRatio();
+            const currentDpr = window.devicePixelRatio || 1;
             if (currentDpr !== lastReportedDpr) {
                 lastReportedDpr = currentDpr;
                 window.electron?.reportDevicePixelRatio(currentDpr);
@@ -571,7 +568,7 @@ export const useElectronPlaybackBridge = ({
             window.removeEventListener('resize', handleResize);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, playerChromeVisibilityMode, lyrics, lyricTimelineOffsetMs, mainWindowClickThroughEnabled, playbackRoute, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, subtitleContentMode, transparentPlayerBackground, isLiked]);
+    }, [cachedCoverUrl, coverUrl, currentSong, duration, effectiveLoopMode, exportState, isDaylight, isFmMode, isNowPlayingStageActive, isPlayerChromeHidden, playerChromeVisibilityMode, lyrics, lyricTimelineOffsetMs, mainWindowClickThroughEnabled, playbackRoute, playbackSyncBridgeStatus, playQueue, playerState, showTransparentWindowBorder, subtitleContentMode, remoteLyricLayout, transparentPlayerBackground, isLiked]);
 
     useEffect(() => {
         if (!playbackSyncBridgeStatus.discordPresenceEnabled || !window.electron?.publishDiscordPresenceSnapshot) {
@@ -638,6 +635,12 @@ export const useElectronPlaybackBridge = ({
             }
 
             if (command.type === 'open-export') {
+                return;
+            }
+
+            // The main process has already brought this window up.
+            if (command.type === 'open-remote-settings') {
+                openSettings('options', 'remote');
                 return;
             }
 

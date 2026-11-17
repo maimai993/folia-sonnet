@@ -3,6 +3,7 @@ import { ChevronRight, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SettingsOptionDef } from './options';
 import { Unfold } from './Reveal';
+import { hasElectronBridge } from '../../../../platform/runtime';
 
 // src/components/modal/settings/kit/Row.tsx
 // The one row every option is drawn as: label at the left, the control at the right, a hairline
@@ -19,8 +20,9 @@ type RowNaming = {
 
 const RowNamingContext = createContext<RowNaming>({});
 
-/** Whether this is the desktop app: the test the settings window and the views before the kit use. */
-const isDesktopApp = () => typeof window !== 'undefined' && Boolean(window.electron);
+/** Whether this is the desktop app: 判据同 platform/runtime 的 hasElectronBridge —— 安卓为模组装的
+ * `window.electron` shim 不带 platform，按「对象在不在」判会把桌面专属行在安卓上画成可用。 */
+const isDesktopApp = () => hasElectronBridge();
 
 /** What names a control: the label of the row it sits in, wherever in the row it sits. */
 export const useRowNaming = (): RowNaming => useContext(RowNamingContext);

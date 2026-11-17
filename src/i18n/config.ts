@@ -6,6 +6,7 @@ import zhTW from 'virtual:folia-locale-zh-TW';
 import ind from './locales/in.ts';
 import vi from './locales/vi.ts';
 import { resolveMissingTranslation } from './missingTranslation';
+import { isPerfCheckSurface } from '../utils/appSurface';
 
 /*
  * Chinese fallback for keys the active locale does not contain.
@@ -77,12 +78,30 @@ const normalizeSupportedLanguage = (value: string | null | undefined): Exclude<A
   return 'en';
 };
 
+/*
+ * 有没有 localStorage 可用。
+ *
+ * 只判 `typeof window === 'undefined'` 不够：`window` 在、存储不在的地方是有的 —— 无痕/受限的
+ * WebView、被裁掉存储的沙箱，以及测试里只为别的事 stub 了一个 window 的情形。下面几处都改用它，
+ * 读不到就当没存过，别在模块求值时就抛（`initialLanguagePreference` 是模块级立即执行的）。
+ */
+const storageOrNull = (): Storage | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage ?? null;
+  } catch {
+    // 取 localStorage 本身就可能抛（安全策略禁掉存储时）。
+    return null;
+  }
+};
+
 export const readStoredAppLanguagePreference = (): AppLanguagePreference => {
-  if (typeof window === 'undefined') {
+  const storage = storageOrNull();
+  if (!storage) {
     return 'system';
   }
 
-  const saved = localStorage.getItem(APP_LANGUAGE_STORAGE_KEY);
+  const saved = storage.getItem(APP_LANGUAGE_STORAGE_KEY);
   if (saved === 'system' || isSupportedManualLanguage(saved)) {
     return saved;
   }
@@ -162,7 +181,8 @@ i18n
  * too, instead of only manual switches made in Settings.
  */
 const pushLocaleToMainProcess = (value: string | null | undefined) => {
-  if (typeof window === 'undefined') {
+  // The performance check's window only reads the language; the main window tells the main process.
+  if (typeof window === 'undefined' || isPerfCheckSurface) {
     return;
   }
 
@@ -180,8 +200,9 @@ pushLocaleToMainProcess(i18n.resolvedLanguage ?? i18n.language);
 export const applyAppLanguagePreference = async (
   preference: AppLanguagePreference
 ): Promise<Exclude<AppLanguagePreference, 'system'>> => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(APP_LANGUAGE_STORAGE_KEY, preference);
+  const storage = storageOrNull();
+  if (storage) {
+    storage.setItem(APP_LANGUAGE_STORAGE_KEY, preference);
   }
 
   const nextLanguage = preference === 'system' ? detectSystemLanguage() : preference;

@@ -58,6 +58,8 @@ export type CoreSurfaceParams = {
     sortDirection: SongSortDirection;
 
     playFiltered: () => void;
+    /** 随机播放当前范围；没有时（suite 没做这个入口）不发布 shuffle-play-filtered。 */
+    shufflePlayFiltered?: () => void;
     enqueueFiltered: () => void;
     /** 收进速记簿；没有时（宿主没给 collectTracks）不发布 collect-filtered。 */
     collectFiltered?: () => void;
@@ -116,6 +118,8 @@ export type CoreSurfaceInputs = {
     /** 重新拉取此刻可用（useCollectionActions 的 capabilities.reload.enabled）。 */
     canReloadOnlineCollection: boolean;
     playFiltered: () => void;
+    /** 随机播放当前范围（useCollectionActions 的 shuffleScope）；suite 没有这个入口时不给。 */
+    shufflePlayFiltered?: () => void;
     enqueueFiltered: () => void;
     /** 收进速记簿（useCollectionActions 的 collectScope）；宿主不支持时不给。 */
     collectFiltered?: () => void;
@@ -179,6 +183,7 @@ export const buildCoreSurfaceParams = (
         sortDirection: inputs.sortDirection,
 
         playFiltered: inputs.playFiltered,
+        shufflePlayFiltered: inputs.shufflePlayFiltered,
         enqueueFiltered: inputs.enqueueFiltered,
         collectFiltered: inputs.collectFiltered,
         setSortField: inputs.setSortField,
@@ -205,6 +210,7 @@ export const buildCoreSurfaceParams = (
  */
 export const GRID_SURFACE_ACTION_SOURCES: Readonly<Record<GridSurfaceActionId, { action: LibraryActionId } | { extra: string }>> = {
     'play-filtered': { action: 'play-scope' },
+    'shuffle-play-filtered': { action: 'shuffle-scope' },
     'enqueue-filtered': { action: 'enqueue-scope' },
     'collect-filtered': { action: 'collect-scope' },
     'sort-newest': { action: 'sort' },
@@ -276,6 +282,7 @@ export const buildGridSurfaceState = (params: GridSurfaceParams): GridSurfaceSta
     const availableActions: GridSurfaceActionId[] = [];
     if (hasTracks) {
         availableActions.push('play-filtered', 'enqueue-filtered');
+        if (params.shufflePlayFiltered) availableActions.push('shuffle-play-filtered');
         if (params.collectFiltered) availableActions.push('collect-filtered');
     }
     if (params.supportsLocalTrackSorting) {
@@ -366,6 +373,7 @@ export const runGridSurfaceAction = (action: GridSurfaceActionId, params: GridSu
 
     switch (action) {
         case 'play-filtered': return params.playFiltered();
+        case 'shuffle-play-filtered': return params.shufflePlayFiltered?.();
         case 'enqueue-filtered': return params.enqueueFiltered();
         case 'collect-filtered': return params.collectFiltered?.();
         case 'sort-toggle-direction': return params.setSortDirection(params.sortDirection === 'asc' ? 'desc' : 'asc');

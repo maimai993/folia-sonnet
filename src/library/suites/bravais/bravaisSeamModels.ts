@@ -1,7 +1,6 @@
 import type { BravaisFormState } from './bravaisFormModel';
-import type { SongSortDirection, SongSortField } from '../../../utils/songSorting';
-import type { SongSortPreset } from '../../core/collection/songSortOptions';
 import type { DailyStyleGroup, DailyStyleSelection } from '../../../types/onlineMusic';
+import type { LucideIcon } from 'lucide-react';
 
 // src/library/suites/bravais/bravaisSeamModels.ts
 // B7 集合页挂在层描述上的扩展类型（设计稿 §10.2 / §10.6）：缝里的收藏星标、补页进度、状态行、结果提示、过滤输入位（每面墙都有）、
@@ -71,12 +70,19 @@ export type BravaisSeamFilter = {
     setQuery: (query: string) => void;
 };
 
-/** 「⋯ 更多」里的一项（集合级的低频动作）。 */
+/**
+ * 「⋯ 更多」里的一项（集合级的动作）。方案 C：给了 `priority`（越小越先）与 `icon` 的项，按钮行下面的动作格放得下时
+ * 直接成一格图标按钮（读屏名与悬停提示是 label），放不下才留在「⋯」里；没给 priority 的（删除、折叠）永远在「⋯」里。
+ */
 export type BravaisSeamMenuItem = {
     id: string;
     label: string;
     disabled?: boolean;
     danger?: boolean;
+    icon?: LucideIcon;
+    priority?: number;
+    /** 进行中：格子里的图标转圈（重新拉取这类）。 */
+    busy?: boolean;
     run: () => void;
 };
 
@@ -175,16 +181,13 @@ export type BravaisWallHint = {
     body?: string;
 };
 
-/**
- * 列表面板工具行的排序。两项都与网格侧栏用的是同一组控件、同一张预设表，
- * 所以这里给的是预设本身而不是「value + options」——网页下拉不需要字符串键。
- */
+/** 列表面板工具行的排序（本地文件夹才有）。 */
 export type BravaisListSort = {
-    presets: readonly SongSortPreset[];
-    field: SongSortField;
-    direction: SongSortDirection;
+    field: string;
+    fields: readonly { value: string; label: string }[];
+    direction: 'asc' | 'desc';
     directionLabel: string;
-    selectPreset: (preset: SongSortPreset) => void;
+    setField: (field: string) => void;
     toggleDirection: () => void;
 };
 

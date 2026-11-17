@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>506 · 偏色过境</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #cv { display: block; position: fixed; left: 0; top: 0; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<!-- 形态设置面板声明：宿主在 ready 后会读 window.__stagePanel（必须最外层、无条件） -->
+<script>
+window.__stagePanel = {
+  title: '偏色过境',
+  hint: '歌词自左向右掠过；拖「景深厚度」拉开红蓝分离，拖「黑边宽度」加厚黑框。调完自动记住，切歌不变。',
+  items: [
+    { key: 'offset',   label: '景深厚度', type: 'range', min: 0,   max: 60,  step: 1,   def: 24 },
+    { key: 'size',     label: '字号',     type: 'range', min: 48,  max: 220, step: 1,   def: 140 },
+    { key: 'stroke',   label: '线条粗细', type: 'range', min: 1,   max: 9,   step: 0.5, def: 3.5 },
+    { key: 'pad',      label: '黑边宽度', type: 'range', min: 0,   max: 240, step: 2,   def: 96 },
+    { key: 'speed',    label: '滑行速度', type: 'range', min: 0.3, max: 2.2, step: 0.1, def: 1 },
+    { key: 'enter',    label: '入场方式', type: 'segment', def: 'slide',
+      options: [ { v: 'slide', t: '左右滑过' }, { v: 'fade', t: '中间渐变' } ] },
+    { key: 'style',    label: '笔触',     type: 'segment', def: 'sketch',
+      options: [ { v: 'sketch', t: '排线' }, { v: 'hollow', t: '空心' }, { v: 'solid', t: '净色' } ] },
+    { key: 'breath',   label: '呼吸视差', type: 'switch', def: false },
+    { key: 'beat',     label: '鼓点震动', type: 'switch', def: false },
+    { key: 'hatch',    label: '手绘排线', type: 'switch', def: true }
+  ]
+};
+
+/* ---- 统一「震动」开关：宿主在 ready 后同步读取 ---- */
+window.__liziShake = true;
+if (!window.__stagePanel.items.some(function (it) { return it.key === 'shake'; })) {
+  window.__stagePanel.items.push({ key: 'shake', label: '震动', type: 'switch', def: true });
+}
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  /* =========================================================
+     506 · 偏色过境
+     红蓝色差(Chromostereopsis)歌词：每句自左掠过、向右甩出画面。
+     视觉取自 chromostereopsis studio（纯黑外框 / 纯蓝内场 /
+     品红前景 + 深蓝残影 + 斜向排线），颜色一个没改。
+     ========================================================= */
+
+  /* ---------- 自检口：最外层、无条件、直接从状态算 ---------- */
+  var S = {
+    lines: [], idx: -1, t: 0, playing: true,
+    frames: 0, js: 0, err: "", title: ""
+  };
+  var RM = false;
+  try { RM = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { }
+
+  window.__stage = function () {
+    var i = S.idx;
+    var ln = (i >= 0 && i < S.lines.length) ? S.lines[i] : null;
+    return {
+      lines: S.lines.length,
+      idx: i,
+      t: isFinite(S.t) ? S.t : 0,
+      playing: !!S.playing,
+      frames: S.frames,
+      js: Math.round(S.js * 100) / 100,
+      err: S.err || "",
+      text: ln ? String(ln.text || "") : "",
+      gl: false,
+      rm: RM
+    };
+  };
+
+  /* ---------- 常量 ---------- */
+  var PAL = { frame: "#000000", field: "#0018ff", fg: "#ff007f", deep: "#00076b" };
+  var DPR_MAX = 2;
+  var REF_SIZE = 140;     /* 烤版用的参考字号：字号滑块只缩放，不重烤 */
+
+  function FONT(px) {
+    return "700 " + (Math.round(px * 10) / 10) +
+      'px "Arial Black","Impact","Haettenschweiler","Noto Sans SC","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif';
+  }
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function num(v, d) { var n = Number(v); return isFinite(n) ? n : d; }
+
+  /* ---------- 参数 ---------- */
+  var LIM = {
+    offset: [0, 60], size: [48, 220], stroke: [1, 9], pad: [0, 240], speed: [0.3, 2.2]
+  };
+  var P = { offset: 24, size: 140, stroke: 3.5, pad: 96, speed: 1, enter: "slide", style: "sketch", hatch: true, breath: false, beat: false };
+
+  /* 这些必须在 resize() 之前就存在（resize 会清烤版缓存） */
+  var cache = new Map();
+  var CACHE_MAX = 4;
+  var beatK = 0, clock = 0;
+  var introSeen = false;   /* 这首歌经历过前奏停位 */
+
+  /* ---------- 报错（限流：每秒最多一条 console.error） ---------- */
+  var errAt = 0;
+  function logErr(e) {
+    S.err = String((e && e.message) || e || "error");
+    var n = performance.now();
+    if (n - errAt > 1000) {
+      errAt = n;
+      try { console.error(e); } catch (_) { }
+    }
+  }
+
+  /* ---------- ready：第一个 rAF 无条件发，只发一次 ---------- */
+  var readySent = false;
+  function sendReady() {
+    if (readySent) return;
+    readySent = true;
+    try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); } catch (e) { logErr(e); }
+  }
+  var raf = window.requestAnimationFrame || function (f) { return setTimeout(function () { f(performance.now()); }, 16); };
+  raf(sendReady);
+  setTimeout(sendReady, 800);
+
+  /* ---------- 画布 ---------- */
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d", { alpha: false });
+  if (!ctx) { logErr("no 2d context"); return; }
+
+  var W = 1440, H = 900, DPR = 1;
+  var L = { k: 1, x: 0, y: 0, w: 1440, h: 900, cy: 450 };
+
+  function layout() {
+    var portrait = W < H;
+    /* 字号跟着屏幕走：横屏按宽度为主、竖屏按宽度、都要受可用高度约束 */
+    var k = portrait
+      ? clamp(W / 980, 0.5, 1.3)
+      : clamp(Math.max(W / 1700, H / 1000), 0.62, 1.65);
+    k = Math.min(k, H / 620);
+    L.k = k;
+    /* 取整：蓝场边缘落在整数像素上，否则会有一圈半透明边（还被影子检测误判成溢出） */
+    var pad = Math.round(clamp(P.pad * k, 0, Math.min(W, H) * 0.2));
+    L.x = pad; L.y = pad;
+    L.w = Math.max(1, W - pad * 2);
+    L.h = Math.max(1, H - pad * 2);
+    L.cy = L.y + L.h * (portrait ? 0.60 : 0.5);
+  }
+
+  function resize() {
+    var w = window.innerWidth, h = window.innerHeight;
+    if (!isFinite(w) || w <= 0) w = 1440;
+    if (!isFinite(h) || h <= 0) h = 900;
+    W = Math.round(w); H = Math.round(h);
+    DPR = Math.min(DPR_MAX, window.devicePixelRatio || 1);
+    if (!isFinite(DPR) || DPR <= 0) DPR = 1;
+    cv.width = Math.max(1, Math.round(W * DPR));
+    cv.height = Math.max(1, Math.round(H * DPR));
+    cv.style.width = W + "px";
+    cv.style.height = H + "px";
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    layout();
+    cache.clear();
+  }
+  addEventListener("resize", resize);
+  resize();
+
+  /* =========================================================
+     文字版：把一句话烤进两张离屏画布（残影层 / 前景层）
+     烤一次，之后每帧只 drawImage —— 这是 165Hz 下唯一稳的写法
+     ========================================================= */
+
+  /* 烤好的文字版放在 cache 里（idx -> plate），见文件上方声明 */
+
+  function displayText(s) {
+    s = (s == null) ? "" : String(s);
+    s = s.replace(/[\s\u00a0]+/g, " ").trim();
+    if (s.length > 110) s = s.slice(0, 109) + "…";
+    return s;
+  }
+
+  function hatchPattern(g, color, sp, lw) {
+    sp = Math.max(6, Math.round(sp));
+    var c = document.createElement("canvas");
+    c.width = sp; c.height = sp;
+    var x = c.getContext("2d");
+    if (!x) return null;
+    x.strokeStyle = color;
+    x.lineWidth = Math.max(1, lw);
+    x.lineCap = "round";
+    x.beginPath();
+    x.moveTo(0, sp);
+    x.lineTo(sp, 0);
+    x.stroke();
+    try { return g.createPattern(c, "repeat"); } catch (e) { return null; }
+  }
+
+  /* ---- 加粗：用 9 次偏移填充把字形“长胖”，比 strokeText 快一个数量级 ---- */
+  function heavyText(g, text, cx, cy, r) {
+    if (!(r > 0.7)) { g.fillText(text, cx, cy); return; }
+    var d = r * 0.7071;
+    g.fillText(text, cx - r, cy);
+    g.fillText(text, cx + r, cy);
+    g.fillText(text, cx, cy - r);
+    g.fillText(text, cx, cy + r);
+    g.fillText(text, cx - d, cy - d);
+    g.fillText(text, cx + d, cy - d);
+    g.fillText(text, cx - d, cy + d);
+    g.fillText(text, cx + d, cy + d);
+    g.fillText(text, cx, cy);
+  }
+
+  /* 四种笔触（都在透明离屏上画，composite 是安全的）
+     ghost  —— 实体、不排线。景深层要干净，脏了整幅就浑
+     sketch —— 排线实体 + 一道实心轮廓环（默认，参考图那味）
+     solid  —— 纯色实体，最干净
+     hollow —— 只留轮廓环，中间透出蓝底 */
+  function drawPlate(g, text, px, color, sw, cx, cy, mode) {
+    g.save();
+    try {
+      g.font = FONT(px);
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.lineJoin = "round";
+      g.lineCap = "round";
+
+      var body = Math.max(1.2, px * 0.03);       /* 加粗半径 */
+      var ring = Math.max(1, sw * 0.8);           /* 轮廓环宽度（空心/线宽） */
+
+      if (mode === "ghost") {
+        g.fillStyle = color;
+        heavyText(g, text, cx, cy, body * 0.82);
+      } else if (mode === "solid") {
+        g.fillStyle = color;
+        heavyText(g, text, cx, cy, body);
+
+      } else if (mode === "hollow") {
+        g.fillStyle = color;
+        heavyText(g, text, cx, cy, body + ring);
+        g.globalCompositeOperation = "destination-out";
+        heavyText(g, text, cx, cy, Math.max(0.4, body - ring * 0.5));
+        g.globalCompositeOperation = "source-over";
+
+      } else {
+        /* sketch：实心字上压一层深蓝斜排线当手绘阴影（对齐 studio 的“线条粗细/排线感”） */
+        g.fillStyle = color;
+        heavyText(g, text, cx, cy, body);
+        if (P.hatch) {
+          var lwH = Math.max(1, px * (0.005 + 0.0035 * sw));
+          var hp = hatchPattern(g, PAL.deep, Math.max(8, px * 0.105), lwH);
+          if (hp) {
+            g.globalCompositeOperation = "source-atop";
+            g.globalAlpha = 0.34;
+            g.fillStyle = hp;
+            g.fillRect(0, 0, g.canvas.width, g.canvas.height);
+            g.globalAlpha = 1;
+            g.globalCompositeOperation = "source-over";
+          }
+        }
+      }
+    } catch (e) { logErr(e); }
+    g.restore();
+  }
+  function fitPx(text, pxOverride) {
+    var base = (pxOverride > 0) ? pxOverride : P.size * L.k;
+    var maxW = L.w * 0.94;
+    if (!(maxW > 10)) maxW = 10;
+    try {
+      ctx.font = FONT(base);
+      var w = ctx.measureText(text).width;
+      if (isFinite(w) && w > maxW && w > 0) base = base * (maxW / w);
+    } catch (e) { logErr(e); }
+    return clamp(base, 8, 420);
+  }
+
+  function plateCanvas(plate, text, sw, mode, color) {
+    var c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(plate.cw * plate.bs));
+    c.height = Math.max(1, Math.round(plate.ch * plate.bs));
+    var g = c.getContext("2d");
+    if (!g) return null;
+    g.setTransform(plate.bs, 0, 0, plate.bs, 0, 0);
+    drawPlate(g, text, plate.px, color, sw, plate.cw / 2, plate.ch / 2, mode);
+    return c;
+  }
+
+  /* 把一句话烤成一张版：残影版 + 前景版 + 逐字前缀宽度 */
+  function bakeText(text, pxOverride) {
+    text = text || "";
+    if (!text) return null;
+
+    var px = fitPx(text, pxOverride);
+    var sw = Math.max(0.8, P.stroke * L.k);
+    var off = Math.max(0, P.offset * L.k);
+
+    var tw = 0;
+    try {
+      ctx.font = FONT(px);
+      tw = ctx.measureText(text).width;
+    } catch (e) { logErr(e); }
+    if (!isFinite(tw) || tw <= 0) tw = px * Math.max(1, text.length) * 0.55;
+
+    var M = Math.ceil(off * 1.3 + sw * 2.2 + px * 0.2 + 14);
+    var cw = Math.min(4096, Math.ceil(tw + M * 2));
+    var ch = Math.min(2048, Math.ceil(px * 1.5 + M * 2));
+
+    var bs = DPR;
+    /* 大字号降采样：烤版耗时跟像素面积成正比，掉一帧比糊一点更看得出来 */
+    if (cw * ch * bs * bs > 3.2e6) bs = 1;
+
+    var plate = { px: px, tw: tw, cw: cw, ch: ch, bs: bs, ghost: null, fg: null };
+    plate.ghost = plateCanvas(plate, text, sw, "ghost", PAL.deep);
+    plate.fg = plateCanvas(plate, text, sw, P.style, PAL.fg);
+
+
+    return plate;
+  }
+
+  function bake(i) {
+    var line = S.lines[i];
+    if (!line) return null;
+    return bakeText(displayText(line.text), REF_SIZE * L.k);
+  }
+
+  /* 字号变了只缩放，不重烤 */
+  function scaleOf(plate, wantPx) {
+    var s = wantPx / plate.px;
+    if (!isFinite(s) || s <= 0) s = 1;
+    return clamp(s, 0.12, 4);
+  }
+
+  function ensurePlate(i) {
+    var c = cache.get(i);
+    if (c) return c;
+    var p = bake(i);
+    if (!p) return null;
+    cache.set(i, p);
+    if (cache.size > CACHE_MAX) {
+      var keep = {};
+      for (var k = i - 1; k <= i + 2; k++) keep[k] = 1;
+      cache.forEach(function (v, key) { if (!keep[key]) cache.delete(key); });
+    }
+    return p;
+  }
+
+  /* =========================================================
+     时间轴
+     ========================================================= */
+  var CLK = { base: 0, wall: 0, started: false };
+
+  function idxAt(t) {
+    var a = S.lines, lo = 0, hi = a.length - 1, best = -1;
+    while (lo <= hi) {
+      var m = (lo + hi) >> 1;
+      if (a[m].t <= t + 1e-4) { best = m; lo = m + 1; } else hi = m - 1;
+    }
+    return best;
+  }
+
+  function onInit(p) {
+    var song = (p && p.song) || {};
+    S.title = typeof song.name === "string" ? song.name.trim() : "";
+
+    var raw = (p && Array.isArray(p.lines)) ? p.lines : [];
+    var arr = [], i;
+    for (i = 0; i < raw.length; i++) {
+      var l = raw[i];
+      if (!l || typeof l !== "object") continue;
+      arr.push({
+        t: num(l.t, 0),
+        dur: Math.max(0, num(l.dur, 0)),
+        text: (l.text == null) ? "" : String(l.text),
+        d: 3.4
+      });
+    }
+    arr.sort(function (a, b) { return a.t - b.t; });
+
+    var dur0 = num(p && p.duration, 0);
+    for (i = 0; i < arr.length; i++) {
+      var gap = (i + 1 < arr.length) ? (arr[i + 1].t - arr[i].t) : 0;
+      var d;
+      if (gap > 0.18) d = gap;
+      else if (arr[i].dur > 0.18) d = arr[i].dur;
+      else if (i + 1 === arr.length && dur0 > arr[i].t) d = dur0 - arr[i].t;
+      else d = 3.4;
+      arr[i].d = clamp(d, 0.5, 14);
+    }
+    S.lines = arr;
+    S.idx = idxAt(S.t);
+    cache.clear();
+    beatK = 0;
+  }
+
+  function onTick(p) {
+    var t = Number(p && p.time);
+    if (isFinite(t)) { CLK.base = t; CLK.wall = performance.now(); CLK.started = true; }
+    if (p && typeof p.playing === "boolean") S.playing = p.playing;
+  }
+
+  function applySetting(k, v) {
+    if (!Object.prototype.hasOwnProperty.call(P, k)) return;
+    if (k === "style") {
+      var s0 = String(v);
+      if (s0 === "sketch" || s0 === "hollow" || s0 === "solid") P.style = s0;
+    } else if (k === "enter") {
+      var s1 = String(v);
+      if (s1 === "slide" || s1 === "fade") P.enter = s1;
+    } else if (k === "hatch" || k === "breath" || k === "beat") {
+      P[k] = !!v;
+    } else if (LIM[k]) {
+      var n = Number(v);
+      if (isFinite(n)) P[k] = clamp(n, LIM[k][0], LIM[k][1]);
+    }
+    /* 只有影响"烤版"的参数才重建 */
+    if (k === "stroke" || k === "style" || k === "hatch" || k === "pad") cache.clear();
+    if (k === "pad") layout();
+    if (k === "beat" && !P.beat) beatK = 0;
+  }
+
+  /* =========================================================
+     动线：进场 → 平行慢滑 → 甩出右边界
+     ========================================================= */
+  function easeOutCubic(x) { var u = 1 - x; return 1 - u * u * u; }
+  function easeInCubic(x) { return x * x * x; }
+
+  /* 进/出场用绝对秒数（不再按句长比例）：1.5 秒的短句也不会变成一道残影 */
+  function phaseOf(d) {
+    var e = clamp(d * 0.5, 0.55, 1.0);
+    var x = clamp(d * 0.42, 0.5, 0.85);
+    if (e + x > d * 0.94) {
+      var k = (d * 0.94) / (e + x);
+      e *= k; x *= k;
+    }
+    return { e: e, x: x };
+  }
+
+  function geomOf(tw) {
+    var x0 = L.x, w = L.w;
+    var rest = x0 + w * 0.5;
+    var room = Math.max(0, (w - tw) * 0.5);
+    var drift = Math.min(w * 0.13 * P.speed, room * 0.9 + 12) * (RM ? 0.35 : 1);
+    if (!(drift > 0)) drift = 0;
+    return {
+      start: x0 - tw * 0.5 - 24,
+      end: x0 + w + tw * 0.5 + 40,
+      rest: rest - drift * 0.5,
+      drift: drift
+    };
+  }
+
+  function xAt(el, d, tw) {
+    var g = geomOf(tw), ph = phaseOf(d);
+    el = clamp(el, 0, d);
+    if (el <= ph.e) return g.start + (g.rest - g.start) * easeOutCubic(el / ph.e);
+    var hold = Math.max(0.05, d - ph.e - ph.x);
+    if (el <= d - ph.x) return g.rest + g.drift * clamp((el - ph.e) / hold, 0, 1);
+    var p = clamp((el - (d - ph.x)) / ph.x, 0, 1);
+    return (g.rest + g.drift) + (g.end - g.rest - g.drift) * easeInCubic(p);
+  }
+
+  function clipField() {
+    ctx.beginPath();
+    ctx.rect(L.x, L.y, L.w, L.h);
+    ctx.clip();
+  }
+
+  function blit(img, cx, cy, plate, s) {
+    if (!img || !img.width || !img.height) return;
+    s = s || 1;
+    var w = plate.cw * s, h = plate.ch * s;
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+  }
+
+  /* 中间渐变：不横移，只在原地淡入淡出 */
+  function fadeAlpha(u) {
+    var a = clamp(u / 0.14, 0, 1);
+    var b = clamp((1 - u) / 0.14, 0, 1);
+    var t = Math.min(a, b);
+    return t * t * (3 - 2 * t);
+  }
+
+  function drawLine(line, plate, dt, pre, alphaMul, skipEnter) {
+    var d = line.d > 0 ? line.d : 3.4;
+    var el = S.t - line.t;
+    var u = clamp(el / d, 0, 1);
+    var s = scaleOf(plate, fitPx(displayText(line.text), P.size * L.k));
+    var tw = plate.tw * s;
+    var fading = (P.enter === "fade") && (pre == null);
+    var alpha = fading ? fadeAlpha(u) : 1;
+    if (alpha <= 0.004) return;
+    var x;
+    if (pre != null) {
+      /* 前奏提前进场：从画外滑到停稳位，主唱一开口正好就位 */
+      alpha = (alphaMul == null) ? 1 : alphaMul;
+      if (P.enter === "fade") {
+        x = L.x + L.w * 0.5;
+      } else {
+        var g0 = geomOf(tw);
+        x = g0.start + (g0.rest - g0.start) * easeOutCubic(clamp(pre, 0, 1));
+      }
+    } else {
+      x = fading ? (L.x + L.w * 0.5) : xAt(skipEnter ? el + phaseOf(d).e : el, d, tw);
+    }
+    var cy = L.cy;
+    /* 景深跟着实际字号走：竖屏小字不至于被残影糊死 */
+    var off = Math.max(0, P.offset * ((plate.px * s) / REF_SIZE));
+
+    /* 影子的位置只由「字的位置」决定，偏移是常数：
+       不做逐帧速度拖尾、不跟鼠标、不跟时间漂 —— 字一停，影子就是一块死的东西。
+       唯一会动的是两个默认关闭的开关：呼吸（上下）和鼓点（左右脉冲）。 */
+    var breathe = (P.breath && !RM) ? Math.sin(S.t * 1.35) * 3.4 * L.k : 0;
+    var kick = (P.beat && !RM && window.__liziShake !== false) ? beatK * 9 * L.k : 0;
+
+    var fx = x + off * 0.35, fy = cy + off * 0.2;
+    var gx = x - off - kick, gy = cy - off * 0.55 + breathe;
+
+    /* ① 影子：死锁在蓝场内，一格都不许溢到黑边上 */
+    ctx.save();
+    clipField();
+    ctx.globalAlpha = 0.96 * alpha;
+    blit(plate.ghost, gx, gy, plate, s);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    /* ② 前景：永远允许破框穿到黑边 —— 不做成开关，免得被旧设置关掉 */
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    blit(plate.fg, fx, fy, plate, s);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function roundRect(x, y, w, h, r) {
+    if (w <= 0 || h <= 0) return;
+    r = Math.min(r, w * 0.5, h * 0.5);
+    if (ctx.roundRect) {
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+  }
+
+  /* 前奏 / 间奏 / 无歌词：一条品红小块自己掠过去，预告同一套动线 */
+  var titlePlate = null, titleSig = "";
+
+  function ensureTitle() {
+    var refPx = clamp(Math.min(REF_SIZE * L.k * 0.74, L.w * 0.14), 20, 300);
+    var sig = S.title + "|" + Math.round(refPx) + "|" + P.style + "|" + P.stroke + "|" + P.hatch;
+    if (titlePlate && sig === titleSig) return titlePlate;
+    titleSig = sig;
+    titlePlate = bakeText(S.title, refPx);
+    return titlePlate;
+  }
+
+  function drawIdle(showTitle) {
+    var k = L.k;
+    var cy = L.cy;
+
+    /* 前奏 / 纯音乐 / 间奏：歌名走同一套动线来回掠过，画面不空 */
+    var cyc = RM ? 8.0 : 5.2;
+    var u = (clock % cyc) / cyc;
+    var e = u * u * (3 - 2 * u);
+    var fadeMode = (P.enter === "fade");
+
+    if (showTitle && S.title) {
+      var tpx = fitPx(S.title, clamp(Math.min(P.size * k * 0.74, L.w * 0.14), 20, 300));
+      var tp = ensureTitle();
+      if (tp) {
+        var ts = scaleOf(tp, tpx);
+        var off = Math.max(0, P.offset * ((tp.px * ts) / REF_SIZE));
+        var ttw = tp.tw * ts;
+        var tx, ta = 1;
+        if (fadeMode) {
+          tx = L.x + L.w * 0.5;
+          var a1 = clamp(u / 0.16, 0, 1), a2 = clamp((1 - u) / 0.16, 0, 1);
+          var t0 = Math.min(a1, a2);
+          ta = t0 * t0 * (3 - 2 * t0);
+        } else {
+          var from = L.x - ttw * 0.5 - 20;
+          var to = L.x + L.w + ttw * 0.5 + 20;
+          tx = from + (to - from) * e;
+        }
+
+        ctx.save();
+        clipField();
+        ctx.globalAlpha = 0.96 * ta;
+        blit(tp.ghost, tx - off, cy - off * 0.55, tp, ts);
+        ctx.restore();
+
+        ctx.globalAlpha = ta;
+        blit(tp.fg, tx + off * 0.35, cy + off * 0.2, tp, ts);
+        ctx.globalAlpha = 1;
+        return;
+      }
+    }
+
+    /* 连歌名都没有：一条品红横条照样掠过去 */
+    var off2 = Math.max(0, P.offset * k);
+    var bw = clamp(L.w * 0.2, 40, 320 * k);
+    var bh = Math.max(6, Math.round(11 * k));
+    var bx = xAt((clock % cyc), cyc, bw);
+    var by = cy;
+    var ba = 1;
+    if (fadeMode) {
+      bx = L.x + L.w * 0.5;
+      var b1 = clamp(u / 0.16, 0, 1), b2 = clamp((1 - u) / 0.16, 0, 1);
+      var b0 = Math.min(b1, b2);
+      ba = b0 * b0 * (3 - 2 * b0);
+    }
+
+    ctx.save();
+    clipField();
+    ctx.globalAlpha = 0.96 * ba;
+    ctx.fillStyle = PAL.deep;
+    roundRect(bx - bw * 0.5 - off2, by - bh * 0.5 - off2 * 0.55, bw, bh, bh * 0.5);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.globalAlpha = ba;
+    ctx.fillStyle = PAL.fg;
+    roundRect(bx - bw * 0.5 + off2 * 0.35, by - bh * 0.5 + off2 * 0.2, bw, bh, bh * 0.5);
+    ctx.fill();
+  }
+  function draw(dt) {
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = PAL.frame;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PAL.field;
+    ctx.fillRect(L.x, L.y, L.w, L.h);
+
+    var i = S.idx;
+    var line = (i >= 0 && i < S.lines.length) ? S.lines[i] : null;
+    var u = line ? (S.t - line.t) / (line.d > 0 ? line.d : 3.4) : 2;
+    var hasText = false;
+    if (line && u < 1) {
+      hasText = displayText(line.text).length > 0;
+    }
+
+    if (hasText) {
+      var plate = ensurePlate(i);
+      if (plate) {
+        if (i > 0) introSeen = false;
+        drawLine(line, plate, dt, null, 1, i === 0 && introSeen);
+        return;
+      }
+    }
+
+    /* 前奏：不挂歌名卡。第一句一开始就摆在场上等着，临近时滑到位并亮起来，
+       前奏再长也不会像卡住 */
+    if (i < 0 && S.lines.length) {
+      var f0 = S.lines[0];
+      if (displayText(f0.text)) {
+        var lead = clamp(f0.t * 0.55, 2.5, 7);
+        var from = Math.max(0, f0.t - lead);
+        var pre = (f0.t > from) ? clamp((S.t - from) / (f0.t - from), 0, 1) : 1;
+        var near = clamp((S.t - f0.t + 2) / 2, 0, 1);      /* 最后 2 秒亮起来 */
+        var p0 = ensurePlate(0);
+        if (p0) { introSeen = true; drawLine(f0, p0, dt, pre, 0.5 + 0.5 * near, 0); return; }
+      }
+    }
+
+    drawIdle(S.lines.length === 0);
+  }
+
+  /* =========================================================
+     主循环
+     ========================================================= */
+  var lastNow = performance.now();
+  var prebakeAt = 0;
+
+  function frame(now) {
+    var js0 = performance.now();
+    try {
+      var dt = (now - lastNow) / 1000;
+      lastNow = now;
+      if (!isFinite(dt) || dt < 0) dt = 0;
+      if (dt > 0.05) dt = 0.05;
+      clock += dt;
+
+      if (CLK.started) {
+        if (S.playing) {
+          var extra = (now - CLK.wall) / 1000;
+          if (!isFinite(extra) || extra < 0) extra = 0;
+          S.t = CLK.base + Math.min(0.5, extra);
+        } else {
+          S.t = CLK.base;
+        }
+      }
+      if (!isFinite(S.t)) S.t = 0;
+
+      S.idx = idxAt(S.t);
+
+      beatK = beatK > 0 ? Math.max(0, beatK - dt * 3.4) : 0;
+
+      draw(dt);
+
+      /* 提前把下一句烤好，避免换句那一帧掉帧 */
+      if (now - prebakeAt > 220) {
+        prebakeAt = now;
+        var ni = S.idx + 1;
+        if (ni >= 0 && ni < S.lines.length && !cache.has(ni) && (S.lines[ni].t - S.t) < 6) {
+          var p2 = bake(ni);
+          if (p2) cache.set(ni, p2);
+        }
+      }
+
+      S.frames++;
+    } catch (e) {
+      logErr(e);
+    }
+    S.js = performance.now() - js0;
+    raf(frame);
+  }
+  raf(frame);
+
+  /* =========================================================
+     消息
+     ========================================================= */
+  addEventListener("message", function (ev) {
+    var d = ev.data;
+    if (!d || d.__c100 !== 1) return;
+    var p = d.payload || {};
+    try {
+      if (d.type === "init") {
+        onInit(p);
+        if (typeof p.playing === "boolean") S.playing = p.playing;
+        else S.playing = true;
+      } else if (d.type === "tick") {
+        onTick(p);
+      } else if (d.type === "setting") {
+        applySetting(String(p.key || ""), p.value);
+      } else if (d.type === "beat") {
+        var lv = num(p.level, 0.5);
+        beatK = Math.max(beatK, clamp(lv, 0, 1));
+      } else if (d.type === "live") {
+        if (p && typeof p.playing === "boolean") S.playing = p.playing;
+      }
+    } catch (e) { logErr(e); }
+  });
+
+  /* 活动 / 空格：舞台在 iframe 里，父页面收不到，必须转发 */
+  var actAt = 0;
+  function sendActivity() {
+    var n = performance.now();
+    if (n - actAt < 180) return;
+    actAt = n;
+    try { parent.postMessage({ __c100: 1, type: "activity" }, "*"); } catch (e) { }
+  }
+  addEventListener("mousemove", sendActivity, { passive: true });
+  addEventListener("pointermove", sendActivity, { passive: true });
+  addEventListener("touchstart", sendActivity, { passive: true });
+  addEventListener("touchmove", sendActivity, { passive: true });
+  addEventListener("wheel", sendActivity, { passive: true });
+
+  addEventListener("keydown", function (e) {
+    if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
+      try { parent.postMessage({ __c100: 1, type: "key", payload: { key: "Space" } }, "*"); } catch (err) { }
+      e.preventDefault();
+    }
+  });
+
+
+})();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

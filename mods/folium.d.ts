@@ -777,6 +777,12 @@ export interface FoliumVisualizerDef {
     label: FoliumLabel;
     /** Position in the mode picker; default 500 (after builtin modes). */
     order?: number;
+    /**
+     * 样式选择器里代表这款动画的小图标：一段 SVG path 的 `d` 字符串，画在
+     * 宿主统一的 24×24 描边 <svg> 里（与内置样式的 glyph 同一套画框）。
+     * 不填则用通用字形。只接受 path 的 d 数据 —— mod 没有 React，不能传节点。
+     */
+    glyph?: string;
     /** Draws the visualizer into its container. */
     mount: FoliumMount<FoliumStageContext>;
     /**

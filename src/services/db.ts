@@ -184,13 +184,27 @@ export const getCacheUsageByCategory = async (): Promise<{
   }
 };
 
+import { useBilibiliMvStore } from '../stores/useBilibiliMvStore';
+
 export const clearCacheByCategory = async (category: CacheCategory): Promise<void> => {
   try {
+    /*
+     * MV 匹配结果不进 IndexedDB（它在 WebView 的 localStorage 里），
+     * 所以这一类要绕开数据库那一步，直接清 store —— 顺手把内存里那份也清掉，
+     * 否则界面还会继续拿着刚被删掉的结果。
+     */
+    if (category === 'mvMatch') {
+      // 匹配记录与盘上的字节缓存（音轨 + 画面 + 绑定）一起清；具体怎么清由那个平台自己的 store 负责。
+      useBilibiliMvStore.getState().clear();
+      return;
+    }
     await clearBrowserCacheByCategory(category);
     if (category === 'media' && hasElectronAudioCacheBridge()) {
       await window.electron!.clearAudioCache();
     }
-    if (category === 'media') await clearNativeMediaCache();
+    if (category === 'media') {
+      await clearNativeMediaCache();
+    }
     if (category === 'cover') await clearCoverAssets();
   } catch (error) {
     console.error('Failed to clear cache by category', error);
@@ -219,7 +233,7 @@ export const getLocalSongs = async (): Promise<LocalSong[]> => {
 
 /**
  * 按 id 读一首本地歌曲的最新记录。
- * 不走 ensureLocalLibraryInitialized：那一步会把 local_music 和 assignments 整表读一遍，
+ * 不走 ensureLocalLibraryInitialized：那一步要把 local_music 和 assignments 的主键整表读一遍，
  * 而这里只服务切歌、匹配写回这类「只关心一首」的热路径。读失败或记录不存在时返回 undefined。
  */
 export const getLocalSong = async (id: string): Promise<LocalSong | undefined> => {

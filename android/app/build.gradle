@@ -116,6 +116,22 @@ android {
             }
         }
     }
+    /*
+     * 原生库压进 APK（默认是「不压缩、按页对齐」地整份存）。
+     *
+     * AGP 8 起 jniLibs 默认 useLegacyPackaging=false：.so 原样存 109MB，装的时候不用解压、
+     * 可以直接 mmap。代价是下载/传输的那一份也是 109MB。我们侧装分发，APK 体积直接影响
+     * 用户的下载与传文件时间，所以这里改回压缩：libnode(47MB) + libonnxruntime(32.6MB)
+     * + ffmpeg(25MB) 压完大约是原来的一半多一点，APK 少七十来 MB。
+     *
+     * 代价：装到机器上时系统会把这几个 .so 解压到应用私有目录，安装占用比不压缩时大
+     * （磁盘换下载）。功能没有任何变化。
+     */
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
     signingConfigs {
         if (hasReleaseKeystore) {
             release {

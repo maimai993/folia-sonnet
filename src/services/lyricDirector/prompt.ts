@@ -1,5 +1,5 @@
 import { SONNET_CAMERA_INTENSITY_MAX } from '../../types';
-import { buildParamSpec } from './catalog';
+import { buildParamSpec, effectiveBlockedDirectorModes } from './catalog';
 import type { DirectorModeInfo } from './catalog';
 
 // src/services/lyricDirector/prompt.ts
@@ -144,13 +144,15 @@ export const buildSourcePrompt = (input: DirectorPromptInput): string => {
     }
 
     out.push('', '可选模式：');
-    modes.forEach((mode) => {
+    // 生效的禁区（用户勾掉的 + 永远不许 AI 用的 fork/模组样式）：连列都不列，
+    // 列出来的话模型只会照着点其中名字顺眼的那个。
+    const blocked = effectiveBlockedDirectorModes(input.blockedModes);
+    modes.filter((mode) => !blocked.includes(mode.id)).forEach((mode) => {
         out.push(`- ${mode.id}（${mode.label}）${mode.hint ? `：${mode.hint}` : ''}`);
     });
     // Every mode's parameter space, so the model can tune whichever mode it picks
     // (it chooses and tunes in one round trip). A blocked mode is left out of it
     // as well — its parameter keys would only invite an answer naming them.
-    const blocked = input.blockedModes ?? [];
     const specEntries = Object.entries(buildParamSpec())
         .filter(([modeId, value]) => Boolean(value) && !blocked.includes(modeId));
     if (specEntries.length > 0) {
