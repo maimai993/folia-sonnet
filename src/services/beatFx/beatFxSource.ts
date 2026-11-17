@@ -574,8 +574,8 @@ export const loadBeatFxTrackDrums = (song: SongResult, { storedOnly = false, voc
     if (!vocals) releaseTrackVocals(key);
     const voice = vocals ? loadTrackVocalEnvelope(key, readBytes, { at: () => Math.min(askedAt, getBeatFxLastHeard(key)), seconds: (song.durationMs || 0) / 1000 }) : null;
     const drums = (async (): Promise<BeatFxTrackDrums> => {
-        // 原生的整曲解码先要一个地址（见 `resolveNativeAudioUrl`）；拿不到就走老路。
-        const nativeUrl = await resolveNativeAudioUrl(song);
+        // 有四轨缓存就先读鼓轨（drums.m4a，已分离好），没有再走整曲分离。
+        const nativeUrl = (await resolveNativeStemUrl(song, 'drums')) ?? (await resolveNativeAudioUrl(song));
         const [analysis, envelope] = await Promise.all([loadTrackDrumHits(key, readBytes, nativeUrl), voice]);
         return (analysis || envelope) && found() ? 'hits' : missing ? 'retry' : 'none';
     })();
