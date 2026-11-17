@@ -2660,6 +2660,11 @@ export default {
         "account": "音质",
         "aiDirector": "AI 导演"
     },
+    "settingsErrorBoundary": {
+        "title": "设置页出了点问题（已拦下，应用没崩）",
+        "retry": "重试",
+        "close": "关闭设置"
+    },
     "aiDirector": {
         "title": "AI 歌词动画导演",
         "currentMode": "当前模式：{{mode}}",
@@ -4414,6 +4419,7 @@ export default {
         "androidUpdateInstallPermissionHint": "已打开「允许来自此来源的应用」设置页，授权后回到这里再点一次「立即安装」。",
         "androidUpdateFailedNotice": "检查更新需要能访问更新服务器，网络对不上时可以先用上面那个发布页入口。",
         "androidUpdateFailureManifestMissing": "拿不到版本清单（地址变了或还没上传）",
+        "androidUpdateFailureRateLimited": "更新服务暂时不可用（请求过于频繁或网络不通），请稍后再试，或直接去发布页下载。",
         "androidUpdateFailureTimeout": "连接更新服务器超时",
         "androidUpdateFailureEmptyManifest": "版本清单是空的或格式不对",
         "androidUpdateFailureNoApk": "版本清单里没有可安装的 APK",

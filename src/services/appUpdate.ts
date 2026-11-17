@@ -11,9 +11,11 @@ import {
 // src/services/appUpdate.ts
 // 应用内检查更新（Android）。
 //
-// 版本清单是一份静态 json，形如：
-//   { "version": "0.7.19", "download_url": "https://.../folia-sonnet-0.7.19-release.apk" }
-// 出包时把最新版本号与安装包地址写进去即可 —— 不依赖 GitHub Release，也绕开 API 限流。
+// 版本清单：安卓读 **GitHub Releases 的 latest**（本 fork 自己的仓库），摊成一份小清单
+// （version / download_url / assets / published_at …），再走同一条比对 → 下载 → 交系统安装器
+// 的链路。原来读的是自建 CDN 上的静态 json（`{ version, download_url }`）：那份清单的
+// download_url 不带扩展名，解析出来是「没有可安装的 APK」，而且上面写的是上游的版本号，
+// 与本 fork 对不上。自建清单形状仍然兼容（toManifestPayload 认 version/download_url）。
 //
 // 桌面端那套走 electron-updater（主进程里查、下载、重启安装），Android 这里没有对应能力：
 // 应用**不允许**自己静默装更新，非 Play 分发必须落到系统安装器并让用户点确认。所以这条
@@ -255,8 +257,13 @@ const toReleaseInfo = (payload: UpdateManifestPayload): AppReleaseInfo | null =>
 /** 把失败原因翻成人话。「检查失败」这三个字本身不足以让人判断该不该重试。 */
 const describeFetchFailure = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
-  if (/HTTP 4(03|04)/.test(message)) {
-    // 403/404 = 清单地址变了或文件没传上去。
+  // GitHub API 未认证时 60 次/时/IP，超限回 403（二级限流是 403/429），国内也常直接不可达。
+  // 这与「清单地址变了」是两回事：给用户的建议不同（等一会儿 / 直接去发布页）。
+  if (/HTTP (403|429)/.test(message)) {
+    return 'rate-limited';
+  }
+  if (/HTTP 404/.test(message)) {
+    // 404 = 清单地址变了或没有已发布版本。
     return 'manifest-missing';
   }
   if (/timed out|AbortError/i.test(message)) {

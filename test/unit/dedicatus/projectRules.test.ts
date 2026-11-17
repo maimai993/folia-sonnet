@@ -127,6 +127,26 @@ describe('D513 Folium stable interface', () => {
         expect(major).toEqual([]);
     });
 
+    it('treats a widened union as an addition, not a rewrite', () => {
+        const line = (members: string) => `export type FoliumBeatEffectSource = ${members};`;
+        const before = [line("'beats' | 'drums' | 'stems'")].join('\n');
+        const after = [line("'beats' | 'drums' | 'stems' | 'envelopes'")].join('\n');
+        const files = parseDiff([
+            'diff --git a/mods/folium.d.ts b/mods/folium.d.ts',
+            '--- a/mods/folium.d.ts',
+            '+++ b/mods/folium.d.ts',
+            '@@ -1 +1 @@',
+            `-${line("'beats' | 'drums' | 'stems'")}`,
+            `+${line("'beats' | 'drums' | 'stems' | 'envelopes'")}`,
+        ].join('\n'));
+        const read = (minor: number, text: string) => (file: string) => (file === 'mods/folium.d.ts' ? text : `{ "version": { "major": 1, "minor": ${minor} } }`);
+        // 加宽只算新增：没有删改报告。
+        expect(checkFoliumApi(files, { readBase: read(9, before), readCurrent: read(10, after) })).toEqual([]);
+        // 小版本没升时，报的是「有新增」，不是「被删改」。
+        const stale = checkFoliumApi(files, { readBase: read(9, before), readCurrent: read(9, after) });
+        expect(stale.map(finding => finding.key)).toEqual(['D513:added']);
+    });
+
     it('lets a minor bump rewrite the version line itself', () => {
         const versionLine = (minor: number) => `export declare const FOLIUM_VERSION: { readonly major: 1; readonly minor: ${minor} };`;
         const files = parseDiff([

@@ -54,6 +54,7 @@ const formatSize = (bytes: number): string => (
 const failureKeyOf = (message: string): string => {
     switch (message) {
         case 'manifest-missing': return 'options.androidUpdateFailureManifestMissing';
+        case 'rate-limited': return 'options.androidUpdateFailureRateLimited';
         case 'timeout': return 'options.androidUpdateFailureTimeout';
         case 'empty-manifest': return 'options.androidUpdateFailureEmptyManifest';
         case 'no-apk': return 'options.androidUpdateFailureNoApk';

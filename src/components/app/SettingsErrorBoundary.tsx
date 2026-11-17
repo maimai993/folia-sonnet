@@ -1,10 +1,14 @@
 import React from 'react';
+import i18n from '../../i18n/config';
+import { Button } from '../ui';
 
 // src/components/app/SettingsErrorBoundary.tsx
 // 设置弹窗的兜底边界。弹窗一挂载就渲染整棵页面树，其中任何一页在真实设备上抛错
 // （jsdom 探针抓不到、只有真机才崩的那种），以前的表现是整棵 React 树卸载 → 整个应用黑屏。
 // 有了这一层，崩溃被圈在弹窗里：屏幕上给出错误摘要（而不是黑屏），完整堆栈打到 console.error
 // （installConsoleLogCapture 会把它送进运行日志），弹窗照常可以关掉。
+//
+// 类组件是 getDerivedStateFromError 的要求；文案走 i18n（不是 hooks，所以这里直接读 i18n.t）。
 export interface SettingsErrorBoundaryProps {
     onClose?: () => void;
     children?: React.ReactNode;
@@ -25,66 +29,27 @@ export class SettingsErrorBoundary extends React.Component<SettingsErrorBoundary
         console.error('[SettingsErrorBoundary] settings crashed:', error, info);
     }
 
+    private retry = () => this.setState({ error: null });
+
+    private close = () => {
+        this.setState({ error: null });
+        this.props.onClose?.();
+    };
+
     render() {
         const { error } = this.state;
         if (!error) {
             return this.props.children;
         }
         return (
-            <div
-                style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 200,
-                    background: '#111114',
-                    color: '#e8e6e3',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 12,
-                    padding: 24,
-                    overflowY: 'auto',
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                }}
-            >
-                <div style={{ fontWeight: 700 }}>设置页出错了（已拦下，应用没崩）</div>
-                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                    {error.message || String(error)}
+            <div className="fixed inset-0 z-[200] flex flex-col gap-3 overflow-y-auto bg-[#111114] p-6 font-mono text-[13px] text-[#e8e6e3]">
+                <div className="font-bold">{i18n.t('settingsErrorBoundary.title')}</div>
+                <div className="whitespace-pre-wrap break-all">{error.message || String(error)}</div>
+                <div className="whitespace-pre-wrap break-all opacity-70">{error.stack || ''}</div>
+                <div className="flex gap-2">
+                    <Button onClick={this.retry}>{i18n.t('settingsErrorBoundary.retry')}</Button>
+                    <Button onClick={this.close}>{i18n.t('settingsErrorBoundary.close')}</Button>
                 </div>
-                <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', opacity: 0.7 }}>
-                    {error.stack || ''}
-                </div>
-                <button
-                    type="button"
-                    onClick={() => this.setState({ error: null })}
-                    style={{
-                        alignSelf: 'flex-start',
-                        padding: '8px 16px',
-                        borderRadius: 10,
-                        background: '#2a2a30',
-                        color: '#e8e6e3',
-                        border: '1px solid #3a3a42',
-                    }}
-                >
-                    重试
-                </button>
-                <button
-                    type="button"
-                    onClick={() => {
-                        this.setState({ error: null });
-                        this.props.onClose?.();
-                    }}
-                    style={{
-                        alignSelf: 'flex-start',
-                        padding: '8px 16px',
-                        borderRadius: 10,
-                        background: '#2a2a30',
-                        color: '#e8e6e3',
-                        border: '1px solid #3a3a42',
-                    }}
-                >
-                    关闭设置
-                </button>
             </div>
         );
     }

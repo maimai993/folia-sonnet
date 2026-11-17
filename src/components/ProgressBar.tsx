@@ -30,6 +30,13 @@ interface ProgressBarProps {
 }
 
 
+/*
+ * 松手之后播放器回传真实位置要一点时间（要缓冲时更久）。这段窗口内继续停在刚拖到的位置上，
+ * 否则进度条会先弹回旧位置再跳过去 —— 看着就是「拖了没反应」（安卓真机反馈 2026-11-13）。
+ */
+const SEEK_SETTLE_MS = 700;
+const SEEK_SETTLE_TOLERANCE_SEC = 0.4;
+
 const formatTime = (time: number) => {
     if (isNaN(time)) return "00:00";
     const minutes = Math.floor(time / 60);
@@ -57,6 +64,8 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     const timeRef = useRef<HTMLSpanElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const isDraggingRef = useRef(false);
+    /** 刚拖到的位置与它的保鲜期；见 SEEK_SETTLE_MS。 */
+    const settleRef = useRef<{ value: number; expiresAt: number } | null>(null);
     const lastDisplayedSecondRef = useRef<number | null>(null);
     const lastInputSecondRef = useRef<number | null>(null);
     const trackDeviceWidthRef = useRef(0);
@@ -64,7 +73,19 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
 
     // Keeps continuous progress on the compositor while coarse values update only when needed.
     const updateUI = useCallback((value: number, force = false, syncInput = true, bypassDrag = false) => {
-        if (!bypassDrag && isDraggingRef.current) return;
+        if (!bypassDrag) {
+            if (isDraggingRef.current) return;
+            // 松手后的保鲜期：还在窗口里、且回传的位置没追上来，就先不听播放器的。见 handleSeekEnd。
+            const settle = settleRef.current;
+            if (settle && !force) {
+                const arrived = Math.abs(Math.max(0, value) - settle.value) <= SEEK_SETTLE_TOLERANCE_SEC;
+                if (arrived || Date.now() >= settle.expiresAt) {
+                    settleRef.current = null;
+                } else {
+                    return;
+                }
+            }
+        }
 
         const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
         const clampedValue = duration > 0 ? Math.min(safeValue, duration) : safeValue;
@@ -153,9 +174,17 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
     };
 
     const handleSeekStart = (e: React.PointerEvent<HTMLInputElement>) => {
-        if (disabled) return;
+        // 只认主键：右键/中间键落到 range 上是浏览器自己的行为，不该进拖动态。
+        if (disabled || e.button !== 0) return;
         isDraggingRef.current = true;
-        e.currentTarget.setPointerCapture(e.pointerId);
+        settleRef.current = null;
+        try {
+            e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+            // 指针已经没了（例如被系统手势抢走、元素在这一下被卸载）。捕获失败不影响
+            // input 事件本身；这里必须吞掉 —— 抛出去的话下面的 onSeekStart 不会执行，
+            // 而 isDraggingRef 已经置真、没人复位，updateUI 会永远早退（进度条冻住）。
+        }
         onSeekStart?.();
     };
 
@@ -165,6 +194,11 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
         isDraggingRef.current = false;
         updateUI(value, true);
         onSeek(value);
+        /*
+         * 松手之后播放器回传真实位置要一点时间（要缓冲时更久）。这段窗口内继续停在新位置，
+         * 否则进度条会先弹回旧位置再跳过去——看着就是「拖了没反应」（安卓真机反馈）。
+         */
+        settleRef.current = { value, expiresAt: Date.now() + SEEK_SETTLE_MS };
         onSeekEnd?.();
     };
 
@@ -241,7 +275,12 @@ const ProgressBar: React.FC<ProgressBarProps> = ({
                     onInput={handleInput}
                     onChange={() => { }} // React requires this
                     onClick={(e) => e.stopPropagation()}
-                    className={`absolute w-full opacity-0 ${isLine ? 'inset-x-0 -top-1.5 h-[calc(100%+12px)]' : 'inset-0 h-full'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    /*
+                     * `touch-none` 不能去掉：没有它，安卓会把这次拖动判成滚动并发出 pointercancel，
+                     * 拖到一半就被取消，表现就是「拖不动」。
+                     * 命中区要撑到轨道之外：默认档的轨道只有 6px 高，手指根本抓不住，所以上下各多给 8px。
+                     */
+                    className={`absolute w-full opacity-0 touch-none ${isLine ? 'inset-x-0 -top-1.5 h-[calc(100%+12px)]' : '-inset-y-2 h-[calc(100%+16px)]'} ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                 />
                 <FoliumProgressLayers ctx={foliumCtx} />
             </div>

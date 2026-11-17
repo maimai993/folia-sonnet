@@ -2644,6 +2644,11 @@ export default {
         "account": "Quality",
         "aiDirector": "AI director"
     },
+    "settingsErrorBoundary": {
+        "title": "The settings window hit an error (caught; the app itself is fine)",
+        "retry": "Try again",
+        "close": "Close settings"
+    },
     "aiDirector": {
         "title": "AI lyric animation director",
         "currentMode": "Current mode: {{mode}}",
@@ -4338,6 +4343,7 @@ export default {
         "androidUpdateInstallPermissionHint": "The \"Install unknown apps\" settings page has been opened. Allow it there, then come back and tap \"Install now\" again.",
         "androidUpdateFailedNotice": "Checking for updates needs to reach the update server. If the network cannot, use the release page link above.",
         "androidUpdateFailureManifestMissing": "Update manifest is unreachable (address changed or not uploaded yet)",
+        "androidUpdateFailureRateLimited": "The update service is temporarily unavailable (rate limited or unreachable). Try again later, or download from the releases page.",
         "androidUpdateFailureTimeout": "Timed out reaching the update server",
         "androidUpdateFailureEmptyManifest": "Update manifest is empty or malformed",
         "androidUpdateFailureNoApk": "Update manifest has no installable APK",

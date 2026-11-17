@@ -2644,6 +2644,11 @@ export default {
         "account": "Tài khoản",
         "aiDirector": "AI director"
     },
+    "settingsErrorBoundary": {
+        "title": "Cửa sổ cài đặt gặp lỗi (đã chặn; ứng dụng vẫn chạy)",
+        "retry": "Thử lại",
+        "close": "Đóng cài đặt"
+    },
     "aiDirector": {
         "title": "AI lyric animation director",
         "currentMode": "Current mode: {{mode}}",
@@ -4338,6 +4343,7 @@ export default {
         "androidUpdateInstallPermissionHint": "The \"Install unknown apps\" settings page has been opened. Allow it there, then come back and tap \"Install now\" again.",
         "androidUpdateFailedNotice": "Checking for updates needs to reach the update server. If the network cannot, use the release page link above.",
         "androidUpdateFailureManifestMissing": "Update manifest is unreachable (address changed or not uploaded yet)",
+        "androidUpdateFailureRateLimited": "Dịch vụ cập nhật tạm thời không dùng được (bị giới hạn tần suất hoặc không kết nối được). Hãy thử lại sau, hoặc tải từ trang phát hành.",
         "androidUpdateFailureTimeout": "Timed out reaching the update server",
         "androidUpdateFailureEmptyManifest": "Update manifest is empty or malformed",
         "androidUpdateFailureNoApk": "Update manifest has no installable APK",

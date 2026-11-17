@@ -447,10 +447,9 @@ const executeSearch = async (
 };
 
 const getInitialHomeViewTab = (): HomeViewTab => {
-    if (typeof window === 'undefined') {
-        return 'playlist';
-    }
-    const savedTab = localStorage.getItem(LAST_HOME_VIEW_TAB_KEY);
+    // 走 storagePrimitives：存储被裁掉的 WebView（以及只 stub 了 window 的单测）里，
+    // 裸 localStorage 会抛 ReferenceError，连 store 的初始化都跟着挂掉。
+    const savedTab = getStoredString(LAST_HOME_VIEW_TAB_KEY, '');
     return savedTab === 'playlist' || savedTab === 'local' || savedTab === 'albums' || savedTab === 'navidrome' || savedTab === 'radio' || savedTab === 'explore'
         ? savedTab
         : 'playlist';
@@ -510,10 +509,9 @@ export const useSearchNavigationStore = create<SearchNavigationState>((set, get)
         set({ searchHistory: [] });
     },
     setHomeViewTab: (tab) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LAST_HOME_VIEW_TAB_KEY, tab);
-        }
+        // 先切换再记：写法若抛（存储被裁），页签照样跟着点走，只是不记忆。
         set({ homeViewTab: tab });
+        setStoredString(LAST_HOME_VIEW_TAB_KEY, tab);
     },
     setSearchQuery: (query) => set({ searchQuery: query }),
     // 相等就原样返回：列表的 onScroll 会反复调用，卸载时也会补一次复位，不能每次都让订阅者重渲染。

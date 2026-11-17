@@ -2644,6 +2644,11 @@ export default {
         "account": "Kualitas",
         "aiDirector": "Sutradara AI"
     },
+    "settingsErrorBoundary": {
+        "title": "Jendela pengaturan mengalami kesalahan (sudah ditangani; aplikasi tetap jalan)",
+        "retry": "Coba lagi",
+        "close": "Tutup pengaturan"
+    },
     "aiDirector": {
         "title": "Sutradara animasi lirik AI",
         "currentMode": "Mode saat ini: {{mode}}",
@@ -4301,6 +4306,7 @@ export default {
         "androidUpdateInstallPermissionHint": "Halaman pengaturan \"Pasang aplikasi tak dikenal\" sudah dibuka. Izinkan di sana, lalu kembali dan ketuk \"Pasang sekarang\" lagi.",
         "androidUpdateFailedNotice": "Pemeriksaan pembaruan harus bisa menjangkau server pembaruan. Kalau jaringan tidak bisa, pakai tautan halaman rilis di atas.",
         "androidUpdateFailureManifestMissing": "Manifes pembaruan tidak bisa diakses (alamat berubah atau belum diunggah)",
+        "androidUpdateFailureRateLimited": "Layanan pembaruan sementara tidak tersedia (terlalu sering atau tidak terjangkau). Coba lagi nanti, atau unduh dari halaman rilis.",
         "androidUpdateFailureTimeout": "Waktu koneksi ke server pembaruan habis",
         "androidUpdateFailureEmptyManifest": "Manifes pembaruan kosong atau formatnya salah",
         "androidUpdateFailureNoApk": "Manifes pembaruan tidak punya APK yang bisa dipasang",

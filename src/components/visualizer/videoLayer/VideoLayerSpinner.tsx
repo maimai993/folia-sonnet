@@ -33,6 +33,13 @@ const VideoLayerSpinner: React.FC<VideoLayerSpinnerProps> = ({ videoRef }) => {
                 return;
             }
             const ready = video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+            // 源坏了（VideoLayer 在 error 事件里打了标）就别再转圈：一直转等于告诉用户
+            // 「再等等」，而他等到的是永远等不出来的画面。
+            if (video.dataset.error === 'true') {
+                stalledSinceRef.current = null;
+                setVisible(false);
+                return;
+            }
             if (ready) {
                 stalledSinceRef.current = null;
                 setVisible(false);

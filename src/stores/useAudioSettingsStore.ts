@@ -344,7 +344,7 @@ export type AudioSettingsState = {
     vocalCancelCacheLimit: number;
     /** 原生此刻真正生效的模式：两个开关的意图可能被互斥改写，界面以它为准。 */
     vocalTrackMode: 'instrumental' | 'vocal' | 'off';
-    /** 「设置 → 存储」里的总开关：是否预先拆分音轨、提前分析下一首。默认关。 */
+    /** 「设置 → 存储」里的总开关：是否预先拆分音轨、提前分析下一首。默认打开（见下面初始化那行的理由）。 */
     prebuildTracksEnabled: boolean;
     audioOutputDeviceId: string;
     /** The listener's own sound, always: a mod's curve is never written into it. */
@@ -493,8 +493,7 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     vocalCancelCacheBytes: 0,
     vocalCancelCacheLimit: 0,
     vocalTrackMode: 'off',
-    // 默认关：预拆两轨是几十秒的推理，不替用户决定要不要占这份负载。
-    // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
+        // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
     prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
     audioEqualizerSettings: initialAudioEqualizerSettings,
