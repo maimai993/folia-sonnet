@@ -16,11 +16,15 @@
  * 这里统一收口：拿不到就当没有存储，读返回兜底、写什么都不做。
  */
 const storageOrNull = (): Storage | null => {
-    if (typeof window === 'undefined') {
-        return null;
-    }
     try {
-        return window.localStorage ?? null;
+        if (typeof window !== 'undefined') {
+            const fromWindow = window.localStorage;
+            if (fromWindow) {
+                return fromWindow;
+            }
+        }
+        // window 在、但存储挂在全局上（测试只 stub 了 localStorage，受限宿主也可能这样）。
+        return (globalThis as { localStorage?: Storage }).localStorage ?? null;
     } catch {
         // 取 localStorage 本身就可能抛（安全策略禁掉存储时）。
         return null;
