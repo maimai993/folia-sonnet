@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { VideoCardFlow } from './VideoCardFlow';
+import { Button, TextField } from '../../ui';
 import { useVideoSettingsStore } from '../../../stores/useVideoSettingsStore';
 import { VideoPlayer, type VideoEpisode } from './VideoPlayer';
 import {
@@ -88,7 +89,7 @@ const PosterCard: React.FC<{ video: CmsVideo; onOpen: () => void }> = ({ video, 
         || [video.typeName, video.year, video.area].filter(Boolean).join(' · ')
         || '影视';
     return (
-        <button
+        <Button
             type="button"
             onClick={onOpen}
             className="group flex w-full min-w-0 flex-col items-stretch overflow-hidden rounded-2xl bg-[#141418] p-2 text-left transition-colors hover:bg-[#1c1c22]"
@@ -114,7 +115,7 @@ const PosterCard: React.FC<{ video: CmsVideo; onOpen: () => void }> = ({ video, 
             </span>
             <span className="mt-2 block truncate px-1 text-[13px] font-semibold leading-[18px] text-[#f2f2f4]">{video.name}</span>
             <span className="mb-1 mt-0.5 block truncate px-1 text-[11.5px] leading-4 text-[#f2f2f4]/45">{subtitle}</span>
-        </button>
+        </Button>
     );
 };
 
@@ -135,7 +136,7 @@ const EpisodePanel: React.FC<{
             <div className="rounded-xl border border-white/10 bg-[#17171b] p-4 text-[13px] text-[color:var(--st-t2)] shadow-2xl">
                 <div className="mb-2 font-medium text-[color:var(--st-t1)]">{video.name}</div>
                 这个站点没有给出可解析的播放地址。
-                <button type="button" onClick={onClose} className="mt-3 block text-[color:var(--st-accent)]">返回</button>
+                <Button type="button" onClick={onClose} className="mt-3 block text-[color:var(--st-accent)]">返回</Button>
             </div>
         );
     }
@@ -149,22 +150,22 @@ const EpisodePanel: React.FC<{
                         {[video.typeName, video.year, video.area].filter(Boolean).join(' · ')}
                     </div>
                 </div>
-                <button type="button" onClick={onClose} className="shrink-0 text-[13px] text-[color:var(--st-t2)] hover:text-[color:var(--st-t1)]">
+                <Button type="button" onClick={onClose} className="shrink-0 text-[13px] text-[color:var(--st-t2)] hover:text-[color:var(--st-t1)]">
                     关闭
-                </button>
+                </Button>
             </div>
 
             {lines.length > 1 && (
                 <div className="flex shrink-0 flex-wrap justify-center gap-1.5 px-4 pt-2">
                     {lines.map((item, index) => (
-                        <button
+                        <Button
                             key={`${item.name}-${index}`}
                             type="button"
                             onClick={() => { setLineIndex(index); setEpFocus(0); }}
                             className={`rounded-md px-2.5 py-1 text-[12.5px] ${index === lineIndex ? 'bg-white/20 text-[color:var(--st-t1)]' : 'text-[color:var(--st-t3)] hover:text-[color:var(--st-t2)]'}`}
                         >
                             {item.name}
-                        </button>
+                        </Button>
                     ))}
                 </div>
             )}
@@ -440,7 +441,7 @@ export const VideoWorkspace: React.FC = () => {
         <div className="flex h-full min-h-0 flex-col gap-3">
             {/* 「● 全部平台 ⌄」：位置和形态照首页那一颗，选全部就搜所有源，选一个就只搜那一个。 */}
             <div className="relative flex shrink-0 items-center justify-center">
-                <button
+                <Button
                     type="button"
                     onClick={() => setScopeOpen(open => !open)}
                     className="flex h-7 items-center gap-1.5 rounded-full border-y border-white/[0.12] bg-black/45 px-3 text-[12.5px] font-medium text-[color:var(--st-t1)] outline outline-1 outline-[rgba(40,40,40,0.2)] backdrop-blur transition-colors hover:bg-black/65"
@@ -448,10 +449,10 @@ export const VideoWorkspace: React.FC = () => {
                     <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#56c98d]" />
                     <span className="whitespace-nowrap">{scopeLabel}</span>
                     <ChevronDown size={13} />
-                </button>
+                </Button>
                 {scopeOpen && (
                     <>
-                        <button
+                        <Button
                             type="button"
                             aria-hidden="true"
                             tabIndex={-1}
@@ -459,7 +460,7 @@ export const VideoWorkspace: React.FC = () => {
                             className="fixed inset-0 z-40 cursor-default"
                         />
                         <div className="absolute top-8 z-50 max-h-[60vh] w-[230px] overflow-y-auto rounded-xl border border-white/[0.12] bg-[#17171b] p-1 shadow-2xl">
-                            <button
+                            <Button
                                 type="button"
                                 onClick={() => {
                                     setScope('all');
@@ -469,10 +470,10 @@ export const VideoWorkspace: React.FC = () => {
                             >
                                 <span className="whitespace-nowrap">全部平台</span>
                                 <span className="shrink-0 text-[11px] text-[color:var(--st-t3)]">{usableSites.length} 个源</span>
-                            </button>
+                            </Button>
                             <div className="my-1 h-px bg-white/[0.08]" />
                             {usableSites.map(site => (
-                                <button
+                                <Button
                                     key={site.key}
                                     type="button"
                                     onClick={() => {
@@ -490,7 +491,7 @@ export const VideoWorkspace: React.FC = () => {
                                 >
                                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${scope === site.key ? 'bg-[#56c98d]' : 'bg-white/25'}`} />
                                     <span className="min-w-0 flex-1 truncate">{site.name}</span>
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </>
@@ -504,13 +505,13 @@ export const VideoWorkspace: React.FC = () => {
                             ? `正在搜「${mode.kind === 'search' ? mode.keyword : topWord}」…`
                             : `影视搜索结果 · 「${mode.kind === 'search' ? mode.keyword : ''}」${searchHits.length} 条`}
                     </span>
-                    <button
+                    <Button
                         type="button"
                         onClick={() => { setMode({ kind: 'browse' }); setSearchHits([]); setSearchNote(''); }}
                         className="h-7 shrink-0 rounded-lg bg-white/10 px-2.5 text-[12.5px] text-[color:var(--st-t2)] hover:bg-white/20 hover:text-[color:var(--st-t1)]"
                     >
                         返回推荐
-                    </button>
+                    </Button>
                 </div>
             )}
 
@@ -545,14 +546,14 @@ export const VideoWorkspace: React.FC = () => {
                     {categories.length > 0 && (
                         <div className="flex shrink-0 flex-wrap justify-center gap-1.5">
                             {[{ id: '', name: '全部' }, ...categories].map(item => (
-                                <button
+                                <Button
                                     key={item.id || 'all'}
                                     type="button"
                                     onClick={() => setCategoryId(item.id)}
                                     className={`rounded-md px-2.5 py-1 text-[12.5px] ${item.id === categoryId ? 'bg-[var(--st-fill2)] text-[color:var(--st-t1)]' : 'text-[color:var(--st-t3)] hover:text-[color:var(--st-t2)]'}`}
                                 >
                                     {item.name}
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     )}

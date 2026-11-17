@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { ChevronLeft, X } from 'lucide-react';
+import { Button } from '../../ui';
 import { useVideoWorkspaceStore } from '../../../stores/useVideoWorkspaceStore';
 import { VideoWorkspace } from './VideoWorkspace';
 
@@ -76,7 +77,7 @@ export const VideoWorkspaceHost: React.FC = () => {
             {/* 顶部那 64px 留给 Folia 自己的页签与右上搜索框：影视页就长在它下面，
                 搜索框直接就能搜剧，不另开一个输入框。返回/关闭浮在右上角，不占一行高度。 */}
             <div className="pointer-events-none absolute right-3 top-2 z-10 flex items-center gap-1">
-                <button
+                <Button
                     type="button"
                     onClick={() => setOpen(false)}
                     className="pointer-events-auto rounded-full bg-white/[0.06] p-1.5 text-[color:var(--st-t2)] hover:bg-white/15 hover:text-[color:var(--st-t1)]"
@@ -84,8 +85,8 @@ export const VideoWorkspaceHost: React.FC = () => {
                     aria-label="返回"
                 >
                     <ChevronLeft size={17} />
-                </button>
-                <button
+                </Button>
+                <Button
                     type="button"
                     onClick={() => setOpen(false)}
                     className="pointer-events-auto rounded-full bg-white/[0.06] p-1.5 text-[color:var(--st-t2)] hover:bg-white/15 hover:text-[color:var(--st-t1)]"
@@ -93,7 +94,7 @@ export const VideoWorkspaceHost: React.FC = () => {
                     aria-label="关闭"
                 >
                     <X size={16} />
-                </button>
+                </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden px-4 py-3 md:px-8">
                 <VideoWorkspace />

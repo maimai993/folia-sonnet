@@ -11,7 +11,7 @@
 // 操作面是把几家主流播放器的习惯合成一套（不另起一套键位）：
 //   PotPlayer —— 空格停/播、←/→ 5 秒、↑/↓ 音量、Enter 全屏、PgUp/PgDn 上下集、/ - 调倍速、B 设 A-B、C 载图
 //   mpv       —— , . 逐帧、[ ] 倍速 ∓10%、{ } 减半/加倍、L 循环、数字键跳百分比、滚轮音量
-//   YouTube   —— 单击画面停/播、双击全屏、双击左右两侧快退/快进、J/K/L、M 静音
+//   网页播放器 —— 单击画面停/播、双击全屏、双击左右两侧快退/快进、J/K/L、M 静音
 //   IINA/Infuse —— 断点续播、自动下一集、结尾倒计时
 // 画面走 Folia 的液态玻璃：海报虚化打底 + 环境光，控制条是一条玻璃胶囊，播放中鼠标停下几秒自己走开。
 
@@ -38,12 +38,26 @@ import {
     Volume2,
     VolumeX,
 } from 'lucide-react';
+import { Button, TextField, Slider } from '../../ui';
 import { openOutsideLink } from '../../../utils/system/outsideLink';
 import { fetchVideoText } from '../../../services/videoSources/net';
 import { isMediaUrl, type CmsPlayLine } from '../../../services/videoSources/cms';
 import { languageName, loadSubtitleVtt, searchSubtitles, type SubtitleHit } from '../../../services/videoSources/subtitles';
 
-export type VideoEpisode = { name: string; url: string };
+import {
+    STEP_SECONDS, STEP_SECONDS_LONG, SPEEDS, CHROME_LINGER_MS, PREFS_KEY, ENHANCE_KEY, POS_PREFIX, DEFAULT_PREFS, readPrefs, writePrefs, isHls, resolvePageMedia, clock, KEYMAP,
+} from './videoPlayerModel';
+import type {
+    VideoEpisode,
+    LoopMode,
+    AspectMode,
+    Prefs,
+    Level,
+    PanelTab,
+    MenuLeaf,
+    MenuBranch,
+    MenuEntry,
+} from './videoPlayerModel';
 
 type Props = {
     /** 剧名。 */
@@ -65,130 +79,8 @@ type Props = {
     onClose: () => void;
 };
 
-/** 基础快进快退步长：跟 PotPlayer / mpv 的 5 秒一致，Shift 跳到 30 秒。 */
-const STEP_SECONDS = 5;
-const STEP_SECONDS_LONG = 30;
-const SPEEDS = [0.5, 1, 1.25, 1.5, 2];
-/** 控制条亮着多久就走开（毫秒）。 */
-const CHROME_LINGER_MS = 3000;
-/** 画质增强与各项画面偏好的存储键。 */
-const PREFS_KEY = 'folia-video-prefs';
-const ENHANCE_KEY = 'folia-video-enhance';
-/** 断点续播的存储键前缀。 */
-const POS_PREFIX = 'folia-video-pos';
-
-type LoopMode = 'off' | 'episode' | 'list';
-type AspectMode = 'contain' | 'cover' | 'fill';
-
-/** 记在本地的一整套画面/声音偏好。 */
-type Prefs = {
-    volume: number;
-    speed: number;
-    aspect: AspectMode;
-    rotate: number;
-    mirror: boolean;
-    brightness: number;
-    contrast: number;
-    saturation: number;
-};
-
-const DEFAULT_PREFS: Prefs = {
-    volume: 1,
-    speed: 1,
-    aspect: 'contain',
-    rotate: 0,
-    mirror: false,
-    brightness: 1,
-    contrast: 1,
-    saturation: 1,
-};
-
-const readPrefs = (): Prefs => {
-    try {
-        const raw = window.localStorage.getItem(PREFS_KEY);
-        if (!raw) return { ...DEFAULT_PREFS };
-        const parsed = JSON.parse(raw) as Partial<Prefs>;
-        return { ...DEFAULT_PREFS, ...parsed };
-    } catch {
-        return { ...DEFAULT_PREFS };
-    }
-};
-
-const writePrefs = (prefs: Prefs) => {
-    try {
-        window.localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
-    } catch { /* 存不进就只管这一次 */ }
-};
-
-const isHls = (url: string) => /\.m3u8($|\?)/i.test(url);
-
-/** 从一个播放网页里抠出真正的媒体地址；抠不到返回空串。 */
-const resolvePageMedia = async (pageUrl: string): Promise<string> => {
-    try {
-        const response = await fetchVideoText(pageUrl);
-        if (!response.ok) return '';
-        const match = response.bodyText.match(/["'(]([^"'()\\\s]*\.m3u8[^"'()\\\s]*)/i);
-        if (!match) return '';
-        // 页面里常给相对路径（/20250923/xxx/index.m3u8?sign=…），按页面地址补成绝对地址。
-        try {
-            return new URL(match[1], pageUrl).toString();
-        } catch {
-            return '';
-        }
-    } catch {
-        return '';
-    }
-};
-
-const clock = (seconds: number) => {
-    if (!Number.isFinite(seconds) || seconds < 0) return '--:--';
-    const total = Math.floor(seconds);
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    const two = (value: number) => String(value).padStart(2, '0');
-    return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
-};
-
-/** hls.js 报上来的档位。 */
-type Level = { index: number; height: number; bitrate: number };
-
-type PanelTab = 'cover' | 'episodes' | 'subtitle' | 'quality' | 'more';
-
-/** 右键菜单的一条：能点的叶子、带子菜单的分支、或者一道分隔线。 */
-type MenuLeaf = { kind: 'leaf'; label: string; hint?: string; checked?: boolean; disabled?: boolean; run: () => void };
-type MenuBranch = { kind: 'branch'; label: string; children: MenuLeaf[] };
-type MenuEntry = MenuLeaf | MenuBranch | { kind: 'line' };
-
-/** 快捷键一览（F1 打开）：菜单里标的键位和这里是同一份。 */
-const KEYMAP: Array<[string, string]> = [
-    ['空格 / K', '播放·暂停'],
-    ['← / →', '快退·快进 5 秒（Shift 30 秒）'],
-    ['J / L', '快退·快进 10 秒'],
-    ['↑ / ↓', '音量 +/− 5%'],
-    ['M', '静音切换'],
-    ['滚轮', '调音量（Shift+滚轮 快进·快退）'],
-    ['单击画面', '播放·暂停（双击左右两侧各 ±10 秒）'],
-    ['双击画面', '全屏 / 退出全屏'],
-    ['F / Enter', '全屏 / 退出全屏'],
-    ['Esc', '逐级返回：菜单 → 面板 → 全屏 → 选集'],
-    ['P / N (PgUp·PgDn)', '上一集 · 下一集'],
-    ['[ / ]', '倍速 ∓10%'],
-    ['{ / }', '倍速减半 / 加倍'],
-    ['Backspace', '回到片头（Shift 恢复 1× 倍速）'],
-    [', / .', '逐帧后退 / 前进'],
-    ['1–9 / 0', '跳到 10%–90% / 片头'],
-    ['L', '循环：关 → 单集 → 列表'],
-    ['B', '按一下设起点 A，再按一下设终点 B（A-B 循环）'],
-    ['S', '截图（存下载目录）'],
-    ['V', '字幕开关'],
-    ['H', '画质增强'],
-    ['W', '缩放：适应 → 铺满 → 裁剪'],
-    ['R', '画面旋转 90°'],
-    ['T', '画中画（浮在最上层的小窗）'],
-    ['I', '媒体信息面板'],
-    ['F1 / ?', '这份快捷键一览'],
-];
+/** 选集条目：仍从这个文件导出，调用方（影视工作台）不用改引用位置。 */
+export type { VideoEpisode };
 
 export const VideoPlayer: React.FC<Props> = ({
     title,
@@ -962,7 +854,7 @@ export const VideoPlayer: React.FC<Props> = ({
         shootScreen, stepFrame, subtitleOn, toggleEnhance, toggleMute, togglePip, togglePlay, volume,
     ]);
 
-    // 画面上的点击：单击停/播，双击中间全屏、双击左右两侧各 ±10 秒——跟 YouTube / PotPlayer 一致。
+    // 画面上的点击：单击停/播，双击中间全屏、双击左右两侧各 ±10 秒——跟主流网页播放器 / PotPlayer 一致。
     const handleStageClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
         pokeChrome();
         const detail = (event.nativeEvent as MouseEvent).detail;
@@ -1045,7 +937,7 @@ export const VideoPlayer: React.FC<Props> = ({
             <div
                 className={`absolute left-0 right-0 top-0 z-20 flex items-center gap-2 bg-gradient-to-b from-black/70 to-transparent px-3 py-2 transition-opacity duration-300 ${chrome ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
             >
-                <button
+                <Button
                     type="button"
                     onClick={onClose}
                     className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10"
@@ -1053,7 +945,7 @@ export const VideoPlayer: React.FC<Props> = ({
                     aria-label="返回选集"
                 >
                     <ChevronLeft size={18} />
-                </button>
+                </Button>
                 <div className="min-w-0 flex-1">
                     <div className="truncate text-[13.5px] font-medium text-[#f2f2f4]">{title}</div>
                     <div className="truncate text-[11.5px] text-[#f2f2f4]/50">
@@ -1065,15 +957,15 @@ export const VideoPlayer: React.FC<Props> = ({
                     </div>
                 </div>
                 {tip && <span className="shrink-0 rounded-md bg-white/12 px-2 py-1 text-[11.5px] text-[#f2f2f4]">{tip}</span>}
-                <button type="button" onClick={togglePip} title="画中画（T）" aria-label="画中画" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
+                <Button type="button" onClick={togglePip} title="画中画（T）" aria-label="画中画" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
                     <PictureInPicture2 size={16} />
-                </button>
-                <button type="button" onClick={() => setHelpOpen(true)} title="快捷键一览（F1）" aria-label="快捷键一览" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
+                </Button>
+                <Button type="button" onClick={() => setHelpOpen(true)} title="快捷键一览（F1）" aria-label="快捷键一览" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
                     <HelpCircle size={16} />
-                </button>
-                <button type="button" onClick={goFullscreen} title="全屏（F）" aria-label="全屏" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
+                </Button>
+                <Button type="button" onClick={goFullscreen} title="全屏（F）" aria-label="全屏" className="rounded-full p-1.5 text-[#f2f2f4] hover:bg-white/10">
                     <Maximize2 size={16} />
-                </button>
+                </Button>
             </div>
 
             {/* 画面：视频铺满；还没起来就放海报，别一片黑。 */}
@@ -1117,21 +1009,21 @@ export const VideoPlayer: React.FC<Props> = ({
                                 <p className="max-w-[460px] text-[13px] leading-6 text-[#f2f2f4]/70">
                                     这一集这个站点只给了播放网页，页面里没找到能直接播的地址。换个线路试试，或者用浏览器打开。
                                 </p>
-                                <button
+                                <Button
                                     type="button"
                                     onClick={() => { void openOutsideLink(url); }}
                                     className="inline-flex items-center gap-1.5 rounded-lg bg-[#6f5bf0] px-3 py-1.5 text-[13px] font-medium text-white"
                                 >
                                     <ExternalLink size={15} />
                                     用浏览器打开
-                                </button>
-                                <button
+                                </Button>
+                                <Button
                                     type="button"
                                     onClick={onClose}
                                     className="text-[12.5px] text-[#f2f2f4]/60 underline underline-offset-2 hover:text-[#f2f2f4]"
                                 >
                                     回去换线路
-                                </button>
+                                </Button>
                             </>
                         )}
                     </div>
@@ -1149,30 +1041,30 @@ export const VideoPlayer: React.FC<Props> = ({
 
                 {/* 停下来的时候中间给一颗大播放钮，点一下接着看（跟 Folia 播放页一个意思）。 */}
                 {!playingState && mediaUrl && !buffering ? (
-                    <button
+                    <Button
                         type="button"
                         onClick={togglePlay}
                         aria-label="播放"
                         className="absolute left-1/2 top-1/2 z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-[#f2f2f4] shadow-[inset_0_1px_0_rgba(255,255,255,0.22),0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-md transition-transform hover:scale-105"
                     >
                         <Play size={26} className="translate-x-[2px]" />
-                    </button>
+                    </Button>
                 ) : null}
 
                 {/* 播完：能续就倒计时自动下一集。 */}
                 {endCount !== null && hasNext ? (
                     <div className="absolute bottom-24 right-6 z-20 flex w-[240px] flex-col gap-2 rounded-2xl border border-white/10 bg-black/60 p-3 backdrop-blur-xl">
                         <div className="truncate text-[12.5px] text-[#f2f2f4]/70">本章播完，{endCount} 秒后继续</div>
-                        <button
+                        <Button
                             type="button"
                             onClick={() => { setEndCount(null); onIndexChange(index + 1); }}
                             className="rounded-xl bg-white/12 px-3 py-1.5 text-[13px] font-medium text-[#f2f2f4] hover:bg-white/18"
                         >
                             立即播放第 {index + 2} 集
-                        </button>
-                        <button type="button" onClick={() => setEndCount(null)} className="text-[11.5px] text-[#f2f2f4]/45 hover:text-[#f2f2f4]/80">
+                        </Button>
+                        <Button type="button" onClick={() => setEndCount(null)} className="text-[11.5px] text-[#f2f2f4]/45 hover:text-[#f2f2f4]/80">
                             停在这儿
-                        </button>
+                        </Button>
                     </div>
                 ) : null}
 
@@ -1181,15 +1073,15 @@ export const VideoPlayer: React.FC<Props> = ({
                     className={`absolute bottom-3 left-1/2 z-20 w-[min(92%,980px)] -translate-x-1/2 transition-opacity duration-300 ${chrome ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
                 >
                     <div className="flex items-center gap-3 rounded-[22px] border border-white/12 bg-black/55 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_18px_50px_rgba(0,0,0,0.5)] backdrop-blur-xl">
-                        <button
+                        <Button
                             type="button"
                             onClick={togglePlay}
                             aria-label={playingState ? '暂停' : '播放'}
                             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f2f2f4] text-[#0a0a0c] transition-transform hover:scale-[1.04]"
                         >
                             {playingState ? <Pause size={18} /> : <Play size={18} />}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             disabled={!hasPrev}
                             onClick={() => onIndexChange(index - 1)}
@@ -1197,7 +1089,7 @@ export const VideoPlayer: React.FC<Props> = ({
                             className="shrink-0 rounded-full p-1.5 text-[#f2f2f4]/80 hover:text-[#f2f2f4] disabled:opacity-30"
                         >
                             <SkipBack size={16} />
-                        </button>
+                        </Button>
                         <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
                             <span className="w-full truncate text-center text-[13px] font-medium text-[#f2f2f4]">{title}</span>
                             {/* 进度条自己是可点可拖的，不再包在选集按钮里，否则点一下只会弹面板。 */}
@@ -1245,7 +1137,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                 <span>{clock(tick.duration)}</span>
                             </span>
                         </div>
-                        <button
+                        <Button
                             type="button"
                             disabled={!hasNext}
                             onClick={() => onIndexChange(index + 1)}
@@ -1253,10 +1145,10 @@ export const VideoPlayer: React.FC<Props> = ({
                             className="shrink-0 rounded-full p-1.5 text-[#f2f2f4]/80 hover:text-[#f2f2f4] disabled:opacity-30"
                         >
                             <SkipForward size={16} />
-                        </button>
+                        </Button>
                         <span className="h-5 w-px bg-white/15" aria-hidden="true" />
                         <span className="relative shrink-0">
-                            <button
+                            <Button
                                 type="button"
                                 onClick={() => { if (muted) toggleMute(); setVolOpen(open => !open); }}
                                 onDoubleClick={toggleMute}
@@ -1264,7 +1156,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                 className="rounded-full p-1.5 text-[#f2f2f4]/80 hover:text-[#f2f2f4]"
                             >
                                 {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                            </button>
+                            </Button>
                             {volOpen && (
                                 <span className="absolute bottom-9 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-2 backdrop-blur">
                                     <span
@@ -1298,22 +1190,22 @@ export const VideoPlayer: React.FC<Props> = ({
                                 </span>
                             )}
                         </span>
-                        <button
+                        <Button
                             type="button"
                             onClick={() => setPanel('episodes')}
                             title="播放列表（选集）"
                             className="shrink-0 rounded-full p-1.5 text-[#f2f2f4]/80 hover:text-[#f2f2f4]"
                         >
                             <ListMusic size={16} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             type="button"
                             onClick={() => setPanel(panel ? null : 'cover')}
                             title="播放面板"
                             className="shrink-0 rounded-full p-1.5 text-[#f2f2f4]/80 hover:text-[#f2f2f4]"
                         >
                             <Settings2 size={16} />
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -1327,21 +1219,21 @@ export const VideoPlayer: React.FC<Props> = ({
                             <div className="truncate text-[12.5px] font-medium text-[#f2f2f4]">{title}</div>
                             <div className="truncate text-[11px] text-[#f2f2f4]/45">{current?.name ?? ''}</div>
                         </div>
-                        <button type="button" onClick={() => setPanel(null)} className="shrink-0 rounded-full p-1 text-[#f2f2f4]/70 hover:bg-white/10 hover:text-[#f2f2f4]" aria-label="关闭面板">
+                        <Button type="button" onClick={() => setPanel(null)} className="shrink-0 rounded-full p-1 text-[#f2f2f4]/70 hover:bg-white/10 hover:text-[#f2f2f4]" aria-label="关闭面板">
                             ✕
-                        </button>
+                        </Button>
                     </div>
 
                     <div className="tabs flex shrink-0 gap-1 px-2 pt-2">
                         {([['cover', '封面'], ['episodes', '选集'], ['subtitle', '字幕'], ['quality', '清晰度'], ['more', '更多']] as Array<[PanelTab, string]>).map(([key, label]) => (
-                            <button
+                            <Button
                                 key={key}
                                 type="button"
                                 onClick={() => setPanel(key)}
                                 className={`rounded-lg px-2.5 py-1 text-[12px] ${panel === key ? 'bg-white/15 text-[#f2f2f4]' : 'text-[#f2f2f4]/50 hover:text-[#f2f2f4]'}`}
                             >
                                 {label}
-                            </button>
+                            </Button>
                         ))}
                     </div>
 
@@ -1368,7 +1260,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                     <span>当前第 {index + 1} 集</span>
                                 </div>
                                 {episodes.map((episode, at) => (
-                                    <button
+                                    <Button
                                         key={`${episode.name}-${at}`}
                                         type="button"
                                         onClick={() => onIndexChange(at)}
@@ -1376,7 +1268,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                     >
                                         <span className="truncate">{episode.name}</span>
                                         <span className="shrink-0 text-[11px] tabular-nums text-[#f2f2f4]/35">{String(at + 1).padStart(2, '0')}</span>
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                         )}
@@ -1387,40 +1279,40 @@ export const VideoPlayer: React.FC<Props> = ({
                                     搜全网字幕（OpenSubtitles）。中文剧名多半搜不到，换成英文名或拼音更准——庆余年 就是 qing yu nian 或 Joy of Life。
                                 </div>
                                 <div className="flex gap-1.5">
-                                    <input
+                                    <TextField
                                         value={subKeyword}
                                         onChange={event => setSubKeyword(event.target.value)}
                                         onKeyDown={event => { if (event.key === 'Enter') void runSubSearch(); }}
                                         placeholder="剧名 / 英文名 / 拼音"
                                         className="h-8 min-w-0 flex-1 select-text rounded-lg bg-white/10 px-2.5 text-[12.5px] text-[#f2f2f4] outline-none placeholder:text-[#f2f2f4]/35"
                                     />
-                                    <button
+                                    <Button
                                         type="button"
                                         disabled={subBusy}
                                         onClick={() => void runSubSearch()}
                                         className="h-8 shrink-0 rounded-lg bg-[#6f5bf0] px-2.5 text-[12px] font-medium text-white disabled:opacity-40"
                                     >
                                         {subBusy ? '搜索中…' : '搜索'}
-                                    </button>
+                                    </Button>
                                 </div>
                                 {subNote && <div className="text-[11.5px] leading-4 text-[#e3a949]">{subNote}</div>}
                                 {subtitleUrl && (
                                     <div className="flex items-center justify-between gap-2 rounded-lg bg-white/10 px-2.5 py-1.5 text-[12px] text-[#f2f2f4]">
                                         <span className="min-w-0 truncate">已加载：{subtitleLabel}</span>
-                                        <button
+                                        <Button
                                             type="button"
                                             onClick={() => { setSubtitleUrl(''); setSubtitleLabel(''); }}
                                             className="shrink-0 text-[11.5px] text-[#f2f2f4]/60 hover:text-[#f2f2f4]"
                                         >
                                             关闭字幕
-                                        </button>
+                                        </Button>
                                     </div>
                                 )}
                                 <div className="flex flex-col gap-1">
                                     {subHits.map(hit => {
                                         const matched = hit.episode === index + 1;
                                         return (
-                                            <button
+                                            <Button
                                                 key={hit.id}
                                                 type="button"
                                                 onClick={() => void applySubtitle(hit)}
@@ -1433,7 +1325,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                                 <span className="shrink-0 text-[10.5px] text-[#f2f2f4]/40">
                                                     {languageName(hit.language)}{hit.downloads ? ` · ${hit.downloads}` : ''}
                                                 </span>
-                                            </button>
+                                            </Button>
                                         );
                                     })}
                                 </div>
@@ -1445,16 +1337,16 @@ export const VideoPlayer: React.FC<Props> = ({
                                 <div className="text-[11.5px] text-[#f2f2f4]/45">当前：{lines[lineIndex]?.name ?? '内置源'}</div>
                                 {levels.length > 0 ? (
                                     <>
-                                        <button
+                                        <Button
                                             type="button"
                                             onClick={() => setLevel(-1)}
                                             className={`flex items-center justify-between rounded-lg px-2.5 py-2 text-[12.5px] ${levelIndex < 0 ? 'bg-white/15 text-[#f2f2f4]' : 'text-[#f2f2f4]/65 hover:bg-white/8'}`}
                                         >
                                             <span>自动</span>
                                             {levelIndex < 0 && <span className="text-[#56c98d]">✓</span>}
-                                        </button>
+                                        </Button>
                                         {levels.map(level => (
-                                            <button
+                                            <Button
                                                 key={level.index}
                                                 type="button"
                                                 onClick={() => setLevel(level.index)}
@@ -1465,7 +1357,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                                     {level.bitrate ? `${Math.round(level.bitrate / 1000)}kbps` : ''}
                                                     {levelIndex === level.index && <span className="text-[#56c98d]">✓</span>}
                                                 </span>
-                                            </button>
+                                            </Button>
                                         ))}
                                     </>
                                 ) : (
@@ -1475,7 +1367,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                 )}
                                 <div className="mt-1 text-[11.5px] text-[#f2f2f4]/45">换线路（换片源，也就换了画质）</div>
                                 {lines.map((line, at) => (
-                                    <button
+                                    <Button
                                         key={`${line.name}-${at}`}
                                         type="button"
                                         onClick={() => onLineChange(at)}
@@ -1483,7 +1375,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                     >
                                         <span className="truncate">{line.name}</span>
                                         <span className="shrink-0 text-[11px] text-[#f2f2f4]/40">{line.episodes.length} 集</span>
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                         )}
@@ -1497,14 +1389,14 @@ export const VideoPlayer: React.FC<Props> = ({
                                     ['倍速 1.5×', () => setSpeed(1.5)],
                                     ['倍速 2×', () => setSpeed(2)],
                                 ].map(([label, run]) => (
-                                    <button
+                                    <Button
                                         key={label as string}
                                         type="button"
                                         onClick={run as () => void}
                                         className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]"
                                     >
                                         {label as string}
-                                    </button>
+                                    </Button>
                                 ))}
 
                                 <div className="mt-2 text-[11.5px] text-[#f2f2f4]/45">画面调节</div>
@@ -1515,14 +1407,13 @@ export const VideoPlayer: React.FC<Props> = ({
                                 ] as Array<[string, number, (value: number) => void]>).map(([label, value, apply]) => (
                                     <label key={label} className="flex items-center gap-2 px-1 py-1 text-[11.5px] text-[#f2f2f4]/55">
                                         <span className="w-8 shrink-0">{label}</span>
-                                        <input
-                                            type="range"
-                                            min={0.6}
-                                            max={1.5}
-                                            step={0.02}
-                                            value={value}
-                                            onChange={event => apply(Number(event.target.value))}
-                                            className="h-1 min-w-0 flex-1 accent-[#56c98d]"
+                                        <Slider
+                                            value={(value - 0.6) / 0.9}
+                                            onPreview={(unit: number) => apply(Number((0.6 + unit * 0.9).toFixed(3)))}
+                                            onCommit={() => { /* 拖动过程已经实时生效，这里不需要落盘 */ }}
+                                            label={label}
+                                            valueText={`${Math.round(value * 100)}%`}
+                                            className="min-w-0 flex-1"
                                         />
                                         <span className="w-9 shrink-0 text-right tabular-nums">{Math.round(value * 100)}%</span>
                                     </label>
@@ -1530,11 +1421,11 @@ export const VideoPlayer: React.FC<Props> = ({
 
                                 <div className="mt-2 text-[11.5px] text-[#f2f2f4]/45">媒体信息</div>
                                 <div className="break-all rounded-lg bg-white/5 px-2.5 py-2 text-[10.5px] leading-4 text-[#f2f2f4]/35">{mediaUrl || url}</div>
-                                <button type="button" onClick={goFullscreen} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">全屏</button>
-                                <button type="button" onClick={shootScreen} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">截图</button>
-                                <button type="button" onClick={togglePip} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">画中画</button>
-                                <button type="button" onClick={() => { void openOutsideLink(mediaUrl || url); }} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">用浏览器打开</button>
-                                <button type="button" onClick={() => setHelpOpen(true)} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">快捷键一览</button>
+                                <Button type="button" onClick={goFullscreen} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">全屏</Button>
+                                <Button type="button" onClick={shootScreen} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">截图</Button>
+                                <Button type="button" onClick={togglePip} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">画中画</Button>
+                                <Button type="button" onClick={() => { void openOutsideLink(mediaUrl || url); }} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">用浏览器打开</Button>
+                                <Button type="button" onClick={() => setHelpOpen(true)} className="rounded-lg px-2.5 py-1.5 text-left text-[12.5px] text-[#f2f2f4]/65 hover:bg-white/8 hover:text-[#f2f2f4]">快捷键一览</Button>
                             </div>
                         )}
                     </div>
@@ -1560,7 +1451,7 @@ export const VideoPlayer: React.FC<Props> = ({
                     >
                         <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
                             <div className="text-[13px] font-medium text-[#f2f2f4]">快捷键一览</div>
-                            <button type="button" onClick={() => setHelpOpen(false)} className="rounded-full p-1 text-[#f2f2f4]/70 hover:bg-white/10" aria-label="关闭">✕</button>
+                            <Button type="button" onClick={() => setHelpOpen(false)} className="rounded-full p-1 text-[#f2f2f4]/70 hover:bg-white/10" aria-label="关闭">✕</Button>
                         </div>
                         <div className="grid min-h-0 grid-cols-1 gap-x-6 overflow-y-auto px-4 py-3 sm:grid-cols-2">
                             {KEYMAP.map(([keys, action]) => (
@@ -1594,7 +1485,7 @@ export const VideoPlayer: React.FC<Props> = ({
                             if (entry.kind === 'branch') {
                                 const expanded = sub?.at === at;
                                 return (
-                                    <button
+                                    <Button
                                         key={entry.label}
                                         type="button"
                                         aria-haspopup="menu"
@@ -1606,11 +1497,11 @@ export const VideoPlayer: React.FC<Props> = ({
                                         <span aria-hidden className="w-4 shrink-0" />
                                         <span className="min-w-0 flex-1 truncate">{entry.label}</span>
                                         <ChevronRight size={13} className="shrink-0 text-[#f2f2f4]/40" />
-                                    </button>
+                                    </Button>
                                 );
                             }
                             return (
-                                <button
+                                <Button
                                     key={entry.label}
                                     type="button"
                                     disabled={entry.disabled}
@@ -1623,7 +1514,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                     </span>
                                     <span className="min-w-0 flex-1 truncate">{entry.label}</span>
                                     {entry.hint ? <span className="shrink-0 text-[11px] tabular-nums text-[#f2f2f4]/35">{entry.hint}</span> : null}
-                                </button>
+                                </Button>
                             );
                         })}
                     </div>
@@ -1639,7 +1530,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                 style={{ top, maxHeight: 320 }}
                             >
                                 {branch.children.map(child => (
-                                    <button
+                                    <Button
                                         key={child.label}
                                         type="button"
                                         disabled={child.disabled}
@@ -1651,7 +1542,7 @@ export const VideoPlayer: React.FC<Props> = ({
                                         </span>
                                         <span className="min-w-0 flex-1 truncate">{child.label}</span>
                                         {child.hint ? <span className="shrink-0 text-[11px] tabular-nums text-[#f2f2f4]/35">{child.hint}</span> : null}
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                         );

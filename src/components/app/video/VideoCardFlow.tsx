@@ -6,6 +6,7 @@
 // 所以这里自带一份轻量的横向卡片流，只做影视需要的事（封面、剧名、备注、选中即打开）。
 
 import React, { useCallback, useEffect, useRef } from 'react';
+import { Button } from '../../ui';
 
 export type VideoCardItem = {
     id: string;
@@ -93,7 +94,7 @@ export const VideoCardFlow: React.FC<VideoCardFlowProps> = ({
             {items.map((item, index) => {
                 const focused = index === focusedIndex;
                 return (
-                    <button
+                    <Button
                         key={item.id}
                         ref={node => {
                             cardRefs.current[index] = node;
@@ -123,7 +124,7 @@ export const VideoCardFlow: React.FC<VideoCardFlowProps> = ({
                         {item.description && (
                             <span className="truncate text-[11.5px] text-[color:var(--st-t3)]">{item.description}</span>
                         )}
-                    </button>
+                    </Button>
                 );
             })}
         </div>
