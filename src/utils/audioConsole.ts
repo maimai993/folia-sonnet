@@ -337,10 +337,6 @@ export type AudioConsoleAdvanced = {
     dynamicEqFreq: number;
     /** 衰减量 0 ~ 12 dB。 */
     dynamicEqAmount: number;
-    /** M/S 宽度 -1 ~ 1。 */
-    msWidth: number;
-    /** 声场展宽 0 ~ 1。 */
-    widen: number;
     /** 人声增强 0 ~ 1。 */
     vocalBoost: number;
 };
@@ -522,10 +518,6 @@ export const AUDIO_CONSOLE_DYNEQ_FREQ_MIN = 80;
 export const AUDIO_CONSOLE_DYNEQ_FREQ_MAX = 400;
 export const AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN = 0;
 export const AUDIO_CONSOLE_DYNEQ_AMOUNT_MAX = 12;
-export const AUDIO_CONSOLE_MSWIDTH_MIN = -1;
-export const AUDIO_CONSOLE_MSWIDTH_MAX = 1;
-export const AUDIO_CONSOLE_WIDEN_MIN = 0;
-export const AUDIO_CONSOLE_WIDEN_MAX = 1;
 export const AUDIO_CONSOLE_VOCAL_MIN = 0;
 export const AUDIO_CONSOLE_VOCAL_MAX = 1;
 export const AUDIO_CONSOLE_SCENE_AMOUNT_MIN = 0;
@@ -668,8 +660,6 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
                 dynamicEq: false,
                 dynamicEqFreq: 180,
                 dynamicEqAmount: 4,
-                msWidth: 0,
-                widen: 0,
                 vocalBoost: 0,
             },
             scene: {
@@ -847,8 +837,6 @@ const normalizeMastering = (value: unknown): AudioConsoleMastering => {
                 dynamicEq: readBoolean(advanced.dynamicEq, defaults.studio.advanced.dynamicEq),
                 dynamicEqFreq: clamp(advanced.dynamicEqFreq, AUDIO_CONSOLE_DYNEQ_FREQ_MIN, AUDIO_CONSOLE_DYNEQ_FREQ_MAX, defaults.studio.advanced.dynamicEqFreq),
                 dynamicEqAmount: clamp(advanced.dynamicEqAmount, AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN, AUDIO_CONSOLE_DYNEQ_AMOUNT_MAX, defaults.studio.advanced.dynamicEqAmount),
-                msWidth: clamp(advanced.msWidth, AUDIO_CONSOLE_MSWIDTH_MIN, AUDIO_CONSOLE_MSWIDTH_MAX, defaults.studio.advanced.msWidth),
-                widen: clamp(advanced.widen, AUDIO_CONSOLE_WIDEN_MIN, AUDIO_CONSOLE_WIDEN_MAX, defaults.studio.advanced.widen),
                 vocalBoost: clamp(advanced.vocalBoost, AUDIO_CONSOLE_VOCAL_MIN, AUDIO_CONSOLE_VOCAL_MAX, defaults.studio.advanced.vocalBoost),
             },
             scene: {

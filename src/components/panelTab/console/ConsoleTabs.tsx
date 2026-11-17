@@ -66,11 +66,11 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
 
     return (
         <div className="flex flex-col gap-1.5">
-            {/* 一级：大类，只是分组提示，小字弱化。 */}
+            {/* 一级：大类，主分段条 —— 当前大类强调色整块点亮。 */}
             <div
                 ref={groupRef}
                 role="group"
-                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto"
+                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto rounded-xl bg-[var(--st-fill)] p-1"
             >
                 {groups.map(group => {
                     const selected = group.id === activeGroup?.id;
@@ -82,9 +82,9 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                             onClick={() => {
                                 if (!selected && first) onTabChange(first);
                             }}
-                            className={`st-t-fast h-6 shrink-0 whitespace-nowrap rounded px-2 text-[11px] transition-colors ${selected
-                                ? 'font-semibold text-[color:var(--st-t2)]'
-                                : 'text-[color:var(--st-t3)] hover:text-[color:var(--st-t1)]'}`}
+                            className={`st-t-fast h-8 shrink-0 whitespace-nowrap rounded-lg px-3 text-[13px] transition-colors ${selected
+                                ? 'bg-[var(--st-accent)] font-semibold text-[color:var(--st-on-accent)] shadow-[0_1px_3px_rgba(0,0,0,0.25)]'
+                                : 'text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]'}`}
                         >
                             {group.label}
                         </Button>
@@ -92,11 +92,11 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                 })}
             </div>
 
-            {/* 二级：页签，主分段条 —— 当前页强调色整块点亮。 */}
+            {/* 二级：页签，小字弱化，只负责切换当前页。 */}
             <div
                 ref={stripRef}
                 role="group"
-                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto rounded-xl bg-[var(--st-fill)] p-1"
+                className="hide-scrollbar flex items-center gap-1 self-start overflow-x-auto"
             >
                 {visibleOptions.map(option => {
                     const selected = option.value === tab;
@@ -107,9 +107,9 @@ const ConsoleTabs: React.FC<ConsoleTabsProps> = ({ tab, groups, options, onTabCh
                             onClick={() => {
                                 if (!selected) onTabChange(option.value);
                             }}
-                            className={`st-t-fast h-9 shrink-0 whitespace-nowrap rounded-lg px-4 text-[14px] transition-colors ${selected
-                                ? 'bg-[var(--st-accent)] font-semibold text-[color:var(--st-on-accent)] shadow-[0_1px_3px_rgba(0,0,0,0.25)]'
-                                : 'text-[color:var(--st-t2)] hover:bg-[var(--st-fill2)] hover:text-[color:var(--st-t1)]'}`}
+                            className={`st-t-fast h-6 shrink-0 whitespace-nowrap rounded px-2 text-[11px] transition-colors ${selected
+                                ? 'font-semibold text-[color:var(--st-t1)]'
+                                : 'text-[color:var(--st-t3)] hover:text-[color:var(--st-t1)]'}`}
                         >
                             {option.label}
                         </Button>

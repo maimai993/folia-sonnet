@@ -413,9 +413,17 @@ class SpatialSettings(
         StemKind.VOCALS -> vocals
     }
 
-    /** 混音时真正使用的摆位：auto 返回内置摆位，custom 返回用户摆位。 */
-    fun resolve(kind: StemKind): StemSpatialSettings =
-        if (mode == SpatialMode.AUTO) AUTO_STEMS.getValue(kind) else stem(kind)
+    /** 混音时真正使用的摆位：auto 返回内置摆位，但用户对某一轨的 audible 开关仍然生效。 */
+    fun resolve(kind: StemKind): StemSpatialSettings {
+        val base = if (mode == SpatialMode.AUTO) AUTO_STEMS.getValue(kind) else stem(kind)
+        val user = stem(kind)
+        return StemSpatialSettings(
+            audible = base.audible && user.audible,
+            pan = base.pan,
+            width = base.width,
+            levelDb = base.levelDb,
+        )
+    }
 
     fun isNeutral(): Boolean = !enabled
         && drums.isNeutral() && bass.isNeutral() && other.isNeutral() && vocals.isNeutral()
@@ -460,16 +468,11 @@ class AdvancedSettings(
     val dynamicEqFreq: Float = 180f,
     /** 动态 EQ 衰减量 0 ~ 12 dB。 */
     val dynamicEqAmount: Float = 4f,
-    /** M/S 宽度 -1(单声道) ~ 1(超宽)：调中侧比例。 */
-    val msWidth: Float = 0f,
-    /** 声场展宽 0 ~ 1：用短延迟做立体声扩散。 */
-    val widen: Float = 0f,
     /** 人声增强 0 ~ 1：抬 2~4kHz 的人声存在感。 */
     val vocalBoost: Float = 0f,
 ) {
     companion object { val NEUTRAL = AdvancedSettings() }
-    fun isNeutral() = !dynamicEq && kotlin.math.abs(msWidth) < 0.01f
-        && widen < 0.01f && vocalBoost < 0.01f
+    fun isNeutral() = !dynamicEq && vocalBoost < 0.01f
 }
 
 /** 智能场景：曲风一键预设 + A/B 对比 + 耳机校准。 */
@@ -722,8 +725,7 @@ class EqSettings(
                 })
                 put("advanced", JSONObject().apply {
                     put("dynamicEq", s.advanced.dynamicEq); put("dynamicEqFreq", s.advanced.dynamicEqFreq.toDouble())
-                    put("dynamicEqAmount", s.advanced.dynamicEqAmount.toDouble()); put("msWidth", s.advanced.msWidth.toDouble())
-                    put("widen", s.advanced.widen.toDouble()); put("vocalBoost", s.advanced.vocalBoost.toDouble())
+                    put("dynamicEqAmount", s.advanced.dynamicEqAmount.toDouble()); put("vocalBoost", s.advanced.vocalBoost.toDouble())
                 })
                 put("scene", JSONObject().apply {
                     put("genre", s.scene.genre); put("compare", s.scene.compare)
@@ -1077,8 +1079,6 @@ class EqSettings(
                     dynamicEq = adv.bool("dynamicEq", false),
                     dynamicEqFreq = adv.number("dynamicEqFreq", 180.0, 80f, 400f),
                     dynamicEqAmount = adv.number("dynamicEqAmount", 4.0, 0f, 12f),
-                    msWidth = adv.number("msWidth", 0.0, -1f, 1f),
-                    widen = adv.number("widen", 0.0, 0f, 1f),
                     vocalBoost = adv.number("vocalBoost", 0.0, 0f, 1f),
                 ),
                 scene = SceneSettings(

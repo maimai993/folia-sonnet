@@ -366,7 +366,7 @@ class ConsoleDspTest {
                 "studio": {
                   "normalize": { "enabled": true, "targetLufs": -12.5, "truePeak": true },
                   "restore": { "declick": true, "hum": true, "denoise": true, "amount": 0.7 },
-                  "advanced": { "dynamicEq": true, "dynamicEqFreq": 220, "dynamicEqAmount": 6, "msWidth": 0.4, "widen": 0.5, "vocalBoost": 0.3 },
+                  "advanced": { "dynamicEq": true, "dynamicEqFreq": 220, "dynamicEqAmount": 6, "vocalBoost": 0.3 },
                   "scene": { "genre": "rock", "compare": false, "headphone": "sony", "amount": 0.8 }
                 }
               }
@@ -459,8 +459,6 @@ class ConsoleDspTest {
         assertEquals(s1.advanced.dynamicEq, s2.advanced.dynamicEq)
         assertEquals(s1.advanced.dynamicEqFreq, s2.advanced.dynamicEqFreq, 1e-4f)
         assertEquals(s1.advanced.dynamicEqAmount, s2.advanced.dynamicEqAmount, 1e-4f)
-        assertEquals(s1.advanced.msWidth, s2.advanced.msWidth, 1e-4f)
-        assertEquals(s1.advanced.widen, s2.advanced.widen, 1e-4f)
         assertEquals(s1.advanced.vocalBoost, s2.advanced.vocalBoost, 1e-4f)
         assertEquals(s1.scene.genre, s2.scene.genre)
         assertEquals(s1.scene.compare, s2.scene.compare)

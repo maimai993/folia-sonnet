@@ -179,7 +179,12 @@ const buildSettings = (): NativeEqualizerSettings => {
             studio: {
                 normalize: { ...console_.mastering.studio.normalize },
                 restore: { ...console_.mastering.studio.restore },
-                advanced: { ...console_.mastering.studio.advanced },
+                advanced: {
+                    dynamicEq: console_.mastering.studio.advanced.dynamicEq,
+                    dynamicEqFreq: console_.mastering.studio.advanced.dynamicEqFreq,
+                    dynamicEqAmount: console_.mastering.studio.advanced.dynamicEqAmount,
+                    vocalBoost: console_.mastering.studio.advanced.vocalBoost,
+                },
                 scene: { ...console_.mastering.studio.scene },
             },
         },

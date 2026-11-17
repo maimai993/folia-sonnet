@@ -41,8 +41,6 @@ class StudioStage {
     private val clickPrev = FloatArray(STUDIO_MAX_CHANNELS)
     private val noiseEnv = FloatArray(STUDIO_MAX_CHANNELS)
     private val noiseGate = FloatArray(STUDIO_MAX_CHANNELS)
-    private var widenPrevL = 0f
-    private var widenPrevR = 0f
 
     // 响度标准化：整曲平均功率 → 慢速目标增益
     private var normPower = 0f
@@ -59,9 +57,6 @@ class StudioStage {
     private var dynEqAmount = 0f
     private var dynEqAtk = 0f
     private var dynEqRel = 0f
-    private var widenAmount = 0f
-    private var msMidGain = 1f
-    private var msSideGain = 1f
     private var normFollowCoef = 0f
     private var normRampCoef = 0f
     private var normTargetGain = 1f
@@ -79,7 +74,6 @@ class StudioStage {
         sceneLow.reset(); sceneMid.reset(); sceneHigh.reset(); hpCalib.reset(); lpCalib.reset()
         clickPrev.fill(0f)
         noiseEnv.fill(0f); noiseGate.fill(1f)
-        widenPrevL = 0f; widenPrevR = 0f
         normPower = 0f; normGain = 1f
     }
 
@@ -181,47 +175,6 @@ class StudioStage {
             index++
         }
 
-        // M/S 声场与展宽是跨声道的，必须在样本循环之后按帧处理。
-        if ((s.advanced.msWidth.abs() > 0.01f || s.advanced.widen > 0.01f) && ch >= 2) {
-            processStereo(buffer, offset, frames, ch, s)
-        }
-    }
-
-    /** 中侧矩阵 + Haas 展宽：按帧对左右声道处理。 */
-    private fun processStereo(
-        buffer: FloatArray, offset: Int, frames: Int, ch: Int, s: StudioSettings,
-    ) {
-        var i = offset
-        var frame = 0
-        while (frame < frames) {
-            val l = buffer[i]
-            val r = buffer[i + 1]
-            var mid = (l + r) * 0.5f
-            var side = (l - r) * 0.5f
-
-            if (s.advanced.msWidth.abs() > 0.01f) {
-                mid *= msMidGain
-                side *= msSideGain
-            }
-
-            var outL = mid + side
-            var outR = mid - side
-
-            // Haas 展宽：一侧加极短延迟并交叉混入一点点，制造空间感而不明显染色。
-            if (s.advanced.widen > 0.01f) {
-                val delayedL = widenPrevR
-                val delayedR = widenPrevL
-                widenPrevL = l
-                widenPrevR = r
-                outL = outL * (1f - widenAmount) + delayedR * widenAmount
-                outR = outR * (1f - widenAmount) + delayedL * widenAmount
-            }
-
-            buffer[i] = outL
-            buffer[i + 1] = outR
-            i += ch
-            frame++
-        }
     }
 
     private fun applySettings(s: StudioSettings) {
@@ -253,11 +206,6 @@ class StudioStage {
         } else {
             vocalBand.bypass()
         }
-
-        // M/S 宽度：mid/side 增益，宽度 -1~1 映射到 side 0.2~2.2
-        msSideGain = 1f + a.msWidth * 1.2f
-        msMidGain = 1f - kotlin.math.abs(a.msWidth) * 0.1f
-        widenAmount = a.widen * 0.18f
 
         // 曲风预设：低/中/高三段的相对增益
         val genre = sc.genre.lowercase()

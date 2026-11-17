@@ -265,7 +265,7 @@ export type NativeEqualizerSettings = {
             restore: { declick: boolean; hum: boolean; denoise: boolean; amount: number };
             advanced: {
                 dynamicEq: boolean; dynamicEqFreq: number; dynamicEqAmount: number;
-                msWidth: number; widen: number; vocalBoost: number;
+                vocalBoost: number;
             };
             scene: { genre: string; compare: boolean; headphone: string; amount: number };
         };

@@ -7,17 +7,11 @@ import {
     AUDIO_CONSOLE_DYNEQ_FREQ_MAX,
     AUDIO_CONSOLE_DYNEQ_AMOUNT_MIN,
     AUDIO_CONSOLE_DYNEQ_AMOUNT_MAX,
-    AUDIO_CONSOLE_MSWIDTH_MIN,
-    AUDIO_CONSOLE_MSWIDTH_MAX,
-    AUDIO_CONSOLE_WIDEN_MIN,
-    AUDIO_CONSOLE_WIDEN_MAX,
     AUDIO_CONSOLE_VOCAL_MIN,
     AUDIO_CONSOLE_VOCAL_MAX,
-    AUDIO_CONSOLE_SCENE_AMOUNT_MIN,
-    AUDIO_CONSOLE_SCENE_AMOUNT_MAX,
 } from '../../../utils/audioConsole';
 import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
-import { Segmented, Toggle } from '../../modal/settings/kit';
+import { Toggle } from '../../modal/settings/kit';
 import EqualizerSection from '../equalizer/EqualizerSection';
 import { ConsoleSlider, formatDb, formatHz } from './controls';
 
@@ -39,14 +33,6 @@ const StudioPane: React.FC = () => {
     const percentage = (value: number): string => `${Math.round(value * 100)}%`;
     const lufs = (value: number): string => `${value.toFixed(0)} LUFS`;
 
-    const genreOptions = (['flat', 'pop', 'rock', 'jazz', 'classical', 'electronic', 'vocal'] as const).map(g => ({
-        value: g,
-        label: t(`ui.consoleStudioGenre_${g}`),
-    }));
-    const headphoneOptions = (['flat', 'airpods', 'sony', 'sennheiser'] as const).map(h => ({
-        value: h,
-        label: t(`ui.consoleStudioHp_${h}`),
-    }));
 
     return (
         <div className="flex min-h-full flex-col">
@@ -126,31 +112,6 @@ const StudioPane: React.FC = () => {
                             />
                         </div>
                     </div>
-                    {/* M/S 声场宽度 */}
-                    <div className="px-4 py-3.5">
-                        <ConsoleSlider
-                            label={t('ui.consoleStudioMsWidth')}
-                            valueText={percentage(studio.advanced.msWidth)}
-                            value={studio.advanced.msWidth}
-                            min={AUDIO_CONSOLE_MSWIDTH_MIN}
-                            max={AUDIO_CONSOLE_MSWIDTH_MAX}
-                            onChange={msWidth => setAdvanced({ msWidth })}
-                            onCommit={() => undefined}
-                        />
-                        <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStudioMsWidthHint')}</p>
-                    </div>
-                    {/* 声场展宽 */}
-                    <div className="px-4 py-3.5">
-                        <ConsoleSlider
-                            label={t('ui.consoleStudioWiden')}
-                            valueText={percentage(studio.advanced.widen)}
-                            value={studio.advanced.widen}
-                            min={AUDIO_CONSOLE_WIDEN_MIN}
-                            max={AUDIO_CONSOLE_WIDEN_MAX}
-                            onChange={widen => setAdvanced({ widen })}
-                            onCommit={() => undefined}
-                        />
-                    </div>
                     {/* 人声增强 */}
                     <div className="px-4 py-3.5">
                         <ConsoleSlider
@@ -166,38 +127,6 @@ const StudioPane: React.FC = () => {
                 </div>
             </EqualizerSection>
 
-            {/* —— 智能场景 —— */}
-            <EqualizerSection title={t('ui.consoleStudioScene')} hint={t('ui.consoleStudioSceneHint')}>
-                <div className="space-y-4 px-4 pb-4 pt-3.5">
-                    <div className="space-y-2">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStudioGenre')}</span>
-                        <Segmented
-                            value={studio.scene.genre}
-                            options={genreOptions}
-                            onChange={genre => setScene({ genre })}
-                            fill
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStudioHeadphone')}</span>
-                        <Segmented
-                            value={studio.scene.headphone}
-                            options={headphoneOptions}
-                            onChange={headphone => setScene({ headphone })}
-                            fill
-                        />
-                    </div>
-                    <ConsoleSlider
-                        label={t('ui.consoleStudioSceneAmount')}
-                        valueText={percentage(studio.scene.amount)}
-                        value={studio.scene.amount}
-                        min={AUDIO_CONSOLE_SCENE_AMOUNT_MIN}
-                        max={AUDIO_CONSOLE_SCENE_AMOUNT_MAX}
-                        onChange={amount => setScene({ amount })}
-                        onCommit={() => undefined}
-                    />
-                </div>
-            </EqualizerSection>
         </div>
     );
 };

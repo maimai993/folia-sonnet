@@ -24,7 +24,6 @@ import {
 } from '../../../utils/audioConsole';
 import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Toggle } from '../../modal/settings/kit';
-import { Button } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
 import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent } from './controls';
 
@@ -49,39 +48,11 @@ const MasteringPane: React.FC = () => {
     const setTone = useAudioConsoleStore(state => state.setTone);
     const setLoudness = useAudioConsoleStore(state => state.setLoudness);
     const setBalance = useAudioConsoleStore(state => state.setBalance);
-    const setCompressor = useAudioConsoleStore(state => state.setCompressor);
-    const setLimiter = useAudioConsoleStore(state => state.setLimiter);
 
     const percentage = (value: number): string => `${Math.round(value * 100)}%`;
 
-    /** 一键夜间模式：小音量下压动态、暖声、收限幅，夜里听清人声不吵人。 */
-    const applyNightMode = (): void => {
-        setCompressor({ enabled: true, bandCount: 4, profile: 'gentle' });
-        setLoudness({ enabled: true, amount: 0.7 });
-        setLimiter({ ceilingDb: -1.5, releaseMs: 220 });
-        setTone({ warmth: 2, clarity: 1 });
-    };
-
-    /** 高低频补偿：低频+高频一起抬，细节（气息、镲片、泛音）更清楚。 */
-    const applyDetailBoost = (): void => {
-        setLoudness({ enabled: true, amount: 0.55 });
-        setExciter({ enabled: true, amount: 0.5, mix: 0.35 });
-    };
-
-    /** 音量补偿：链末慢速 AGC 把调音损失的响度补回来，开调音不再变小变闷。 */
-    const applyLoudnessComp = (): void => {
-        setCompensation({ enabled: true, amount: 0.8, maxGainDb: 8, responseMs: 300 });
-    };
-
     return (
         <div className="flex min-h-full flex-col">
-            <EqualizerSection title={t('ui.consoleMasteringPresets')} hint={t('ui.consoleMasteringPresetsHint')}>
-                <div className="flex flex-wrap gap-2 px-4 pb-4 pt-3">
-                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyNightMode}>{t('ui.consoleMasteringNightMode')}</Button>
-                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyDetailBoost}>{t('ui.consoleMasteringDetailBoost')}</Button>
-                    <Button variant="bare" className="h-8 rounded-lg bg-[var(--st-fill)] px-3 text-[13px] text-[color:var(--st-t1)] hover:bg-[var(--st-fill2)]" onClick={applyLoudnessComp}>{t('ui.consoleMasteringLoudnessComp')}</Button>
-                </div>
-            </EqualizerSection>
             {/* —— 核心：损失补偿，放最上面 —— */}
             <EqualizerSection title={t('ui.consoleMasteringComp')} hint={t('ui.consoleMasteringCompHint')}>
                 <div className="space-y-3.5 px-4 pb-4 pt-3">

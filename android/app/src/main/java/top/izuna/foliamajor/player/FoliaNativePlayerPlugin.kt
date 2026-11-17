@@ -665,6 +665,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             // 过渡接管时这台播放器不接 Web 的装源，伴奏换源也就无从谈起：
             // 把还在跑的生成任务作废，别让它在半路把歌切走。
             InstrumentalCoordinator.cancel()
+            publishStemState(url, webSongKey)
             MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
             val handled = JSObject()
             handled.put("ok", true)
