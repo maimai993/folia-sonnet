@@ -153,6 +153,20 @@ class ArtworkRetryPolicyTest {
     }
 
     @Test
+    fun `永久失败集合只保留最近 64 个地址`() {
+        val tracker = ArtworkFetchTracker()
+        for (i in 0..64) {
+            tracker.onSongChanged()
+            val request = tracker.beginRequest("https://cdn.example.com/$i.jpg")!!
+            assertTrue(tracker.onFetchPermanentFailure(request))
+        }
+
+        assertFalse(tracker.isPermanentlyFailed("https://cdn.example.com/0.jpg"))
+        assertTrue(tracker.isPermanentlyFailed("https://cdn.example.com/1.jpg"))
+        assertTrue(tracker.isPermanentlyFailed("https://cdn.example.com/64.jpg"))
+    }
+
+    @Test
     fun `外部已提供解码封面时不再把缺失补拉放行`() {
         val tracker = ArtworkFetchTracker()
         tracker.onSongChanged()

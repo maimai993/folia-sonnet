@@ -36,6 +36,99 @@ class ArtworkDiskCacheTest {
     }
 
     @Test
+    fun `读取超限旧条目时返回未命中并删除`() {
+        val dir = tempFolder.newFolder("art")
+        val cache = ArtworkDiskCache(dir)
+        cache.put("oversized", byteArrayOf(1))
+        val file = dir.listFiles()!!.single()
+        java.io.RandomAccessFile(file, "rw").use {
+            it.setLength(20L * 1024L * 1024L)
+        }
+
+        assertNull(cache.get("oversized"))
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun `单条字节上限本身可写可读 超出则不覆盖旧条目`() {
+        val cache = ArtworkDiskCache(tempFolder.newFolder("art"))
+        val bytes = ByteArray(ArtworkDiskCache.MAX_ENTRY_BYTES) { 7 }
+        cache.put("boundary", bytes)
+        assertArrayEquals(bytes, cache.get("boundary"))
+
+        cache.put("boundary", ByteArray(ArtworkDiskCache.MAX_ENTRY_BYTES + 1))
+        assertArrayEquals(bytes, cache.get("boundary"))
+    }
+
+    @Test
+    fun `初始化清理上次进程留下的临时文件但保留封面和无关文件`() {
+        val dir = tempFolder.newFolder("art")
+        ArtworkDiskCache(dir).put("kept", byteArrayOf(1, 2))
+        val orphan = File(dir, "art-abandoned.tmp").apply { writeText("partial") }
+        val unrelated = File(dir, "other.tmp").apply { writeText("untouched") }
+
+        val reopened = ArtworkDiskCache(dir)
+
+        assertFalse(orphan.exists())
+        assertTrue(unrelated.exists())
+        assertArrayEquals(byteArrayOf(1, 2), reopened.get("kept"))
+    }
+
+    @Test
+    fun `超过原图直存阈值的合法编码字节仍可缓存`() {
+        val cache = ArtworkDiskCache(tempFolder.newFolder("art"))
+        val encoded = ByteArray(1024 * 1024 + 4096) { (it % 251).toByte() }
+        assertTrue(encoded.size > ArtworkDiskCache.MAX_RAW_CACHE_BYTES)
+        cache.put("png", encoded)
+        assertArrayEquals(encoded, cache.get("png"))
+    }
+
+    @Test
+    fun `同目录新实例初始化不会删除仍在写入的临时文件`() {
+        val dir = tempFolder.newFolder("art")
+        val writing = CountDownLatch(1)
+        val finishWrite = CountDownLatch(1)
+        val initStarted = CountDownLatch(1)
+        val pool = Executors.newFixedThreadPool(2)
+        val cache = ArtworkDiskCache(dir, clockMs = {
+            writing.countDown()
+            check(finishWrite.await(10, TimeUnit.SECONDS))
+            1000L
+        })
+        try {
+            val put = pool.submit { cache.put("same", byteArrayOf(7, 8)) }
+            assertTrue(writing.await(10, TimeUnit.SECONDS))
+            val opened = pool.submit<ArtworkDiskCache> {
+                initStarted.countDown()
+                ArtworkDiskCache(dir)
+            }
+            assertTrue(initStarted.await(10, TimeUnit.SECONDS))
+            finishWrite.countDown()
+            put.get(10, TimeUnit.SECONDS)
+            assertArrayEquals(byteArrayOf(7, 8), opened.get(10, TimeUnit.SECONDS).get("same"))
+        } finally {
+            finishWrite.countDown()
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `缓存写入内存不足记下原错误并清理临时文件`() {
+        val dir = tempFolder.newFolder("art")
+        val failure = OutOfMemoryError("synthetic cache pressure")
+        val reported = mutableListOf<Throwable>()
+        val cache = ArtworkDiskCache(dir, clockMs = { throw failure }, onError = { op, error ->
+            assertEquals("write", op)
+            reported.add(error)
+        })
+
+        cache.put("oom", byteArrayOf(1, 2))
+
+        assertEquals(listOf(failure), reported)
+        assertEquals(0, dir.listFiles()!!.size)
+    }
+
+    @Test
     fun `空键空字节与本地协议不进缓存`() {
         val dir = tempFolder.newFolder("art")
         val cache = ArtworkDiskCache(dir)

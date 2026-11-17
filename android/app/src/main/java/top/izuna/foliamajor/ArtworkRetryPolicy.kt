@@ -26,6 +26,7 @@ object ArtworkRetryPolicy {
     fun nextDelayMs(retryAttempt: Int): Long {
         if (retryAttempt <= 0) return BASE_DELAY_MS
         if (retryAttempt >= MEDIUM_CAP_UNTIL_ATTEMPT) return LONG_IDLE_DELAY_MS
+        // 左移 n 位即乘以 2^n；先限制位数，再把毫秒数封顶到 60 秒。
         val scaled = BASE_DELAY_MS shl retryAttempt.coerceAtMost(5)
         return scaled.coerceAtMost(MEDIUM_CAP_DELAY_MS)
     }

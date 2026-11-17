@@ -17,7 +17,21 @@ class ArtworkDiskCache(
     private val clockMs: () -> Long = { System.currentTimeMillis() },
     private val onError: (String, Throwable) -> Unit = { _, _ -> },
 ) {
-    private val lock = Any()
+    // Service 重建时旧后台写入可能仍在执行；同目录的实例必须共用清理/写入锁。
+    private val lock = synchronized(directoryLocks) {
+        directoryLocks.getOrPut(cacheDir.canonicalPath) { Any() }
+    }
+
+    init {
+        // 进程可能在临时文件改名之前退出；首次使用前回收孤儿文件和超额旧条目。
+        synchronized(lock) {
+            try {
+                trimLocked()
+            } catch (error: Exception) {
+                onError("initialize", error)
+            }
+        }
+    }
 
     fun get(key: String?): ByteArray? {
         if (key.isNullOrBlank()) return null
@@ -25,8 +39,30 @@ class ArtworkDiskCache(
             val file = fileFor(key)
             if (!file.isFile) return null
             val bytes = try {
-                file.readBytes()
-            } catch (error: Throwable) {
+                val length = file.length()
+                if (length <= 0L || length > MAX_ENTRY_BYTES) {
+                    file.delete()
+                    return null
+                }
+                // 即使长度检查后文件被改大，最多也只读取上限 + 1 字节用于拒绝。
+                file.inputStream().use { stream ->
+                    val out = java.io.ByteArrayOutputStream(length.toInt())
+                    val buffer = ByteArray(8 * 1024)
+                    var total = 0
+                    while (true) {
+                        val count = stream.read(buffer, 0, minOf(buffer.size, MAX_ENTRY_BYTES + 1 - total))
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_ENTRY_BYTES) return@use null
+                        out.write(buffer, 0, count)
+                    }
+                    out.toByteArray()
+                }
+            } catch (error: OutOfMemoryError) {
+                // 磁盘缓存是可选兜底；低内存时当未命中，不能让在途请求永远悬挂。
+                onError("read", error)
+                null
+            } catch (error: Exception) {
                 onError("read", error)
                 null
             }
@@ -42,7 +78,7 @@ class ArtworkDiskCache(
 
     fun put(key: String?, bytes: ByteArray) {
         if (key.isNullOrBlank() || bytes.isEmpty()) return
-        if (maxEntries <= 0 || bytes.size.toLong() > maxTotalBytes) return
+        if (maxEntries <= 0 || bytes.size > MAX_ENTRY_BYTES || bytes.size.toLong() > maxTotalBytes) return
         synchronized(lock) {
             var temp: File? = null
             try {
@@ -59,7 +95,9 @@ class ArtworkDiskCache(
                     temp.delete()
                 }
                 trimLocked()
-            } catch (error: Throwable) {
+            } catch (error: OutOfMemoryError) {
+                onError("write", error)
+            } catch (error: Exception) {
                 onError("write", error)
             } finally {
                 if (temp != null && temp.exists()) {
@@ -143,6 +181,10 @@ class ArtworkDiskCache(
          * 写盘前按目标尺寸重编码，防止几百张大图把磁盘缓存顶满。
          */
         const val MAX_RAW_CACHE_BYTES = 512 * 1024
+
+        // 512px RGBA 无损 PNG 最坏约 1MiB；允许编码后的合法封面，但不读任意大旧文件。
+        const val MAX_ENTRY_BYTES = 2 * 1024 * 1024
+        private val directoryLocks = mutableMapOf<String, Any>()
 
         fun create(context: Context, onError: (String, Throwable) -> Unit = { _, _ -> }): ArtworkDiskCache =
             ArtworkDiskCache(File(context.applicationContext.cacheDir, DIR_NAME), onError = onError)

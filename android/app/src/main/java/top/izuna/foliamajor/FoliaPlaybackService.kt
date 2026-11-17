@@ -118,7 +118,7 @@ class FoliaPlaybackService : android.app.Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val artworkDiskCache: ArtworkDiskCache by lazy {
         ArtworkDiskCache.create(this) { op, error ->
-            Log.w(TAG, "Artwork disk cache $op failed", error)
+            Log.w(TAG, "[ArtworkDiskCache] $op failed", error)
         }
     }
     private val artworkTracker = ArtworkFetchTracker { android.os.SystemClock.elapsedRealtime() }
@@ -3232,7 +3232,11 @@ class FoliaPlaybackService : android.app.Service() {
             val format = if (bitmap.hasAlpha()) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG
             val quality = if (format == Bitmap.CompressFormat.PNG) 100 else 90
             if (bitmap.compress(format, quality, out)) out.toByteArray() else null
-        } catch (ignored: Throwable) {
+        } catch (error: OutOfMemoryError) {
+            Log.w(TAG, "[ArtworkDiskCache] Not enough memory to encode the cover", error)
+            null
+        } catch (error: Exception) {
+            Log.w(TAG, "[ArtworkDiskCache] Could not encode the cover", error)
             null
         }
 
