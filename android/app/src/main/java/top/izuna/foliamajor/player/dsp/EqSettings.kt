@@ -209,6 +209,10 @@ class StereoSettings(
      * 人也听不出方向。
      */
     val bassMonoHz: Float = 0f,
+    /** 耳机交叉馈送 0 ~ 1：把对侧声道的一点点（延时 + 高频衰减）混进本侧。0 关。 */
+    val crossfeed: Float = 0f,
+    /** 声场旋转 -180 ~ +180 度：整个声场绕听者转。 */
+    val rotation: Float = 0f,
 ) {
     companion object {
         val NEUTRAL = StereoSettings()
@@ -630,6 +634,8 @@ class EqSettings(
             put("enabled", stereo.enabled)
             put("width", stereo.width.toDouble())
             put("bassMonoHz", stereo.bassMonoHz.toDouble())
+            put("crossfeed", stereo.crossfeed.toDouble())
+            put("rotation", stereo.rotation.toDouble())
         }
         val saturationJson = JSONObject().apply {
             put("enabled", saturation.enabled)
@@ -876,6 +882,8 @@ class EqSettings(
                 width = json.number("width", 1.0, 0f, 2f),
                 // 0 = 关。老包没有这个字段，按「不改变原来听感」处理。
                 bassMonoHz = json.number("bassMonoHz", 0.0, 0f, 400f),
+                crossfeed = json.number("crossfeed", 0.0, 0f, 1f),
+                rotation = json.number("rotation", 0.0, -180f, 180f),
             )
         }
 

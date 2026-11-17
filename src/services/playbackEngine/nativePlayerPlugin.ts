@@ -160,6 +160,10 @@ export type NativeEqualizerSettings = {
         width: number;
         /** 低频单声道：该频率以下的侧向归零；0 表示关。 */
         bassMonoHz: number;
+        /** 耳机交叉馈送 0 ~ 1。 */
+        crossfeed: number;
+        /** 声场旋转 -180 ~ +180 度。 */
+        rotation: number;
     };
     /** 饱和 / 染色：给信号加谐波，挂在后置 EQ 之后、立体声之前。 */
     saturation: {

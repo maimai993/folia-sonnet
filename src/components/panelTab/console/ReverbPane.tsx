@@ -12,6 +12,10 @@ import {
     AUDIO_CONSOLE_ROOM_LEVEL_MIN,
     AUDIO_CONSOLE_STEREO_WIDTH_MAX,
     AUDIO_CONSOLE_STEREO_WIDTH_MIN,
+    AUDIO_CONSOLE_CROSSFEED_MAX,
+    AUDIO_CONSOLE_CROSSFEED_MIN,
+    AUDIO_CONSOLE_ROTATION_MAX,
+    AUDIO_CONSOLE_ROTATION_MIN,
     analyzeImpulseWav,
     type AudioConsoleImpulseProfile,
     type AudioConsoleReverbPreset,
@@ -236,6 +240,34 @@ const ReverbPane: React.FC = () => {
                                 onCommit={() => undefined}
                             />
                             <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoBassMonoHint')}</p>
+                        </div>
+                        <div className="mt-3">
+                            <ConsoleSlider
+                                label={t('ui.consoleStereoCrossfeed')}
+                                valueText={formatPercent(stereo.crossfeed)}
+                                value={stereo.crossfeed}
+                                min={AUDIO_CONSOLE_CROSSFEED_MIN}
+                                max={AUDIO_CONSOLE_CROSSFEED_MAX}
+                                decimals={2}
+                                disabled={!stereo.enabled}
+                                onChange={crossfeed => setStereo({ crossfeed })}
+                                onCommit={() => undefined}
+                            />
+                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoCrossfeedHint')}</p>
+                        </div>
+                        <div className="mt-3">
+                            <ConsoleSlider
+                                label={t('ui.consoleStereoRotation')}
+                                valueText={`${stereo.rotation.toFixed(0)}°`}
+                                value={stereo.rotation}
+                                min={AUDIO_CONSOLE_ROTATION_MIN}
+                                max={AUDIO_CONSOLE_ROTATION_MAX}
+                                decimals={0}
+                                disabled={!stereo.enabled}
+                                onChange={rotation => setStereo({ rotation })}
+                                onCommit={() => undefined}
+                            />
+                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoRotationHint')}</p>
                         </div>
                     </div>
                 </div>

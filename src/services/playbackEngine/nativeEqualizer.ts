@@ -138,6 +138,8 @@ const buildSettings = (): NativeEqualizerSettings => {
             enabled: console_.stereo.enabled,
             width: console_.stereo.width,
             bassMonoHz: console_.stereo.bassMonoHz,
+            crossfeed: console_.stereo.crossfeed,
+            rotation: console_.stereo.rotation,
         },
         saturation: {
             enabled: console_.saturation.enabled,

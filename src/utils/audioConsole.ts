@@ -83,11 +83,12 @@ export type AudioConsoleStereo = {
     width: number;
     /**
      * 低频单声道：这个频率以下的侧向分量归零，只留中置；0 表示关。
-     *
-     * 唱片里的低频常常两声道相位不一致，叠起来会互相抵消 —— 在外放与单声道蓝牙箱
-     * 上就是「底鼓变薄、贝斯消失」。120 Hz 以下是母带处理的常用起点。
      */
     bassMonoHz: number;
+    /** 耳机交叉馈送 0 ~ 1：对侧延时+低通混一点进来，模拟音箱听感。 */
+    crossfeed: number;
+    /** 声场旋转 -180 ~ +180 度。 */
+    rotation: number;
 };
 
 /** 四个分离音轨：顺序与 ScnetRunner.STEMS 一致，改这里要改原生。 */
@@ -442,6 +443,11 @@ export const AUDIO_CONSOLE_CROSSOVER_RATIO = 1.4;
 
 export const AUDIO_CONSOLE_BASS_MONO_MAX = 400;
 
+export const AUDIO_CONSOLE_CROSSFEED_MIN = 0;
+export const AUDIO_CONSOLE_CROSSFEED_MAX = 1;
+export const AUDIO_CONSOLE_ROTATION_MIN = -180;
+export const AUDIO_CONSOLE_ROTATION_MAX = 180;
+
 // —— 空间声场取值范围 ——
 export const AUDIO_CONSOLE_SPATIAL_PAN_MIN = -1;
 export const AUDIO_CONSOLE_SPATIAL_PAN_MAX = 1;
@@ -570,6 +576,8 @@ export const DEFAULT_AUDIO_CONSOLE_SETTINGS: AudioConsoleSettings = {
         enabled: false,
         width: 1,
         bassMonoHz: 0,
+        crossfeed: 0,
+        rotation: 0,
     },
     saturation: {
         enabled: false,
@@ -942,6 +950,8 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             enabled: readBoolean(stereo.enabled, defaults.stereo.enabled),
             width: clamp(stereo.width, AUDIO_CONSOLE_STEREO_WIDTH_MIN, AUDIO_CONSOLE_STEREO_WIDTH_MAX, defaults.stereo.width),
             bassMonoHz: clamp(stereo.bassMonoHz, 0, AUDIO_CONSOLE_BASS_MONO_MAX, defaults.stereo.bassMonoHz),
+            crossfeed: clamp(stereo.crossfeed, AUDIO_CONSOLE_CROSSFEED_MIN, AUDIO_CONSOLE_CROSSFEED_MAX, defaults.stereo.crossfeed),
+            rotation: clamp(stereo.rotation, AUDIO_CONSOLE_ROTATION_MIN, AUDIO_CONSOLE_ROTATION_MAX, defaults.stereo.rotation),
         },
         saturation: {
             enabled: readBoolean(saturation.enabled, defaults.saturation.enabled),
