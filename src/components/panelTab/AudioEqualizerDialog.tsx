@@ -26,9 +26,8 @@ import CompressorPane from './console/CompressorPane';
 import ReverbPane from './console/ReverbPane';
 import PostEqPane from './console/PostEqPane';
 import SaturationPane from './console/SaturationPane';
-import SpatialPane from './console/SpatialPane';
 import MasteringPane from './console/MasteringPane';
-import StudioPane from './console/StudioPane';
+import PlaybackPane from './console/PlaybackPane';
 import RepairPane from './console/RepairPane';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useAudioProfilesStore } from '../../stores/useAudioProfilesStore';
@@ -51,7 +50,7 @@ type AudioEqualizerDialogProps = {
     isDaylight: boolean;
 };
 
-type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'studio' | 'spatial';
+type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'playback';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
 
@@ -59,9 +58,9 @@ const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_
 // t() 在组件里调用，所以这里只放 id 与页签归属，label 在渲染处拼。
 const CONSOLE_GROUP_DEFS: ReadonlyArray<{ id: string; tabs: ConsoleTabId[]; labelKey: string }> = [
     { id: 'base', tabs: ['equalizer', 'repair', 'compressor'], labelKey: 'ui.consoleGroupBase' },
-    { id: 'color', tabs: ['reverb', 'saturation', 'spatial'], labelKey: 'ui.consoleGroupColor' },
+    { id: 'color', tabs: ['reverb', 'saturation'], labelKey: 'ui.consoleGroupColor' },
     { id: 'master', tabs: ['mastering', 'postEq'], labelKey: 'ui.consoleGroupMaster' },
-    { id: 'smart', tabs: ['studio'], labelKey: 'ui.consoleGroupSmart' },
+    { id: 'play', tabs: ['playback'], labelKey: 'ui.consoleGroupPlayback' },
 ];
 
 const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight }) => {
@@ -259,10 +258,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                             { value: 'compressor', label: t('ui.consoleTabCompressor') },
                             { value: 'reverb', label: t('ui.consoleTabReverb') },
                             { value: 'saturation', label: t('ui.consoleTabSaturation') },
-                            { value: 'spatial', label: t('ui.consoleTabSpatial') },
                             { value: 'mastering', label: t('ui.consoleTabMastering') },
                             { value: 'postEq', label: t('ui.consoleTabPostEq') },
-                            { value: 'studio', label: t('ui.consoleTabStudio') },
+                            { value: 'playback', label: t('ui.consoleTabPlayback') },
                         ]}
                         onTabChange={value => setTab(value as typeof tab)}
                     />
@@ -296,10 +294,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     {tab === 'compressor' && <CompressorPane />}
                     {tab === 'reverb' && <ReverbPane />}
                     {tab === 'saturation' && <SaturationPane />}
-                    {tab === 'spatial' && <SpatialPane />}
                     {tab === 'mastering' && <MasteringPane />}
                     {tab === 'postEq' && <PostEqPane />}
-                    {tab === 'studio' && <StudioPane />}
+                    {tab === 'playback' && <PlaybackPane />}
                 </div>
             </div>
         </Sheet>

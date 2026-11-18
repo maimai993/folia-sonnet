@@ -384,6 +384,13 @@ export const startNativeEqualizerSync = (): void => {
      * 界面还没打开时代谢掉也没关系，store 里那三个字段本来就是给界面看的。
      */
     addInstrumentalListener(event => {
+        /*
+         * ★ 进度归属过滤：整队预拆下一首时原生照样往外发 building 事件。
+         * 不属于当前歌的进度不写进 store —— 否则界面把「下一首拆到 47%」
+         * 显示成「当前歌正在拆分」，用户看到的就是「界面被正在拆分的
+         * 那首接管了」。旧 APK 不带这个字段（undefined）时保持原行为。
+         */
+        if (event.forCurrent === false) return;
         const status = event.state === 'ready' || event.state === 'failed' || event.state === 'building'
             ? event.state
             : 'idle';

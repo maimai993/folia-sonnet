@@ -53,33 +53,61 @@ export const queueSongAssetPrecompute = (song: SongResult): void => {
 };
 
 /**
- * 进应用时把整条播放队列排进预拆分：一首接一首，直到队列全拆完。
+ * 进应用时把播放队列**头部窗口**排进预拆分（P2 修复：不再整队拆）。
+ *
+ * 原实现把整条 playQueue 逐首排进预拆 —— 百首歌的队列就是一百次地址解析、
+ * 一百次完整下载加几十秒推理，流量、电量、发热都不可控，而且预拆完成的
+ * 还不一定是接下来会听的歌（用户随时跳过）。改成只拆「当前这首 + 下一首」：
+ * 拨「人声 / 伴奏」秒切的体验不变（当前歌永远优先），浪费封顶两首。
  *
  * 每一首仍走 [queueSongAssetPrecompute] 的去重（本会话 settled/pending），
  * 原生侧 [InstrumentalCoordinator.prebuild] 还会再查一次四轨缓存 —— 已拆过的
  * 直接跳过，不会重复拆分。总开关关着时这里不排 SCNet，只排整曲曲线。
  */
+const QUEUE_PREBUILD_WINDOW = 2;
+
 export const queuePlaybackQueuePrecompute = (queue: SongResult[]): void => {
     if (!isCapacitorAndroid() || !isNativePlayerAvailable()) return;
     if (!useAudioSettingsStore.getState().prebuildTracksEnabled) return;
-    for (const song of queue) {
+    for (const song of queue.slice(0, QUEUE_PREBUILD_WINDOW)) {
         queueSongAssetPrecompute(song);
     }
 };
 
 /**
- * 回前台时重排整条队列。
+ * 预拆的流量约束（P2 修复）：用户开了省流量 / 还在 2G-3G 网络时，跳过
+ * 每首几十 MB 的完整下载与推理。整曲曲线（几 KB）不受影响，智能动感照常。
+ */
+const prebuildAllowedOnThisNetwork = (): boolean => {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (!connection) return true;
+    if (connection.saveData) return false;
+    const type = connection.effectiveType ?? '4g';
+    return type === '4g' || type === 'unknown';
+};
+
+/**
+ * 回前台时重排队列头部窗口。
  *
  * 后台会把没拆完的生成作废（原生 pauseForBackground），但本会话的 settled 记录还在，
- * 那些被作废的歌不会被重新排上。这里清掉 settled 再整队重排：已拆完的由原生
- * allStemsReady 兜底跳过，不会重复拆；没拆完的从断点整首重来。
+ * 那些被作废的歌不会被重新排上。这里清掉窗口内歌曲的 settled 再重排：已拆完的由原生
+ * allStemsReady 兜底跳过，不会重复拆；没拆完的整首重来。窗口之外的 settled 不动 ——
+ * 原实现清空整个 settled 再整队重排，回一次前台就把整条队列的地址重新解析一遍。
  */
 export const rearmPlaybackQueuePrecompute = (queue: SongResult[]): void => {
     if (!isCapacitorAndroid() || !isNativePlayerAvailable()) return;
     if (!useAudioSettingsStore.getState().prebuildTracksEnabled) return;
-    settled.clear();
-    failures.clear();
-    for (const song of queue) {
+    for (const song of queue.slice(0, QUEUE_PREBUILD_WINDOW)) {
+        let key: string;
+        try {
+            key = getPlaybackAnalysisTarget(song).key;
+        } catch {
+            continue;
+        }
+        settled.delete(key);
+        failures.delete(key);
+    }
+    for (const song of queue.slice(0, QUEUE_PREBUILD_WINDOW)) {
         queueSongAssetPrecompute(song);
     }
 };
@@ -106,7 +134,9 @@ const drain = async (): Promise<void> => {
                      * 只负责「排上」，不在这等推理 —— 原生那条队列自己管进度；
                      * 装源时原生也会按开关自己调一次 prebuild，重复调用按 key 去重，安全。
                      */
-                    if (useAudioSettingsStore.getState().prebuildTracksEnabled && isNativePlayerAvailable()) {
+                    if (useAudioSettingsStore.getState().prebuildTracksEnabled
+                        && isNativePlayerAvailable()
+                        && prebuildAllowedOnThisNetwork()) {
                         await nativePlayer.prepareSongTracks(url, getPlaybackSongKey(item.song));
                     }
                     done = true;

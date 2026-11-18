@@ -60,6 +60,8 @@ export type NativePlaybackSnapshot = {
     playing: boolean;
     buffering?: boolean;
     speed?: number;
+    /** 引擎当前的变调倍率（1 = 原调）。恢复会话 / 亮屏核对用，与 speed 一起交付。 */
+    pitch?: number;
     /**
      * 引擎此刻**装的那一首**（装源时写进 MediaItem 的 mediaId），没装东西时为空串。
      *
@@ -359,6 +361,7 @@ interface FoliaNativePlayerPlugin {
     seek(options: { positionMs: number }): Promise<NativeCommandResult | void>;
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
+    setPitch(options: { pitch: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;
     setEqualizer(options: { settings: NativeEqualizerSettings }): Promise<{ applied: boolean; active: boolean; seq: number }>;
     getEqualizerState(): Promise<NativeEqualizerState>;
@@ -463,6 +466,7 @@ export const nativePlayer = {
     seek: (positionMs: number) => FoliaNativePlayer.seek({ positionMs }),
     setVolume: (volume: number) => FoliaNativePlayer.setVolume({ volume }),
     setSpeed: (speed: number) => FoliaNativePlayer.setSpeed({ speed }),
+    setPitch: (pitch: number) => FoliaNativePlayer.setPitch({ pitch }),
     setRepeatMode: (repeatMode: number) => FoliaNativePlayer.setRepeatMode({ repeatMode }),
     setEqualizer: (settings: NativeEqualizerSettings) => FoliaNativePlayer.setEqualizer({ settings }),
     getEqualizerState: () => FoliaNativePlayer.getEqualizerState(),
@@ -496,7 +500,7 @@ export const nativePlayer = {
  * 这里按事件名另外注册 —— 传错名字不会报错，只是永远收不到。
  */
 export const addInstrumentalListener = (
-    listener: (event: { state: string; percent: number }) => void,
+    listener: (event: { state: string; percent: number; forCurrent?: boolean }) => void,
 ): void => {
     void (FoliaNativePlayer as unknown as {
         addListener: (

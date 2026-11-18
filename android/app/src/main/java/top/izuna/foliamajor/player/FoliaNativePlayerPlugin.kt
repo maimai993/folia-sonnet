@@ -103,6 +103,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val durationMs: Long,
             val playing: Boolean,
             val speed: Float,
+            val pitch: Float,
             val buffering: Boolean,
         ) {
             fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
@@ -112,6 +113,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                 put("durationMs", durationMs)
                 put("playing", playing)
                 put("speed", speed.toDouble())
+                put("pitch", pitch.toDouble())
                 put("buffering", buffering)
             }
         }
@@ -136,6 +138,7 @@ class FoliaNativePlayerPlugin : Plugin() {
                 player.getDurationMs(),
                 player.isPlaying(),
                 player.getSpeed(),
+                player.getPitch(),
                 player.isBuffering(),
             )
         }
@@ -347,6 +350,16 @@ class FoliaNativePlayerPlugin : Plugin() {
             val event = JSObject()
             event.put("state", state)
             event.put("percent", percent)
+            /*
+             * ★ 进度归属：building 事件的 key 是协调器 activeKey（正在拆的那首），
+             * 不一定是正在播的这首 —— 整队预拆下一首时，事件照样往外发。不带的
+             * 话 Web 侧会把「下一首拆到 47%」显示成「当前歌正在拆分」，用户看到的
+             * 就是「界面被正在拆分的那首接管了」。与 getInstrumentalState 的
+             * forCurrent 同一语义；旧版 Web 代码不认识这个字段时保持原行为。
+             */
+            val activeKey = InstrumentalCoordinator.activeKeyOrNull()
+            val nowKey = instance?.currentSongKey
+            event.put("forCurrent", activeKey != null && nowKey != null && activeKey == nowKey)
             MAIN.post { notifyListeners("instrumental", event) }
         }
         /*
@@ -367,8 +380,25 @@ class FoliaNativePlayerPlugin : Plugin() {
          * 四轨生成完就发布给音频线程：清唱 / 伴奏 / 全部现在都走四轨混音，不换源。
          * isAppInBackground 让拆分在后台慢而缓。
          */
-        InstrumentalCoordinator.onStemsReady = { url, songKey ->
-            publishStemState(url, songKey)
+        InstrumentalCoordinator.onStemsReady = { url, songKey, userInitiated ->
+            /*
+             * ★ 接管检测：预拆（整队队列 / 「立即拆分」按钮）完成的歌不一定是
+             * 此刻在放的这首，就算恰好是，也不是用户显式要切 —— 不校验身份
+             * 与意图的话，音频线程会把正在播的原曲无脑换成别人的（或这首的）
+             * 分离再混音版本。只有「确实是当前这首」且「用户拨着开关在等结果」
+             * 才发布接管；其余情况成果留在缓存里，等下一次装源
+             * （publishStemState 自然取用）或用户显式操作。
+             */
+            val currentKey = instance?.currentSongKey
+            val currentUrl = instance?.player?.baseUrl()
+            val isCurrentSong = if (songKey != null && currentKey != null) {
+                songKey == currentKey
+            } else {
+                url != null && url == currentUrl
+            }
+            if (isCurrentSong && userInitiated) {
+                publishStemState(url, songKey)
+            }
         }
         InstrumentalCoordinator.isAppInBackground = { appInBackground }
         val appContext = context.applicationContext
@@ -822,6 +852,22 @@ class FoliaNativePlayerPlugin : Plugin() {
     }
 
     /**
+     * 变调（升降 key），不改速度。对已在播的播放器直接生效；FoliaNativePlayer.setPitch
+     * 只改 requestedPitch（内嵌播放器不存在时也记下目标值），下一次 prepare 自然带上。
+     */
+    @PluginMethod
+    fun setPitch(call: PluginCall) {
+        val current = player
+        val pitch = call.getFloat("pitch")
+        if (current == null || pitch == null) {
+            call.reject("pitch is required.")
+            return
+        }
+        current.setPitch(pitch)
+        call.resolve()
+    }
+
+    /**
      * 立刻改循环模式，不重新装地址。
      *
      * 单曲循环是随时能按的：走 prepare 的话当前这首会从头再来一遍，走「只记下来、
@@ -1034,13 +1080,15 @@ class FoliaNativePlayerPlugin : Plugin() {
         val songKey = call.getString("songKey")
         val kindName = call.getString("kind")
         val result = JSObject()
-        if (url.isNullOrBlank() || kindName.isNullOrBlank()) {
+        // 缓存键优先 songKey（见 InstrumentalStore.keyFor）：url 可以省略 ——
+        // Web 侧查本地缓存不必先发网络解析地址，离线 / 弱网也能命中。
+        if ((url.isNullOrBlank() && songKey.isNullOrBlank()) || kindName.isNullOrBlank()) {
             result.put("url", "")
             call.resolve(result)
             return
         }
         val kind = StemKind.entries.firstOrNull { it.name.equals(kindName, ignoreCase = true) }
-        val key = InstrumentalStore.keyFor(url, songKey)
+        val key = InstrumentalStore.keyFor(url.orEmpty(), songKey)
         val file = kind?.let { InstrumentalStore.stemTargetFor(context, key, it) }
         result.put("url", if (file != null && file.isFile) Uri.fromFile(file).toString() else "")
         call.resolve(result)
@@ -1147,6 +1195,7 @@ class FoliaNativePlayerPlugin : Plugin() {
         result.put("playing", current.isPlaying())
         result.put("buffering", current.isBuffering())
         result.put("speed", current.getSpeed().toDouble())
+        result.put("pitch", current.getPitch().toDouble())
         // 引擎此刻装的是哪一首：Web 层判「点歌有没有真的换过去」只信这一个
         // （服务里的 cachedSongKey 会随它自己推的 metadata 变，当判据等于自证）。
         result.put("songKey", current.currentMediaId())

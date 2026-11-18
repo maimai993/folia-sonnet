@@ -333,6 +333,7 @@
     "@chenglou/pretext": "^0.0.9",
     "@emnapi/core": "1.11.3",
     "@emnapi/runtime": "1.11.3",
+    "@paper-design/shaders": "^0.0.80",
     "@paper-design/shaders-react": "^0.0.80",
     "@playwright/test": "^1.63.0",
     "@react-three/drei": "^10.7.8",

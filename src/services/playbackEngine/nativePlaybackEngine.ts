@@ -97,6 +97,8 @@ class NativePlaybackEngine {
      */
     private nativeMediaLive = false;
     private rate = 1;
+    /** 变调倍率（1 = 原调）。不参与位置外推 —— Sonic / AudioTrack 的 pitch 只移频不改时长。 */
+    private pitch = 1;
     /** Invalidates a pending play result when pause, stop, or a new source takes over. */
     private playIntentVersion = 0;
     private sourceGenerationVersion = 0;
@@ -173,6 +175,7 @@ class NativePlaybackEngine {
         this.durationMs = Math.max(0, snapshot.durationMs);
         this.playing = snapshot.playing;
         this.rate = snapshot.speed ?? 1;
+        this.pitch = snapshot.pitch ?? 1;
         this.stalled = snapshot.buffering ?? false;
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
@@ -477,8 +480,16 @@ class NativePlaybackEngine {
         this.positionMs = this.getPositionSec() * 1000;
         this.updatedAtMs = performance.now();
         this.rate = clamp(speed, 0.1, 4);
-        if (!this.hasSource) return;
+        // 不看 hasSource：原生的 setSpeed 对空播放器也只是记下 requestedSpeed，
+        // 下一次 prepare 的 PlaybackParameters 会带上。启动时把落库倍速推过去，
+        // 首次装源才不会以 1x 起播。
         void nativePlayer.setSpeed(this.rate).catch(() => undefined);
+    }
+
+    /** 变调（升降 key），不改速度、不参与位置外推。没有源时原生也照样记下目标值。 */
+    setPitch(pitch: number): void {
+        this.pitch = clamp(pitch, 0.5, 2);
+        void nativePlayer.setPitch(this.pitch).catch(() => undefined);
     }
 
     setRepeatMode(repeatMode: number): void {

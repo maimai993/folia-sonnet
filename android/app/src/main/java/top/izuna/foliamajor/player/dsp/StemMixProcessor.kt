@@ -9,9 +9,12 @@ import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import top.izuna.foliamajor.automix.ScnetRunner
 import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicLong
 
 // android/app/src/main/java/top/izuna/foliamajor/player/dsp/StemMixProcessor.kt
-// 空间声场的内核：四个分离音轨各自摆位、实时混成一路立体声。
+// 四轨混音内核：四个分离音轨各自摆位、实时混成一路立体声。
 //
 // 挂点：FoliaAudioSinkFactory 的 processor 链里**排在 EqAudioProcessor 之前** ——
 // 它负责「这首歌的声源是什么」，EQ / 压缩 / 混响那条链再对混好的结果做整体调音。
@@ -23,15 +26,28 @@ import java.nio.ByteBuffer
 //   相加，输出替换掉原曲 PCM —— 这是「全部音轨一起播放」且能逐轨摆位的唯一稳妥形状。
 //
 // 数据流（音频渲染线程，逐块）：
-//   queueInput 进来的是原曲的 N 帧 16bit PCM（时钟）→ 若空间声场没开、或这首歌的
+//   queueInput 进来的是原曲的 N 帧 16bit PCM（时钟）→ 若混音未激活、或这首歌的
 //   四轨还没生成完，原样直通；否则四个 StemDecoder 各吐出 N 帧 → SpatialStage 摆位 →
 //   四轨相加 → 限幅兜底 → 编码成 16bit 输出。频谱与后面的调音链照常工作。
 //
-// 同步：四个音轨与原曲同采样率、同长度、同一起点，按「块」顺序各解 N 帧即天然对齐。
-//   seek 由插件 seek 处理器把目标帧数写进 [StemMixState]，下一个块先 flush 再 seek 到
-//   最近关键帧，之后重新对齐。AAC 编码延迟造成的 1~2 ms 恒定偏移听不出来，不计。
+// 时钟与同步（P0 修复）：
+//   [masterFrames] 累计 queueInput 进来的帧数 —— 直通期间也累加，因为原曲 PCM 流
+//   本身就是 ExoPlayer 的时间轴。seek（onFlush + pendingSeek）时校准到目标帧，
+//   换歌时由 StemMixState.publishSong 重置。每轨记 [stemFrames]；轨从「不参与」
+//   （被模式过滤 / 用户关掉）转回「参与」时若落后超过容差，重开该轨解码器对齐，
+//   不再出现「切出去几十秒再切回来，乐器回到过去」。
 //
-// ⚠️ 真机验证前不要合并：MediaCodec 的同步解码对具体 ROM 的实现细节敏感
+// 解码器创建（P2 修复）：
+//   MediaCodec 的 create/configure/start 耗时可达数十毫秒，绝不能发生在音频渲染
+//   线程的一个块里（直接 AudioTrack underrun）。所有 open 都提交到单条后台预热线程，
+//   完成后经无锁队列交接给音频线程；交接后的一次性追赶（discard）只花几毫秒。
+//   预热期间保持直通原曲 —— 用户听感上只是「空间声场 / 分离模式晚几百毫秒生效」，
+//   而不是一次爆音或卡顿。
+//
+// 同步：四个音轨与原曲同采样率、同长度、同一起点。AAC 编码延迟造成的 1~2 ms
+//   恒定偏移听不出来，不计。
+//
+// ⚠️ 真机验证：MediaCodec 的同步解码对具体 ROM 的实现细节敏感
 //   （dequeueOutputBuffer 的时序、EOS 行为、SEEK_TO_PREVIOUS_SYNC 的落点）。
 
 @UnstableApi
@@ -44,6 +60,8 @@ class StemMixProcessor(
 
     private val stages = Array(StemKind.ALL.size) { SpatialStage() }
     private val decoders = arrayOfNulls<StemDecoder>(StemKind.ALL.size)
+    /** 每轨解码器自己的时间轴位置（44.1k 帧数）。 */
+    private val stemFrames = LongArray(StemKind.ALL.size)
     private val stemFloat = Array(StemKind.ALL.size) { FloatArray(0) }
     private var mix = FloatArray(0)
     private var scratch = FloatArray(0)
@@ -52,6 +70,52 @@ class StemMixProcessor(
     private var carrySize = 0
     private var lastKey: String? = null
     private val pcm = Pcm16Codec()
+
+    /** 原曲 PCM 流的累计帧数：这就是 ExoPlayer 时钟。seek / 换歌时校准。 */
+    private var masterFrames = 0L
+
+    /** 轨时间轴落后多少帧就要重开对齐（2048 帧 ≈ 46ms @44.1k）。 */
+    private val resyncToleranceFrames = 2048L
+
+    /**
+     * 音频线程每块的解码轮数预算（每轮 ~10-20ms 的 dequeue 超时）。
+     *
+     * 真机上 ROM 的 MediaCodec 偶发慢供给 / 卡死：没有预算的话 read() 会在
+     * 音频线程里转无限轮 —— AudioTrack 长时间无数据，用户看到的就是「自动暂停」，
+     * 卡到 EOS 永远不来就是「无法自动下一首」。超预算时本块少解的那部分按静音补，
+     * 轨时间轴落后由 resync 容差兜底对齐。
+     */
+    private val readAttemptBudget = 4
+
+    /** seek 追赶（discard）一次最多解的帧数（≈2s @44.1k），超出交给 resync 重开。 */
+    private val discardBudgetFrames = 88_200L
+
+    // —— 后台预热：解码器的 open（MediaExtractor + MediaCodec 创建）不在音频线程做 —
+
+    /** 每次换歌 / 全量重开 +1，旧预热任务完成后发现对不上号就自弃。 */
+    private val openGeneration = AtomicLong(0)
+
+    /** 已提交预热、还没交接回来的轨。只在音频线程访问；防止逐块重复提交。 */
+    private val warmPending = HashSet<StemKind>()
+
+    /** 后台 open 完成、等待音频线程接手的解码器（无锁交接）。 */
+    private val handoffQueue = ConcurrentLinkedQueue<StemHandoff>()
+
+    private val warmWorker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "folia-stem-warm").apply {
+            isDaemon = true
+            // 比普通线程低一格：预热是几十毫秒的杂活，不能抢正在放歌的核。
+            priority = Thread.NORM_PRIORITY - 1
+        }
+    }
+
+    private class StemHandoff(
+        val generation: Long,
+        val songKey: String,
+        val kind: StemKind,
+        val decoder: StemDecoder,
+        val baseFrames: Long,
+    )
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
@@ -65,14 +129,23 @@ class StemMixProcessor(
         mix = FloatArray(0)
         scratch = FloatArray(0)
         releaseDecoders()
+        masterFrames = 0L
         lastKey = null
         return inputAudioFormat
     }
 
     override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
         carrySize = 0
-        // seek 之后旧解码器的时间轴已经作废，等下一个块按 StemMixState 里的目标重开。
-        if (StemMixState.hasPendingSeek()) releaseDecoders()
+        // seek 之后旧解码器的时间轴已经作废；同时把时钟校准到 seek 目标。
+        if (StemMixState.hasPendingSeek()) {
+            StemMixState.consumeSeek()
+            masterFrames = StemMixState.lastSeekFrames()
+            releaseDecoders()
+        }
+    }
+
+    override fun onQueueEndOfStream() {
+        // 播放结束：让悬着的预热任务自弃（generation 已在 releaseDecoders 里递增）。
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -89,21 +162,28 @@ class StemMixProcessor(
         val stemFiles = session?.stems
         val settings = session?.spatial
         if (session == null || stemFiles == null || settings == null || !settings.enabled || !session.stems.all { it != null && it.isFile }) {
+            // 直通也要推时钟：原曲 PCM 流就是 ExoPlayer 时间轴（P0-4 的时钟基准）。
+            masterFrames += incoming / (2L * channels)
             passthrough(inputBuffer, incoming)
             return
         }
         // 四轨是 44.1k 写的；时钟不是 44.1k 时时间轴对不上，宁可直通也别混出错的声场。
         if (sampleRate != ScnetRunner.SAMPLE_RATE) {
+            masterFrames += incoming / (2L * channels)
             passthrough(inputBuffer, incoming)
             return
         }
         // 四轨都是立体声；时钟不是双声道时摆位没有意义，直通。
         if (channels != 2) {
+            masterFrames += incoming / (2L * channels)
             passthrough(inputBuffer, incoming)
             return
         }
         // 伴奏 / 清唱 / 全部都走四轨混音：模式决定哪些轨参与（见下面 mode 的筛选）。
         state.stemMixActive = true
+
+        // 接手后台预热完成的解码器：装上、一次性追赶、时间轴对齐到此刻。
+        installHandedOffDecoders(session)
 
         val frameBytes = 2 * channels
         val total = carrySize + incoming
@@ -124,16 +204,39 @@ class StemMixProcessor(
         ensureScratch(frames * channels)
         pcm.decode(raw, frames * channels, scratch)
 
+        // 换歌 / seek 后首次（全部解码器为空）：提交后台预热，本块输出原曲直通。
+        // 注意 scratch 已经解好了本块的原曲 PCM，直接编码输出，不再碰 inputBuffer。
         if (lastKey != session.songKey || decoders.all { it == null }) {
-            openDecoders(session)
-            lastKey = session.songKey
+            if (lastKey != session.songKey) {
+                releaseDecoders()
+                lastKey = session.songKey
+                /*
+                 * ★ 换歌时上一首的 lastSeekFrames 不能继承（那是上一首的时间轴）：
+                 * 只有带 pendingSeek（换歌同时用户已 seek 到新位置）才用目标帧，
+                 * 否则从 0 起 —— 不然新歌四轨从上一首的 seek 位置开始解码，
+                 * 整首错位，听感就是「被换成了另一段音频」。
+                 */
+                masterFrames = if (StemMixState.hasPendingSeek()) {
+                    StemMixState.consumeSeek()
+                    StemMixState.lastSeekFrames()
+                } else {
+                    0L
+                }
+            }
+            requestWarm(session, StemKind.ALL.toSet())
+            masterFrames += frames
+            val out = replaceOutputBuffer(used)
+            pcm.encode(scratch, frames * channels, out)
+            out.flip()
+            state.stemMixActive = false
+            return
         }
 
+        val mode = state.activeMode()
         for (index in 0 until mix.size) mix[index] = 0f
         var audible = 0
         // 播放模式决定哪些音轨参与：全部 = 四轨；伴奏 = 鼓/贝斯/其他；清唱 = 人声。
         // 在此基础上再叠加用户对每轨的 audible 开关。
-        val mode = state.activeMode()
         for (kind in StemKind.ALL) {
             val wantedByMode = when (mode) {
                 VocalTrackMode.INSTRUMENTAL -> kind != StemKind.VOCALS
@@ -143,8 +246,18 @@ class StemMixProcessor(
             if (!wantedByMode) continue
             val stem = settings.resolve(kind)
             if (!stem.audible) continue
-            val decoder = decoders[kind.ordinal]
+            var decoder = decoders[kind.ordinal]
             if (decoder == null) continue
+            /*
+             * 时间轴对齐（P0-4）：轨被模式 / audible 过滤的期间位置冻结，
+             * 重新参与时若落后时钟超过容差，后台重开该轨（期间该轨静音），
+             * 不把「几十秒前的旧数据」混进正在播的位置。
+             */
+            if (stemFrames[kind.ordinal] + resyncToleranceFrames < masterFrames) {
+                decoders[kind.ordinal] = null
+                requestWarm(session, setOf(kind))
+                continue
+            }
             audible += 1
             val buffer = ensureStem(kind.ordinal, frames * channels)
             val got = decoder.read(buffer, frames, channels)
@@ -152,6 +265,7 @@ class StemMixProcessor(
             if (got < frames) {
                 for (index in got * channels until frames * channels) buffer[index] = 0f
             }
+            stemFrames[kind.ordinal] += frames
             stages[kind.ordinal].process(buffer, 0, frames, channels, stem)
             for (index in 0 until frames * channels) mix[index] += buffer[index]
         }
@@ -161,6 +275,8 @@ class StemMixProcessor(
             // 四轨全关：静音。用已经清空的 mix 覆盖原曲（用户要的是「全部」里也能全关）。
             for (index in 0 until frames * channels) scratch[index] = 0f
         }
+
+        masterFrames += frames
 
         val out = replaceOutputBuffer(used)
         pcm.encode(scratch, frames * channels, out)
@@ -172,6 +288,70 @@ class StemMixProcessor(
         val out = replaceOutputBuffer(incoming)
         out.put(inputBuffer)
         out.flip()
+    }
+
+    // ——— 后台预热与交接 ————————————————————————————————————————
+
+    /**
+     * 提交后台 open：把 [kinds] 的解码器在 warm 线程上创建好，再交回音频线程。
+     * baseFrames 取当前时钟；交接时一次性追赶（discard）到最新时钟。
+     */
+    private fun requestWarm(session: StemMixSession, kinds: Set<StemKind>) {
+        /*
+         * 去重：解码器还没交接回来的轨不许重复提交。没有这一道的话，seek /
+         * 换歌后「解码器全空」的每个块都会再排一轮 4 个 open —— warm 线程被
+         * 成百上千个重复 open 压垮，MediaCodec 实例限额被占满，全链越来越卡。
+         */
+        val pending = kinds.filterNot { warmPending.contains(it) }
+        if (pending.isEmpty()) return
+        warmPending.addAll(pending)
+        val generation = openGeneration.get()
+        val baseFrames = masterFrames
+        val songKey = session.songKey
+        warmWorker.execute {
+            for (kind in pending) {
+                if (openGeneration.get() != generation) return@execute
+                val file = session.stems[kind.ordinal] ?: continue
+                val decoder = StemDecoder()
+                try {
+                    decoder.open(file.absolutePath, baseFrames)
+                } catch (_: Throwable) {
+                    // 单轨打开失败（文件被清理 / ROM 不认编码）：整轨静音，别炸整条链。
+                    decoder.release()
+                    continue
+                }
+                handoffQueue.add(StemHandoff(generation, songKey, kind, decoder, baseFrames))
+            }
+        }
+    }
+
+    /** 音频线程每块开头调：接手预热完成的解码器，并追赶到现在。 */
+    private fun installHandedOffDecoders(session: StemMixSession) {
+        while (true) {
+            val handoff = handoffQueue.poll() ?: break
+            // 过期任务（换歌 / seek 已让位，generation 对不上）：直接释放，别装错时间轴的轨。
+            if (handoff.generation != openGeneration.get()) {
+                handoff.decoder.release()
+                continue
+            }
+            if (handoff.songKey != session.songKey) {
+                handoff.decoder.release()
+                continue
+            }
+            val kind = handoff.kind
+            val existing = decoders[kind.ordinal]
+            if (existing != null) {
+                // 已有同轨解码器在位：丢弃后来者（resync 与全量预热撞车）。
+                handoff.decoder.release()
+                continue
+            }
+            // 追赶：open 期间时钟又走了 behind 帧，解码快进丢掉（几毫秒，实时路径可承受）。
+            val behind = masterFrames - handoff.baseFrames
+            if (behind > 0) handoff.decoder.discard(behind)
+            decoders[kind.ordinal] = handoff.decoder
+            stemFrames[kind.ordinal] = masterFrames
+            stages[kind.ordinal].reset()
+        }
     }
 
     private fun ensureMix(samples: Int) {
@@ -190,29 +370,21 @@ class StemMixProcessor(
         return next
     }
 
-    private fun openDecoders(session: StemMixSession) {
-        releaseDecoders()
-        StemMixState.consumeSeek()
-        for (kind in StemKind.ALL) {
-            val file = session.stems[kind.ordinal]
-            if (file == null) continue
-            decoders[kind.ordinal] = StemDecoder().apply {
-                open(file.absolutePath, StemMixState.lastSeekFrames())
-            }
-        }
-    }
-
     private fun releaseDecoders() {
+        openGeneration.incrementAndGet()
+        handoffQueue.clear()
         decoders.forEach { it?.release() }
         decoders.fill(null)
         stages.forEach { it.reset() }
+        stemFrames.fill(0L)
     }
 }
 
 /**
  * 一个音轨的同步解码器：MediaExtractor + MediaCodec，按需吐 PCM。
  *
- * 线程：只在音频渲染线程调用。缓冲复用，不逐块 new。
+ * 线程：open 在 warm 预热线程完成后交给音频渲染线程独占使用（MediaCodec 的
+ * 单线程使用纪律：configure/start 之后只由一个线程驱动）。缓冲复用，不逐块 new。
  */
 private class StemDecoder {
 
@@ -240,6 +412,19 @@ private class StemDecoder {
             extractor.seekTo(seekFrames * 1_000_000L / sampleRate, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
         }
         codec?.start()
+    }
+
+    /** 预热交接后的一次性追赶：解码并丢弃 [frames] 帧（不含声道数换算）。 */
+    fun discard(frames: Long) {
+        if (frames <= 0L || codec == null) return
+        var remaining = frames
+        val sink = FloatArray(2048)
+        while (remaining > 0 && !inputDone) {
+            val chunk = minOf(remaining, 2048L).toInt()
+            val got = read(sink, chunk, channels)
+            if (got <= 0) break
+            remaining -= got
+        }
     }
 
     /** 解出 [frames] 帧交织 16bit → 浮点，写进 [out]；返回实际帧数（文件末尾会少）。 */

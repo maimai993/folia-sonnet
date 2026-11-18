@@ -80,11 +80,13 @@ class FoliaAudioSinkFactory(
          */
         val chain = ArrayList<AudioProcessor>(4)
         // 空间声场在最前：它决定「这首歌的声源是四轨摆位混音还是原曲」。
-        chain.add(StemMixProcessor(state))
-        chain.add(EqAudioProcessor(state))
-        chain.add(VocalCancelProcessor(state))
+        // 每一环都套崩溃护栏：真机上 MediaCodec / ROM 的意外不该炸成「播放出错」，
+        // 降级成当块直通，下一次 flush 状态自然恢复（见 GuardedAudioProcessor）。
+        chain.add(GuardedAudioProcessor("StemMix", StemMixProcessor(state)))
+        chain.add(GuardedAudioProcessor("Eq", EqAudioProcessor(state)))
+        chain.add(GuardedAudioProcessor("VocalCancel", VocalCancelProcessor(state)))
         if (transitionRoleProvider != null) {
-            chain.add(TransitionDspProcessor(transitionRoleProvider))
+            chain.add(GuardedAudioProcessor("Transition", TransitionDspProcessor(transitionRoleProvider)))
         }
         val processors = chain.toTypedArray()
         return DefaultAudioSink.Builder(context)

@@ -853,33 +853,6 @@ const normalizeMastering = (value: unknown): AudioConsoleMastering => {
     };
 };
 
-/** 空间声场块的归一化：老存档没有 spatial 时整块按出厂值补齐，手改过的存档逐字段夹紧。 */
-const normalizeSpatial = (value: unknown): AudioConsoleSpatial => {
-    const root = asRecord(value);
-    const stems = asRecord(root.stems);
-    const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS.spatial;
-    const readStem = (kind: AudioConsoleStemKind): AudioConsoleStemSpatial => {
-        const candidate = asRecord(stems[kind]);
-        const fallback = defaults.stems[kind];
-        return {
-            audible: readBoolean(candidate.audible, fallback.audible),
-            pan: clamp(candidate.pan, AUDIO_CONSOLE_SPATIAL_PAN_MIN, AUDIO_CONSOLE_SPATIAL_PAN_MAX, fallback.pan),
-            width: clamp(candidate.width, AUDIO_CONSOLE_SPATIAL_WIDTH_MIN, AUDIO_CONSOLE_SPATIAL_WIDTH_MAX, fallback.width),
-            levelDb: clamp(candidate.levelDb, AUDIO_CONSOLE_SPATIAL_LEVEL_MIN, AUDIO_CONSOLE_SPATIAL_LEVEL_MAX, fallback.levelDb),
-        };
-    };
-    return {
-        enabled: readBoolean(root.enabled, defaults.enabled),
-        mode: root.mode === 'custom' ? 'custom' : 'auto',
-        stems: {
-            drums: readStem('drums'),
-            bass: readStem('bass'),
-            other: readStem('other'),
-            vocals: readStem('vocals'),
-        },
-    };
-};
-
 /** 把存档里读到的（可能是旧版本、可能是手改过的）设置整理成一份完整合法的设置。 */
 export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSettings => {
     const root = asRecord(value);
@@ -894,6 +867,13 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
     const defaults = DEFAULT_AUDIO_CONSOLE_SETTINGS;
     // 老存档没有 mastering 时整块按出厂值补齐；新存档则逐字段夹紧，防止手改的数值越界。
     const mastering = normalizeMastering(root.mastering);
+    /*
+     * 「智能」工作室与「空间声场」两页已整个移除（页签与 DSP 入口都撤了）：
+     * 老存档里可能还留着开过的 spatial / studio 设置，若照常恢复，用户会面对
+     * 「没有任何界面却一直生效」的隐形处理。这里一律强制回出厂中性值，存档
+     * 里的旧字段就地作废。
+     */
+    mastering.studio = JSON.parse(JSON.stringify(DEFAULT_AUDIO_CONSOLE_SETTINGS.mastering.studio)) as typeof mastering.studio;
     // 阻尼与预延迟缺席时按预设兜底：旧存档里这两个字段还不存在，而不同预设的
     // 「应该有」的数值不一样，用统一默认值会让大教堂听起来像出厂。
     const preset = readPreset(reverb.preset);
@@ -952,7 +932,7 @@ export const normalizeAudioConsoleSettings = (value: unknown): AudioConsoleSetti
             ceilingDb: clamp(limiter.ceilingDb, AUDIO_CONSOLE_LIMITER_CEILING_MIN, AUDIO_CONSOLE_LIMITER_CEILING_MAX, defaults.limiter.ceilingDb),
             releaseMs: clamp(limiter.releaseMs, AUDIO_CONSOLE_LIMITER_RELEASE_MIN, AUDIO_CONSOLE_LIMITER_RELEASE_MAX, defaults.limiter.releaseMs),
         },
-        spatial: normalizeSpatial(root.spatial),
+        spatial: JSON.parse(JSON.stringify(DEFAULT_AUDIO_CONSOLE_SETTINGS.spatial)) as AudioConsoleSpatial,
         mastering,
     };
 };

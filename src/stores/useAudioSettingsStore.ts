@@ -20,13 +20,14 @@ import {
     type AudioEqualizerChangeOrigin,
     type AudioEqualizerModCurve,
 } from '../utils/audioEqualizerModCurve';
-import { getStoredBoolean, getStoredString, removeStoredKey, setStoredBoolean, setStoredString } from './storagePrimitives';
+import { getStoredBoolean, getStoredNumber, getStoredString, removeStoredKey, setStoredBoolean, setStoredNumber, setStoredString } from './storagePrimitives';
 import { writeNativeLoopMode } from '../services/nativeQueueBridge';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { setStatusMessage } from './useStatusMessageStore';
 import { setAudioFocusPolicy } from '../platform/foliaNative';
 import { isCapacitorAndroid } from '../platform/runtime';
 import { nativePlayer } from '../services/playbackEngine/nativePlayerPlugin';
+import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
 import i18n from '../i18n/config';
 
 export const CACHE_SIZE_KEY = 'folia_cache_size';
@@ -67,6 +68,11 @@ export const NETEASE_SCROBBLE_KEY = 'folia_netease_scrobble';
 
 /** Whether pause fades out and resume fades in (services/playbackFade). On unless switched off. */
 export const PLAYBACK_FADE_KEY = 'folia_playback_fade_enabled';
+
+/** 播放倍速（0.5 ~ 2）。 */
+export const PLAYBACK_SPEED_KEY = 'folia_playback_speed';
+/** 升降调半音数（-6 ~ +6，0 = 原调）。 */
+export const PLAYBACK_PITCH_KEY = 'folia_playback_pitch_semitones';
 
 /**
  * 播放时保持屏幕常亮。默认关：常亮是"别给我熄屏"，不是每个人在播放页都想要，
@@ -314,13 +320,17 @@ export type AudioSettingsState = {
     neteaseScrobbleEnabled: boolean;
     /** Short fade when pausing and resuming instead of cutting the sound. On by default. */
     playbackFadeEnabled: boolean;
+    /** 播放倍速（0.5 ~ 2，1 = 原速）。由 ExoPlayer 的 PlaybackParameters 执行，启动时推给原生。 */
+    playbackSpeed: number;
+    /** 升降调（半音，-6 ~ +6，0 = 原调）。只移频不改时长，由 PlaybackParameters 的 pitch 执行。 */
+    playbackPitch: number;
     /** Count down to a skip when a song is restricted or fails for an unknown reason. Off by default. */
     autoSkipUnplayable: boolean;
     /** 后台遇到无法播放的歌曲时静默跳过（Android）。默认开，见 BACKGROUND_SILENT_SKIP_KEY。 */
     backgroundSilentSkip: boolean;
     /** 播放时保持屏幕常亮（Android 的 FLAG_KEEP_SCREEN_ON）。Off by default. */
     keepScreenOnWhilePlaying: boolean;
-    /** 后台与其他音源同时播放（Android）。On by default，见 MIX_WITH_OTHER_AUDIO_KEY。 */
+    /** 后台与其他音源同时播放（Android）。On by default（PR 作者刻意翻转：默认关=播放器接管焦点，应用内/其他应用一出声音乐就被系统按焦点丢失打断，过渡还会被自己的第二台播放器暂停）。 */
     mixWithOtherAudio: boolean;
     /**
      * 关闭人声（中置相消）。Off by default，见 VOCAL_CANCEL_KEY。
@@ -372,6 +382,8 @@ export type AudioSettingsState = {
     handleToggleTranscodeFallback: (enable: boolean) => void;
     handleToggleNeteaseScrobble: (enable: boolean) => void;
     handleTogglePlaybackFade: (enable: boolean) => void;
+    handleSetPlaybackSpeed: (speed: number) => void;
+    handleSetPlaybackPitch: (semitones: number) => void;
     handleToggleAutoSkipUnplayable: (enable: boolean) => void;
     handleToggleBackgroundSilentSkip: (enable: boolean) => void;
     handleToggleKeepScreenOnWhilePlaying: (enable: boolean) => void;
@@ -476,6 +488,8 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     // Off unless asked for: it writes to the listener's music account, so it is never a default.
     neteaseScrobbleEnabled: getStoredBoolean(NETEASE_SCROBBLE_KEY, false),
     playbackFadeEnabled: getStoredBoolean(PLAYBACK_FADE_KEY, true),
+    playbackSpeed: getStoredNumber(PLAYBACK_SPEED_KEY, 1),
+    playbackPitch: getStoredNumber(PLAYBACK_PITCH_KEY, 0),
     // Off unless asked for: skipping a song the listener picked is not something to do by default.
     autoSkipUnplayable: getStoredBoolean(AUTO_SKIP_UNPLAYABLE_KEY, false),
     backgroundSilentSkip: getStoredBoolean(BACKGROUND_SILENT_SKIP_KEY, true),
@@ -563,6 +577,25 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
          * 界面上关掉它也不会有任何变化。
          */
         void writeNativeSettings({ playbackFade: enable });
+    },
+    /*
+     * 倍速与升降调都归 ExoPlayer 的 PlaybackParameters 执行：speed 管时长，pitch 只移频。
+     * speed 必须走引擎（它要把引擎侧的位置外推速率同步改掉），pitch 引擎只记值不参与外推。
+     * 原生对空播放器也只是记下 requestedSpeed / requestedPitch，下一次 prepare 一起带上 ——
+     * 所以在播放页拨了设置、还没出声前装源也不会丢。
+     */
+    handleSetPlaybackSpeed: (speed) => {
+        const clamped = Math.min(2, Math.max(0.5, speed));
+        setStoredNumber(PLAYBACK_SPEED_KEY, clamped);
+        set({ playbackSpeed: clamped });
+        nativePlaybackEngine.setSpeed(clamped);
+    },
+    handleSetPlaybackPitch: (semitones) => {
+        const clamped = Math.min(6, Math.max(-6, Math.round(semitones)));
+        setStoredNumber(PLAYBACK_PITCH_KEY, clamped);
+        set({ playbackPitch: clamped });
+        // 半音 → 频率倍率：每 +12 半音频率翻倍。
+        nativePlaybackEngine.setPitch(Math.pow(2, clamped / 12));
     },
     handleToggleAutoSkipUnplayable: (enable) => {
         setStoredBoolean(AUTO_SKIP_UNPLAYABLE_KEY, enable);
@@ -892,6 +925,8 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     handleToggleTranscodeFallback: state.handleToggleTranscodeFallback,
     handleToggleNeteaseScrobble: state.handleToggleNeteaseScrobble,
     handleTogglePlaybackFade: state.handleTogglePlaybackFade,
+    handleSetPlaybackSpeed: state.handleSetPlaybackSpeed,
+    handleSetPlaybackPitch: state.handleSetPlaybackPitch,
     handleSetAudioOutputDeviceId: state.handleSetAudioOutputDeviceId,
     handleSetAudioEqualizerSettings: state.handleSetAudioEqualizerSettings,
     handleApplyAudioSoundPreset: state.handleApplyAudioSoundPreset,

@@ -310,16 +310,20 @@ export const resolveNativeAudioUrl = async (song: SongResult): Promise<string | 
     }
 };
 
-/** 空间声场/动感效果共用的四轨缓存查询：有该音轨缓存就回 file:// 地址，否则 null。 */
+/**
+ * 空间声场/动感效果共用的四轨缓存查询：有该音轨缓存就回 file:// 地址，否则 null。
+ *
+ * 只用 songKey 查（InstrumentalStore.keyFor 优先 songKey），**不先 resolve 地址**——
+ * 查本地缓存不需要网络：离线、弱网、地址过期都照样命中；原实现先发一次
+ * resolveNativeAudioUrl，在线歌要白等一次网络解析，直链挂住时动感直接没数据。
+ */
 export const resolveNativeStemUrl = async (
     song: SongResult,
     kind: 'drums' | 'bass' | 'other' | 'vocals',
 ): Promise<string | null> => {
     if (!isNativeModelsAvailable()) return null;
-    const url = await resolveNativeAudioUrl(song);
-    if (!url) return null;
     try {
-        const result = await nativePlayer.getStemCacheUrl(url, getPlaybackSongKey(song), kind);
+        const result = await nativePlayer.getStemCacheUrl('', getPlaybackSongKey(song), kind);
         return result.url || null;
     } catch {
         return null;

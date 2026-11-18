@@ -35,10 +35,22 @@ object StemMixState {
     @Volatile private var lastSeekFrames: Long = 0L
 
     fun snapshot(): StemMixSession? {
-        val s = spatial ?: return null
         val current = song ?: return null
-        if (!s.enabled || !current.ready) return null
-        return StemMixSession(current.songKey, current.stems, s)
+        if (!current.ready) return null
+        val s = spatial
+        /*
+         * 激活条件（P0 修复）：四轨混音不只是「空间声场」的数据源，
+         * 它同时是「伴奏 / 清唱」的唯一实现路径 —— PR 删除换源方案后，
+         * 只开伴奏/清唱、不开空间声场时也必须走这里，否则听到的仍是原曲。
+         * 空间声场关着时用 NEUTRAL 摆位（恒等，不改变声像），模式过滤
+         * 交给 StemMixProcessor 的 activeMode()。
+         */
+        val settings = when {
+            s != null && s.enabled -> s
+            NativeEqualizerState.activeMode() != null -> SpatialSettings(enabled = true, mode = SpatialMode.CUSTOM)
+            else -> return null
+        }
+        return StemMixSession(current.songKey, current.stems, settings)
     }
 
     fun publishSpatial(next: SpatialSettings?) {
@@ -46,8 +58,15 @@ object StemMixState {
     }
 
     fun publishSong(next: StemSongState?) {
+        /*
+         * 换歌必须重置 seek 状态（P0 修复）：不重置的话，上一首 seek 到 2:00
+         * 之后切歌，新歌的四轨解码器会从 2:00 起播，与 ExoPlayer 时钟整首错位。
+         * 只有「同一首歌重新装源」（进度恢复）才保留位置语义——但那条路
+         * 由 requestSeek 显式写入，这里清零更安全。
+         */
+        val songChanged = next?.songKey != song?.songKey
         song = next
-        if (next == null) {
+        if (next == null || songChanged) {
             pendingSeekFrames = -1L
             lastSeekFrames = 0L
         }

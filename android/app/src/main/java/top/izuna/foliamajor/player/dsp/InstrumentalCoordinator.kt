@@ -67,8 +67,17 @@ internal object InstrumentalCoordinator {
     /**
      * 四轨生成完成后，通知插件把这首歌的四轨状态发布给音频线程（StemMixState），
      * 让「清唱 / 伴奏 / 全部」都走四轨混音。参数与生成时的 url / songKey 一致。
+     *
+     * [userInitiated] 表示「用户拨着开关在等这一趟」（switchOnDone）：
+     * 只有它为 true 时插件才允许把四轨发布给音频线程接管当前播放 ——
+     * 预拆（整队队列 / 「立即拆分」按钮）完成的歌哪怕恰好是正在放的这首，
+     * 也不该无脑把原曲换成分离再混音的版本；缓存留着，等下一次装源或
+     * 用户显式操作时自然生效。
      */
-    var onStemsReady: ((url: String?, songKey: String?) -> Unit)? = null
+    var onStemsReady: ((url: String?, songKey: String?, userInitiated: Boolean) -> Unit)? = null
+
+    /** 事件归属判断用：此刻正在为哪首歌跑（building 时的 key；其余状态为 activeKey 残留）。 */
+    fun activeKeyOrNull(): String? = activeKey
 
     /** 当前是否在后台。由插件生命周期写入；拆分在后台时慢而缓。 */
     var isAppInBackground: () -> Boolean = { false }
@@ -333,13 +342,19 @@ internal object InstrumentalCoordinator {
             // 刚写的四轨 mtime 最新，trim 不会动它们；旧的两轨派生文件自然被 LRU 清掉。
             InstrumentalStore.trim(appContext)
             notify?.invoke(state, percent)
+            /*
+             * 「用户拨着开关在等这一趟」的意图只在本行读取一次：置回 false 之前
+             * 先截下来传给回调 —— 上面那行再晚也不能让预拆结果接管正在播的歌。
+             */
+            val userRequested = switchOnDone
             switchOnDone = false
             /*
              * 四轨就绪：发布给音频线程（StemMixState）。清唱 / 伴奏 / 全部现在都走
              * 四轨混音，不换源 —— 也就不存在「拆完把上一首的派生文件换到下一首」。
              * 身份由 generation 兜底：能走到这里说明生成期间没有换过歌。
+             * 是否真的接管由插件按 userInitiated 决定（预拆完成不接管）。
              */
-            onStemsReady?.invoke(url, songKey)
+            onStemsReady?.invoke(url, songKey, userRequested)
         }
     }
 

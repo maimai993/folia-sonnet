@@ -12,6 +12,7 @@ import { useRandomVisualizerMode } from '../../../hooks/useRandomVisualizerMode'
 import { useStartupExperienceGate } from '../../../hooks/useStartupExperienceGate';
 import { useStartupUpdatePrompt } from '../../../hooks/useStartupUpdatePrompt';
 import { transitionCapabilities } from '../../../services/automix/stems';
+import { nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
 import { initializeSyncCoordinator } from '../../../services/sync/syncCoordinator';
 import { currentTime } from '../../../stores/motionSignals';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
@@ -240,6 +241,13 @@ export const useAppFoundation = () => {
              * 原生 SharedPreferences 里残留的 false 会压过默认值 —— 这里用 Web 当前值盖掉它。
              */
             void setAudioFocusPolicy(useAudioSettingsStore.getState().mixWithOtherAudio);
+            /*
+             * 倍速 / 变调同理走独立方法，且必须赶在第一次 prepare 之前：prepare 的
+             * PlaybackParameters 用的是原生自己记的 requestedSpeed / requestedPitch。
+             * 原生插件没起好时调用会失败，靠下面的重试循环兜底（最多 20 次 × 500ms）。
+             */
+            nativePlaybackEngine.setSpeed(useAudioSettingsStore.getState().playbackSpeed);
+            nativePlaybackEngine.setPitch(Math.pow(2, useAudioSettingsStore.getState().playbackPitch / 12));
             if (merged || cancelled || attempts >= 20) return;
             attempts += 1;
             setTimeout(() => {

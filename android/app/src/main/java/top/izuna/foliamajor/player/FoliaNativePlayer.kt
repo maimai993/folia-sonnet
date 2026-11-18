@@ -231,6 +231,14 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     /** 别的线程要读（写锚点时判断要不要跳过），所以 volatile。 */
     @Volatile
     private var requestedSpeed = 1f
+    /**
+     * 变调（不改变播放速度）。1 = 原调；0.5 ~ 2 对应 ±12 个半音，界面上只放 ±6。
+     * media3 会把它与速度一起交给 AudioTrack.setPlaybackParams（AudioTrack 原生支持
+     * pitch）或 Sonic，走哪条路都能生效（1.11.1 字节码核实过：两条路径都带 pitch）。
+     * 每次 prepare / 交接都随 PlaybackParameters 一起带上，见各 setPlaybackParameters 处。
+     */
+    @Volatile
+    private var requestedPitch = 1f
     private var requestedRepeatMode = Player.REPEAT_MODE_OFF
 
     // 读的位置/时长走缓存：读可能发生在插件线程上，直接问播放器会跨线程。
@@ -378,7 +386,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             current.setMediaItem(mediaItemFor(url, mediaId))
             current.setRepeatMode(requestedRepeatMode)
             current.setVolume(requestedVolume)
-            current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            current.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
             current.prepare()
             if (startPositionMs > 0) {
                 current.seekTo(startPositionMs)
@@ -430,7 +438,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             current.setMediaItem(mediaItemFor(url, lastMediaId))
             current.setRepeatMode(requestedRepeatMode)
             current.setVolume(requestedVolume)
-            current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            current.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
             current.prepare()
             if (position > 0) current.seekTo(position)
             if (playing) current.setPlayWhenReady(true)
@@ -730,7 +738,17 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         requestedSpeed = clamped
         runOnPlayer {
             val current = player
-            if (current != null) current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            if (current != null) current.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
+        }
+    }
+
+    /** 变调（升降 key），不改速度。对已在播的播放器直接生效，下一次 prepare 也带上。 */
+    fun setPitch(pitch: Float) {
+        val clamped = Math.max(0.5f, Math.min(2f, pitch))
+        requestedPitch = clamped
+        runOnPlayer {
+            val current = player
+            if (current != null) current.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
         }
     }
 
@@ -870,6 +888,11 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         return requestedSpeed
     }
 
+    /** 当前变调倍率（1 = 原调），与快照一并交付，给恢复会话用。 */
+    fun getPitch(): Float {
+        return requestedPitch
+    }
+
     /**
      * 所有碰到播放器的动作都回到**播放器那条线程**。
      *
@@ -948,6 +971,16 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
              */
             old?.removeListener(playerListener)
             /*
+             * ⭐ 焦点保护：淡出期间旧那台不再响应焦点。
+             *
+             * 独占模式（「与其他音源同时播放」关）下新那台起播会请求 AUDIOFOCUS_GAIN，
+             * 系统随即把 LOSS 发给旧那台 —— 它还开着焦点接管的话，ExoPlayer 的焦点
+             * 管理器当场把它 pause：交叉淡出变成静音急停，过渡被自己的第二台播放器
+             * 打断。先把旧那台的焦点接管摘掉（true→false 会顺手 abandon 它占的焦点），
+             * 新那台按自己的策略正常接管；旧的播完就 release，无需恢复。
+             */
+            old?.setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, false)
+            /*
              * ⭐ 新那台必须挂上监听。
              *
              * [buildExtraPlayer] 是「不报名事件」的（它建的时候还不是主角），但交叉一结束
@@ -962,7 +995,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             applySourceHeaders(url)
             incoming.setMediaItem(mediaItemFor(url, mediaId))
             incoming.setRepeatMode(requestedRepeatMode)
-            incoming.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            incoming.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
             incoming.setVolume(0f)
             incoming.prepare()
             incoming.setPlayWhenReady(true)
@@ -1060,6 +1093,9 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             // 交叉一开始就摘掉旧那台的监听：它之后播到尾巴上的 STATE_ENDED 不该被当成
             // 「本曲结束」，否则一次换歌会跳两首（crossfadeTo 里已写过同一条理由）。
             old.removeListener(playerListener)
+            // ⭐ 焦点保护：与 crossfadeTo 同一条 —— 淡出期间旧那台不响应焦点，
+            // 别被新那台的焦点请求按 LOSS 暂停在淡出的半路上。
+            old.setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, false)
             val incoming = buildExtraPlayer()
             // 新那台必须挂监听：它马上就是 player，不挂就彻底失去 ended / ready / buffering。
             incoming.addListener(playerListener)
@@ -1078,7 +1114,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             applySourceHeaders(url)
             incoming.setMediaItem(mediaItemFor(url, mediaId))
             incoming.setRepeatMode(requestedRepeatMode)
-            incoming.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            incoming.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
             incoming.setVolume(0f)
             incoming.prepare()
             incoming.setPlayWhenReady(true)
@@ -1094,7 +1130,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             player?.setVolume((requestedVolume * inGain).coerceIn(0f, 1f))
             val outgoing = transitionOutgoing
             outgoing?.setVolume((requestedVolume * outGain).coerceIn(0f, 1f))
-            outgoing?.setPlaybackParameters(PlaybackParameters(tempoOut.coerceIn(0.25f, 2f)))
+            outgoing?.setPlaybackParameters(PlaybackParameters(tempoOut.coerceIn(0.25f, 2f), requestedPitch))
         }
     }
 
@@ -1107,7 +1143,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             outgoing?.release()
             if (outgoing != null) AudioPipelineTelemetry.notePlayerReleased()
             player?.setVolume(requestedVolume)
-            player?.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+            player?.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
             // 新播放器成为主：把它手上那份 role 引用接过来，下一次过渡继续复用。
             activeRole = handoverRole
             handoverRole = AtomicReference(DeckRole.INACTIVE)
@@ -1126,7 +1162,13 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
                 player = outgoing
                 outgoing.addListener(playerListener)
                 outgoing.setVolume(requestedVolume)
-                outgoing.setPlaybackParameters(PlaybackParameters(requestedSpeed))
+                outgoing.setPlaybackParameters(PlaybackParameters(requestedSpeed, requestedPitch))
+                // 焦点接管按策略恢复：交接开始时它的焦点接管被摘掉过（见 transitionBegin），
+                // 撤销后它重新成为主播放器，独占模式下得继续响应别的应用的焦点请求。
+                outgoing.setAudioAttributes(
+                    PLAYBACK_AUDIO_ATTRIBUTES,
+                    !top.izuna.foliamajor.audio.FoliaAudioFocus.mixWithOthers(context),
+                )
             }
             incoming?.removeListener(playerListener)
             incoming?.stop()

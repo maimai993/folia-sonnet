@@ -54,6 +54,25 @@ export const getStoredString = (key: string, fallback: string) => {
     return storage.getItem(key) || fallback;
 };
 
+export const setStoredNumber = (key: string, value: number) => {
+    storageOrNull()?.setItem(key, String(value));
+};
+
+/** 解析失败（旧版本写坏过 / 手改）时按 fallback 走，不让 NaN 流进 store。 */
+export const getStoredNumber = (key: string, fallback: number) => {
+    const storage = storageOrNull();
+    if (!storage) {
+        return fallback;
+    }
+
+    const saved = storage.getItem(key);
+    if (saved === null) {
+        return fallback;
+    }
+    const parsed = Number(saved);
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export const removeStoredKey = (key: string) => {
     storageOrNull()?.removeItem(key);
 };
