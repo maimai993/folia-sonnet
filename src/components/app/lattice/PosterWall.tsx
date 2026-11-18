@@ -28,7 +28,7 @@ import { getPlaybackSongKey } from '../../../utils/appPlaybackGuards';
 import { useDevicePixelRatio } from '../../../hooks/useMediaQuery';
 import { useReducedMotionFor } from '../../../hooks/useReducedMotionFor';
 import { EXPANSION_SPAN } from '../../wall/blockTemplates';
-import { useLatticeSettingsStore } from '../../../stores/useLatticeSettingsStore';
+import { useLatticeSettingsStore, WALL_ZOOM_MAX, WALL_ZOOM_MIN } from '../../../stores/useLatticeSettingsStore';
 import { resolveWallHandoffRole, useWallHandoffStore } from '../../../stores/useWallHandoffStore';
 import { useLatticeWallHandoff } from './useLatticeWallHandoff';
 import { wallIsLeftForPage } from './wallLayer';
@@ -130,6 +130,12 @@ export default function PosterWall({
     // 从资料库墙翻牌交接进来（或淡入交叉）：入场由交接代替，不跑抬起落下的波次。
     const entranceSuppressed = useWallHandoffStore(state => resolveWallHandoffRole(state.session, 'lattice') === 'in');
     const autoFocusOnSongChange = useLatticeSettingsStore(state => state.autoFocusOnSongChange);
+    /*
+     * 墙面缩放（#409）。基准档位是 getScale(视口宽度)，用户双指捏合 / Ctrl+滚轮在它上下改倍率；
+     * 倍率存在 store 的 wallZoom 里（跨会话保留），手势停下才写回 —— 缩放途中每帧都写会让整面墙重渲染。
+     */
+    const wallZoom = useLatticeSettingsStore(state => state.wallZoom);
+    const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
     const devicePixelRatio = useDevicePixelRatio();
     const pixelScale = cameraScale * devicePixelRatio;
 
@@ -171,7 +177,8 @@ export default function PosterWall({
         if (!container) return;
         const observer = new ResizeObserver(([entry]) => {
             viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
-            const scale = getScale(entry.contentRect.width);
+            // 基准档位 × 用户倍率（#409）：换设备 / 转屏时基准跟着宽度变，倍率是相对的。
+            const scale = getScale(entry.contentRect.width) * wallZoom;
             applyCamera({ ...cameraRef.current, scale }, true);
             setCameraScale(previous => previous === scale ? previous : scale);
             setMeasured(true);
@@ -283,6 +290,16 @@ export default function PosterWall({
         cameraRef,
         getWorldBounds,
         viewportRef,
+        /*
+         * 缩放宿主（#409）：双指捏合与 Ctrl+滚轮都走这一份。倍率的上下限是基准档位的倍数，
+         * 所以窄屏 / 宽屏上「能缩到多小 / 多大」是同一套相对量。
+         */
+        zoom: {
+            baseScale: () => getScale(viewportRef.current?.width ?? window.innerWidth),
+            minFactor: WALL_ZOOM_MIN,
+            maxFactor: WALL_ZOOM_MAX,
+            onZoomEnd: factor => setWallZoom(factor),
+        },
     });
 
     // Only the block holding the open card is re-geared; every other poster keeps its base rect.

@@ -96,7 +96,13 @@ const dualTheme = (name: string): DualTheme => ({
     dark: { name: `${name}-dark`, backgroundColor: '#000000', primaryColor: '#eeeeee' },
 } as unknown as DualTheme);
 
-beforeEach(() => {
+beforeEach(async () => {
+    /*
+     * 「禁用 AI 推理」总闸默认打开（#401）。这里验的是缓存与生成的先后关系，
+     * 不是闸门本身，所以先把推理打开。
+     */
+    const { useAiInferenceSettingsStore } = await import('@/stores/useAiInferenceSettingsStore');
+    useAiInferenceSettingsStore.getState().setAiInferenceDisabled(false);
     state.payload = null;
     state.pushed.length = 0;
     /*
@@ -158,7 +164,7 @@ describe('没有配置密钥时', () => {
             combine: (previous, fresh) => combineStageParts(previous, fresh, []),
         });
 
-        expect(result.source).toBe('ai');
+        expect(result!.source).toBe('ai');
         expect(state.pushed).toHaveLength(1);
         /* 新生成的主题用新的，动画决策保留云端那份 —— 两条都在。 */
         const uploaded = state.pushed[0] as { theme?: { light?: { name?: string } }; decision?: { mode?: string } };

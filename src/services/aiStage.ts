@@ -32,6 +32,7 @@ import {
 } from './lyricDirector/prompt';
 import { readDirectorSettings, readRecentModes } from './lyricDirector/state';
 import { isFoliaCloudCacheEnabled } from './foliaCloud';
+import { AI_MEMORY_GUARDED, isOnlineInferenceAllowed } from './aiMemoryGate';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { md5 } from '../utils/md5';
 import { readBackgroundTheme } from './backgroundThemeBridge';
@@ -424,7 +425,7 @@ export const generateStage = async (ctx: StageContext): Promise<StageParts> => {
  * 答案被标成 cloud，界面就会对刚生成完的用户说「已从云端拉取缓存」—— 而那一句本来
  * 是留给「这会儿没调模型、用的是别人推的那份」的。
  */
-const inFlight = new Map<string, Promise<StageResult>>();
+const inFlight = new Map<string, Promise<StageResult | null>>();
 const recent = new Map<string, { parts: StageParts; at: number; source: AiCloudCacheSource }>();
 
 const readRecent = (
@@ -478,7 +479,7 @@ export const notifyStageResolved = (source: AiCloudCacheSource): void => {
 };
 
 /** 先问云端，没有（或不全）再生成，生成完回传。一次往返，一条缓存。 */
-const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
+const resolveStage = async (ctx: StageContext): Promise<StageResult | null> => {
     if (!ctx.skipPull) {
         const native = await readBackgroundTheme(ctx.songTitle, ctx.lyricSource);
         const parts = native ? normalizeStagePayload(native.payload, ctx.blockedModes) : null;
@@ -496,7 +497,7 @@ const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
             console.log('[BackgroundTheme] 原生结果缺本次需要的那一半，回落云缓存', { songTitle: ctx.songTitle, requirement: ctx.requirement });
         }
     }
-    const { value, source } = await withAiCloudCache({
+    const cached = await withAiCloudCache({
         kind: STAGE_CACHE_KIND,
         fingerprint: ctx.fingerprint,
         generate: () => (ctx.generate ?? generateStage)(ctx),
@@ -524,8 +525,15 @@ const resolveStage = async (ctx: StageContext): Promise<StageResult> => {
          */
         lyricText: ctx.lyricSource,
         isPureMusic: ctx.isPureMusic,
+        /*
+         * 允许不允许**生成**（#401）。缓存命中在 withAiCloudCache 里先 return，
+         * 所以禁用推理时依然能用别人算好的结果；只有没命中才走到这里被拦下。
+         */
+        canGenerate: isOnlineInferenceAllowed,
     });
-    return { ...value, source };
+    // 没命中、又不许生成：这一轮没有答案（调用方按「暂时没有」处理，不当作失败）。
+    if (!cached) return null;
+    return { ...cached.value, source: cached.source };
 };
 
 /**
@@ -609,6 +617,14 @@ export const requestStage = async (request: StageRequest): Promise<StageResult> 
     inFlight.set(ctx.fingerprint, promise);
     try {
         const result = await promise;
+        /*
+         * 没命中缓存、又不许生成（推理被禁用 / 内存压力，#401）：这一轮拿不到答案。
+         *
+         * 这里抛的是一个**明确的受控错误**而不是 null：null 会一路穿过 gemini.ts 等调用方
+         * 的类型，改动面远大于收益；而 "ai-memory-guarded:" 前缀已经有一套现成的识别口径
+         * （见 aiCompletion），调用方按「这台机器现在不算」处理，不会当成网络失败重试。
+         */
+        if (!result) throw new Error(AI_MEMORY_GUARDED + 'no-cache-hit');
         /* 记下的是「这一首歌刚问出的答案」：主题与导演先后到，后到的那次不必再问一遍。 */
         rememberRecent(ctx.fingerprint, {
             ...(result.theme ? { theme: result.theme } : {}),

@@ -62,7 +62,13 @@ vi.mock('@/services/aiNativeFetch', () => ({
  */
 const TIMEOUT_MS = 20000;
 
-beforeEach(() => {
+beforeEach(async () => {
+    /*
+     * 「禁用 AI 推理」总闸默认打开（#401）。这里验的是缓存与生成的先后关系，
+     * 不是闸门本身，所以先把推理打开。
+     */
+    const { useAiInferenceSettingsStore } = await import('@/stores/useAiInferenceSettingsStore');
+    useAiInferenceSettingsStore.getState().setAiInferenceDisabled(false);
   state.requested.length = 0;
   state.hit = true;
   /*
