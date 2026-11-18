@@ -8,6 +8,7 @@ import type { AppPlaybackBridges } from './useAppPlaybackBridges';
 import { useElectronWindowChrome } from '../../../hooks/useElectronWindowChrome';
 import { useHdrExitConfirm, useHdrProjectionActive } from '../../../hooks/useHdrProjection';
 import { useIdleCursorHide } from '../../../hooks/useIdleCursorHide';
+import { isWallpaperSurface } from '../../../utils/appSurface';
 import { usePersonalFmModeController } from '../../../hooks/usePersonalFmModeController';
 import { usePlayerSwipeGesture } from '../../../hooks/usePlayerSwipeGesture';
 import { hasFreeCamera } from '../../visualizer/backgrounds/freeCameraModes';
@@ -68,7 +69,14 @@ export const useAppChromeAndGestures = (model: Input) => {
         hint: t('ui.hdrProjectionExitHint', '再点一次退出'),
     });
 
-    const isPlayerSwipeEnabled = currentView === 'player' && !isPanelOpen;
+    /*
+     * 壁纸模式下不接横滑切歌（#424）。
+     *
+     * 壁纸层在桌面上，用户的横向拖动是在翻桌面 / 划页，不是在切歌。把它当成切歌会一边划桌面
+     * 一边换歌，是这一层最不能接受的行为。单击 / 双击暂停 / 隐藏那几条同理，见下面各自的判据。
+     */
+    const isWallpaperSurfaceMode = isWallpaperSurface;
+    const isPlayerSwipeEnabled = currentView === 'player' && !isPanelOpen && !isWallpaperSurfaceMode;
     /*
      * 3D 舞台背景（粒子 / 星河 / 安魂 / 音域回响）自己吃横向拖动 —— 拖动在那里是「转视角」。
      *
@@ -117,7 +125,8 @@ export const useAppChromeAndGestures = (model: Input) => {
             handleContainerClick();
             return;
         }
-        if (hidePlayerChromeOnTap && currentView === 'player' && playerChromeVisibilityMode !== 'auto-hide') {
+        // 壁纸模式下不接「点一下收起控件」：桌面上的点按是用户在自己桌面上操作，不该改变壁纸画面（#424）。
+        if (hidePlayerChromeOnTap && !isWallpaperSurfaceMode && currentView === 'player' && playerChromeVisibilityMode !== 'auto-hide') {
             /*
              * HDR 下「点空白退出」退的是**投影本身**（横屏 / 镜像 / 亮度一起还原），
              * 不是把收起来的界面再翻出来 —— 界面本来就是整屏收着的，翻出来翻回去看着
@@ -127,7 +136,7 @@ export const useAppChromeAndGestures = (model: Input) => {
                 ? disableHdrProjection
                 : () => setIsPlayerChromeHidden(prev => !prev));
         }
-    }, [confirmHdrExit, currentView, handleContainerClick, hidePlayerChromeOnTap, hdrProjectionActive, isPanelOpen, playerChromeVisibilityMode, setIsPlayerChromeHidden]);
+    }, [confirmHdrExit, currentView, handleContainerClick, hidePlayerChromeOnTap, hdrProjectionActive, isPanelOpen, isWallpaperSurfaceMode, playerChromeVisibilityMode, setIsPlayerChromeHidden]);
 
     /*
      * 双击歌词页的空白：暂停 / 继续。
