@@ -1779,7 +1779,7 @@ class FoliaPlaybackService : android.app.Service() {
         if (songChanged) {
             top.izuna.foliamajor.ai.BackgroundThemeWorker.updateActiveSong(songKey)
             cachedSongKey = songKey
-            resetArtworkStateForSongChange()
+            resetArtworkStateForSongChange(songKey)
             cachedDurationMs = 0L
             cachedLiked = false
             cachedCanLike = false
@@ -1875,7 +1875,9 @@ class FoliaPlaybackService : android.app.Service() {
             top.izuna.foliamajor.wallpaper.WallpaperLyricsState.setCoverUrl(artworkUrl)
         }
         if (!ArtworkRetryPolicy.isLocalOnlyUrl(artworkUrl)) {
-            requestArtwork(artworkUrl, songKey)
+            // 只在真的换歌时才起请求（#383）：这首歌已经拿到过封面（含磁盘缓存命中）就什么都不做，
+            // 不然镜像每重装一次、每推一次 metadata 就会在同一条签名 URL 上再查一次盘 / 下一次。
+            if (songChanged) requestArtwork(artworkUrl, songKey)
         } else if (songChanged) {
             loadCachedArtworkForSong(songKey)
         }
@@ -2074,7 +2076,7 @@ class FoliaPlaybackService : android.app.Service() {
         val songChanged = songKey != null && songKey != cachedSongKey
         if (songChanged) {
             cachedSongKey = songKey
-            resetArtworkStateForSongChange()
+            resetArtworkStateForSongChange(songKey)
             // 时长也一起清掉：metadata 现在是从缓存整体重建的（见 applyMetadata），
             // 不清的话「新歌还没带时长」会被填成上一首的时长。
             cachedDurationMs = 0L
@@ -2135,7 +2137,8 @@ class FoliaPlaybackService : android.app.Service() {
         val artwork = decodeArtwork(artworkBase64)
         if (artwork != null) {
             cachedArtwork = artwork
-            artworkTracker.onExternalArtworkLoaded()
+            // 带上 songKey：这首歌有封面了，之后同一条 update 再来就不该再起请求。
+            artworkTracker.onExternalArtworkLoaded(cachedSongKey)
             if (ArtworkRetryPolicy.isLocalOnlyUrl(artworkUrl)) {
                 cacheBitmapForSongAsync(cachedSongKey, artwork)
             }
@@ -2148,7 +2151,13 @@ class FoliaPlaybackService : android.app.Service() {
         // blob: / data: 在这里就挡掉：它们只存在于 WebView 进程里，写进请求状态
         // 会把去重标记占住，后面真正的 https 地址反而进不来（见 requestArtwork）。
         if (!ArtworkRetryPolicy.isLocalOnlyUrl(artworkUrl)) {
-            requestArtwork(artworkUrl, cachedSongKey)
+            // 已经拿到过封面（下载成功 / 磁盘命中 / 这次自带 base64）就什么都不做（#383）：
+            // 同一条 update 会随歌词、播放状态反复到达，签名 URL 还会整首周期性换一个，
+            // 每次都查盘 + HEAD + 写两份 + 两次全目录 trim 是白耗。真的起了一次请求、
+            // 还没拿到时，才顺手把磁盘里的旧封面先贴上。
+            if (requestArtwork(artworkUrl, cachedSongKey)) {
+                loadCachedArtworkForSong(cachedSongKey)
+            }
         } else if (artwork == null && songChanged) {
             loadCachedArtworkForSong(cachedSongKey)
         }
@@ -2185,10 +2194,22 @@ class FoliaPlaybackService : android.app.Service() {
         }
     }
 
-    private fun resetArtworkStateForSongChange() {
+    /**
+     * 换歌时重置封面状态（#383）。
+     *
+     * 同 songKey 再进来是同一首的又一次 update（重推 / 签名 URL 轮换 / 歌词到了重推），
+     * 什么都不重置：`cachedArtwork` 留着，tracker 也按「这一首已经有封面」继续拦去重。
+     *
+     * 只守着「这一首已经有封面」这一档，没封面时照样走一遍（tracker 对同歌也是空转）。
+     * `cachedArtwork != null` 这个附加条件是为了兜住「Bitmap 在、tracker 记的身份空着」的
+     * 老状态（服务重建后 Web 层先推 metadata 再报换歌）：那时 tracker 会重新认一次当前歌，
+     * 不把已经贴上的封面清掉。
+     */
+    private fun resetArtworkStateForSongChange(songKey: String?) {
+        if (songKey != null && songKey == cachedSongKey && cachedArtwork != null) return
         cancelArtworkRetry()
         cachedArtwork = null
-        artworkTracker.onSongChanged()
+        artworkTracker.onSongChanged(songKey)
     }
 
     private fun cancelArtworkRetry() {
@@ -2265,10 +2286,17 @@ class FoliaPlaybackService : android.app.Service() {
         executeArtworkFetch(request, cachedSongKey)
     }
 
-    private fun requestArtwork(url: String?, songKey: String?) {
-        val request = artworkTracker.beginRequest(url) ?: return
+    /**
+     * 请求封面：去重按 songKey 记（#383），同歌同 URL / 同歌换 URL 都不再重下一遍。
+     *
+     * @return true = 真的起了一次请求（调用方据此决定要不要去查磁盘缓存）；
+     *         false = 这一首已经有封面或已有请求在途，什么都不做。
+     */
+    private fun requestArtwork(url: String?, songKey: String?): Boolean {
+        val request = artworkTracker.beginRequest(url, songKey) ?: return false
         cancelArtworkRetry()
         executeArtworkFetch(request, songKey)
+        return true
     }
 
     private fun loadCachedArtworkForSong(songKey: String?) {
@@ -2285,7 +2313,7 @@ class FoliaPlaybackService : android.app.Service() {
                 if (!running || generation != artworkTracker.currentGeneration() || cachedArtwork != null) {
                     return@post
                 }
-                artworkTracker.onExternalArtworkLoaded()
+                artworkTracker.onExternalArtworkLoaded(songKey)
                 applyLoadedArtwork(decoded.bitmap)
             }
         }
@@ -2337,14 +2365,16 @@ class FoliaPlaybackService : android.app.Service() {
                 is ArtworkDownload.Bytes -> {
                     when (val decoded = ArtworkDecoder.decodeSampled(download.bytes)) {
                         is ArtworkLoad.Loaded -> {
-                            val bytesToCache = if (download.bytes.size <= ArtworkDiskCache.MAX_RAW_CACHE_BYTES) {
-                                download.bytes
-                            } else {
-                                encodeBitmapForCache(decoded.bitmap)
+                            // 两套键存的字节不一样（#383）：`url:` 是这一次网络尝试的原始字节，
+                            // 源图不超过阈值时原样存；`song:` 只服务通知栏尺寸，一律按 512px 解码结果
+                            // 重编码，命中它的人拿到的就是通知栏那张图（见 ArtworkDiskCache.songKey）。
+                            val rawBytes = if (ArtworkDiskCache.keepsRawBytes(download.bytes.size)) download.bytes else null
+                            val sampledBytes = if (rawBytes != null) rawBytes else encodeBitmapForCache(decoded.bitmap)
+                            urlCacheKey?.let { key ->
+                                if (rawBytes != null) artworkDiskCache.put(key, rawBytes)
                             }
-                            if (bytesToCache != null) {
-                                urlCacheKey?.let { artworkDiskCache.put(it, bytesToCache) }
-                                ArtworkDiskCache.songKey(targetSongKey)?.let { artworkDiskCache.put(it, bytesToCache) }
+                            if (sampledBytes != null) {
+                                ArtworkDiskCache.songKey(targetSongKey)?.let { artworkDiskCache.put(it, sampledBytes) }
                             }
                             deliverLoadedArtwork(request, decoded.bitmap)
                         }
@@ -2364,6 +2394,12 @@ class FoliaPlaybackService : android.app.Service() {
 
     private fun handleTransientArtworkFailure(request: ArtworkFetchTracker.FetchRequest, targetSongKey: String) {
         if (tryDeliverFromDiskCache(ArtworkDiskCache.songKey(targetSongKey), request)) {
+            // 磁盘命中要真的走「成功」这条路（#383）：否则 tracker 里那条请求一直算在途，
+            // 这一首再也起不了新请求，回前台 / 网络恢复的补拉也全被挡住。
+            mainHandler.post {
+                if (!running || !artworkTracker.onFetchSucceeded(request)) return@post
+                cancelArtworkRetry()
+            }
             return
         }
         mainHandler.post {
@@ -2489,12 +2525,15 @@ class FoliaPlaybackService : android.app.Service() {
                     cachedArtist = entry.artist; cachedAlbum = entry.album
                     cachedProviderId = entry.providerId; cachedServerSongId = entry.songId
                     cachedLiked = false; cachedCanLike = false
-                    resetArtworkStateForSongChange()
+                    resetArtworkStateForSongChange(entry.songKey)
                     mirroredIndex = playQueue.all().indexOf(entry); playQueue.seekTo(mirroredIndex)
                     // 镜像里的封面地址同样可能还是页面内的 blob（见 requestArtwork）：
                     // 别让它占住去重标记，也别为它起一次注定失败的下载。
                     if (!ArtworkRetryPolicy.isLocalOnlyUrl(entry.coverUrl)) {
-                        requestArtwork(entry.coverUrl, entry.songKey)
+                        // 换成这一首的那一拍才请求；这一首已经有封面（含磁盘命中）就不再重下（#383）。
+                        if (requestArtwork(entry.coverUrl, entry.songKey)) {
+                            loadCachedArtworkForSong(entry.songKey)
+                        }
                     } else {
                         loadCachedArtworkForSong(entry.songKey)
                     }

@@ -3,6 +3,7 @@ package top.izuna.foliamajor
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -94,7 +95,7 @@ class ArtworkDiskCacheTest {
             writing.countDown()
             check(finishWrite.await(10, TimeUnit.SECONDS))
             1000L
-        })
+        }, onError = { _, _ -> })
         try {
             val put = pool.submit { cache.put("same", byteArrayOf(7, 8)) }
             assertTrue(writing.await(10, TimeUnit.SECONDS))
@@ -144,7 +145,9 @@ class ArtworkDiskCacheTest {
 
         assertNull(ArtworkDiskCache.songKey(null))
         assertNull(ArtworkDiskCache.songKey(""))
-        assertEquals("song:netease:1", ArtworkDiskCache.songKey("netease:1"))
+        assertNotEquals(ArtworkDiskCache.songKey("netease:1"), "song:netease:1")
+        assertTrue(ArtworkDiskCache.songKey("netease:1")!!.startsWith("song:"))
+        assertTrue(ArtworkDiskCache.songKey("netease:1")!!.endsWith(":netease:1"))
 
         cache.put(null, byteArrayOf(1))
         cache.put("  ", byteArrayOf(1))
@@ -161,7 +164,7 @@ class ArtworkDiskCacheTest {
             cacheDir = tempFolder.newFolder("art"),
             maxEntries = 2,
             maxTotalBytes = 1024L * 1024L,
-            clockMs = { now.get() },
+            onError = { _, _ -> },
         )
 
         cache.put("k1", byteArrayOf(1))
@@ -182,6 +185,39 @@ class ArtworkDiskCacheTest {
     }
 
     @Test
+    fun `注入的钟改了写盘时间戳后 仍按真实写入顺序淘汰`() {
+        val dir = tempFolder.newFolder("art")
+        // 服务注入的是 elapsedRealtime（开机以来毫秒，远小于墙钟），重启后会从很小的值重新开始。
+        // 读写共用这样一个「钟」，淘汰的先后必须仍然是真实的写入 / 访问先后。
+        val elapsed = AtomicLong(3_000L)
+        val cache = ArtworkDiskCache(
+            cacheDir = dir,
+            maxEntries = 2,
+            maxTotalBytes = 1024L * 1024L,
+            clockMs = { elapsed.get() },
+            onError = { _, _ -> },
+        )
+
+        cache.put("k1", byteArrayOf(1))
+        elapsed.addAndGet(1_000L)
+        cache.put("k2", byteArrayOf(2))
+        assertEquals(2, cache.entryCount())
+
+        // 模拟「换了另一个钟」：重启后 elapsedRealtime 从零开始，接下来的时间戳比盘上的都小。
+        // 再访问一次 k1 —— 它必须成为最近使用的，而不是被这个更小的钟推到最旧。
+        elapsed.set(5L)
+        assertArrayEquals(byteArrayOf(1), cache.get("k1"))
+        elapsed.set(501L)
+        cache.put("k3", byteArrayOf(3))
+
+        // k1 是最近一次真实访问的，不能被淘汰；最旧的是 k2
+        assertEquals(2, cache.entryCount())
+        assertArrayEquals(byteArrayOf(1), cache.get("k1"))
+        assertNull(cache.get("k2"))
+        assertArrayEquals(byteArrayOf(3), cache.get("k3"))
+    }
+
+    @Test
     fun `超过总字节上限时淘汰旧项 且超大单项不会清空缓存`() {
         val now = AtomicLong(10_000L)
         val cache = ArtworkDiskCache(
@@ -189,6 +225,7 @@ class ArtworkDiskCacheTest {
             maxEntries = 10,
             maxTotalBytes = 10L,
             clockMs = { now.get() },
+            onError = { _, _ -> },
         )
 
         cache.put("k1", ByteArray(6) { 1 })
