@@ -8,6 +8,15 @@ import { setSystemBarsAlwaysHidden } from '../platform/foliaNative';
  */
 export const ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY = 'folia_android_phone_fit_orientation';
 
+/*
+ * 废弃开关留下的那把键。
+ *
+ * 开关本身已经删了，但这把键是**发布过的**存储键（D507：已发布的键不改名、不删），所以它
+ * 还留在 dev/dedicatus/storageKeys.mjs 的登记表里。启动时顺手把它清掉：老用户机器上那份
+ * `true/false` 再没有任何代码会读，留着只是让「手机适配」看起来还在。
+ */
+export const LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
+
 export type AndroidPhoneFitOrientation = 'portrait' | 'landscape';
 
 export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => {
@@ -45,6 +54,14 @@ export const applyPhoneOrientation = (
 
 /** 启动时在首帧之前把方向落上去（「强制横屏」从上次的选择恢复）。 */
 export const installPhoneOrientationPreference = (): void => {
+    // 废弃开关留下的那份值顺手清掉（键名仍登记在 storageKeys.mjs，见上面的注释）。
+    if (typeof window !== 'undefined') {
+        try {
+            localStorage.removeItem(LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY);
+        } catch {
+            // 存储不可用就算了：那里本来也没有可清的东西。
+        }
+    }
     applyPhoneOrientation(readStoredAndroidPhoneFitOrientation());
 };
 
