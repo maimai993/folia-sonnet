@@ -37,9 +37,29 @@ export interface AiCompletionTarget {
     model: string;
 }
 
+/**
+ * 一张要交给模型的图。
+ *
+ * 只支持 base64 data URL（data:image/jpeg;base64,...）—— 三家供应商都接受内联图片，
+ * 而外部 URL 会被部分兼容端点拒绝（它们不替我们下载）。调用方自己压好再传，别把原图塞进来。
+ */
+export interface AiImageInput {
+    /** data:image/<fmt>;base64,<data> */
+    dataUrl: string;
+    /** 这张图是干什么的（「封面」「第 30 秒的画面」），写进提示词让模型知道该看什么。 */
+    label: string;
+}
+
 export interface AiCompletionRequest {
     system: string;
     prompt: string;
+    /**
+     * 随提问一起交出去的图（多模态）。
+     *
+     * 没给就是纯文本，行为与以前完全一致。给了之后：OpenAI 兼容走 image_url，
+     * Anthropic 走 image block，Gemini 走 inlineData。
+     */
+    images?: readonly AiImageInput[];
     /** Best effort: the provider may cap it lower. */
     maxTokens?: number;
     temperature?: number;
@@ -180,7 +200,7 @@ const runOpenAi = async (request: AiCompletionRequest, send: typeof fetch): Prom
             model,
             messages: [
                 { role: 'system', content: request.system },
-                { role: 'user', content: request.prompt },
+                { role: 'user', content: buildOpenAiUserContent(request) },
             ],
             temperature,
             ...(request.maxTokens ? { max_tokens: request.maxTokens } : {}),
@@ -208,6 +228,33 @@ const runOpenAi = async (request: AiCompletionRequest, send: typeof fetch): Prom
     return text;
 };
 
+
+/** 把 data:image/jpeg;base64,xxx 拆成媒体类型与裸 base64；格式不对返回 null（这张图就跳过）。 */
+const splitImageDataUrl = (dataUrl: string): { mediaType: string; data: string } | null => {
+    const matched = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
+    return matched ? { mediaType: matched[1].toLowerCase(), data: matched[2] } : null;
+};
+type OpenAiUserContent = string | Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+>;
+
+/**
+ * OpenAI 兼容端点的 user 内容。
+ *
+ * 没有图就**保持纯字符串**：一大批兼容端点（各家中转、本地推理服务）对数组形式的 content
+ * 支持参差不齐，纯文本路径不能被这次改动拖下水。
+ */
+const buildOpenAiUserContent = (request: AiCompletionRequest): OpenAiUserContent => {
+    if (!request.images || request.images.length === 0) return request.prompt;
+    const parts: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [
+        { type: 'text', text: request.prompt },
+    ];
+    for (const image of request.images) {
+        if (!splitImageDataUrl(image.dataUrl)) continue;
+        parts.push({ type: 'image_url', image_url: { url: image.dataUrl } });
+    }
+    return parts.length > 1 ? parts : request.prompt;
+};
 const runAnthropic = async (request: AiCompletionRequest, send: typeof fetch): Promise<string> => {
     const settings = readAiSettings();
     const apiKey = resolveAiApiKey(settings);

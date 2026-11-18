@@ -32,7 +32,7 @@ import {
 } from './lyricDirector/prompt';
 import { readDirectorSettings, readRecentModes } from './lyricDirector/state';
 import { isFoliaCloudCacheEnabled } from './foliaCloud';
-import { AI_MEMORY_GUARDED, isOnlineInferenceAllowed } from './aiMemoryGate';
+import { AI_MEMORY_GUARDED } from './aiMemoryGate';
 import { setStatusMessage } from '../stores/useStatusMessageStore';
 import { md5 } from '../utils/md5';
 import { readBackgroundTheme } from './backgroundThemeBridge';
@@ -526,10 +526,13 @@ const resolveStage = async (ctx: StageContext): Promise<StageResult | null> => {
         lyricText: ctx.lyricSource,
         isPureMusic: ctx.isPureMusic,
         /*
-         * 允许不允许**生成**（#401）。缓存命中在 withAiCloudCache 里先 return，
-         * 所以禁用推理时依然能用别人算好的结果；只有没命中才走到这里被拦下。
+         * 不给 canGenerate：这一条是**在线**生成，不耗本地资源（#418）。
+         *
+         * 「禁用 AI 推理」管的是本机模型（拍点分析、音轨分离）。挂上 isOnlineInferenceAllowed
+         * 之后，开关一关，云缓存没命中的歌就再也生成不出主题 —— 用户看到的是
+         * i-memory-guarded: no-cache-hit，而他要的是「别在手机上跑模型」，不是「别联网」。
+         * 缓存命中本来就在 withAiCloudCache 里先 return，不受影响。
          */
-        canGenerate: isOnlineInferenceAllowed,
     });
     // 没命中、又不许生成：这一轮没有答案（调用方按「暂时没有」处理，不当作失败）。
     if (!cached) return null;

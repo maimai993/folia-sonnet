@@ -16,7 +16,10 @@ import { FoliumStageLayerSlot } from '../../mods/folium/registries/stageLayers';
 import { type AutomixDeckId } from '../../services/automix/useAutomixDecks';
 // HiFi 路线上 mpv 拿着设备：两块网页 deck 既不该有 src，它们的事件也不该改动传输状态。
 import { isHifiRoute } from '../../services/hifi/hifiPlayback';
+import React from 'react';
 import { consumeProgrammaticPause, playbackFade } from '../../services/playbackFade';
+import { isCapacitorAndroid } from '../../platform/runtime';
+import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { hasLoopedToStart } from '../../services/playedTrackCache';
 import { currentTime, lyricCurrentTime } from '../../stores/motionSignals';
 import { endLoadingToPlay, usePlaybackStore } from '../../stores/usePlaybackStore';
@@ -75,6 +78,11 @@ const Lattice = lazy(loadLattice);
 export type AppModel = AppFoundation & AppAudioOutput & AppThemeAndNavigation & AppAccountsAndStage & AppLibraryControllers & AppPlaybackQueue & AppPlaybackBridges & AppChromeAndGestures & AppPublishers & AppCommandPalette & AppPlaybackActions & AppWallAndHome & AppPlayerPanel & AppOverlayModels;
 
 const AppSurface = ({ model }: { model: AppModel }) => {
+    // 「与其他音源同时播放」：被外部打断后自动恢复只在它开着时生效（见 onPause）。
+    const mixWithOtherAudio = useAudioSettingsStore(state => state.mixWithOtherAudio);
+    // 自动恢复的节流状态：1.5 秒冷却、连续 3 次封顶、安静 10 秒重置。
+    const lastAutoResumeAt = React.useRef(0);
+    const autoResumeAttempts = React.useRef(0);
     const {
         accountController, activeProviderId, addPickedSongsToLocalPlaylist, addPickedSongsToNavidromePlaylist,
         addPickedSongsToOnlinePlaylist, alwaysShowMainWindowTitlebar, appDialogsModel, appOverlaysModel, appStyle,
@@ -172,6 +180,8 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 automix.handleActiveDeckPlaying();
             }}
             onPause={(e) => {
+                // 见下面那段的说明：被外部打断后自动恢复的节流状态。
+                // （ref 在组件作用域，见 const autoResumeAttempts）
                 // A pause that flushing a fade-out made, while a new song is already being set up:
                 // the transport state and play intent belong to that song now.
                 if (consumeProgrammaticPause(e.currentTarget)) return;
@@ -186,6 +196,38 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 // source re-pointed, and the deck left silent until play was pressed by hand.
                 // What happens to a failed source belongs to the error path below.
                 if (e.currentTarget.error) return;
+                /*
+                 * 被打断之后自动恢复（「与其他音源同时播放」开着时才生效）。
+                 *
+                 * 系统把音频焦点收走时，Chromium 会**直接把 <audio> 暂停**，不等 Web 层表态 ——
+                 * 到这里时状态机还停在 PLAYING。若这时照常落到 PAUSED，界面就变成「显示在播、
+                 * 其实没声音」，用户再点播放要先把 pause 走一遍，经常就卡在那。
+                 *
+                 * 只在开关打开时接管：开着这个开关，含义就是「别的应用出声时我继续放」，
+                 * 那被暂停就不是用户的本意。节流见下面的常量，别跟对面抢焦点抢成互相打断。
+                 */
+                if (mixWithOtherAudio && isCapacitorAndroid()) {
+                    /*
+                     * 被系统（别的应用抢走音频焦点）打断之后，接回去继续放。
+                     *
+                     * 只在「与其他音源同时播放」开着时接手：这个开关的含义就是「别的应用出声时
+                     * 我照放」，那这次被暂停就不是用户的本意。状态机此刻还停在 PLAYING，照常
+                     * 落到 PAUSED 就变成「界面显示在播、其实没声音」，用户再点播放要先把 pause
+                     * 走一遍，经常卡在那里。
+                     *
+                     * 节流是为了别和对面抢焦点抢成互相打断：1.5 秒内只接一次，连续接三次就
+                     * 停手，安静 10 秒后重新给机会。
+                     */
+                    const now = Date.now();
+                    if (now - lastAutoResumeAt.current > 10_000) autoResumeAttempts.current = 0;
+                    const cooling = now - lastAutoResumeAt.current < 1_500;
+                    const exhausted = autoResumeAttempts.current >= 3;
+                    if (cooling || exhausted) return;
+                    autoResumeAttempts.current += 1;
+                    lastAutoResumeAt.current = now;
+                    void e.currentTarget.play().catch(() => undefined);
+                    return;
+                }
                 shouldAutoPlay.current = false;
                 if (!e.currentTarget.ended) {
                     setPlayerState(PlayerState.PAUSED);
