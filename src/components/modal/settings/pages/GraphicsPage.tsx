@@ -5,6 +5,7 @@ import ConfirmDialog from '../../../shared/ConfirmDialog';
 import { MOTION_SURFACE_IDS, useMotionSettingsStore, type MotionSurfaceId } from '../../../../stores/useMotionSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
+import { useAiInferenceSettingsStore } from '../../../../stores/useAiInferenceSettingsStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
 import type { LyricAntialias } from '../../../../types';
@@ -50,6 +51,8 @@ const O = {
     lyricAntialias: option(PERFORMANCE, 'lyricAntialias', 'options.lyricAntialias'),
     backgroundThrottling: option(PERFORMANCE, 'backgroundThrottling', 'options.backgroundThrottling', { electronOnly: true }),
     glowFix: option(PERFORMANCE, 'glowBlurQuantize', 'options.glowBlurQuantize'),
+    // 「禁用 AI 推理」总闸：默认打开（见 stores/useAiInferenceSettingsStore）。
+    aiInferenceDisabled: option(PERFORMANCE, 'aiInferenceDisabled', 'options.aiInferenceDisabled', { noteKey: 'options.aiInferenceDisabledDesc' }),
     gpuPreference: option(PERFORMANCE, 'gpuPreference', 'options.gpuPreference', { electronOnly: true, available: () => IS_WINDOWS_DESKTOP }),
     followSystem: option(MOTION, 'reduceMotionFollowSystem', 'options.reduceMotionFollowSystem'),
 };
@@ -85,6 +88,9 @@ const GraphicsPage: React.FC = () => {
         setStaticMode: state.handleToggleStaticMode,
         setHomeBackgroundOff: state.handleToggleDisableHomeDynamicBackground,
     })));
+    // 「禁用 AI 推理」总闸（默认打开）。
+    const aiInferenceDisabled = useAiInferenceSettingsStore(state => state.aiInferenceDisabled);
+    const setAiInferenceDisabled = useAiInferenceSettingsStore(state => state.setAiInferenceDisabled);
     const nativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const setNativeBlur = usePlayerChromeSettingsStore(state => state.handleTogglePlayerPageNativeBlur);
     const backgroundThrottling = useDesktopSettingsStore(state => state.backgroundThrottling);
@@ -118,6 +124,9 @@ const GraphicsPage: React.FC = () => {
                         <Button onClick={() => openPerfCheck()}>{t('options.perfCheckRun')}</Button>
                     </Row>
                 )}
+                <Row option={O.aiInferenceDisabled} hint={t('options.aiInferenceDisabledDesc')}>
+                    <Toggle checked={aiInferenceDisabled} onChange={setAiInferenceDisabled} />
+                </Row>
                 <Row option={O.staticMode} hint={t('options.enableStaticModeDesc')}>
                     <Toggle checked={theme.staticMode} onChange={theme.setStaticMode} />
                 </Row>

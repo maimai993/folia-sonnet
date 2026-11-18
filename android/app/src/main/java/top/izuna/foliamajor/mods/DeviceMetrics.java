@@ -74,6 +74,27 @@ final class DeviceMetrics {
             out.put("cpuSelfPercent", selfPercent);
             out.put("memoryKb", memoryKb);
 
+            /*
+             * 低内存信号（issue #401）。
+             *
+             * 复用这里本来就在做的 ActivityManager.getMemoryInfo：lowMemory 是系统自己的判据
+             * （它决定杀谁之前就会置这一位），availMemKb / thresholdKb 留作界面自己判断的余地。
+             * JS 侧的低内存闸门读这一份，决定要不要继续跑 AI 推理（在线与本地模型都算）。
+             */
+            try {
+                ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+                if (am != null) {
+                    ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
+                    am.getMemoryInfo(info);
+                    out.put("lowMemory", info.lowMemory ? 1 : 0);
+                    out.put("availMemKb", info.availMem / 1024L);
+                    out.put("thresholdKb", info.threshold / 1024L);
+                    out.put("totalMemKb", info.totalMem / 1024L);
+                }
+            } catch (Throwable error) {
+                Log.w(TAG, "读内存水位失败", error);
+            }
+
             // 温度：CPU 与 GPU 都取各自 zone 的中位数，电池单独一项。
             putNullable(out, "cpuTempC", medianThermal("cpu-", "cpuss"));
             putNullable(out, "gpuTempC", medianThermal("gpuss"));

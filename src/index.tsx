@@ -6,6 +6,7 @@ import { installConsoleLogCapture } from './utils/consoleLogBuffer';
 import { installDebugModule } from './services/debug/debugModule';
 import { installMemorySampleFeed } from './services/debug/memorySamples';
 import { installNativeAndroidBridge } from './services/nativeAndroidBridge';
+import { installAiMemoryGate } from './services/aiMemoryGate';
 import { installPerfDiagnosticsSwitch } from './utils/frameTimingDiagnostics';
 import { setMediaDiagnosticsEnabledReader } from './utils/mediaDiagnostics';
 import { usePerfDiagnosticsStore } from './stores/usePerfDiagnosticsStore';
@@ -69,6 +70,9 @@ setMediaDiagnosticsEnabledReader(perfDiagnosticsPort.isEnabled);
 // 本地登录的地基：把内置的接口代码挂到页面与原生之间。它是异步的（要 import 那份 JS），
 // 但装好之前页面发来的请求会被排队，装好后统一补发，所以不用 await。
 void installNativeAndroidBridge();
+// AI 低内存闸门（issue #401）：读上一回「有没有活到稳定期」算连续被杀次数，并起内存水位轮询。
+// 必须早于任何 AI 入口 —— 闸门关着时 requestAiCompletion 与原生分析模型都不发起（见 utils/aiMemoryGate）。
+installAiMemoryGate();
 // 方向属性（竖屏 / 横屏）要在首帧之前落到 <html> 上：横屏那套缩放与「强制横屏」都读它，
 // 晚一步就会先按原始尺寸铺完再变，开屏那一下看得见跳变。
 // （原来的「手机适配」总开关是废弃代码，已删；这里只剩方向。）
