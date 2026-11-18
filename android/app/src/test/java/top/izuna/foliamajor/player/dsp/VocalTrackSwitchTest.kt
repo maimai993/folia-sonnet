@@ -75,8 +75,15 @@ class VocalTrackSwitchTest {
     }
 
     @Test
-    fun `地址变了但 songKey 没跟上时不许换源`() {
-        assertFalse(stillPlayingGeneratedTrack(secondUrl, "song:first", firstUrl, "song:first"))
+    fun `同一首歌签名地址刷新后分离结果仍可接管`() {
+        // 77d17e01 明确以 songKey 认歌：签名换链、切画质和 MV 注入不是切到另一首。
+        val refreshedUrl = "$firstUrl?expires=next"
+        assertTrue(stillPlayingGeneratedTrack(refreshedUrl, "song:first", firstUrl, "song:first"))
+    }
+
+    @Test
+    fun `不同歌曲即使共用同一音频地址也不许接管`() {
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "song:second", firstUrl, "song:first"))
     }
 
     @Test
@@ -101,8 +108,10 @@ class VocalTrackSwitchTest {
 
     @Test
     fun `当前歌没有身份时宁可不换`() {
+        // stop() 清掉的是 currentMediaId；不能把 URL 是否存在混作歌曲身份。
         assertFalse(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, "song:first"))
-        assertFalse(stillPlayingGeneratedTrack(null, "song:first", firstUrl, "song:first"))
+        assertFalse(stillPlayingGeneratedTrack(null, "", firstUrl, "song:first"))
+        assertFalse(stillPlayingGeneratedTrack(firstUrl, "", firstUrl, null))
     }
 
     // ---- 三态原子接口：值 → 目标轨的映射（「切人声放的是全部、切全部放的是人声」回归） ----

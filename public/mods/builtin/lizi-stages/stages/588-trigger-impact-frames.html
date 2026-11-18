@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>588 · 扳机社闪光帧</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #07070c; }
+  #stage-canvas { display: block; width: 100vw; height: 100vh; }
+</style>
+</head>
+<body>
+<canvas id="stage-canvas"></canvas>
+<script>
+'use strict';
+
+/* ============================================================
+   588 · 扳机社闪光帧 / TRIGGER IMPACT FRAMES
+   Canvas 2D — extreme fisheye, 4-point trigger stars,
+   black & white hand-drawn impact frames.
+   ============================================================ */
+
+var cv = document.getElementById('stage-canvas');
+var ctx = cv.getContext('2d', { alpha: false });
+
+var W = 1440, H = 900, DPR = 1;
+var nowT = 0, lastNow = 0;
+
+var S = {
+  lines: [],
+  idx: -1,
+  t: 0,
+  playing: false,
+  frames: 0,
+  js: 0,
+  err: '',
+  text: '',
+  gl: false,
+  rm: false,
+  song: { name: '', artists: '' },
+  accent: 'rgb(30,242,255)',
+  accentRGB: [30, 242, 255],
+  duration: 0,
+  live: { bass: 0, mid: 0, treble: 0, bpm: 0, level: 0 }
+};
+
+var cam = { ox: 0, oy: 0, rot: 0, zoom: 0 };
+var slam = { t0: -99, dir: 1 };
+var imp = { t0: -99, dur: 0.075, mode: 0, seed: 1 };
+var lastImp = -99;
+var lineChangeT = -99;
+var glyphs = null, glyphLineIdx = -99;
+var sparks = [];
+var pulse = 0, beatLevel = 0;
+var lastErrPost = 0;
+var lastAct = 0;
+
+/* ---------- stage settings (宿主面板协议，ready 前同步声明) ---------- */
+/* flashRate 的口径：每 N 个「冲击触发点」闪一次（触发点 = 强拍 / 换句）。
+   0 = 完全不闪；默认 1 表示每个触发点都闪，仍受原有冷却约束，观感不变。
+   用计数而不是独立计时器，是为了不新增节奏源，也不改变原有触发条件。 */
+var P = { flashRate: 1 };
+var flashN = 0;
+
+window.__stagePanel = {
+  title: '扳机社闪光帧',
+  hint: '0 = 完全不闪；N = 每 N 个触发点（强拍/换句）闪一次，数字越大越稀',
+  items: [
+    { key: 'flashRate', label: '闪光频率', type: 'range', min: 0, max: 8, step: 1, def: 1 }
+  ]
+};
+
+/* ---- 统一「震动」开关：宿主在 ready 后同步读取 ---- */
+window.__liziShake = true;
+if (!window.__stagePanel.items.some(function (it) { return it.key === 'shake'; })) {
+  window.__stagePanel.items.push({ key: 'shake', label: '震动', type: 'switch', def: true });
+}
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+function applySetting(key, value) {
+  if (key !== 'flashRate') return;
+  var n = +value;
+  if (!isFinite(n)) return;
+  P.flashRate = Math.max(0, Math.min(8, Math.round(n)));
+  /* 归零计数，让新档位从下一个触发点就按新规则走，不需要重载
+     （否则旧计数会让改档后的第一次闪光时机看起来没有立即生效）。 */
+  flashN = 0;
+}
+
+var CYAN = [30, 242, 255];
+var PINK = [255, 43, 147];
+var LEMON = [255, 228, 22];
+var PAPER = [246, 242, 232];
+
+var LYRIC_FONT = '"Arial Black","Noto Sans SC","Microsoft YaHei","Heiti SC","SimHei",sans-serif';
+var MONO_FONT = 'ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace';
+
+var RM = false;
+try { RM = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e0) { RM = false; }
+S.rm = RM;
+
+/* ---------- tiny utils ---------- */
+
+function clamp01(v) { v = +v; if (!isFinite(v)) return 0; return v < 0 ? 0 : (v > 1 ? 1 : v); }
+function easeOutQuint(x) { x = clamp01(x); return 1 - Math.pow(1 - x, 5); }
+function pad2(n) { n = Math.floor(n); return n < 10 ? '0' + n : '' + n; }
+function rgba(rgb, a) {
+  if (!rgb || rgb.length < 3) rgb = CYAN;
+  return 'rgba(' + Math.round(rgb[0]) + ',' + Math.round(rgb[1]) + ',' + Math.round(rgb[2]) + ',' + a + ')';
+}
+function addStops(g, stops) {
+  if (!g) return;
+  try {
+    for (var i = 0; i < stops.length; i++) {
+      var s = stops[i];
+      if (!s) continue;
+      g.addColorStop(Math.max(0, Math.min(1, +s[0])), s[1]);
+    }
+  } catch (e) {}
+}
+function mulberry32(a) {
+  a = a | 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function noteErr(e) {
+  var msg = (e && e.message) ? e.message : String(e);
+  S.err = msg;
+  var n = performance.now();
+  if (n - lastErrPost > 1000) {
+    lastErrPost = n;
+    try { parent.postMessage({ __c100: 1, type: 'error', payload: { msg: msg } }, '*'); } catch (e2) {}
+    try { console.error('[588]', e); } catch (e3) {}
+  }
+}
+
+/* ---------- accent ---------- */
+
+function setAccent(a) {
+  var ok = Array.isArray(a) && a.length >= 3;
+  var r = ok ? +a[0] : NaN, g = ok ? +a[1] : NaN, b = ok ? +a[2] : NaN;
+  if (!isFinite(r) || !isFinite(g) || !isFinite(b) || (r + g + b) < 24) { r = 30; g = 242; b = 255; }
+  r = Math.max(0, Math.min(255, Math.round(r)));
+  g = Math.max(0, Math.min(255, Math.round(g)));
+  b = Math.max(0, Math.min(255, Math.round(b)));
+  S.accentRGB = [r, g, b];
+  S.accent = 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
+/* ---------- state ---------- */
+
+function findIdx(t) {
+  var best = -1;
+  for (var i = 0; i < S.lines.length; i++) {
+    var L = S.lines[i];
+    if (!L) continue;
+    if (t >= L.t - 0.03) best = i;
+  }
+  return best;
+}
+
+function buildGlyphs(L) {
+  var out = [];
+  if (!L) return out;
+  var text = L.text || '';
+  var n = text.length;
+  if (!n) return out;
+  var chars = L.chars;
+  var hasChars = !!(chars && chars.length && chars[0]);
+  var rel = false;
+  if (hasChars) {
+    var firstT = +chars[0].t;
+    if (isFinite(firstT) && firstT < L.t - 0.08) rel = true;
+  }
+  var dur = (L.dur && L.dur > 0) ? L.dur : Math.max(1.6, n * 0.22);
+  for (var i = 0; i < n; i++) {
+    var ct;
+    if (hasChars) {
+      var ci = (chars.length === n) ? i : Math.min(chars.length - 1, Math.floor(i * chars.length / n));
+      var rec = chars[ci];
+      var rt = rec ? +rec.t : NaN;
+      if (isFinite(rt)) ct = (rel ? L.t : 0) + rt;
+      else ct = L.t + (i / n) * dur * 0.72;
+    } else {
+      ct = L.t + (i / n) * dur * 0.72;
+    }
+    if (!isFinite(ct)) ct = L.t;
+    out.push({ ch: text.charAt(i), ct: ct });
+  }
+  return out;
+}
+
+/* ---------- messaging ---------- */
+
+function onInit(p) {
+  try {
+    p = p || {};
+    var song = p.song || {};
+    S.song = {
+      name: (typeof song.name === 'string') ? song.name : '',
+      artists: song.artists || ''
+    };
+    setAccent(p.accent);
+    var dur = +p.duration;
+    S.duration = (isFinite(dur) && dur > 0) ? dur : 0;
+
+    var src = Array.isArray(p.lines) ? p.lines : [];
+    var clean = [];
+    for (var i = 0; i < src.length; i++) {
+      var L = src[i];
+      if (!L) continue;
+      var lt = +L.t;
+      if (!isFinite(lt)) lt = 0;
+      var ld = +L.dur;
+      clean.push({
+        t: lt,
+        dur: (isFinite(ld) && ld > 0) ? ld : 0,
+        text: (typeof L.text === 'string') ? L.text : '',
+        chars: Array.isArray(L.chars) ? L.chars : null
+      });
+    }
+    S.lines = clean;
+    S.idx = -1;
+    S.text = '';
+    S.playing = true;
+    glyphs = null;
+    glyphLineIdx = -99;
+    lineChangeT = -99;
+    sparks.length = 0;
+    S.err = '';
+  } catch (e) { noteErr(e); }
+}
+
+function onTick(p) {
+  p = p || {};
+  var t = +p.time;
+  if (isFinite(t)) S.t = t;
+  if (typeof p.playing === 'boolean') S.playing = p.playing;
+}
+
+function onLive(p) {
+  p = p || {};
+  var b = +p.bass, m = +p.mid, tr = +p.treble, lv = +p.level, bpm = +p.bpm;
+  if (isFinite(b)) S.live.bass = clamp01(b);
+  if (isFinite(m)) S.live.mid = clamp01(m);
+  if (isFinite(tr)) S.live.treble = clamp01(tr);
+  if (isFinite(lv)) S.live.level = clamp01(lv);
+  if (isFinite(bpm) && bpm > 0) S.live.bpm = bpm;
+}
+
+function onBeat(p) {
+  p = p || {};
+  var lv = +p.level;
+  if (!isFinite(lv)) lv = 0.6;
+  lv = clamp01(lv);
+  beatLevel = Math.max(beatLevel, lv);
+  pulse = Math.min(1.6, pulse + 0.30 + lv * 0.75);
+  if (lv > 0.65) triggerImpact(false);
+  spawnSparks(lv > 0.65 ? 10 : 4, lv);
+}
+
+window.addEventListener('message', function (e) {
+  var d = e && e.data;
+  if (!d || d.__c100 !== 1) return;
+  try {
+    if (d.type === 'init') onInit(d.payload);
+    else if (d.type === 'tick') onTick(d.payload);
+    else if (d.type === 'beat') onBeat(d.payload);
+    else if (d.type === 'live') onLive(d.payload);
+    else if (d.type === 'setting') {
+      var sp = d.payload || {};
+      applySetting(sp.key, sp.value);
+    }
+  } catch (err) { noteErr(err); }
+});
+
+function poke() {
+  var n = nowT || (performance.now() / 1000);
+  if (n - lastAct < 0.4) return;
+  lastAct = n;
+  try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (e) {}
+}
+window.addEventListener('pointermove', poke, { passive: true });
+window.addEventListener('pointerdown', poke, { passive: true });
+window.addEventListener('wheel', poke, { passive: true });
+window.addEventListener('keydown', function (e) {
+  try {
+    var k = (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') ? 'Space' : e.key;
+    parent.postMessage({ __c100: 1, type: 'key', payload: { key: k } }, '*');
+  } catch (err) {}
+  poke();
+});
+
+/* ---------- effects ---------- */
+
+function triggerSlam() {
+  slam.t0 = nowT;
+  slam.dir = (Math.random() < 0.5) ? -1 : 1;
+  triggerImpact(true);
+}
+
+function triggerImpact(force) {
+  /* 0 档必须在写入任何状态之前返回：不更新 imp.t0，屏幕就不会残留
+     半截冲击帧；同时保留 slam、背景十字星、歌词星和火花等其它动效。 */
+  if (!(P.flashRate > 0)) return;
+  if (!force && nowT - lastImp < 1.05) return;
+  if (nowT - lastImp < 0.34) return;
+  /* 频率闸门放在冷却之后：只对「本来就会闪」的触发点计数，
+     避免被冷却吃掉的调用提前消耗计数。N=1 时完全走原逻辑。 */
+  flashN++;
+  if (P.flashRate > 1 && (flashN % P.flashRate) !== 1) return;
+  lastImp = nowT;
+  imp.t0 = nowT;
+  imp.dur = RM ? 0.10 : 0.078;
+  imp.mode = (Math.random() < 0.5) ? 0 : 1;
+  imp.seed = (Math.random() * 1e9) | 0;
+  if (!RM) spawnSparks(12, 1);
+}
+
+function spawnSparks(count, power) {
+  var cx = W * 0.5, cy = H * 0.5;
+  var base = Math.min(W, H);
+  for (var i = 0; i < count; i++) {
+    if (sparks.length > 300) break;
+    var a = Math.random() * Math.PI * 2;
+    var sp = (0.25 + Math.random() * 0.95) * base * (0.35 + clamp01(power) * 0.55);
+    var col;
+    var r = Math.random();
+    if (r < 0.30) col = '255,43,147';
+    else if (r < 0.48) col = '255,228,22';
+    else col = Math.round(S.accentRGB[0]) + ',' + Math.round(S.accentRGB[1]) + ',' + Math.round(S.accentRGB[2]);
+    sparks.push({
+      x: cx, y: cy,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp * 0.82,
+      life: 0,
+      max: 0.45 + Math.random() * 0.75,
+      size: (5 + Math.random() * 16) * base / 900,
+      rot: Math.random() * 6.283,
+      spin: (Math.random() - 0.5) * 12,
+      star: Math.random() < 0.5,
+      col: col
+    });
+  }
+}
+
+/* ---------- camera ---------- */
+
+function updateCam(dt) {
+  var breathe = RM ? 0.25 : 1;
+  var shakeK = (window.__liziShake === false) ? 0 : 1;
+  cam.ox = (Math.sin(nowT * 0.63) * W * 0.0040 + Math.sin(nowT * 1.71 + 1.3) * W * 0.0018) * breathe;
+  cam.oy = (Math.cos(nowT * 0.47) * H * 0.0040 + Math.sin(nowT * 1.13 + 0.7) * H * 0.0015) * breathe;
+  cam.rot = (Math.sin(nowT * 0.29) * 0.0070 + Math.sin(nowT * 0.71 + 2.1) * 0.0030) * breathe;
+  cam.zoom = pulse * 0.016 * shakeK;
+  var el = nowT - slam.t0;
+  if (el >= 0 && el < 0.55) {
+    var e = easeOutQuint(Math.min(1, el / 0.16));
+    cam.zoom += 0.34 * (1 - e) * shakeK;
+    cam.rot += slam.dir * 0.055 * (1 - e) * shakeK;
+  }
+}
+
+function updateFx(dt) {
+  pulse *= Math.exp(-dt * 5.2);
+  if (pulse < 0.001) pulse = 0;
+  beatLevel *= Math.exp(-dt * 2.4);
+  for (var i = sparks.length - 1; i >= 0; i--) {
+    var p = sparks[i];
+    if (!p) { sparks.splice(i, 1); continue; }
+    p.life += dt;
+    if (p.life >= p.max) { sparks.splice(i, 1); continue; }
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    var damp = Math.exp(-dt * 2.1);
+    p.vx *= damp;
+    p.vy *= damp;
+    p.vy += 30 * dt;
+    p.rot += p.spin * dt;
+  }
+  if (sparks.length > 340) sparks.splice(0, sparks.length - 340);
+}
+
+function updateState() {
+  var idx = findIdx(S.t);
+  if (idx !== S.idx) {
+    S.idx = idx;
+    S.text = (idx >= 0 && S.lines[idx]) ? (S.lines[idx].text || '') : '';
+    lineChangeT = nowT;
+    glyphLineIdx = -99;
+    glyphs = null;
+    if (idx >= 0) {
+      triggerSlam();
+      spawnSparks(24, 0.8);
+    }
+  }
+  if (glyphLineIdx !== idx) {
+    glyphLineIdx = idx;
+    glyphs = (idx >= 0 && S.lines[idx] && S.lines[idx].text) ? buildGlyphs(S.lines[idx]) : null;
+  }
+}
+
+/* ---------- shapes ---------- */
+
+function star4Path(x, y, r, rot, jitter, seed) {
+  if (!(r > 0.4)) return false;
+  var rnd = jitter ? mulberry32((seed | 0) || 7) : null;
+  var tips = [];
+  var i, a, rr;
+  for (i = 0; i < 4; i++) {
+    a = rot + i * Math.PI / 2;
+    rr = jitter ? r * (0.82 + rnd() * 0.36) : r;
+    tips.push({ x: x + Math.cos(a) * rr, y: y + Math.sin(a) * rr, a: a });
+  }
+  ctx.beginPath();
+  ctx.moveTo(tips[0].x, tips[0].y);
+  for (i = 0; i < 4; i++) {
+    var cur = tips[i];
+    var nxt = tips[(i + 1) % 4];
+    var ma = cur.a + Math.PI / 4;
+    var jr = jitter ? (0.10 + rnd() * 0.11) : 0.15;
+    ctx.quadraticCurveTo(x + Math.cos(ma) * r * jr, y + Math.sin(ma) * r * jr, nxt.x, nxt.y);
+  }
+  ctx.closePath();
+  return true;
+}
+
+/* ---------- background ---------- */
+
+function drawBands() {
+  ctx.save();
+  ctx.translate(W * 0.5, H * 0.5);
+  ctx.rotate(-0.42 + Math.sin(nowT * 0.21) * 0.02 + cam.rot * 0.5);
+  var L = Math.max(W, H) * 1.7;
+  var bands = [
+    { y: -0.20, h: 0.11, col: '255,43,147', a: 0.17 },
+    { y: 0.04, h: 0.055, col: '30,242,255', a: 0.15 },
+    { y: 0.21, h: 0.14, col: '255,228,22', a: 0.10 }
+  ];
+  for (var i = 0; i < bands.length; i++) {
+    var b = bands[i];
+    var yy = H * b.y + Math.sin(nowT * 0.6 + i * 1.7) * H * 0.012;
+    var hh = H * b.h;
+    var grad = ctx.createLinearGradient(-L, yy, L, yy + hh);
+    addStops(grad, [
+      [0, 'rgba(' + b.col + ',0)'],
+      [0.28, 'rgba(' + b.col + ',' + b.a + ')'],
+      [0.72, 'rgba(' + b.col + ',' + (b.a * 0.7) + ')'],
+      [1, 'rgba(' + b.col + ',0)']
+    ]);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(-L, yy);
+    ctx.lineTo(L, yy + hh * 0.4);
+    ctx.lineTo(L, yy + hh * 1.4);
+    ctx.lineTo(-L, yy + hh);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTunnel(cx, cy) {
+  var minD = Math.min(W, H);
+  var phase = (nowT * 0.6) % 1;
+  ctx.save();
+  ctx.translate(cx, cy);
+  for (var i = 0; i < 15; i++) {
+    var z = i + phase;
+    var rad = minD * 0.045 * Math.pow(1.52, z);
+    if (!(rad > 1) || rad > Math.max(W, H) * 2.4) continue;
+    var a = 0.22 * Math.pow(0.88, i) * (0.55 + beatLevel * 1.0);
+    ctx.save();
+    ctx.rotate(nowT * 0.18 + z * 0.05 + cam.rot * 0.4);
+    ctx.strokeStyle = (i % 2 === 0) ? rgba(S.accentRGB, a) : 'rgba(255,43,147,' + a + ')';
+    ctx.lineWidth = Math.max(1, minD * 0.0022 * (1 + z * 0.16));
+    ctx.beginPath();
+    ctx.rect(-rad, -rad * 0.66, rad * 2, rad * 1.32);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawSpeedLines(cx, cy) {
+  var maxR = Math.hypot(W, H) * 0.62;
+  var n = 130;
+  var boost = 1 + pulse * 0.9;
+  for (var i = 0; i < n; i++) {
+    var s1 = Math.sin(i * 12.9898 + 4.1414) * 43758.5453;
+    var f1 = s1 - Math.floor(s1);
+    var s2 = Math.sin(i * 78.233 + 1.7) * 12345.678;
+    var f2 = s2 - Math.floor(s2);
+    var ang = (i / n) * Math.PI * 2 + nowT * 0.07 + f1 * 0.05;
+    var r0 = maxR * (0.10 + f2 * 0.55);
+    var len = maxR * (0.08 + f1 * 0.30) * boost;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * r0, cy + Math.sin(ang) * r0 * 0.72);
+    ctx.lineTo(cx + Math.cos(ang) * (r0 + len), cy + Math.sin(ang) * (r0 + len) * 0.72);
+    ctx.strokeStyle = (i % 9 === 0)
+      ? 'rgba(255,43,147,' + (0.10 + f1 * 0.16) + ')'
+      : rgba(S.accentRGB, 0.05 + f1 * 0.10);
+    ctx.lineWidth = 0.8 + f1 * 2.2;
+    ctx.stroke();
+  }
+}
+
+function drawBigStars(cx, cy) {
+  var R = Math.min(W, H) * 0.46;
+  var sx = cx + Math.sin(nowT * 0.4) * W * 0.03;
+  ctx.save();
+  ctx.globalAlpha = 0.10 + pulse * 0.13;
+  if (star4Path(sx, cy, R, nowT * 0.12, true, 12345)) {
+    ctx.fillStyle = rgba(S.accentRGB, 0.55);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 0.07 + pulse * 0.10;
+  if (star4Path(cx - R * 0.72, cy + R * 0.12, R * 0.38, -nowT * 0.19, true, 777)) {
+    ctx.fillStyle = 'rgba(255,43,147,0.75)';
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBackground() {
+  var g = ctx.createLinearGradient(0, 0, W * 0.3, H);
+  addStops(g, [[0, '#0c0a16'], [0.5, '#07060c'], [1, '#100714']]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  var bass = S.live.bass;
+  var cx = W * 0.5 + cam.ox, cy = H * 0.5 + cam.oy;
+  var rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.70);
+  addStops(rg, [
+    [0, rgba(S.accentRGB, 0.13 + bass * 0.16)],
+    [0.45, rgba(S.accentRGB, 0.045)],
+    [1, 'rgba(0,0,0,0)']
+  ]);
+  ctx.fillStyle = rg;
+  ctx.fillRect(0, 0, W, H);
+
+  drawBands();
+  drawTunnel(cx, cy);
+  drawSpeedLines(cx, cy);
+  drawBigStars(cx, cy);
+
+  if (grainPattern) {
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillStyle = grainPattern;
+    ctx.translate(-((nowT * 7) % 220), -((nowT * 11) % 220));
+    ctx.fillRect(0, 0, W + 240, H + 240);
+    ctx.restore();
+  }
+
+  var vg = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.32, W * 0.5, H * 0.5, Math.max(W, H) * 0.78);
+  addStops(vg, [[0, 'rgba(0,0,0,0)'], [0.72, 'rgba(0,0,0,0.18)'], [1, 'rgba(0,0,0,0.62)']]);
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+}
+
+/* ---------- lyric ---------- */
+
+function drawRail(cx, cy, fs, half) {
+  var railY = Math.min(H * 0.86, cy + fs * 0.72);
+  ctx.save();
+  ctx.strokeStyle = rgba(S.accentRGB, 0.26 + pulse * 0.32);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - half, railY);
+  ctx.lineTo(cx + half, railY);
+  ctx.stroke();
+  for (var ti = 0; ti < 25; ti++) {
+    var tx = cx - half + (ti / 24) * half * 2;
+    var th = (ti % 6 === 0) ? fs * 0.12 : fs * 0.055;
+    ctx.beginPath();
+    ctx.moveTo(tx, railY);
+    ctx.lineTo(tx, railY + th);
+    ctx.stroke();
+  }
+  ctx.restore();
+  return railY;
+}
+
+function drawLyrics() {
+  if (!glyphs || glyphs.length === 0) {
+    drawEmptyState();
+    return;
+  }
+  var n = glyphs.length;
+  var fs = Math.min(H * 0.32, (W * 0.88) / Math.max(n, 3) * 0.98);
+  if (!isFinite(fs) || fs < 14) fs = 32;
+  var adv = Math.min(fs * 1.0, (W * 0.90) / n);
+  var portrait = H > W * 1.15;
+  var cx = W * 0.5 + cam.ox * 0.6;
+  var cy = H * (portrait ? 0.58 : 0.5) + cam.oy * 0.5;
+  var zoom = 1 + cam.zoom;
+  var totalW = (n - 1) * adv;
+  var half = totalW * 0.5 + fs * 0.45;
+
+  drawRail(cx, cy, fs, half);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+
+  for (var i = 0; i < n; i++) {
+    var g = glyphs[i];
+    if (!g) continue;
+    var ch = g.ch;
+    if (!ch || ch === ' ' || ch === '　') continue;
+
+    var u = (n > 1) ? ((i - (n - 1) / 2) / ((n - 1) / 2)) : 0;
+    var x = cx + (i - (n - 1) / 2) * adv;
+    var y = cy + (u * u) * fs * 0.15 + Math.sin(nowT * 1.3 + i * 0.7) * 1.5;
+    var age = S.t - g.ct;
+    var pre = age < -0.02;
+    var reveal = clamp01(age / 0.24);
+    var pop = pre ? 1 : (1 + 0.85 * Math.pow(1 - reveal, 3));
+    var sc = (1 + 0.24 * u * u) * pop * zoom;
+    var alpha = pre ? 0.10 : (0.45 + 0.55 * clamp01(reveal * 3));
+    var rot = cam.rot * 0.65 + u * 0.06;
+    if (!pre) rot += Math.sin(age * 18) * 0.05 * Math.exp(-Math.max(0, age) * 4);
+
+    var hot = (!pre && age >= 0 && age < 0.30);
+    var fill = pre ? 'rgba(246,242,232,0.12)' : (hot ? '#ffe416' : '#f6f2e8');
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.transform(1, 0, -0.15, 1, 0, 0);
+    ctx.scale(sc, sc);
+
+    if (!pre && age >= 0 && age < 0.5) {
+      var k = clamp01(age / 0.5);
+      ctx.save();
+      ctx.globalAlpha = alpha * (1 - k) * 0.85;
+      if (star4Path(0, -fs * 0.02, fs * (0.55 + 1.6 * k), nowT * 1.6 + i, true, i * 97 + 3)) {
+        ctx.fillStyle = rgba(S.accentRGB, 0.95);
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.globalAlpha = alpha;
+    }
+
+    ctx.font = '900 ' + Math.round(fs) + 'px ' + LYRIC_FONT;
+
+    ctx.fillStyle = '#05040a';
+    ctx.fillText(ch, fs * 0.055, fs * 0.062);
+
+    if (!pre) {
+      var off = 3 + pulse * 9;
+      ctx.globalAlpha = alpha * 0.30;
+      ctx.fillStyle = 'rgba(255,43,147,0.85)';
+      ctx.fillText(ch, -off, 0);
+      ctx.fillStyle = rgba(S.accentRGB, 0.85);
+      ctx.fillText(ch, off, 0);
+      ctx.globalAlpha = alpha;
+    }
+
+    ctx.lineWidth = Math.max(2, fs * 0.052);
+    ctx.strokeStyle = 'rgba(6,5,12,0.94)';
+    ctx.strokeText(ch, 0, 0);
+
+    if (!pre) {
+      ctx.shadowColor = rgba(S.accentRGB, 0.9);
+      ctx.shadowBlur = Math.min(34, fs * 0.18);
+    }
+    ctx.fillStyle = fill;
+    ctx.fillText(ch, 0, 0);
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+
+    ctx.restore();
+  }
+
+  var nextL = S.lines[S.idx + 1];
+  if (nextL && nextL.text) {
+    var ny = Math.min(H * 0.92, cy + fs * 1.16);
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 ' + Math.round(Math.min(fs * 0.22, H * 0.042)) + 'px ' + LYRIC_FONT;
+    ctx.fillStyle = 'rgba(246,242,232,0.34)';
+    ctx.fillText(nextL.text.slice(0, 34), cx, ny, W * 0.82);
+    ctx.restore();
+  }
+}
+
+function drawEmptyState() {
+  var cx = W * 0.5, cy = H * 0.5;
+  var size = Math.min(W * 0.15, H * 0.24);
+  var hasLines = S.lines.length > 0;
+  var title = !hasLines ? 'NO SIGNAL' : (S.idx < 0 ? 'STANDBY' : '···');
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(nowT * 0.25);
+  ctx.strokeStyle = rgba(S.accentRGB, 0.35);
+  ctx.lineWidth = 2;
+  ctx.setLineDash([14, 12]);
+  ctx.strokeRect(-size * 1.15, -size * 0.6, size * 2.3, size * 1.2);
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 ' + Math.round(size) + 'px ' + LYRIC_FONT;
+  ctx.lineWidth = Math.max(2, size * 0.02);
+  ctx.strokeStyle = 'rgba(246,242,232,0.85)';
+  ctx.strokeText(title, cx, cy, W * 0.9);
+  ctx.fillStyle = 'rgba(246,242,232,0.10)';
+  ctx.fillText(title, cx, cy, W * 0.9);
+
+  var sy = cy + Math.sin(nowT * 1.4) * size * 0.62;
+  ctx.fillStyle = rgba(S.accentRGB, 0.28);
+  ctx.fillRect(cx - size * 1.15, sy, size * 2.3, 2);
+
+  ctx.font = '600 ' + Math.max(12, Math.min(W * 0.014, 18)) + 'px ' + MONO_FONT;
+  ctx.fillStyle = rgba(S.accentRGB, 0.92);
+  ctx.fillText(hasLines ? 'AWAITING LYRIC SIGNAL / 等待歌词' : 'NO LYRIC DATA / 本曲无歌词', cx, cy + size * 0.86, W * 0.9);
+}
+
+/* ---------- sparks ---------- */
+
+function drawSparks() {
+  for (var i = 0; i < sparks.length; i++) {
+    var p = sparks[i];
+    if (!p) continue;
+    var k = 1 - p.life / p.max;
+    if (k <= 0) continue;
+    var a = k * k;
+    ctx.save();
+    ctx.globalAlpha = a;
+    if (p.star) {
+      if (star4Path(p.x, p.y, p.size * (0.35 + k), p.rot, false, 0)) {
+        ctx.fillStyle = 'rgba(' + p.col + ',0.95)';
+        ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = 'rgba(' + p.col + ',' + (0.9 * a) + ')';
+      ctx.lineWidth = Math.max(1, p.size * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.vx * 0.035, p.y - p.vy * 0.035);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+/* ---------- impact frame ---------- */
+
+function drawImpact() {
+  /* 0 档立即停画：即使用户在冲击帧播放中途调到 0，也不会把这帧播完，
+     白闪（含 reduced-motion 的低透明度白屏）分支一并跳过。 */
+  if (!(P.flashRate > 0)) return;
+  var el = nowT - imp.t0;
+  if (el < 0 || el > imp.dur) return;
+
+  if (RM) {
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    return;
+  }
+
+  var step = Math.floor(el / 0.022);
+  var flip = (step % 2) === 0;
+  var whiteBG = (imp.mode === 0) ? flip : !flip;
+  var bg = whiteBG ? '#f5f2e9' : '#07070c';
+  var fg = whiteBG ? '#07070c' : '#f5f2e9';
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  var rnd = mulberry32(imp.seed + step * 911);
+  var cx = W * 0.5, cy = H * 0.5;
+  var maxR = Math.hypot(W, H) * 0.62;
+  var i, k, a, r0, r1, aa, rr;
+
+  ctx.strokeStyle = fg;
+  for (i = 0; i < 58; i++) {
+    a = (i / 58) * Math.PI * 2 + (rnd() - 0.5) * 0.05;
+    r0 = maxR * (0.15 + rnd() * 0.15);
+    r1 = maxR * (0.55 + rnd() * 0.55);
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+    for (k = 1; k <= 4; k++) {
+      rr = r0 + (r1 - r0) * (k / 4);
+      aa = a + (rnd() - 0.5) * 0.09 * (k / 4 + 0.25);
+      ctx.lineTo(cx + Math.cos(aa) * rr, cy + Math.sin(aa) * rr * 0.95);
+    }
+    ctx.lineWidth = (1 + rnd() * 7) * Math.min(W, H) / 900;
+    ctx.stroke();
+  }
+
+  var sR = Math.min(W, H) * (0.26 + rnd() * 0.14);
+  if (star4Path(cx + (rnd() - 0.5) * W * 0.10, cy + (rnd() - 0.5) * H * 0.06, sR, rnd() * 1.2, true, imp.seed + step)) {
+    ctx.fillStyle = fg;
+    ctx.fill();
+  }
+
+  if (star4Path(cx, cy, Math.min(W, H) * 0.08, -nowT * 3, true, imp.seed + step + 5)) {
+    ctx.fillStyle = bg;
+    ctx.fill();
+  }
+
+  var pulseW = Math.min(W, H) * 0.012;
+  ctx.fillStyle = fg;
+  ctx.fillRect(cx - W * 0.5, cy - pulseW, W, pulseW * 2);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(-0.06);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 ' + Math.round(Math.min(W * 0.22, H * 0.36)) + 'px "Arial Black","Yu Gothic","MS Gothic","Microsoft YaHei",sans-serif';
+  ctx.fillStyle = fg;
+  ctx.fillText('ドン', 0, -H * 0.02, W * 0.86);
+  ctx.font = '900 ' + Math.round(Math.min(W * 0.030, H * 0.05)) + 'px ' + MONO_FONT;
+  ctx.fillText('I M P A C T', 0, H * 0.14, W * 0.8);
+  ctx.restore();
+}
+
+/* ---------- HUD ---------- */
+
+function timecode(t) {
+  if (!isFinite(t) || t < 0) t = 0;
+  var m = Math.floor(t / 60);
+  var s = Math.floor(t % 60);
+  var f = Math.floor((t - Math.floor(t)) * 24);
+  return pad2(m) + ':' + pad2(s) + ':' + pad2(f);
+}
+
+function drawHUD() {
+  var pad = Math.max(14, Math.min(W, H) * 0.032);
+  var u = Math.max(10, Math.min(W * 0.0105, 15));
+
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '600 ' + u + 'px ' + MONO_FONT;
+  ctx.fillStyle = 'rgba(246,242,232,0.62)';
+  ctx.fillText('LIZI // STAGE 588', pad, pad + u);
+  ctx.fillStyle = rgba(S.accentRGB, 0.95);
+  ctx.fillText('TRIGGER · IMPACT FRAMES', pad, pad + u * 2.4);
+
+  var name = (S.song && S.song.name) ? String(S.song.name) : 'UNTITLED';
+  var artists = '';
+  if (S.song && S.song.artists) {
+    artists = Array.isArray(S.song.artists) ? S.song.artists.join(' / ') : String(S.song.artists);
+  }
+  var label = name + (artists ? '  —  ' + artists : '');
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(246,242,232,0.78)';
+  ctx.font = '700 ' + u + 'px ' + MONO_FONT;
+  ctx.fillText(label, W - pad, pad + u, W * 0.44);
+  ctx.fillStyle = 'rgba(246,242,232,0.32)';
+  ctx.font = '600 ' + (u * 0.82) + 'px ' + MONO_FONT;
+  ctx.fillText('SEQ.588 // 24FPS // ' + (S.live.bpm > 0 ? ('BPM ' + Math.round(S.live.bpm)) : 'BPM ---'), W - pad, pad + u * 2.6, W * 0.44);
+
+  var barW = Math.max(120, W * 0.24);
+  var bx = pad;
+  var by = H - pad - 8;
+  ctx.textAlign = 'left';
+  ctx.font = '700 ' + u + 'px ' + MONO_FONT;
+  ctx.fillStyle = 'rgba(246,242,232,0.82)';
+  ctx.fillText(timecode(S.t), bx, by - 12);
+  ctx.fillStyle = 'rgba(246,242,232,0.16)';
+  ctx.fillRect(bx, by, barW, 2);
+  var frac = (S.duration > 0) ? clamp01(S.t / S.duration) : 0;
+  ctx.fillStyle = rgba(S.accentRGB, 0.92);
+  ctx.fillRect(bx, by, barW * frac, 2);
+  ctx.fillStyle = '#ffe416';
+  ctx.fillRect(bx + barW * frac - 1.5, by - 4, 3, 10);
+
+  ctx.textAlign = 'right';
+  ctx.font = '600 ' + (u * 0.86) + 'px ' + MONO_FONT;
+  ctx.fillStyle = 'rgba(246,242,232,0.38)';
+  ctx.fillText('GL:CANVAS2D // 2X', W - pad, H - pad - 8);
+  ctx.fillStyle = rgba(S.accentRGB, 0.7);
+  ctx.fillText(S.playing ? '▶ PLAY' : '‖ HOLD', W - pad, H - pad - 8 - u * 1.6);
+
+  var b = Math.max(18, Math.min(W, H) * 0.028);
+  ctx.strokeStyle = 'rgba(246,242,232,0.32)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pad, pad + b); ctx.lineTo(pad, pad); ctx.lineTo(pad + b, pad);
+  ctx.moveTo(W - pad - b, pad); ctx.lineTo(W - pad, pad); ctx.lineTo(W - pad, pad + b);
+  ctx.moveTo(pad, H - pad - b); ctx.lineTo(pad, H - pad); ctx.lineTo(pad + b, H - pad);
+  ctx.moveTo(W - pad - b, H - pad); ctx.lineTo(W - pad, H - pad); ctx.lineTo(W - pad, H - pad - b);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(246,242,232,0.14)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.5 - 16, H * 0.5); ctx.lineTo(W * 0.5 + 16, H * 0.5);
+  ctx.moveTo(W * 0.5, H * 0.5 - 16); ctx.lineTo(W * 0.5, H * 0.5 + 16);
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(W - pad * 0.42, H * 0.5);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 ' + Math.round(Math.min(W * 0.052, H * 0.062)) + 'px "Arial Black","Microsoft YaHei",sans-serif';
+  ctx.fillStyle = 'rgba(246,242,232,0.055)';
+  ctx.fillText('トリガー ・ インパクト', 0, 0);
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(W - pad * 1.5, pad * 2.9);
+  ctx.rotate(nowT * 0.6);
+  ctx.strokeStyle = rgba(S.accentRGB, 0.55);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-u * 0.5, -u * 0.5, u, u);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+/* ---------- grain ---------- */
+
+var grainCanvas = null;
+var grainPattern = null;
+
+function buildGrain() {
+  try {
+    var gs = 220;
+    grainCanvas = document.createElement('canvas');
+    grainCanvas.width = gs;
+    grainCanvas.height = gs;
+    var gctx = grainCanvas.getContext('2d');
+    if (!gctx) { grainPattern = null; return; }
+    var img = gctx.createImageData(gs, gs);
+    var d = img.data;
+    for (var i = 0; i < d.length; i += 4) {
+      var v = 110 + ((Math.random() * 100) | 0);
+      d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+    }
+    gctx.putImageData(img, 0, 0);
+    grainPattern = ctx.createPattern(grainCanvas, 'repeat');
+  } catch (e) {
+    grainPattern = null;
+  }
+}
+
+/* ---------- resize / frame ---------- */
+
+function resize() {
+  var w = window.innerWidth || 0;
+  var h = window.innerHeight || 0;
+  if (!isFinite(w) || w <= 0) w = 1440;
+  if (!isFinite(h) || h <= 0) h = 900;
+  W = w;
+  H = h;
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  if (!isFinite(DPR) || DPR <= 0) DPR = 1;
+  cv.width = Math.max(1, Math.round(W * DPR));
+  cv.height = Math.max(1, Math.round(H * DPR));
+  cv.style.width = W + 'px';
+  cv.style.height = H + 'px';
+}
+
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  drawBackground();
+  drawLyrics();
+  drawSparks();
+  drawHUD();
+  drawImpact();
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  var t0 = performance.now();
+  try {
+    S.frames++;
+    nowT = t0 / 1000;
+    var dt = lastNow ? Math.min(0.06, nowT - lastNow) : 0.016;
+    if (!(dt > 0)) dt = 0.016;
+    lastNow = nowT;
+    updateState();
+    updateCam(dt);
+    updateFx(dt);
+    draw();
+  } catch (e) {
+    noteErr(e);
+  }
+  S.js = Math.round((performance.now() - t0) * 100) / 100;
+}
+
+/* ---------- ready ---------- */
+
+var readySent = false;
+function sendReady() {
+  if (readySent) return;
+  readySent = true;
+  try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (e) {}
+}
+
+/* ---------- self-check hook (top-level, unconditional) ---------- */
+
+window.__stage = function () {
+  return {
+    lines: S.lines.length,
+    idx: S.idx,
+    t: S.t,
+    playing: !!S.playing,
+    frames: S.frames,
+    js: S.js,
+    err: S.err || '',
+    text: S.text || '',
+    gl: false,
+    rm: RM
+  };
+};
+
+/* ---------- boot ---------- */
+
+resize();
+window.addEventListener('resize', resize);
+buildGrain();
+
+requestAnimationFrame(sendReady);
+setTimeout(sendReady, 800);
+requestAnimationFrame(frame);
+
+try {
+  var _mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  if (_mq && _mq.addEventListener) {
+    _mq.addEventListener('change', function (e) {
+      RM = !!(e && e.matches);
+      S.rm = RM;
+    });
+  }
+} catch (e4) {}
+</script>
+</body>
+</html>

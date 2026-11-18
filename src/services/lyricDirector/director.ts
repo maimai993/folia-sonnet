@@ -15,12 +15,14 @@ import {
 } from '../aiCompletion';
 import type { AiCompletionTarget } from '../aiCompletion';
 import {
+    effectiveBlockedDirectorModes,
     formatParamValue,
     gateSatisfied,
     gatesFor,
     isBlockedDirectorMode,
     isInertValue,
     isKnownDirectorMode,
+    isLockedDirectorMode,
     modeLabel,
     sanitizeParams,
     tuningStateKey,
@@ -246,13 +248,15 @@ const currentModeOf = (state: VisualizerState): string => (
     typeof state?.visualizerMode === 'string' ? state.visualizerMode : 'classic'
 );
 
-/* An id the registry does not know is a hallucination; a mode the user blocked is
- * one the AI was never shown, so an answer naming it is treated the same way —
- * both degrade to the mode that is already playing. */
+/* An id the registry does not know is a hallucination; a mode the user blocked — or one
+ * the AI is never allowed to use at all (fork-only and mod modes) — is one the AI was
+ * never shown, so an answer naming it is treated the same way: both degrade to the mode
+ * that is already playing. */
 const validatedMode = (mode: unknown, fallback: string, blockedModes: readonly string[] = []): string => {
     const candidate = typeof mode === 'string' ? mode.trim() : '';
-    if (isKnownDirectorMode(candidate) && !isBlockedDirectorMode(candidate, blockedModes)) return candidate;
-    return fallback;
+    if (!isKnownDirectorMode(candidate) || isLockedDirectorMode(candidate)) return fallback;
+    if (isBlockedDirectorMode(candidate, effectiveBlockedDirectorModes(blockedModes))) return fallback;
+    return candidate;
 };
 
 interface ApplyResult {
@@ -372,7 +376,7 @@ export const restoreLyricDirectorSnapshot = (): string => {
     const typed = useVisualizerSettingsStore.getState();
     const state = typed as unknown as Record<string, unknown>;
     if (typeof snapshot.mode === 'string') {
-        typed.handleSetVisualizerMode(snapshot.mode as VisualizerMode, { notify: false });
+        typed.handleSetVisualizerMode(snapshot.mode, { notify: false });
     }
     Object.entries(snapshot.tunings ?? {}).forEach(([mode, tuning]) => {
         const setter = MODE_PARAMS[mode]?.setter;
@@ -468,7 +472,7 @@ export const runLyricDirectorDecision = async (options: { announce?: boolean; fo
      * 默认 AI 优先 —— AI 的答案覆盖随机那一票，随机兜 AI 没给的底；选「随机优先」才是
      * 上面注释里那条老规矩 —— 随机先定，AI 照算照上传但不应用。
      */
-    const randomAnimation = useVisualizerSettingsStore.getState().randomVisualizerModePerSong === true;
+    const randomAnimation = useVisualizerSettingsStore.getState().randomVisualizerModePerSong;
     const randomPriority = randomAnimation && settings.autoDecisionPriority === 'random';
     const applyAllowed = options.apply !== false && (force || (!randomPriority && settings.autoOnSongChange));
     const songKey = currentSongKey();

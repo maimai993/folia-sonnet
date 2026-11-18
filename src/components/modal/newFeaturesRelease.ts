@@ -1,4 +1,4 @@
-import { AppWindow, Clapperboard, Palette, Shapes, Sparkles } from 'lucide-react';
+import { Atom, Gauge, Radio, Shuffle, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // src/components/modal/newFeaturesRelease.ts
@@ -19,13 +19,13 @@ type NewFeaturesRelease = {
 // Defines the current release's cards; their localized text lives under i18nKey in every locale.
 // 与上游 v0.7.22 一致：六张。花火（含它需要的智能动感模式）曾被 60b70efc 砍掉，现已按用户要求恢复。
 export const NEW_FEATURES_RELEASE: NewFeaturesRelease = {
-    i18nKey: 'releaseNotes.v0_7_28',
-    majorUpdate: { codename: 'Mimiambol' },
+    i18nKey: 'releaseNotes.v0_7_29',
+    majorUpdate: { codename: 'Feynman' },
     features: [
-        { id: 'scenes', icon: Clapperboard },
-        { id: 'newLook', icon: Shapes },
-        { id: 'windowControls', icon: AppWindow },
-        { id: 'styleOptions', icon: Palette },
+        { id: 'radioWall', icon: Radio },
+        { id: 'metaphor', icon: Atom },
+        { id: 'perfCheck', icon: Gauge },
+        { id: 'shuffleSearch', icon: Shuffle },
         { id: 'moreDetails', icon: Sparkles },
     ],
 };

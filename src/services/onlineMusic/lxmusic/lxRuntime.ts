@@ -688,7 +688,6 @@ export const loadLxSource = (rawScript: string, meta: LxSourceMeta): LxLoadedSou
     try {
         (globalThis as { lx?: unknown }).lx = lx;
         // 包一层 async 以支持脚本顶层 await；脚本里的 const { EVENT_NAMES, request, on, send } = globalThis.lx 在主作用域里取到。
-        // eslint-disable-next-line no-new-func
         const runner = new Function(`"use strict";\n${rawScript}`) as () => unknown;
         const returned = runner();
         // 顶层 await 的脚本会返回 Promise：初始化失败要留痕，不要静默。

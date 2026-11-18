@@ -1,5 +1,5 @@
 import {
-    applyAndroidPhoneFit,
+    applyPhoneOrientation,
     readStoredAndroidPhoneFitOrientation,
     syncAndroidPhoneFitNative,
     writeStoredAndroidPhoneFitOrientation,
@@ -125,7 +125,7 @@ export const applyHdrProjection = async (enabled: boolean): Promise<DisplayBoost
         writePreviousOrientation(null);
     }
     writeStoredAndroidPhoneFitOrientation(orientation);
-    applyAndroidPhoneFit(false, orientation);
+    applyPhoneOrientation(orientation);
     syncAndroidPhoneFitNative(true, orientation);
 
     if (typeof document !== 'undefined') {

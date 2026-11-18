@@ -3,14 +3,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import type { MotionValue } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getCacheUsageByCategory, clearCacheByCategory } from '../../services/db';
-import { cacheSizeLabels, readMvMediaCacheBytes, clearMvMatchCache, clearMvMediaCacheBytes } from './settings/useCacheUsagePanel';
-
+import { useCacheUsagePanel } from './settings/useCacheUsagePanel';
 import { forgetSettledDrumHits } from '../../services/analysis/drumHits';
 import { clearBalanceRuntime } from '../../services/volumeBalance/balanceRecords';
-import { DualTheme, StageStatus, StageSource, Theme, ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
+import { type DualTheme, type StageStatus, type StageSource, type Theme, type ThemeMode, type NowPlayingConnectionStatus, type ReplayGainMode } from '../../types';
 import { getNavidromeConfig, saveNavidromeConfig, clearNavidromeConfig, hashPassword, navidromeApi, setNavidromeEnabled, getCachedNavidromeServerProfile, refreshNavidromeServerProfile, getNavidromeConfigOrigin, dismissNavidromeServerPreset } from '../../services/navidromeService';
 import { fetchNavidromeServerPreset, markNavidromeConfigAsPresetIfMatching, restoreNavidromeServerPreset } from '../../services/navidromeServerPreset';
-import { NavidromeConfig, NavidromeServerProfile } from '../../types/navidrome';
+import { type NavidromeConfig, type NavidromeServerProfile } from '../../types/navidrome';
 import VisPlayground from '../visualizer/window/VisPlayground';
 import { useVisualizerTunings } from '../visualizer/useVisualizerTunings';
 import ThemePark from './ThemePark';
@@ -26,7 +25,7 @@ import { kitMotionTokens, useKitReducedMotion } from './settings/kit/motion';
 import { parseNumberText } from './settings/kit/numberText';
 import { SETTINGS_PAGES, SETTINGS_PAGE_OPTIONS } from './settings/pages';
 import HelpPage from './settings/pages/HelpPage';
-import { SettingsPageContext, type CacheCategory, type ElectronSettingsState, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
+import { SettingsPageContext, type SettingsPageContextValue } from './settings/pages/settingsPageContext';
 import { AiHelpPromptModal } from './AiHelpPromptModal';
 import ReleaseNotesDialog from './ReleaseNotesDialog';
 import meowImageUrl from '../../../build/miao.png';
@@ -35,12 +34,15 @@ import { type SettingsModalState, type SettingsSubviewId, type VisualizerSetting
 import { SettingsAnchorProvider, useSettingsAnchorList, useSettingsAnchorStore } from './settings/navigation/SettingsAnchorContext';
 import SettingsSearchResults from './settings/navigation/SettingsSearchResults';
 import SettingsSideList from './settings/navigation/SettingsSideList';
+import SettingsCompactNav from './settings/navigation/SettingsCompactNav';
 import { settingsAnchorSubview } from '../../utils/settingsAnchorModel';
 import { buildSettingsNavGroups, findSettingsNavItem, type SettingsSectionId } from './settings/navigation/settingsNavModel';
 import { buildSettingsSearchEntries, searchSettings, type SettingsSearchEntry } from './settings/navigation/settingsNavSearch';
 import { isSettingsSectionSubview, resolveInitialSettingsSection, sectionForSettingsSubview, writeLastSettingsSection } from './settings/navigation/settingsLastSection';
 import { useSettingsLanding, type SettingsLandingTarget } from './settings/navigation/useSettingsLanding';
 import { runsOnWindows } from '../../utils/platform';
+import { hasElectronBridge, isCapacitorAndroid } from '../../platform/runtime';
+import { canReadDesktopSettings } from './settings/desktopSettingsBridge';
 import { openOutsideLink } from '../../utils/system/outsideLink';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useSettingsScrollSpy } from '../../hooks/useSettingsScrollSpy';
@@ -124,9 +126,6 @@ const DEFAULT_UPDATE_CHANNEL: 'realeco' | 'limo' | 'cielo' | 'internal' = __APP_
         : __APP_RELEASE_CHANNEL__ === 'internal'
             ? 'internal'
             : 'realeco';
-
-// Synchronous on purpose: the first render has to know which sections exist before the isElectron state below settles.
-const hasElectronBridge = () => typeof window !== 'undefined' && typeof (window as any).electron?.platform === 'string';
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
     onClose,
@@ -324,8 +323,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         }
     };
     const contentScrollRef = useRef<HTMLDivElement>(null);
-    // Matches the md: split of the window: under it the side list is a strip that scrolls sideways.
-    const isWideSettingsLayout = useMediaQuery('(min-width: 768px)');
+    // 安卓上不用宽屏两列：横屏逻辑宽度就有 780~900px，768px 会命中，而横屏高度只有
+    // 390~430px，内容区被压成一条（「横屏设置页不显示文字、界面大小异常」）。
+    // androidPhoneFit.css ⑤ 也在同一环境下压回单列，两边必须一致。
+    const isWideSettingsLayout = useMediaQuery('(min-width: 768px)') && !isCapacitorAndroid();
     const settingsAnchorStore = useSettingsAnchorStore();
     const settingsAnchors = useSettingsAnchorList(settingsAnchorStore);
 
@@ -377,24 +378,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         landOn(initialAnchor.rowId ?? initialAnchor.id, initialAnchor.id);
     }, [initialAnchor]);
 
-    // Cache State
-    const [cacheSizes, setCacheSizes] = useState({
-        playlist: '0 B',
-        lyrics: '0 B',
-        cover: '0 B',
-        media: '0 B',
-        analysis: '0 B',
-        volumeBalance: '0 B',
-        mvMatch: '0 B',
-        mvMedia: '0 B'
-    });
-    const [mediaCount, setMediaCount] = useState(0);
-    const [isCleaning, setIsCleaning] = useState<CacheCategory | null>(null);
+    // 缓存用量：状态与清理都在 useCacheUsagePanel 里（别在这里再写一份 —— 以前两份就是
+    // 「新加一类只在其中一处出现」的来源）。
+    const { cacheSizes, mediaCount, isCleaning, clearCategory } = useCacheUsagePanel(activeTab);
 
     // Electron Settings State
     // Seeded synchronously so a remembered desktop/mods section has its title on the first frame; the effect below still confirms it.
     const [isElectron, setIsElectron] = useState(hasElectronBridge);
-    const [electronSettings, setElectronSettings] = useState<ElectronSettingsState>({
+    const [electronSettings, setElectronSettings] = useState({
         GEMINI_API_KEY: '',
         // fork：留空表示沿用主进程里的默认地址（见 services/aiText.ts，那里才写具体主机）。
         GEMINI_API_URL: '',
@@ -430,7 +421,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     const [cacheDirectory, setCacheDirectory] = useState<string>('');
     const [cacheDirectoryIsDefault, setCacheDirectoryIsDefault] = useState(true);
     const [cacheDirectoryStatus, setCacheDirectoryStatus] = useState<'idle' | 'choosing'>('idle');
-    const isElectronRuntime = typeof window !== 'undefined' && typeof window.electron?.platform === 'string';
+    const isElectronRuntime = hasElectronBridge();
     const savedAiApiKey = savedElectronAiCredentials.AI_PROVIDER === 'openai'
         ? savedElectronAiCredentials.OPENAI_API_KEY
         : savedElectronAiCredentials.GEMINI_API_KEY;
@@ -452,8 +443,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // window again. Read together and applied as one transition, they render it once, between frames.
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
-        const electron = (window as any).electron;
-        if (!electron || typeof electron.platform !== 'string') {
+        const electron = window.electron;
+        if (!canReadDesktopSettings()
+            || typeof electron?.getSettings !== 'function'
+            || typeof electron.getCacheDirectory !== 'function') {
             return;
         }
         setIsElectron(true);
@@ -485,10 +478,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     setCacheDirectory(cacheDirectoryResult.path);
                     setCacheDirectoryIsDefault(cacheDirectoryResult.isDefault);
                 }
-                if (electron.getUpdateStatus && updateAnswer.status === 'fulfilled') {
+                if (typeof electron.getUpdateStatus === 'function' && updateAnswer.status === 'fulfilled') {
                     setUpdateStatus(updateAnswer.value as ElectronUpdateStatus);
                 }
-                if (electron.getDiscordPresenceStatus && discordAnswer.status === 'fulfilled') {
+                if (typeof electron.getDiscordPresenceStatus === 'function' && discordAnswer.status === 'fulfilled') {
                     setDiscordPresenceStatus(discordAnswer.value as ElectronDiscordPresenceStatus);
                 }
             });
@@ -543,7 +536,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const saveElectronSettings = async () => {
-        if ((window as any).electron) {
+        const electron = window.electron;
+        if (hasElectronBridge() && typeof electron?.saveSettings === 'function') {
             // What is saved is the number that was typed, so "0,7" is kept as 0.7 and the main process
             // reads it as that; anything that is not a number from 0 to 2 falls back to the default.
             const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
@@ -556,26 +550,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             const geminiKeyDraft = electronSettings.GEMINI_API_KEY.trim();
             const openaiKeyDraft = electronSettings.OPENAI_API_KEY.trim();
             if (geminiKeyDraft) {
-                await (window as any).electron.saveSettings('GEMINI_API_KEY', geminiKeyDraft);
+                await electron.saveSettings('GEMINI_API_KEY', geminiKeyDraft);
             }
             // fork：Gemini 的自建 / 反代地址，存进设置文件后主进程按它发请求。
-            await (window as any).electron.saveSettings('GEMINI_API_URL', electronSettings.GEMINI_API_URL.trim());
+            await electron.saveSettings('GEMINI_API_URL', electronSettings.GEMINI_API_URL.trim());
             // URL before key: a new OpenAI-compatible key is bound to the URL saved at that moment.
-            await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
+            await electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             if (openaiKeyDraft) {
-                await (window as any).electron.saveSettings('OPENAI_API_KEY', openaiKeyDraft);
+                await electron.saveSettings('OPENAI_API_KEY', openaiKeyDraft);
             }
-            await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
-            await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
-            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM === true);
-            await (window as any).electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
-            await (window as any).electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
-            await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
-            await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
-            await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
-            await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
-            await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
-            const savedSettings = await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            await electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
+            await electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
+            await electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM);
+            await electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
+            await electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
+            await electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
+            await electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
+            await electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
+            await electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
+            await electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
+            const savedSettings = await electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
             const configuredKeys = savedSettings?.AI_API_KEYS_CONFIGURED;
             setSavedElectronAiCredentials({
                 AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
@@ -817,61 +811,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         refreshServerProfile(config);
     };
 
-    const applyCacheUsage = (
-        usage: Awaited<ReturnType<typeof getCacheUsageByCategory>>,
-        mvMediaBytes = 0,
-    ) => {
-        setCacheSizes(cacheSizeLabels(usage, mvMediaBytes));
-        setMediaCount(usage.mediaCount);
-    };
-
-    const fetchCacheUsage = async () => {
-        // MV 那份字节缓存在盘上、要问原生；与 IndexedDB 的用量一起量好再交给界面。
-        const [usage, mvMediaBytes] = await Promise.all([
-            getCacheUsageByCategory(),
-            readMvMediaCacheBytes().catch(() => 0),
-        ]);
-        applyCacheUsage(usage, mvMediaBytes);
-    };
-
-    useEffect(() => {
-        if (activeTab === 'options') {
-            // Like the answers above, it lands while the window is opening.
-            void Promise.all([
-                getCacheUsageByCategory(),
-                readMvMediaCacheBytes().catch(() => 0),
-            ]).then(([usage, mvMediaBytes]) => startTransition(() => applyCacheUsage(usage, mvMediaBytes)));
-        }
-    }, [activeTab]);
-
-    const handleClear = async (category: CacheCategory) => {
-        setIsCleaning(category);
-        // 智能平衡's readings held in memory go with its stored ones, or they would be written back. First, so
-        // a write already sent lands before the clear and none is sent after it.
-        if (category === 'volumeBalance') clearBalanceRuntime();
-        if (category === 'mvMatch') {
-            // MV 匹配结果不进 IndexedDB，清的是那平台自己的 store。
-            clearMvMatchCache();
-        } else if (category === 'mvMedia') {
-            // 只清盘上的音视频字节，保留「配了哪条投稿」的记录。
-            await clearMvMediaCacheBytes();
-        } else {
-            await clearCacheByCategory(category);
-        }
-        // The drum hits' memory of which tracks are stored goes with the stored analyses.
-        if (category === 'analysis') forgetSettledDrumHits();
-        await fetchCacheUsage();
-        setIsCleaning(null);
-    };
 
     const handleChooseCacheDirectory = async () => {
-        if (!(window as any).electron) {
+        const bridge = window.electron;
+        if (!hasElectronBridge() || typeof bridge?.chooseCacheDirectory !== 'function') {
             return;
         }
 
         setCacheDirectoryStatus('choosing');
         try {
-            const result = await (window as any).electron.chooseCacheDirectory();
+            const result = await bridge.chooseCacheDirectory();
             if (result?.path) {
                 setCacheDirectory(result.path);
                 setCacheDirectoryIsDefault(result.isDefault);
@@ -1142,7 +1091,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 isCleaning,
                 mediaCount,
                 onChooseCacheDirectory: handleChooseCacheDirectory,
-                onClear: handleClear,
+                onClear: clearCategory,
             },
             desktop: {
                 model: {
@@ -1192,6 +1141,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             exit={{ opacity: 0 }}
             transition={shellTransition}
             data-folia-keyboard-window="true"
+            data-folia-settings-overlay="true"
             data-ponder-page-scope={activeTab === 'help' ? 'help-page' : 'settings-page'}
             className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-8 sm:px-5 sm:py-12"
             style={{ backgroundColor: overlayBackground }}
@@ -1204,25 +1154,44 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 role="dialog"
                 aria-modal="true"
                 aria-label={t('options.settingsWindowName')}
+                data-folia-settings-panel="true"
                 className="st-window relative isolate flex h-[90vh] w-full flex-col overflow-hidden rounded-2xl text-[color:var(--st-t1)] shadow-[0_36px_90px_rgba(0,0,0,0.5),0_0_0_1px_var(--st-line2)] md:grid md:h-[86vh] md:w-[960px] md:grid-cols-[212px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)]"
                 style={{ ...settingsTokens(isDaylight, theme), ...kitMotionTokens(reducedKitMotion) }}
                 onClick={(event) => event.stopPropagation()}
             >
                 <GlassLayer radius="rounded-2xl" tint="bg-[var(--st-win)]" />
                 <SettingsKitThemeContext.Provider value={kitTheme}>
-                    <SettingsSideList
-                        groups={settingsNavGroups}
-                        activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
-                        onSelectSection={handleSelectSettingsSection}
-                        onSelectHelp={handleSelectHelp}
-                        query={searchQuery}
-                        onQueryChange={handleSearchQueryChange}
-                        onSubmitQuery={() => {
-                            if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
-                        }}
-                        isWide={isWideSettingsLayout}
-                    />
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                    {/* 宽屏：左侧栏（搜索框 + 分类）常在。紧凑档：顶上只有菜单按钮和搜索框，
+                        分类收进菜单按钮打开的抽屉里——抽屉就是同一个侧栏，不带搜索框。 */}
+                    {isWideSettingsLayout ? (
+                        <SettingsSideList
+                            groups={settingsNavGroups}
+                            activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
+                            onSelectSection={handleSelectSettingsSection}
+                            onSelectHelp={handleSelectHelp}
+                            query={searchQuery}
+                            onQueryChange={handleSearchQueryChange}
+                            onSubmitQuery={() => {
+                                if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
+                            }}
+                        />
+                    ) : (
+                        <SettingsCompactNav
+                            groups={settingsNavGroups}
+                            activeId={isSearching ? null : activeTab === 'help' ? 'help' : activeSettingsSection}
+                            onSelectSection={handleSelectSettingsSection}
+                            onSelectHelp={handleSelectHelp}
+                            query={searchQuery}
+                            onQueryChange={handleSearchQueryChange}
+                            onSubmitQuery={() => {
+                                if (searchHits.length > 0) handleSelectSearchHit(searchHits[0]);
+                            }}
+                            isDaylight={isDaylight}
+                            onClose={onClose}
+                            closeLabel={t('ui.close')}
+                        />
+                    )}
+                    <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
                         <PageHeader
                             title={isSearching
                                 ? t('options.settingsSearchTitle')
@@ -1235,10 +1204,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 : undefined}
                             closeLabel={t('ui.close')}
                             onClose={onClose}
+                            showClose={isWideSettingsLayout}
                         />
                         <div
                             ref={contentScrollRef}
-                            className="relative z-10 min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-8 md:pb-16 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-4 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--st-fill2)] [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-3"
+                            data-folia-settings-content="true"
+                            className="relative min-h-0 flex-1 overflow-y-auto px-4 pb-12 md:px-8 md:pb-16 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-4 [&::-webkit-scrollbar-thumb]:border-solid [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-[var(--st-fill2)] [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-3"
                         >
                             {isSearching ? (
                                 <SettingsSearchResults hits={searchHits} onSelect={handleSelectSearchHit} />
@@ -1287,7 +1258,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                 </AnimatePresence>
             </motion.div>
-            <MarketMount />
             <AnimatePresence>
                 {showVisPlayground && (
                     <VisPlayground
@@ -1436,6 +1406,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                 )}
             </AnimatePresence>
+
+            <MarketMount />
 
             <LyricFilterSettingsModal
                 isOpen={showLyricFilterSettings}

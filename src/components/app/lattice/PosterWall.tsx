@@ -79,15 +79,9 @@ const CAMERA_HOME = { x: 34, y: 80 };
 /*
  * 墙的基准倍率：按视口宽度分档，但**手机横过来那一档要单独看**。
  *
- * 只看宽度时，手机横屏的宽（700~900）落进桌面档，倍率从竖屏的 0.52 跳到 0.64 —— 磁贴
- * 大了 23%。更显眼的是相机能看到的世界范围 = 视口 ÷ 倍率：横屏高度只剩 360，范围一下
- * 小了一大截，于是「磁贴变大、范围变小、得多拖几下才看全」。
- *
- * HDR 投影会强制横屏（画面要经挡风玻璃反射），所以这件事是在开 HDR 时撞上的：本来就横着
- * 的时候没有这一档跳变，于是「横屏下开 HDR 反而没有放大的迹象」。
- *
- * 按短边压一档：桌面窗口再怎么拖，短边也多在 600 以上，不受影响；只有「宽够桌面、高却
- * 只有手机那一点」的横屏手机会退到 0.52，与它竖屏时一致 —— 转屏不再改变磁贴大小。
+ * 只看宽度时，手机横屏的宽（700~900）落进桌面档，倍率从竖屏的 0.52 跳到 0.64 —— 磁贴大了 23%。
+ * 更显眼的是相机能看到的世界范围 = 视口 ÷ 倍率：横屏高度只剩 360，范围一下小了一大截，
+ * 于是「磁贴变大、范围变小、得多拖几下才看全」。按短边压一档即可。
  */
 const getScale = (width: number, height: number) => {
     const byWidth = width < 640 ? 0.52 : width < 1100 ? 0.64 : 0.76;
@@ -140,8 +134,7 @@ export default function PosterWall({
         if (opened) hasDrawnRef.current = true;
     }, [opened]);
     // Camera scale, mirrored into state only so posters can size their artwork. It follows the
-    // width breakpoints, so this settles after the first measure and then only moves on a resize
-    // or when the user's zoom is handed back at the end of a pinch (see the zoom effect below).
+    // width breakpoints, so this settles after the first measure and then only moves on a resize.
     const [cameraScale, setCameraScale] = useState(() => cameraRef.current.scale);
     const reducedMotion = useReducedMotionFor('lattice');
     // 从资料库墙翻牌交接进来（或淡入交叉）：入场由交接代替，不跑抬起落下的波次。
@@ -323,8 +316,10 @@ export default function PosterWall({
         cameraRef,
         getWorldBounds,
         viewportRef,
-        // 接上捏合 / Ctrl+滚轮：没给 zoom 时 useWallPointerPan 根本不认这两种手势，
-        // 于是播放界面这面磁贴墙怎么捏都不缩放（bravais 资料库墙早就接了同一份倍率）。
+        /*
+         * 缩放宿主（#409）：双指捏合与 Ctrl+滚轮都走这一份。倍率的上下限是基准档位的倍数，
+         * 所以窄屏 / 宽屏上「能缩到多小 / 多大」是同一套相对量。
+         */
         zoom: {
             // 基准档位只跟视口宽度走：cameraRef 里的 scale 已经含了倍率，不能拿它当基准。
             baseScale: () => baseScaleRef.current,
@@ -399,7 +394,6 @@ export default function PosterWall({
         onBack,
         backEnabled,
     });
-
     // Permanent identities for the two handlers every poster receives. An arrow per poster is
     // re-created on each wall render, which alone would defeat LatticePoster's memo and put all
     // 50+ poster bodies back on the critical path of every unrelated App re-render.
@@ -472,6 +466,14 @@ export default function PosterWall({
         <div
             ref={containerRef}
             className="lattice-field"
+            /*
+             * 触屏手势全交给页面自己处理（#409）：不写这一条，安卓 WebView 会把双指捏合
+             * 当成**页面缩放**吃掉 —— 手指按下去了，pointermove 却不再来（浏览器直接发
+             * pointercancel），于是 useWallPointerPan 里的捏合判定永远走不到。
+             * 队列墙的 .lattice-field 一直是这么写的（见 radio/RadioWall.css 的注释），
+             * 海报墙这一条漏了，双指缩放因此「彻底不能用」。
+             */
+            style={{ touchAction: 'none' }}
             tabIndex={-1}
             onKeyDown={handleFieldKeyDown}
             onFocusCapture={handleFocusCapture}

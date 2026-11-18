@@ -54,7 +54,13 @@ vi.mock('@/services/aiCompletion', async (importOriginal) => {
 
 const lines = (a: string, b: string) => [{ fullText: a }, { fullText: b }];
 
-beforeEach(() => {
+beforeEach(async () => {
+    /*
+     * 「禁用 AI 推理」总闸默认打开（#401）。这里验的是缓存与生成的先后关系，
+     * 不是闸门本身，所以先把推理打开。
+     */
+    const { useAiInferenceSettingsStore } = await import('@/stores/useAiInferenceSettingsStore');
+    useAiInferenceSettingsStore.getState().setAiInferenceDisabled(false);
     state.payload = null;
     /*
      * 选一个「填了 Key、能生成」的服务商。

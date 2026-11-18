@@ -16,7 +16,7 @@
 // 里面的每个文件都算模组的内容），路径改成拷过去的位置。这个文件只给编辑器看，宿主不读它。
 
 /** The Folium version this host implements; mods read it at runtime as `folium.host.folium`. */
-export declare const FOLIUM_VERSION: { readonly major: 1; readonly minor: 9 };
+export declare const FOLIUM_VERSION: { readonly major: 1; readonly minor: 10 };
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;
@@ -777,6 +777,12 @@ export interface FoliumVisualizerDef {
     label: FoliumLabel;
     /** Position in the mode picker; default 500 (after builtin modes). */
     order?: number;
+    /**
+     * 样式选择器里代表这款动画的小图标：一段 SVG path 的 `d` 字符串，画在
+     * 宿主统一的 24×24 描边 <svg> 里（与内置样式的 glyph 同一套画框）。
+     * 不填则用通用字形。只接受 path 的 d 数据 —— mod 没有 React，不能传节点。
+     */
+    glyph?: string;
     /** Draws the visualizer into its container. */
     mount: FoliumMount<FoliumStageContext>;
     /**

@@ -30,10 +30,16 @@ import { useStatusMessageStore } from '@/stores/useStatusMessageStore';
 
 const initialAudio = useAudioSettingsStore.getState();
 
-beforeEach(() => {
+beforeEach(async () => {
     useAudioSettingsStore.setState(initialAudio, true);
     useStatusMessageStore.setState({ message: null });
     storage.clear();
+    /*
+     * 「禁用 AI 推理」总闸默认打开（#401），它会当场拒掉人声 / 伴奏分离。
+     * 这个文件验的是开关拨动的语义（持久化、互斥、一次原子更新），所以先把推理打开。
+     */
+    const { useAiInferenceSettingsStore } = await import('@/stores/useAiInferenceSettingsStore');
+    useAiInferenceSettingsStore.getState().setAiInferenceDisabled(false);
 });
 
 describe('handleSetMuted', () => {

@@ -34,6 +34,8 @@ type SearchWorkspaceProps = {
     theme: Theme;
     isDaylight: boolean;
     onClose: () => void;
+    /** 退掉压在搜索结果之上的一层（歌单 / 专辑）。安卓返回键在搜索页里要靠它逐层返回（#411）。 */
+    onBackCollection: () => void;
     onSubmitSearch: (source?: SearchSource, kind?: SearchKind) => void;
     onLoadMore: () => void;
     onPlayTrack: (track: UnifiedSong) => void;
@@ -67,6 +69,7 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     theme,
     isDaylight,
     onClose,
+    onBackCollection,
     onSubmitSearch,
     onLoadMore,
     onPlayTrack,
@@ -170,16 +173,26 @@ const SearchWorkspace: React.FC<SearchWorkspaceProps> = ({
     }, [activeProviderId, isSearchOpen, onSubmitSearch, sources, submittedQuery]);
 
     useEffect(() => {
-        if (!isSearchOpen || hasCollection) return;
+        if (!isSearchOpen) return;
+        /*
+         * 安卓返回键（#411）：它派发的是一个 Escape，**有人消费才算关掉一层**，没人消费就退到后台。
+         *
+         * 原来这里是 `if (!isSearchOpen || hasCollection) return` —— 打开一张歌单 / 专辑之后
+         * 搜索页就不接管 Escape 了，于是返回键直接退到后台（用户看到的正是「返回键把 App 杀了」），
+         * 而不是先退回搜索结果。现在分两层：
+         *   · 压在搜索结果之上（hasCollection）：退掉那一层，搜索页留着；
+         *   · 已经在搜索结果上：关掉搜索页。
+         * 两层都要 preventDefault，让 useNativeBackButton 认为这次按键被消费掉。
+         */
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                onClose();
-            }
+            if (event.key !== 'Escape') return;
+            event.preventDefault();
+            if (hasCollection) onBackCollection();
+            else onClose();
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [hasCollection, isSearchOpen, onClose]);
+    }, [hasCollection, isSearchOpen, onBackCollection, onClose]);
 
     return (
         <AnimatePresence>

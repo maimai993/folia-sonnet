@@ -114,14 +114,68 @@ internal object InstrumentalStore {
     /**
      * 这首歌的缓存键。
      *
-     * 用 songKey（平台 + 歌曲 id）而不是 URL：同一首歌的直链会过期、会换 CDN，
-     * 拿 URL 当键等于每次播放都重新分离一遍。没有 songKey 时才退回 URL。
+     * ★ 键 = songKey + **音频身份**，两者都参与（#408）。
+     *
+     * 原先只用 songKey。理由是「同一首歌的直链会过期、会换 CDN，拿 URL 当键等于每次播放都
+     * 重新分离一遍」—— 那一条到今天仍然成立，所以**不能直接把 URL 塞进键**。但只用 songKey
+     * 又漏了另一半：同一首歌可以换到**另一段音频**（切画质、MV 音轨注入/还原、平台换源），
+     * 那时 songKey 不变、音频却变了，旧结果照样命中 —— 用户点分离，听到的是上一次那一段的
+     * 分离结果（「点了分离放的是别的」）。
+     *
+     * 折中办法是取 URL 的**稳定部分**：[stableUrlIdentity] 把签名 / 时效 / 追踪参数全部剔掉，
+     * 只留「这是哪一份音频」。同一份音频换了签名得到的键不变（不会白重跑），
+     * 换了一份音频则键必然不同（不会串台）。
      */
     fun keyFor(url: String, songKey: String?): String {
-        val seed = if (!songKey.isNullOrBlank()) songKey else url
+        val audio = stableUrlIdentity(url)
+        // 没有 songKey 时只剩音频身份；两样都没有就只能用一个常量，让调用方自己去查缓存以外的判断。
+        val seed = when {
+            !songKey.isNullOrBlank() && audio.isNotEmpty() -> "$songKey|$audio"
+            !songKey.isNullOrBlank() -> songKey
+            else -> url
+        }
         val digest = MessageDigest.getInstance("SHA-1").digest(seed.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { "%02x".format(it) }.take(32)
     }
+
+    /**
+     * URL 里「代表哪一份音频」的那部分：丢掉 scheme、host 之外的可变查询参数。
+     *
+     * 各平台的直链都带一串一次性参数（`deadline` / `expires` / `token` / `sign` / `auth` /
+     * `wsSecret` / 时间戳…），它们每次签发都不同；同一份音频真正稳定的标识在**路径**上
+     * （`/xxx/bilibili/audio/1234.m4s`、`/song/media/outer/0303/M800/x.mp3` 这类），
+     * 以及少量语义参数（音质档位 `level` / `quality` / `bitrate`）。
+     *
+     * 所以这里只保留：路径 + 白名单里的查询参数（按键名排序，避免顺序不同算出两个键）。
+     * 白名单之外的参数一律视为「重新签发时会变」，不参与身份。
+     */
+    fun stableUrlIdentity(url: String): String {
+        if (url.isBlank()) return ""
+        val withoutScheme = url.substringAfter("://", url)
+        val pathAndQuery = withoutScheme.substringAfter('/', "")
+        val path = pathAndQuery.substringBefore('?')
+        val query = pathAndQuery.substringAfter('?', "")
+        if (query.isEmpty()) return path
+        val identityParams = query.split('&')
+            .mapNotNull { pair ->
+                val name = pair.substringBefore('=').lowercase()
+                if (name !in STABLE_QUERY_KEYS) null else pair
+            }
+            .sorted()
+        return if (identityParams.isEmpty()) path else "$path?${identityParams.joinToString("&")}"
+    }
+
+    /**
+     * 真正决定「是不是同一份音频」的查询参数。
+     *
+     * 只放音质 / 时长 / 轨道这类语义项：它们变了就是另一段音频，键该跟着变。
+     * 白名单比黑名单安全 —— 平台新加一个签名参数时，默认按「会变」处理，只是多跑一次分离，
+     * 不会串台。
+     */
+    private val STABLE_QUERY_KEYS = setOf(
+        "level", "quality", "bitrate", "br", "format", "codec",
+        "qn", "fnval", "sk", "duration", "mediaid", "mtype",
+    )
 
     /** 已经生成好的那一轨；没有则 null。取用会刷新 mtime，让它晚一点被清掉。 */
     fun find(context: Context, key: String, mode: VocalTrackMode = VocalTrackMode.INSTRUMENTAL): File? {
@@ -162,6 +216,19 @@ internal object InstrumentalStore {
             val file = stemTargetFor(context, key, it)
             file.isFile && file.length() > 0L
         }
+
+    /**
+     * 删掉这个键下的两份成品（含临时文件）。
+     *
+     * 用在分离失败之后（#408）：同一身份上留着的旧结果会让「这一次失败」看起来像成功 ——
+     * 界面报失败，下一次 reconcile 却直接命中旧音频装进播放器。
+     */
+    fun drop(context: Context, key: String) {
+        for (mode in listOf(VocalTrackMode.INSTRUMENTAL, VocalTrackMode.VOCAL)) {
+            runCatching { targetFor(context, key, mode).delete() }
+            runCatching { tempFor(context, key, mode).delete() }
+        }
+    }
 
     /**
      * 把临时文件转正。

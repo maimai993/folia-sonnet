@@ -166,7 +166,7 @@ export const joinStemRun = (
         for (const entry of [...run.listeners]) entry.onDone?.(outcome);
         run.listeners.clear();
         return outcome;
-    })().catch((error): StemOutcome => {
+    })().catch((error: unknown): StemOutcome => {
         console.warn(`[StemRun] ${key}: separation failed`, error);
         run.finished = true;
         if (run.cancelCheck) clearInterval(run.cancelCheck);

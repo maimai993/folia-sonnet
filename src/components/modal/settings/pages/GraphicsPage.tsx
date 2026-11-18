@@ -5,6 +5,7 @@ import ConfirmDialog from '../../../shared/ConfirmDialog';
 import { MOTION_SURFACE_IDS, useMotionSettingsStore, type MotionSurfaceId } from '../../../../stores/useMotionSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
+import { useAiInferenceSettingsStore } from '../../../../stores/useAiInferenceSettingsStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
 import type { LyricAntialias } from '../../../../types';
@@ -12,7 +13,8 @@ import { VISUALIZER_FRAME_RATE_OPTIONS } from '../../../../utils/frameRateLimite
 import { LYRIC_RENDER_SCALES } from '../../../../utils/lyricRenderQuality';
 import { DEFAULT_RENDER_PIXEL_RATIO, RENDER_PIXEL_RATIO_OPTIONS } from '../../../../utils/renderPixelRatio';
 import { lyricAntialiasChoices, lyricRenderScaleChoices } from '../../../visualizer/renderQuality/LyricRenderQualityRows';
-import { Group, Link, Reveal, Row, Segmented, Toggle, option, useSettingsKitTheme, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import { openPerfCheck } from '../../../perfCheck/openPerfCheck';
+import { Button, Group, Link, Reveal, Row, Segmented, Toggle, option, useSettingsKitTheme, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import { GpuPreferenceRow } from './graphics/GpuPreferenceRow';
 import LiquidGlassGroup, { LIQUID_GLASS_OPTIONS } from './graphics/LiquidGlassGroup';
 import { useSettingsPage } from './settingsPageContext';
@@ -39,6 +41,7 @@ const PERFORMANCE: SettingsGroupDef = { id: 'graphicsPerformance', titleKey: 'op
 const MOTION: SettingsGroupDef = { id: 'graphicsMotion', titleKey: 'options.reduceMotionSection' };
 
 const O = {
+    perfCheck: option(PERFORMANCE, 'perfCheck', 'options.perfCheck', { electronOnly: true }),
     staticMode: option(PERFORMANCE, 'enableStaticMode', 'options.enableStaticMode'),
     homeBackground: option(PERFORMANCE, 'disableHomeDynamicBackground', 'options.disableHomeDynamicBackground'),
     nativeBlur: option(PERFORMANCE, 'enablePlayerPageNativeBlur', 'options.enablePlayerPageNativeBlur'),
@@ -48,6 +51,8 @@ const O = {
     lyricAntialias: option(PERFORMANCE, 'lyricAntialias', 'options.lyricAntialias'),
     backgroundThrottling: option(PERFORMANCE, 'backgroundThrottling', 'options.backgroundThrottling', { electronOnly: true }),
     glowFix: option(PERFORMANCE, 'glowBlurQuantize', 'options.glowBlurQuantize'),
+    // 「禁用 AI 推理」总闸：默认打开（见 stores/useAiInferenceSettingsStore）。
+    aiInferenceDisabled: option(PERFORMANCE, 'aiInferenceDisabled', 'options.aiInferenceDisabled', { noteKey: 'options.aiInferenceDisabledDesc' }),
     gpuPreference: option(PERFORMANCE, 'gpuPreference', 'options.gpuPreference', { electronOnly: true, available: () => IS_WINDOWS_DESKTOP }),
     followSystem: option(MOTION, 'reduceMotionFollowSystem', 'options.reduceMotionFollowSystem'),
 };
@@ -83,6 +88,9 @@ const GraphicsPage: React.FC = () => {
         setStaticMode: state.handleToggleStaticMode,
         setHomeBackgroundOff: state.handleToggleDisableHomeDynamicBackground,
     })));
+    // 「禁用 AI 推理」总闸（默认打开）。
+    const aiInferenceDisabled = useAiInferenceSettingsStore(state => state.aiInferenceDisabled);
+    const setAiInferenceDisabled = useAiInferenceSettingsStore(state => state.setAiInferenceDisabled);
     const nativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const setNativeBlur = usePlayerChromeSettingsStore(state => state.handleTogglePlayerPageNativeBlur);
     const backgroundThrottling = useDesktopSettingsStore(state => state.backgroundThrottling);
@@ -111,6 +119,14 @@ const GraphicsPage: React.FC = () => {
     return (
         <>
             <Group def={PERFORMANCE}>
+                {isElectron && (
+                    <Row option={O.perfCheck} hint={t('options.perfCheckDesc')}>
+                        <Button onClick={() => openPerfCheck()}>{t('options.perfCheckRun')}</Button>
+                    </Row>
+                )}
+                <Row option={O.aiInferenceDisabled} hint={t('options.aiInferenceDisabledDesc')}>
+                    <Toggle checked={aiInferenceDisabled} onChange={setAiInferenceDisabled} />
+                </Row>
                 <Row option={O.staticMode} hint={t('options.enableStaticModeDesc')}>
                     <Toggle checked={theme.staticMode} onChange={theme.setStaticMode} />
                 </Row>

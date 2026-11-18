@@ -59,13 +59,24 @@ internal fun vocalTrackModeOf(mode: String?): VocalTrackMode? = when (mode) {
  * 同样是纯字符串比较，不碰 Android API，可直接进 JVM 单测。
  */
 internal fun stillPlayingGeneratedTrack(
-    currentBaseUrl: String?,
+    @Suppress("UNUSED_PARAMETER") currentBaseUrl: String?,
     currentMediaId: String,
-    buildUrl: String,
+    @Suppress("UNUSED_PARAMETER") buildUrl: String,
     buildSongKey: String?,
 ): Boolean {
-    if (currentBaseUrl != buildUrl) return false
-    // 生成时没有身份（songKey）的，无从确认「还是不是这一首」，不放行。
+    /*
+     * ★ 以 songKey 为唯一身份判据。
+     *
+     * 原曲地址 baseUrl 是平台给的签名直链（B 站带 deadline=、音乐平台带 expires/token），
+     * 拆分要几十秒到几分钟，期间签名过期、切画质、MV 音轨注入/还原都会让 Web 重新装源，
+     * baseUrl 就变了。旧判据 `currentBaseUrl != buildUrl` 把这一种误判成「换了歌」，
+     * 拆分跑完不自动换源 —— 用户要手动再拨一次（走 reconcile 的缓存分支、只比 songKey）
+     * 才生效，正是「拆完不会自动切，点一下别的再点回来才行」。
+     *
+     * 身份其实由 songKey（平台 + 歌曲 id）唯一确定：上一首和这一首的 songKey 必然不同，
+     * 所以只比 songKey 就足够挡住 #378「上一首的分离结果装到当前这首」。
+     * 没有 songKey 的老路径无从确认身份，一律不放行。
+     */
     if (buildSongKey.isNullOrBlank()) return false
     return currentMediaId == buildSongKey
 }

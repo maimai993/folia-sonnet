@@ -2,10 +2,6 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './i18n/config';
 import './index.css';
-// 手机适配的整套覆盖样式。规则全部由 <html data-folia-phone-fit='true'> 门控，
-// 开关关着时这里等于一张空表，上游桌面布局不会被碰到。放在 bootstrap 而不是 App 里，
-// 是为了让下面按 URL 挂的几个根（远程控制 / OBS）也能拿到同样的属性语义。
-import './styles/androidPhoneFit.css';
 import App from './App';
 import AppSplashGate from './components/AppSplashGate';
 import RemoteControlApp from './components/remote/RemoteControlApp';
@@ -13,25 +9,29 @@ import ObsBrowserSourceApp from './components/obs/ObsBrowserSourceApp';
 import ObsNowPlayingSourceApp from './components/obs/ObsNowPlayingSourceApp';
 import ObsPlayerCapSourceApp from './components/obs/ObsPlayerCapSourceApp';
 import { initializeLocalCoverRuntime } from './services/localCoverRuntime';
-import { installHdslbImageFixer } from './services/bilibili/hdslbImage';
 import { installFoliumHomePageDismissal } from './components/app/home/foliumHomePageDismissal';
 import { installLibrarySuiteChromeCommands } from './library/app/installLibrarySuiteChromeCommands';
 import { noteFoliumFirstScreenMounted, startFoliumForMainWindow } from './mods/runtime/mainWindowStart';
 import { installNativeDragGuard } from './utils/nativeDragGuard';
-// 安卓的安全区必须在画第一帧之前就落进 CSS 变量：env(safe-area-inset-*) 在安卓 WebView 上
-// 不可信（只报挖孔不报系统栏，无刘海全 0），顶部控件会被状态栏压住。
-import { installPhoneInsets } from './services/phoneInsets';
 import { prewarmSavedVisualizer, prewarmVisualizersWhenIdle } from './components/visualizer/prewarmVisualizers';
 import { bootNavidromeServerPreset } from './services/navidromeServerPreset';
 import { isNavidromeEnabled } from './services/navidromeService';
 import { setNavidromeEnabledState } from './stores/useLibraryStore';
-import { isMainAppSurface, isObsBrowserSourceSurface, isRemoteControlSurface, obsSourceKind } from './utils/appSurface';
+import { isMainAppSurface, isObsBrowserSourceSurface, isPerfCheckSurface, isRemoteControlSurface, obsSourceKind } from './utils/appSurface';
+// 手机适配的整套覆盖样式。规则全部由 <html data-folia-phone-fit='true'> 门控，
+// 开关关着时这里等于一张空表，上游桌面布局不会被碰到。放在 bootstrap 而不是 App 里，
+// 是为了让下面按 URL 挂的几个根（远程控制 / OBS）也能拿到同样的属性语义。
+import './styles/androidPhoneFit.css';
+import { installHdslbImageFixer } from './services/bilibili/hdslbImage';
+// 安卓的安全区必须在画第一帧之前就落进 CSS 变量：env(safe-area-inset-*) 在安卓 WebView 上
+// 不可信（只报挖孔不报系统栏，无刘海全 0），顶部控件会被状态栏压住。
+import { installPhoneInsets } from './services/phoneInsets';
+installPhoneInsets();
+installHdslbImageFixer();
 // 副作用 import：store 在模块加载时就把 `<html data-reduce-motion>` 写好并保持同步。放在 bootstrap
 // 而不是 App 里，是因为下面按 URL 挂的根不止 App —— 远程控制窗口的进度辉光也读这个属性。
 import './stores/useMotionSettingsStore';
 // 同上：液态玻璃的开关（`<html data-liquid-glass='on'>` + 注入器）也要在画第一帧之前就挂好。
-// 原来只被设置弹窗那一支引用（当时在 AppearancePage，现在在 GraphicsPage 的 LiquidGlassGroup），
-// 谁先被懒加载谁才生效；挂在 bootstrap 上之后每个根（App / 遥控 / OBS）一开始就带着正确的玻璃状态。
 import './stores/useGlassSurfaceSettingsStore';
 
 // src/bootstrap.tsx
@@ -55,7 +55,6 @@ const FIRST_SCREEN_MOD_WAIT_MS = 1500;
 // here, for every surface this bundle mounts, rather than inside App so the remote-control and OBS
 // roots are covered too and App.tsx does not grow. See utils/nativeDragGuard.ts.
 installNativeDragGuard();
-installPhoneInsets();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -63,6 +62,8 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
+// The performance check's window, loaded only there.
+const PerfCheckApp = React.lazy(() => import('./components/perfCheck/PerfCheckApp'));
 const isObsBrowserSource = isObsBrowserSourceSurface;
 // obsSource=now-playing / playercap: static OBS overlay that connects directly to NowPlaying / PlayerCap in the browser (no Electron SSE relay).
 const isNowPlayingObsSource = isObsBrowserSource && obsSourceKind === 'now-playing';
@@ -94,7 +95,9 @@ const renderApp = () => root.render(
               ? <ObsBrowserSourceApp />
               : isRemoteControl
                 ? <RemoteControlApp />
-                : <FirstScreenMounted><App /></FirstScreenMounted>}
+                : isPerfCheckSurface
+                  ? <React.Suspense fallback={null}><PerfCheckApp /></React.Suspense>
+                  : <FirstScreenMounted><App /></FirstScreenMounted>}
       </AppSplashGate>
     </React.StrictMode>
   );
@@ -124,10 +127,11 @@ const bootNavidrome = async () => {
     if (result === 'applied') setNavidromeEnabledState(isNavidromeEnabled());
 };
 
+// allSettled：mod 加载失败也要等预置写完再渲染，失败原因单独打出来，不吞掉。
 // 启动链上的每一步都是 await 串起来的，而 #app-splash 遮罩要等 renderApp 跑完才移除。
 // 只要其中任何一步不 settle（WebView 里的 serviceWorker.ready、Dexie 打开、某个 host
-// 桥调用），遮罩就会永久停在首屏动画上，而且控制台可能一条错误都没有——比崩溃更难排查。
-// 这里给整条链套一个兜底超时：先渲染出界面，迟到的初始化结果被忽略。
+// 桥调用），遮罩就会永久停在首屏动画上。这里给整条链套一个兜底超时：先渲染出界面，
+// 迟到的初始化结果被忽略。
 const BOOT_RENDER_FALLBACK_MS = 8_000;
 let hasRendered = false;
 const renderOnce = () => {
@@ -136,20 +140,16 @@ const renderOnce = () => {
     renderApp();
 };
 const bootFallbackTimer = setTimeout(renderOnce, BOOT_RENDER_FALLBACK_MS);
-// 正常路径下这个定时器必然会被 renderOnce 抢跑或在同一轮事件循环里失效，不必留着。
-// allSettled：mod 加载失败也要等预置写完再渲染，失败原因单独打出来，不吞掉。
+
 void Promise.allSettled([bootFolium(), bootNavidrome()])
     .then(([folium, navidrome]) => {
         if (folium.status === 'rejected') console.error('[Bootstrap] Folium boot failed:', folium.reason);
         if (navidrome.status === 'rejected') console.warn('[Navidrome] Server preset boot failed:', navidrome.reason);
     })
     .finally(() => {
-        // 不等它：封面 worker 接管页面后 controllerchange 会自己把这一期间失败的封面重新要一遍，
-        // 为了它卡住首屏不值当（首次安装时它可能要等一整个 precache 下载完才接管）。
-        initializeLocalCoverRuntime();
-        // B 站图床封来源，<img> 直连隔三差五 403 —— 挂上「加载失败就换原生代理的
-        // 本地 blob 重试」的兜底。不阻塞启动。
-        installHdslbImageFixer();
         clearTimeout(bootFallbackTimer);
+        // Not in the performance check's window: the cover migration it may start writes through a
+        // first-party channel (the main window runs it).
+        if (!isPerfCheckSurface) initializeLocalCoverRuntime();
         renderOnce();
     });

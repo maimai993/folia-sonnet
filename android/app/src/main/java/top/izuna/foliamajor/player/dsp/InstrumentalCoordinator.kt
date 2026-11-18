@@ -320,6 +320,17 @@ internal object InstrumentalCoordinator {
                 state = STATE_FAILED
                 percent = 0
                 /*
+                 * 失败时把这个键下的成品一并删掉（#408）。
+                 *
+                 * 「点了分离，放的却是别的」有一半是这么来的：同一个键上留着上一次的成功结果，
+                 * 这一次分离失败 → 界面报失败，但缓存里那份旧音频还在，下一次 reconcile
+                 * 直接命中它、装进播放器。删掉之后，下一次要么重新分离成功、要么老实报失败。
+                 *
+                 * 键里已经带了音频身份（见 InstrumentalStore.keyFor），所以正常不会混到别的歌；
+                 * 这里清的是「同一身份下上一次留下的残余」。
+                 */
+                InstrumentalStore.drop(context, key)
+                /*
                  * ★ 失败就得把「要分离」的意图退回去，不能停在 vocal / instrumental 上。
                  *
                  * 以前这里只报一条 failed：界面照样写着「人声」，播放器却还装着原曲

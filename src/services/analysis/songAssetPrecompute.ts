@@ -4,7 +4,6 @@ import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { getPlaybackSongKey } from '../../utils/appPlaybackGuards';
 import { getPlaybackAnalysisTarget } from '../playbackRecovery/representationRegistry';
 import { isNativePlayerAvailable, nativePlayer } from '../playbackEngine/nativePlayerPlugin';
-import { resolveNativeAudioUrl } from '../beatFx/beatFxSource';
 import { prewarmMusicEnvelope } from './musicEnvelope';
 
 // src/services/analysis/songAssetPrecompute.ts
@@ -123,6 +122,12 @@ const drain = async (): Promise<void> => {
             pending.delete(key);
             let done = false;
             try {
+                /*
+                 * 动态 import：beatFxSource 反过来经 prefetchService 用到本模块，静态导入会连成
+                 * songAssetPrecompute → beatFxSource → prefetchService → songAssetPrecompute 的环（D301）。
+                 * 这里本来就在 async 里、也不在热路径上，多一次模块查找可以忽略。
+                 */
+                const { resolveNativeAudioUrl } = await import('../beatFx/beatFxSource');
                 const url = await resolveNativeAudioUrl(item.song);
                 if (url) {
                     await prewarmMusicEnvelope(key, url, item.durationSec);

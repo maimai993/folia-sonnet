@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>沉纱</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#060d12;overflow:hidden}
+  *,*::before,*::after{box-sizing:border-box}
+  #stage{position:fixed;inset:0;overflow:hidden;background:#060d12;isolation:isolate;
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  #cv{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1}
+  .lyr{position:absolute;left:0;right:0;bottom:7vh;padding:0 6vw;text-align:center;pointer-events:none;z-index:4}
+  @media (max-aspect-ratio:3/4){
+    .lyr{bottom:10vh;padding:0 8vw}
+    .ghost{width:190%;height:150%}
+    .ghost-in{font-size:clamp(46px,17vw,120px)}
+  }
+  .ln{display:block;margin:0;font-weight:300;letter-spacing:.05em;line-height:1.44;
+      color:#8fb0b6;transition:opacity .45s ease,transform .45s ease}
+  .cur{font-size:calc(clamp(19px,4.3vw,52px) * var(--scale,1));color:#eefaf7;min-height:1.44em;
+       font-weight:300;letter-spacing:.045em;text-shadow:0 2px 26px rgba(3,10,14,.9);
+       max-width:100%;overflow-wrap:break-word;word-break:break-word;line-height:1.44}
+  .ch{display:inline-block;opacity:.44;color:#8fb0b6;transition:opacity .22s ease,color .3s ease,text-shadow .3s ease}
+  /* 1px edge highlight so the last glyph never disappears on pale water */
+  .ch.on{opacity:1;color:#f7fdfb;text-shadow:0 0 18px rgba(196,240,232,.55),0 1px 2px rgba(4,12,16,.9)}
+  .ghost{position:absolute;left:50%;top:50%;width:150%;height:170%;transform:translate(-50%,-50%) rotate(-2.4deg);
+         z-index:2;pointer-events:none;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  .ghost-in{font-size:clamp(38px,9vw,110px);font-weight:300;letter-spacing:.06em;white-space:nowrap;
+            color:rgba(190,232,230,.075);filter:blur(1px)}
+  .ovl{position:absolute;inset:0;z-index:3;pointer-events:none;
+       background:linear-gradient(to bottom,rgba(4,10,14,.62) 0%,rgba(4,10,14,.14) 16%,rgba(4,10,14,.10) 46%,rgba(3,8,12,.55) 74%,rgba(2,6,9,.86) 100%)}
+  .gap{width:.3em}
+  .prev,.next{font-size:clamp(13px,2vw,23px);opacity:.24;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+  .prev{transform:translateY(-.2em)}
+  .next{transform:translateY(.2em)}
+  .empty{font-size:clamp(17px,2.6vw,30px);letter-spacing:.14em;color:#cfe6e6;font-weight:300}
+  .em-music{display:block;font-size:.8em;color:#9fd0d2;opacity:.7;margin-bottom:.5em}
+  .em-txt{display:block;color:#e7f4f2}
+  .em-art{display:block;font-size:.5em;letter-spacing:.18em;color:#8fb0b6;margin-top:.9em;opacity:.85}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div class="ovl"></div>
+  <div class="lyr" id="lyr">
+    <div class="ln prev" id="lprev"></div>
+    <div class="ln cur" id="lcur"></div>
+    <div class="ghost" id="lghost" aria-hidden="true"></div>
+    <div class="ln next" id="lnext"></div>
+  </div>
+</div>
+<script>
+'use strict';
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '沉纱',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+
+/* ---------- self-check port: outermost, unconditional ---------- */
+var STG = { lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: '', text: '', gl: false, rm: false };
+window.__stage = function () {
+  return {
+    lines: STG.lines.length,
+    idx: STG.idx,
+    t: STG.t,
+    playing: STG.playing,
+    frames: STG.frames,
+    js: STG.js,
+    err: STG.err,
+    text: STG.text,
+    gl: STG.gl,
+    rm: STG.rm
+  };
+};
+
+var view = { w: 1440, h: 900, dpr: 1 };
+var cv = document.getElementById('cv');
+var ctx = null;
+try { ctx = cv.getContext('2d', { alpha: false }); } catch (e) { console.error('[443] 2d ctx', e); }
+
+var lprev = document.getElementById('lprev');
+var lcur = document.getElementById('lcur');
+var lnext = document.getElementById('lnext');
+var lghost = document.getElementById('lghost');
+var songEl = null;
+
+var readySent = false;
+function postReady() {
+  if (readySent) return;
+  readySent = true;
+  try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (e) { console.error('[443] ready', e); }
+}
+
+/* the stage may be mounted before it has any lyric at all: show a resting state */
+function idleState() {
+  try {
+    lcur.className = 'ln cur empty';
+    lcur.textContent = '';
+    var s = document.createElement('span');
+    s.className = 'em-music';
+    s.textContent = '♪';
+    lcur.appendChild(s);
+    var w = document.createElement('span');
+    w.className = 'em-txt';
+    w.textContent = '等 一 首 歌';
+    lcur.appendChild(w);
+  } catch (e) { console.error('[443] idle', e); }
+}
+
+function finite(n, fb) { return (typeof n === 'number' && isFinite(n)) ? n : fb; }
+function clamp01(n) { return n < 0 ? 0 : (n > 1 ? 1 : n); }
+
+function resize() {
+  var w = Math.round(window.innerWidth || 0) || 1440;
+  var h = Math.round(window.innerHeight || 0) || 900;
+  if (!isFinite(w) || w < 2) w = 1440;
+  if (!isFinite(h) || h < 2) h = 900;
+  var dpr = Math.min(finite(window.devicePixelRatio, 1), 2);
+  if (!(dpr > 0.5)) dpr = 1;
+  var grew = (w !== view.w || h !== view.h);
+  view.w = w; view.h = h; view.dpr = dpr;
+  if (ctx) {
+    cv.width = Math.max(2, Math.round(w * dpr));
+    cv.height = Math.max(2, Math.round(h * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  if (grew || !bgCv) rebuildLayers();
+  else if (ctx) { ctx.drawImage(bgCv, 0, 0, view.w, view.h); }
+}
+
+/* ---------- palette driven by cover accent ---------- */
+var PAL = {
+  pearl: [236, 246, 243],
+  cyan: [150, 214, 220],
+  dark: [5, 11, 15],
+  acc: [120, 190, 200]
+};
+function hex(rgb, a) {
+  var r = Math.max(0, Math.min(255, rgb[0] | 0));
+  var g = Math.max(0, Math.min(255, rgb[1] | 0));
+  var b = Math.max(0, Math.min(255, rgb[2] | 0));
+  return 'rgba(' + r + ',' + g + ',' + b + ',' + (a === undefined ? 1 : a) + ')';
+}
+function mix(a, b, k) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * k),
+    Math.round(a[1] + (b[1] - a[1]) * k),
+    Math.round(a[2] + (b[2] - a[2]) * k)
+  ];
+}
+
+/* ---------- pre-rendered layers (built once per resize) ---------- */
+var bgCv = null, vigCv = null, rayTex = null;
+
+function mkCanvas(w, h) {
+  var c = document.createElement('canvas');
+  c.width = Math.max(2, Math.round(w));
+  c.height = Math.max(2, Math.round(h));
+  return c;
+}
+
+function buildBackdrop() {
+  var w = view.w, h = view.h, dpr = view.dpr;
+  bgCv = mkCanvas(w * dpr, h * dpr);
+  var g2 = bgCv.getContext('2d');
+  g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var g = g2.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, hex(mix([12, 30, 36], PAL.acc, 0.10), 1));
+  g.addColorStop(0.40, '#08151b');
+  g.addColorStop(0.78, '#050e13');
+  g.addColorStop(1, '#030709');
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, w, h);
+  /* surface shimmer near the top */
+  var sg = g2.createRadialGradient(w * 0.5, -h * 0.22, 0, w * 0.5, -h * 0.22, Math.max(w, h) * 0.75);
+  sg.addColorStop(0, hex(PAL.cyan, 0.30));
+  sg.addColorStop(0.55, hex(PAL.cyan, 0.05));
+  sg.addColorStop(1, 'rgba(0,0,0,0)');
+  g2.fillStyle = sg;
+  g2.fillRect(0, 0, w, h);
+}
+
+function buildVignette() {
+  var w = view.w, h = view.h, dpr = view.dpr;
+  vigCv = mkCanvas(w * dpr, h * dpr);
+  var c = vigCv.getContext('2d');
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var cx = w * 0.5, cy = h * 0.44, r = Math.max(w, h) * 0.78;
+  var g = c.createRadialGradient(cx, cy, Math.min(w, h) * 0.12, cx, cy, r);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.62, 'rgba(2,6,9,0.34)');
+  g.addColorStop(1, 'rgba(1,4,6,0.86)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, w, h);
+}
+
+function buildRays() {
+  var w = 720, h = 1400;
+  rayTex = mkCanvas(w, h);
+  var c = rayTex.getContext('2d');
+  c.clearRect(0, 0, w, h);
+  /* one wide, soft light shaft; instanced a few times at different angles */
+  var g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, hex(PAL.pearl, 0.34));
+  g.addColorStop(0.35, hex(PAL.cyan, 0.12));
+  g.addColorStop(1, 'rgba(120,200,210,0)');
+  c.fillStyle = g;
+  c.beginPath();
+  c.moveTo(w * 0.42, 0);
+  c.lineTo(w * 0.58, 0);
+  c.lineTo(w * 0.78, h);
+  c.lineTo(w * 0.22, h);
+  c.closePath();
+  c.fill();
+  /* soften edges of the shaft only */
+  var eg = c.createLinearGradient(0, 0, w, 0);
+  eg.addColorStop(0, 'rgba(0,0,0,1)');
+  eg.addColorStop(0.24, 'rgba(0,0,0,0)');
+  eg.addColorStop(0.76, 'rgba(0,0,0,0)');
+  eg.addColorStop(1, 'rgba(0,0,0,1)');
+  c.globalCompositeOperation = 'destination-out';
+  c.fillStyle = eg;
+  c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = 'source-over';
+}
+
+function rebuildLayers() {
+  try {
+    buildBackdrop();
+    buildVignette();
+    if (!rayTex) buildRays();
+    buildSilk();
+    buildFigure();
+    if (!grainCv) buildGrain();
+    buildBloom();
+    seedMotes();
+  } catch (e) {
+    console.error('[443] rebuildLayers', e);
+  }
+}
+
+/* ---------- silk drape texture: satin folds in water ---------- */
+var silkTex = null, figTex = null;
+
+function buildSilk() {
+  var TW = 640, TH = 1200;
+  silkTex = mkCanvas(TW, TH);
+  var c = silkTex.getContext('2d');
+  c.clearRect(0, 0, TW, TH);
+  var strips = 11;
+  for (var s = 0; s < strips; s++) {
+    var u = s / (strips - 1);
+    var baseX = TW * (0.16 + u * 0.68);
+    var wid = TW * (0.055 + 0.075 * Math.abs(Math.sin(s * 1.7 + 0.6)));
+    var amp = TW * (0.045 + 0.06 * Math.abs(Math.cos(s * 2.3)));
+    var freq = 1.5 + 1.1 * Math.abs(Math.sin(s * 0.9));
+    var ph = s * 1.13;
+    var bright = 0.30 + 0.55 * Math.abs(Math.sin(s * 1.31 + 0.9));
+    var edgeA = 0.05 + 0.5 * Math.abs(Math.cos(s * 0.7));
+
+    var left = [], right = [];
+    for (var y = -20; y <= TH + 20; y += 16) {
+      var v = y / TH;
+      var cx = baseX + Math.sin(v * Math.PI * freq + ph) * amp + Math.sin(v * Math.PI * 0.6 + ph * 2) * amp * 0.35;
+      var ww = wid * (0.42 + 0.85 * Math.sin(Math.min(1, v * 1.15) * Math.PI * 0.72 + 0.25));
+      ww = Math.max(wid * 0.16, ww);
+      left.push([cx - ww * 0.5, y]);
+      right.push([cx + ww * 0.5, y]);
+    }
+    c.beginPath();
+    c.moveTo(left[0][0], left[0][1]);
+    for (var i = 1; i < left.length; i++) c.lineTo(left[i][0], left[i][1]);
+    for (var j = right.length - 1; j >= 0; j--) c.lineTo(right[j][0], right[j][1]);
+    c.closePath();
+
+    var gx0 = baseX - wid, gx1 = baseX + wid;
+    var g = c.createLinearGradient(gx0, 0, gx1, 0);
+    g.addColorStop(0, hex(PAL.cyan, 0.02 * edgeA));
+    g.addColorStop(0.30, hex(PAL.cyan, 0.20 * bright));
+    g.addColorStop(0.50, hex(PAL.pearl, 0.46 * bright));
+    g.addColorStop(0.70, hex(PAL.cyan, 0.18 * bright));
+    g.addColorStop(1, hex(PAL.cyan, 0.02 * edgeA));
+    c.fillStyle = g;
+    c.fill();
+  }
+  /* one global vertical fade so the drape melts into the water */
+  c.save();
+  c.globalCompositeOperation = 'destination-out';
+  var vg = c.createLinearGradient(0, 0, 0, TH);
+  vg.addColorStop(0, 'rgba(0,0,0,1)');
+  vg.addColorStop(0.14, 'rgba(0,0,0,0)');
+  vg.addColorStop(0.82, 'rgba(0,0,0,0.12)');
+  vg.addColorStop(1, 'rgba(0,0,0,1)');
+  c.fillStyle = vg;
+  c.fillRect(0, 0, TW, TH);
+  c.restore();
+}
+
+/* ---------- floating figure silhouette (closed eyes, weightless) ---------- */
+function buildFigure() {
+  var W = 420, H = 900;
+  var tmp = mkCanvas(W, H);
+  var c = tmp.getContext('2d');
+  c.clearRect(0, 0, W, H);
+  var cx = W * 0.5;
+  c.fillStyle = 'rgba(198,226,228,0.92)';
+  /* head */
+  c.beginPath();
+  c.ellipse(cx, H * 0.20, W * 0.115, H * 0.078, 0.10, 0, Math.PI * 2);
+  c.fill();
+  /* neck + torso, drifting like kelp */
+  c.beginPath();
+  c.moveTo(cx - W * 0.055, H * 0.26);
+  c.bezierCurveTo(cx - W * 0.30, H * 0.36, cx - W * 0.26, H * 0.60, cx - W * 0.10, H * 0.66);
+  c.bezierCurveTo(cx + W * 0.10, H * 0.72, cx + W * 0.30, H * 0.60, cx + W * 0.24, H * 0.40);
+  c.bezierCurveTo(cx + W * 0.20, H * 0.30, cx + W * 0.09, H * 0.24, cx + W * 0.055, H * 0.26);
+  c.closePath();
+  c.fill();
+  /* one arm lifting in the current */
+  c.beginPath();
+  c.moveTo(cx + W * 0.16, H * 0.34);
+  c.bezierCurveTo(cx + W * 0.40, H * 0.30, cx + W * 0.46, H * 0.48, cx + W * 0.30, H * 0.56);
+  c.bezierCurveTo(cx + W * 0.36, H * 0.44, cx + W * 0.26, H * 0.40, cx + W * 0.12, H * 0.42);
+  c.closePath();
+  c.fill();
+  /* trailing legs */
+  c.beginPath();
+  c.moveTo(cx - W * 0.09, H * 0.64);
+  c.bezierCurveTo(cx - W * 0.20, H * 0.80, cx - W * 0.05, H * 0.94, cx - W * 0.16, H * 1.02);
+  c.lineTo(cx - W * 0.02, H * 1.02);
+  c.bezierCurveTo(cx + W * 0.04, H * 0.88, cx - W * 0.02, H * 0.76, cx + W * 0.06, H * 0.64);
+  c.closePath();
+  c.fill();
+
+  figTex = mkCanvas(W * view.dpr * 0.6, H * view.dpr * 0.6);
+  var f = figTex.getContext('2d');
+  try { f.filter = 'blur(' + Math.max(3, Math.round(9 * view.dpr)) + 'px)'; } catch (e2) { }
+  f.drawImage(tmp, 0, 0, figTex.width, figTex.height);
+  f.filter = 'none';
+}
+
+/* ---------- drifting motes ---------- */
+var motes = [];
+var moteSpr = null;
+function seedMotes() {
+  var n = STG.rm ? 22 : 46;
+  motes = [];
+  for (var i = 0; i < n; i++) {
+    motes.push({
+      x: Math.random(), y: Math.random(),
+      r: 0.7 + Math.random() * 2.6,
+      ph: Math.random() * Math.PI * 2,
+      sp: 0.008 + Math.random() * 0.028,
+      am: 0.10 + Math.random() * 0.34
+    });
+  }
+  if (!moteSpr) {
+    var S = 64;
+    moteSpr = mkCanvas(S, S);
+    var c = moteSpr.getContext('2d');
+    var g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    g.addColorStop(0, hex(PAL.pearl, 0.95));
+    g.addColorStop(0.28, hex(PAL.cyan, 0.45));
+    g.addColorStop(1, 'rgba(150,214,220,0)');
+    c.fillStyle = g;
+    c.beginPath();
+    c.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+    c.fill();
+  }
+}
+
+/* ---------- per-frame scene ---------- */
+var EN = { level: 0.3, bass: 0.2, mid: 0.2, treble: 0.2, beat: 0, pulse: 0 };
+var bloomSpr = null;
+
+function buildBloom() {
+  var S = 320;
+  bloomSpr = mkCanvas(S, S);
+  var c = bloomSpr.getContext('2d');
+  var g = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, hex(PAL.pearl, 0.85));
+  g.addColorStop(0.32, hex(PAL.cyan, 0.34));
+  g.addColorStop(0.68, hex(PAL.cyan, 0.07));
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, S, S);
+}
+
+function drawScene(t, now) {
+  var w = view.w, h = view.h;
+  var ar = w / h;
+  /* breathe slower when the song is paused, so the stage still reads as alive */
+  var calm = (STG.rm ? 0.35 : 1) * (STG.playing ? 1 : 0.45);
+
+  /* light shafts from the surface */
+  if (rayTex) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var shafts = 3;
+    for (var i = 0; i < shafts; i++) {
+      var ph = t * (0.055 + i * 0.013) * calm + i * 2.1;
+      var sx = w * (0.26 + i * 0.26) + Math.sin(ph) * w * 0.09;
+      var sw = Math.min(w * 0.42, h * 0.55);
+      ctx.globalAlpha = (0.13 + 0.07 * Math.sin(ph * 1.7)) * (0.6 + EN.level * 0.5);
+      ctx.save();
+      ctx.translate(sx, -h * 0.10);
+      ctx.rotate(Math.sin(ph * 0.6) * 0.20 + (i - 1) * 0.075);
+      ctx.drawImage(rayTex, -sw * 0.5, 0, sw, h * 1.25);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /* the floating body, seen through the water */
+  if (figTex) {
+    var fh = Math.min(h * 0.92, w * 0.72), fw = fh * (420 / 900);
+    var fx = w * 0.5 + Math.sin(t * 0.09 * calm) * w * 0.045;
+    var fy = h * 0.40 + Math.sin(t * 0.13 * calm + 1.2) * h * 0.035;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.16 + EN.bass * 0.13;
+    ctx.translate(fx, fy);
+    ctx.rotate(Math.sin(t * 0.07 * calm) * 0.10 - 0.06);
+    ctx.drawImage(figTex, -fw * 0.5, -fh * 0.42, fw, fh);
+    ctx.restore();
+  }
+
+  /* silk drapes: same texture, three slow double-exposures */
+  if (silkTex) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    var passes = STG.rm ? 2 : 3;
+    for (var p = 0; p < passes; p++) {
+      var pp = t * (0.035 + p * 0.014) * calm + p * 1.9;
+      var tw = Math.max(w * (0.66 - p * 0.10), h * 0.52);
+      var th = h * (1.32 + p * 0.10);
+      var x = w * 0.5 + Math.sin(pp * 1.1) * w * 0.13 + (p - 1) * w * 0.10;
+      var y = h * 0.5 + Math.cos(pp * 0.9) * h * 0.06;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.sin(pp * 0.7) * 0.10 + (p - 1) * 0.05);
+      if (p === 1) ctx.scale(-1, 1);
+      ctx.globalAlpha = 0.30 + p * 0.10 + EN.treble * 0.12;
+      ctx.drawImage(silkTex, -tw * 0.5, -th * 0.5, tw, th);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  /* motes */
+  if (moteSpr) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var m = 0; m < motes.length; m++) {
+      var o = motes[m];
+      var yy = (o.y - t * o.sp * calm * 0.5) % 1;
+      if (yy < 0) yy += 1;
+      var xx = (o.x + Math.sin(t * o.sp * 4 + o.ph) * 0.012) % 1;
+      if (xx < 0) xx += 1;
+      var r = o.r * (1 + EN.bass * 0.7) * (h / 900);
+      ctx.globalAlpha = o.am * (0.55 + 0.45 * Math.sin(t * 0.9 + o.ph)) * (0.7 + EN.level * 0.6);
+      ctx.drawImage(moteSpr, xx * w - r * 2, yy * h - r * 2, r * 4, r * 4);
+    }
+    ctx.restore();
+  }
+
+  /* bloom pulse on the beat (pre-rendered, just an alpha blit) */
+  if (EN.pulse > 0.01 && bloomSpr) {
+    var bw = Math.max(w, h) * 1.35;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = Math.min(0.9, 0.16 * EN.pulse);
+    ctx.drawImage(bloomSpr, w * 0.5 - bw * 0.5, h * 0.40 - bw * 0.5, bw, bw);
+    ctx.restore();
+  }
+
+  /* vignette last, so the type stays the brightest thing */
+  if (vigCv) ctx.drawImage(vigCv, 0, 0, w, h);
+
+  /* drifting grain: one pattern fill, keeps the dark field from banding */
+  if (ctx && grainPat) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.30;
+    var off = (t * 13) % 160;
+    ctx.translate(-off, -off);
+    ctx.fillStyle = grainPat;
+    ctx.fillRect(0, 0, w + 170, h + 170);
+    ctx.restore();
+  }
+}
+
+var grainCv = null, grainPat = null;
+function buildGrain() {
+  var S = 160;
+  grainCv = mkCanvas(S, S);
+  var c = grainCv.getContext('2d');
+  var img = c.createImageData(S, S);
+  var d = img.data;
+  for (var i = 0; i < d.length; i += 4) {
+    var v = 110 + Math.random() * 90;
+    d[i] = v; d[i + 1] = v; d[i + 2] = v;
+    d[i + 3] = 26 + Math.random() * 46;
+  }
+  c.putImageData(img, 0, 0);
+  try { grainPat = ctx ? ctx.createPattern(grainCv, 'repeat') : null; } catch (e) { grainPat = null; }
+}
+
+
+function paintBase() {
+  if (!ctx) return;
+  if (!bgCv) { ctx.fillStyle = '#060d12'; ctx.fillRect(0, 0, view.w, view.h); return; }
+  ctx.drawImage(bgCv, 0, 0, view.w, view.h);
+}
+
+/* ---------- lyric engine ---------- */
+var CUR = { spans: [], times: [], lit: -1, uid: 0 };
+
+function isLatin(ch) { return /[A-Za-z0-9'’\-]/.test(ch); }
+function isSpace(ch) { return /[\s\u00a0]/.test(ch); }
+
+/* normalise one line into atomic {c,t} glyphs; never trusts the payload */
+function normChars(line) {
+  var out = [];
+  var src = Array.isArray(line.chars) ? line.chars : null;
+  var txt = typeof line.text === 'string' ? line.text : '';
+  var i, n;
+  if (src && src.length) {
+    n = Math.min(src.length, 400);
+    for (i = 0; i < n; i++) {
+      var g = src[i];
+      var c = g && typeof g.c === 'string' ? g.c : '';
+      if (!c) { c = txt.charAt(i); }
+      if (!c) continue;
+      out.push({ c: c, t: finite(g && g.t, line.t) });
+    }
+  } else if (txt) {
+    var len = Math.min(txt.length, 400);
+    var dur = line.dur > 0 ? line.dur : Math.max(1.1, len * 0.26);
+    for (i = 0; i < len; i++) out.push({ c: txt.charAt(i), t: line.t + dur * (i / Math.max(1, len)) });
+  }
+  return out;
+}
+
+function clearLyrics() {
+  CUR.spans = []; CUR.times = []; CUR.lit = -1; CUR.uid++;
+  lcur.textContent = ''; lcur.className = 'ln cur';
+  lprev.textContent = ''; lnext.textContent = '';
+}
+
+function buildLine(i) {
+  var L = STG.lines;
+  var line = L[i];
+  if (!line) { clearLyrics(); return; }
+  var glyphs = normChars(line);
+  if (!glyphs.length) {
+    CUR.spans = []; CUR.times = []; CUR.lit = -1;
+    lcur.textContent = '';
+    return;
+  }
+  var frag = document.createDocumentFragment();
+  var spans = [], times = [];
+  var word = null;
+  for (var k = 0; k < glyphs.length; k++) {
+    var g = glyphs[k];
+    var sp = document.createElement('span');
+    sp.className = 'ch';
+    sp.textContent = g.c;
+    var isWordChar = isLatin(g.c);
+    if (isWordChar) {
+      if (!word) { word = document.createElement('span'); word.className = 'w'; frag.appendChild(word); }
+      word.appendChild(sp);
+    } else {
+      word = null;
+      if (isSpace(g.c)) sp.className = 'ch gap';
+      frag.appendChild(sp);
+    }
+    spans.push(sp);
+    times.push(g.t);
+  }
+  /* build first, then measure the real rendered width and fit it */
+  lcur.className = 'ln cur';
+  lcur.textContent = '';
+  lcur.appendChild(frag);
+  CUR.spans = spans; CUR.times = times; CUR.lit = -1; CUR.uid++;
+  applyScale(glyphs.length);
+
+  var p = L[i - 1], nx = L[i + 1];
+  lprev.textContent = p && typeof p.text === 'string' ? p.text : '';
+  lnext.textContent = nx && typeof nx.text === 'string' ? nx.text : '';
+  STG.text = typeof line.text === 'string' ? line.text : '';
+  setGhost(sungPrefix(STG.text, 0));
+  hideEmpty();
+}
+
+/* the ghost echo only ever shows what has already been sung */
+function applyScale(n) {
+  /* coarse guess first, then a measured correction so long lines never spill */
+  var s = n > 34 ? 0.52 : n > 26 ? 0.66 : n > 20 ? 0.80 : n > 14 ? 0.92 : 1;
+  lcur.style.setProperty('--scale', String(s));
+  try {
+    var avail = Math.max(120, view.w * 0.88);
+    var i = 0;
+    /* fixed iteration budget; the step is multiplicative but bounded by the counter */
+    while (i < 7) {
+      var wid = lcur.scrollWidth;
+      if (!wid || wid <= avail + 1) break;
+      s = Math.max(0.34, s * (avail / wid) * 0.98);
+      lcur.style.setProperty('--scale', String(s));
+      i++;
+    }
+  } catch (e) { console.error('[443] applyScale', e); }
+}
+
+function sungPrefix(txt, k) {
+  if (!txt) return '';
+  var cut = k < 0 ? 0 : Math.min(txt.length, k + 1);
+  return txt.slice(0, cut);
+}
+
+function hideEmpty() {
+  if (songEl) { songEl.style.opacity = '0'; }
+  lcur.classList.remove('empty');
+}
+
+function showEmpty(song) {
+  clearLyrics();
+  setGhost('');
+  var nm = song && typeof song.name === 'string' ? song.name.trim() : '';
+  var ar = song && song.artists;
+  if (Array.isArray(ar)) ar = ar.filter(function (x) { return typeof x === 'string' && x; }).join(' / ');
+  if (typeof ar !== 'string') ar = '';
+  lcur.className = 'ln cur empty';
+  lcur.textContent = '';
+  var line1 = document.createElement('span');
+  line1.className = 'em-music';
+  line1.textContent = '♪';
+  var line2 = document.createElement('span');
+  line2.className = 'em-txt';
+  line2.textContent = nm || '纯音乐';
+  lcur.appendChild(line1);
+  lcur.appendChild(line2);
+  if (ar && nm) {
+    var line3 = document.createElement('span');
+    line3.className = 'em-art';
+    line3.textContent = ar;
+    lcur.appendChild(line3);
+  }
+  STG.text = '';
+}
+
+/* light glyphs up to time t; only touches the spans that changed */
+function updateLit(t) {
+  var times = CUR.times, n = times.length;
+  if (!n) return;
+  var k = -1;
+  for (var i = 0; i < n; i++) { if (times[i] <= t + 0.02) k = i; else break; }
+  if (k === CUR.lit) return;
+  var spans = CUR.spans;
+  var lo = Math.min(CUR.lit, k), hi = Math.max(CUR.lit, k);
+  for (var a = lo + 1; a <= hi && a < n; a++) {
+    if (!spans[a]) continue;
+    if (a <= k) spans[a].classList.add('on');
+    else spans[a].classList.remove('on');
+  }
+  CUR.lit = k;
+  var txt = STG.text || '';
+  if (txt) setGhost(sungPrefix(txt, k));
+}
+
+
+function onInit(payload) {
+  var p = payload || {};
+  var acc = Array.isArray(p.accent) ? p.accent : null;
+  if (acc && isFinite(acc[0]) && isFinite(acc[1]) && isFinite(acc[2])) {
+    PAL.acc = [acc[0] | 0, acc[1] | 0, acc[2] | 0];
+    /* lift the accent into a water-light tint instead of using it raw */
+    PAL.cyan = mix(PAL.cyan, PAL.acc, 0.42);
+    PAL.pearl = mix(PAL.pearl, PAL.acc, 0.10);
+    rebuildLayers();
+  }
+  var lines = Array.isArray(p.lines) ? p.lines : [];
+  var clean = [];
+  for (var i = 0; i < lines.length && i < 2000; i++) {
+    var l = lines[i];
+    if (!l || typeof l !== 'object') continue;
+    clean.push({ t: finite(l.t, 0), dur: Math.max(0, finite(l.dur, 0)), text: (typeof l.text === 'string' ? l.text : ''), chars: Array.isArray(l.chars) ? l.chars : null });
+  }
+  STG.lines = clean;
+  STG.idx = -1;
+  lastIdx = -2;
+  if (!clean.length) { showEmpty(p.song); STG.text = ''; setGhost(''); return; }
+  lcur.classList.remove('empty');
+  setGhost('');
+  buildLine(0);
+  lcur.style.opacity = '0';
+  setTimeout(function () { lcur.style.opacity = ''; }, 30);
+}
+
+/* the big double-exposed ghost word: the sung part of the line, echoing behind the type */
+var ghostKey = '';
+function setGhost(txt) {
+  var s = (txt || '').trim();
+  if (s === ghostKey) return;
+  ghostKey = s;
+  if (!lghost) return;
+  lghost.textContent = '';
+  if (!s) return;
+  var inner = document.createElement('div');
+  inner.className = 'ghost-in';
+  inner.textContent = s.length > 26 ? s.slice(0, 26) : s;
+  lghost.appendChild(inner);
+}
+
+var lastIdx = -2;
+
+function onTick(p) {
+  p = p || {};
+  var t = finite(p.time, STG.t);
+  STG.t = t;
+  if (typeof p.playing === 'boolean') STG.playing = p.playing;
+  var L = STG.lines, idx = -1;
+  for (var i = 0; i < L.length; i++) { if (L[i].t <= t + 0.02) idx = i; else break; }
+  if (idx !== lastIdx) {
+    lastIdx = idx;
+    STG.idx = idx;
+    if (idx >= 0) buildLine(idx);
+    else if (L.length) { buildLine(0); CUR.lit = -1; for (var z = 0; z < CUR.spans.length; z++) CUR.spans[z].classList.remove('on'); CUR.lit = -1; }
+  }
+  updateLit(t);
+}
+
+window.addEventListener('message', function (ev) {
+  var d = ev && ev.data;
+  if (!d || d.__c100 !== 1) return;
+  try {
+    if (d.type === 'init') onInit(d.payload);
+    else if (d.type === 'tick') onTick(d.payload);
+    else if (d.type === 'beat') {
+      var bp = d.payload || {};
+      var lv = finite(bp.level, 0.5);
+      EN.beat = lv;
+      EN.pulse = Math.max(EN.pulse, 0.55 + clamp01(lv) * 0.65);
+    } else if (d.type === 'live') {
+      var lp = d.payload || {};
+      EN.level = clamp01(finite(lp.level, EN.level));
+      EN.bass = clamp01(finite(lp.bass, EN.bass));
+      EN.mid = clamp01(finite(lp.mid, EN.mid));
+      EN.treble = clamp01(finite(lp.treble, EN.treble));
+      if (typeof lp.playing === 'boolean') STG.playing = lp.playing;
+    }
+  } catch (e) { STG.err = String(e && e.message || e); console.error('[443] msg', d && d.type, e); }
+});
+
+window.addEventListener('resize', function () {
+  try { resize(); } catch (e) { STG.err = String(e && e.message || e); console.error('[443] resize', e); }
+});
+
+var mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+STG.rm = !!(mq && mq.matches);
+if (mq && mq.addEventListener) {
+  mq.addEventListener('change', function (e) {
+    STG.rm = !!e.matches;
+    try { seedMotes(); } catch (e2) { console.error('[443] rm change', e2); }
+  });
+}
+
+idleState();
+resize();
+
+function frame(now) {
+  var t0 = performance.now();
+  try {
+    var t = now * 0.001;
+    if (!isFinite(t)) t = STG.frames * 0.016;
+    STG.frames++;
+    if (STG.frames === 1) postReady();
+
+    /* decay the beat pulse */
+    EN.pulse *= 0.90;
+    if (EN.pulse < 0.001) EN.pulse = 0;
+
+    if (ctx) {
+      paintBase();
+      drawScene(t, now);
+    }
+  } catch (e) {
+    STG.err = String(e && e.message || e);
+    console.error('[443] frame', e);
+  }
+  STG.js = STG.js * 0.82 + (performance.now() - t0) * 0.18;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setTimeout(postReady, 600);
+</script>
+</body>
+</html>

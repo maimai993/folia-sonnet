@@ -106,7 +106,6 @@ for (const testCase of cases) {
     options.noServer = false;
     options.url = undefined;
 
-    // eslint-disable-next-line no-await-in-loop
     await withRenderSession(options, async (session) => {
         const { page, url } = session;
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });

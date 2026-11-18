@@ -113,7 +113,7 @@ const PanelSurface: React.FC<PanelSurfaceProps> = ({ hasHandle, isCover, tabKey,
     );
     const scrollRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
-    const content = useMeasuredSize(contentRef, tabKey);
+    const content = useMeasuredSize(contentRef, `${tabKey}:${isWideShort}`);
     // The surface takes the size of its tab while it is still closed: nothing inside it moves
     // until it has been painted once.
     const [isStill, setIsStill] = useState(true);

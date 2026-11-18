@@ -447,6 +447,7 @@ const UnifiedPanel: React.FC<UnifiedPanelProps> = ({
                         playerState={playerState}
                         modeLabel={fmModeLabel}
                         onOpenModePicker={onOpenFmModePicker}
+                        onOpenLattice={queue.onOpenLattice}
                         onTogglePlay={onTogglePlay}
                         onNextTrack={onNextTrack}
                         onPrevTrack={onPrevTrack}

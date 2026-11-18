@@ -172,7 +172,12 @@ export const useWallPointerPan = ({
     }, []);
 
     const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0) return;
+        /*
+         * 触屏上第二根手指的 button 在某些 WebView 里不是 0（是 -1 或 1）；只认 0 会让
+         * 捏合的第二根手指被整条丢掉，表现就是「双指没反应」（#409）。所以触屏一律放行，
+         * 鼠标仍只认左键。
+         */
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
         // Panning stays available while a card is open, but a drag that starts on the open card
         // belongs to its own controls - the progress bar seeks by dragging.
         // Only actual controls are excluded; the cover, title and surrounding space can pan.

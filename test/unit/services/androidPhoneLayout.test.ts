@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-    ANDROID_PHONE_FIT_STORAGE_KEY,
     ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY,
-    applyAndroidPhoneFit,
     applyDeviceProfile,
+    applyPhoneOrientation,
     inferDeviceType,
     readStoredAndroidPhoneFitOrientation,
-    readStoredAndroidPhoneFit,
     writeStoredAndroidPhoneFitOrientation,
-    writeStoredAndroidPhoneFit,
 } from '@/services/androidPhoneLayout';
 
 const storage = new Map<string, string>();
@@ -18,8 +15,10 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe('android phone layout preference', () => {
-    it('persists the switch using the dedicated key', () => {
+describe('android phone orientation', () => {
+    // 「手机适配」那套覆盖样式是废弃代码，已经整体删除（见 androidPhoneFit.css 顶部）。
+    // 这里只验还活着的那一半：方向。
+    it('persists the orientation using the dedicated key', () => {
         const localStorageStub = {
             getItem: (key: string) => storage.get(key) ?? null,
             setItem: (key: string, value: string) => storage.set(key, value),
@@ -27,28 +26,22 @@ describe('android phone layout preference', () => {
         vi.stubGlobal('window', { localStorage: localStorageStub });
         vi.stubGlobal('localStorage', localStorageStub);
 
-        writeStoredAndroidPhoneFit(true);
-        expect(storage.get(ANDROID_PHONE_FIT_STORAGE_KEY)).toBe('true');
-        expect(readStoredAndroidPhoneFit()).toBe(true);
-
-        writeStoredAndroidPhoneFit(false);
-        expect(readStoredAndroidPhoneFit()).toBe(false);
-
         writeStoredAndroidPhoneFitOrientation('landscape');
         expect(storage.get(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY)).toBe('landscape');
         expect(readStoredAndroidPhoneFitOrientation()).toBe('landscape');
     });
 
-    it('gates CSS through the document root attribute', () => {
+    it('writes only the orientation attribute at the document root', () => {
         const setAttribute = vi.fn();
         vi.stubGlobal('document', { documentElement: { setAttribute } });
 
-        applyAndroidPhoneFit(true, 'landscape');
-        expect(setAttribute).toHaveBeenCalledWith('data-folia-phone-fit', 'true');
+        applyPhoneOrientation('landscape');
         expect(setAttribute).toHaveBeenCalledWith('data-folia-phone-orientation', 'landscape');
+        // 废弃的 data-folia-phone-fit 不再写入。
+        expect(setAttribute).not.toHaveBeenCalledWith('data-folia-phone-fit', expect.anything());
 
-        applyAndroidPhoneFit(false, 'portrait');
-        expect(setAttribute).toHaveBeenCalledWith('data-folia-phone-fit', 'false');
+        setAttribute.mockClear();
+        applyPhoneOrientation('portrait');
         expect(setAttribute).toHaveBeenCalledWith('data-folia-phone-orientation', 'portrait');
     });
 });

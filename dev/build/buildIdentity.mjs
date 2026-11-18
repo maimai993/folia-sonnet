@@ -7,7 +7,7 @@
 
 // 只有本仓库自己的 GitHub Actions 构建出来的才算官方版本。这里必须写死：
 // fork 的 Actions 里 GITHUB_REPOSITORY 是 fork 自己，本地构建根本没有 GITHUB_ACTIONS。
-export const OFFICIAL_BUILD_REPO = 'maimai993/folia-sonnet';
+export const OFFICIAL_BUILD_REPO = 'Folia-CE/folia-sonnet';
 
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/i;

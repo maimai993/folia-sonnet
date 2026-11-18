@@ -1,6 +1,6 @@
 # Folia-Sonnet
 
-将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.28**。
+将 Folia 打包到 Android 平台的实验性项目。它不是官方 Android 客户端，也不代表 Folia 主项目的移动端计划；本仓库版本基于 **Folia-major 0.7.29**（社区版 `0.7.29.2`），仓库地址 [Folia-CE/folia-sonnet](https://github.com/Folia-CE/folia-sonnet)。
 
 > [!IMPORTANT]  
 > **装上去就能用，不需要自建后端。**
@@ -26,13 +26,15 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 | 可视化叠层     | 壁纸之上的一层 WebView，跑的是播放页同一个渲染器，画面与播放页一致。                             |
 | 音乐锁屏      | 锁屏界面上也挂同一层叠层，与桌面叠层完全一致；底部控制条自上有退出（ˇ）/ 封面 / 歌名 / 进度条 / 上一首·播放暂停·下一首，也可设成「只在锁屏上出现」。 |
 | 原生锁屏歌词    | ColorOS 16+ 上把歌词写进 `MediaMetadata["lyricInfo"]`，交给系统锁屏 / AOD 原生渲染。 |
-| 手机适配      | 竖屏 / 横屏的紧凑布局，全部由 `<html data-folia-phone-fit>` 门控，关闭时桌面布局一字不变。     |
+| 安全区避让     | 挖孔 / 状态栏 / 底部导航栏由原生算好写进 `--folia-safe-area-*`，只挪落在里面的控件，背景照旧铺到边。 |
 | 刘海 / 挖孔适配 | 清掉系统垫给 decor 的 cutout padding，沉浸式下不再留黑边。                           |
 | 状态栏歌词     | 与 Lyricon 同步：换歌、播放暂停、拖动跳变、转屏等事件推送，段内推进归原生。                         |
 | 前台播放      | 前台服务 + 媒体通知，通知栏 / 锁屏 / 耳机按键的控制回到 App。                              |
 | 播放时保持常亮   | 可选开关：只在播放中钉住屏幕，暂停 / 退到后台立刻交还给系统。                                   |
 | 模组系统（Node 宿主） | 模组在手机上跑在 APK 内置的 Node.js 运行时里（`folia-node` assets + libnode），桌面版能装的 Folium 模组这里也能装。 |
 | 原生分析模型    | 智能动感模式的两个分析模型（拍点 `beat_this`、分轨 `htdemucs`）在原生侧跑 onnxruntime：熄屏、后台切歌都不断，分析的峰值负载也压得住。 |
+| 内置释出策略    | 原生库压缩进 APK（`jniLibs.useLegacyPackaging`），整包从 266MB 降到约 196MB；代价是安装时系统解压，占用比下载大。 |
+| AI 歌词动画导演  | 由 AI 按歌曲挑动画样式并调参，只对**上游自带**的样式开放；本仓库自加的与模组投稿的一律锁定，避免 AI 选到预期之外的画面。 |
 
 上游 Folia 本身具备的能力：
 
@@ -54,7 +56,8 @@ Folia 是一个以全屏沉浸式歌词播放为核心的在线音乐播放器�
 | 项目                                                                                                | 关系                                                                              |
 | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | [chthollyphile/folia-major](https://github.com/chthollyphile/folia-major)                         | Folia 主线仓库。本仓库的 Web 代码跟随它演进，当前对应 **0.7.28**。                                    |
-| [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)                       | Folia 的 Web / 桌面版本，本仓库 fork 自它，Android 容器是在它的代码外面加的一层壳。                         |
+| [Folia-CE/folia-sonnet](https://github.com/Folia-CE/folia-sonnet)                                 | 本仓库（社区版）。上游 Web / 桌面版的 fork，Android 容器与社区改动都在这里。                    |
+| [chthollyphile/folia-sonnet](https://github.com/chthollyphile/folia-sonnet)                       | Folia 的 Web / 桌面版本，本仓库最初 fork 自它。                                                |
 | [2706521883-lgtm/folia-qishui](https://github.com/2706521883-lgtm/folia-qishui)                   | 「汽水音乐」在线音源最先由它接入 Folia；**上游主线现已内置汽水**，本仓库跟随上游拿到这一音源（协议层、签名宿主与音频解密的原实现出自该项目）。 |
 | [Andrea-lyz/ColorOS-Live-Lyrics-Bridge](https://github.com/Andrea-lyz/ColorOS-Live-Lyrics-Bridge) | ColorOS 原生锁屏歌词（「媒体与播放」歌词页）的桥接协议参考。原生锁屏歌词那部分按它的协议写 `MediaMetadata["lyricInfo"]`。 |
 | [RemnantCloudGodofWar/folia-android](https://github.com/RemnantCloudGodofWar/folia-android)       | 同为 Folia 的 Android 化尝试，手机适配（紧凑布局、竖屏 / 横屏）与 AI 主题等做法参考了它。                        |

@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useState } from 'react';
 import { clearCacheByCategory, getCacheUsageByCategory } from '../../../services/db';
+import { clearBalanceRuntime } from '../../../services/volumeBalance/balanceRecords';
 import { forgetSettledDrumHits } from '../../../services/analysis/drumHits';
 import { clearMvMatchCache, clearMvMediaCacheBytes, readMvMediaCacheBytes, readMvMatchCacheBytes } from '../../../stores/useBilibiliMvStore';
 import type { CacheCategory } from './pages/settingsPageContext';
@@ -100,6 +101,9 @@ export const useCacheUsagePanel = (activeTab: 'help' | 'options') => {
 
     const handleClear = async (category: CacheCategory) => {
         setIsCleaning(category);
+        // 智能平衡's readings held in memory go with its stored ones, or they would be written back.
+        // First, so a write already sent lands before the clear and none is sent after it.
+        if (category === 'volumeBalance') clearBalanceRuntime();
         if (category === 'mvMatch') {
             // 这一份不进 IndexedDB：清内存 + localStorage，两处都要动，否则重启又回来了。
             clearMvMatchCache();

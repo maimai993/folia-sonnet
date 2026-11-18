@@ -12,7 +12,7 @@ import { drumStemSegments, startDrumStem, type DrumStemProgress } from './drumSt
 import type { StemReader } from './stemPass';
 import { runTrackStems, setWantedStemTrack, stemTrackWanted, type StemTask } from './trackStemRun';
 import { dropStemDrums, setStemDrumsKeptListener } from './stemRange';
-import { HTDEMUCS_GPU_SEGMENT } from './beatThisGpu';
+import { HTDEMUCS_GPU_SEGMENT, gpuStemsOnScreenUsable } from './beatThisGpu';
 import { modelCanRun } from './modelAvailability';
 import { decodeAtRate } from './trackAudio';
 import { decodeTrackAtRate } from './trackBytes';
@@ -79,7 +79,8 @@ export const canRunDrumStem = (): boolean => {
     return typeof window !== 'undefined'
         && typeof window.electron?.getHtdemucsGpuWeights === 'function'
         && typeof navigator !== 'undefined' && 'gpu' in navigator
-        && modelCanRun('htdemucs_gpu');
+        && modelCanRun('htdemucs_gpu')
+    && gpuStemsOnScreenUsable();
 };
 
 /** 44.1 kHz mono to the 22.05 kHz beat_this rate, by the browser's own resampler; the vocal envelope's too (vocalStemRun.ts). */

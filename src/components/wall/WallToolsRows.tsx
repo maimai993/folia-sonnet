@@ -1,6 +1,6 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Button, TextField } from '../ui';
+import { Tooltip } from '../modal/settings/kit';
 
 // src/components/wall/WallToolsRows.tsx
 // 墙面工具面板（WallToolsButton）里的各种行：条目（动作 / 开关 / 滑条 / 分组小标题）与顶部那排纯图标快捷格。
@@ -20,6 +20,8 @@ export type WallToolsEntry =
         /** 右侧的当前值（不是按键，不画框）。 */
         value?: string;
         disabled?: boolean;
+        /** 悬停时的提示（与播放页面板里的提示同一个样式）；置灰时用它写原因。 */
+        hint?: string;
         /** 点了不收起面板（循环切换一类的条目，让人看到新值）。 */
         keepOpen?: boolean;
         onSelect: () => void;
@@ -122,19 +124,20 @@ function WallToolsSliderRow({ entry }: { entry: Extract<WallToolsEntry, { kind: 
     return (
         <div role="group" aria-label={entry.label} className="lattice-tools-slider" data-wall-tools-slider={entry.id}>
             {entry.iconAction ? (
-                <Button
+                <button
+                    type="button"
                     className="lattice-tools-slider-icon"
                     aria-label={entry.iconAction.label}
-                    tip={entry.iconAction.label}
+                    title={entry.iconAction.label}
                     aria-pressed={entry.iconAction.pressed}
                     onClick={entry.iconAction.onPress}
                 >
                     <Icon aria-hidden="true" />
-                </Button>
+                </button>
             ) : (
                 <span className="lattice-tools-slider-icon" aria-hidden="true"><Icon /></span>
             )}
-            <TextField
+            <input
                 type="range"
                 min={0}
                 max={1}
@@ -168,8 +171,9 @@ export function WallToolsQuickRow({ actions, onDone }: { actions: readonly WallT
                 const Icon = action.icon;
                 const tooltip = [action.label, action.status, action.kbd].filter(Boolean).join(' · ');
                 return (
-                    <Button
+                    <button
                         key={action.id}
+                        type="button"
                         role="menuitem"
                         className={action.busy ? 'lattice-tools-quick-action is-busy' : 'lattice-tools-quick-action'}
                         data-wall-tools-quick={action.id}
@@ -178,7 +182,7 @@ export function WallToolsQuickRow({ actions, onDone }: { actions: readonly WallT
                         aria-busy={action.busy || undefined}
                         aria-expanded={action.expanded}
                         aria-controls={action.controls}
-                        tip={tooltip}
+                        title={tooltip}
                         disabled={action.disabled}
                         onClick={() => {
                             action.onSelect();
@@ -186,7 +190,7 @@ export function WallToolsQuickRow({ actions, onDone }: { actions: readonly WallT
                         }}
                     >
                         <Icon aria-hidden="true" />
-                    </Button>
+                    </button>
                 );
             })}
         </div>
@@ -206,7 +210,8 @@ export function WallToolsRow({ entry, onDone }: { entry: WallToolsEntry; onDone:
     const Icon = entry.icon;
     if (entry.kind === 'toggle') {
         return (
-            <Button
+            <button
+                type="button"
                 role="menuitemcheckbox"
                 aria-checked={entry.checked}
                 className="lattice-tools-action"
@@ -217,11 +222,12 @@ export function WallToolsRow({ entry, onDone }: { entry: WallToolsEntry; onDone:
                 <span className={`lattice-tools-toggle ${entry.checked ? 'is-on' : ''}`} aria-hidden="true">
                     <span />
                 </span>
-            </Button>
+            </button>
         );
     }
-    return (
-        <Button
+    const button = (
+        <button
+            type="button"
             role="menuitem"
             className="lattice-tools-action"
             onClick={() => {
@@ -229,11 +235,14 @@ export function WallToolsRow({ entry, onDone }: { entry: WallToolsEntry; onDone:
                 if (!entry.keepOpen) onDone();
             }}
             disabled={entry.disabled}
+            aria-description={entry.hint}
         >
             <Icon aria-hidden="true" />
             <span>{entry.label}</span>
             {entry.value !== undefined && <span className="lattice-tools-value">{entry.value}</span>}
             {entry.kbd !== undefined && (entry.kbdHidden ? <kbd aria-hidden="true">{entry.kbd}</kbd> : <kbd>{entry.kbd}</kbd>)}
-        </Button>
+        </button>
     );
+    // 有提示的条目包一层提示（悬停在外面这一层上；置灰的按钮不接指针，见 WallToolsButton.css）。
+    return entry.hint ? <Tooltip text={entry.hint} className="lattice-tools-hint">{button}</Tooltip> : button;
 }

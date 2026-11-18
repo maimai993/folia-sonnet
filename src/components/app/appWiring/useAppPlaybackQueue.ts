@@ -77,6 +77,7 @@ export const useAppPlaybackQueue = (model: Input) => {
         addOnlineSongsToQueue,
         playSong,
         playOnlineQueueFromStart,
+        playOnlineQueueShuffled,
         handleQueueAddAndPlay,
         handleSearchOverlaySubmit,
         handleSearchLoadMore,
@@ -418,7 +419,7 @@ export const useAppPlaybackQueue = (model: Input) => {
         // 速记簿要用：「插进队列并播这一首」（playback 页）与「拖动重排队列」（queue 页）。
         handleQueueAddAndPlay, handleStageExternalPlayRequest,
         handleUnavailableReplacementConfirm, incomingLyricTimelineOffsetMs, isShowingTail, loopPositionRef,
-        openSongCardPanel, pendingUnavailableReplacement, playOnlineQueueFromStart, playSong,
+        openSongCardPanel, pendingUnavailableReplacement, playOnlineQueueFromStart, playOnlineQueueShuffled, playSong,
         setPendingUnavailableReplacement, shuffleQueue, skipAfterPlaybackFailure, stageIsNextUp, stageNextUp,
         stageTrackPillOnScreen
     };

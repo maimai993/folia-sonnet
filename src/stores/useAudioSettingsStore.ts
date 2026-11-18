@@ -24,6 +24,7 @@ import { getStoredBoolean, getStoredNumber, getStoredString, removeStoredKey, se
 import { writeNativeLoopMode } from '../services/nativeQueueBridge';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { setStatusMessage } from './useStatusMessageStore';
+import { isLocalInferenceAllowed } from '../services/aiMemoryGate';
 import { setAudioFocusPolicy } from '../platform/foliaNative';
 import { isCapacitorAndroid } from '../platform/runtime';
 import { nativePlayer } from '../services/playbackEngine/nativePlayerPlugin';
@@ -355,7 +356,7 @@ export type AudioSettingsState = {
     vocalCancelCacheLimit: number;
     /** 原生此刻真正生效的模式：两个开关的意图可能被互斥改写，界面以它为准。 */
     vocalTrackMode: 'instrumental' | 'vocal' | 'off';
-    /** 「设置 → 存储」里的总开关：是否预先拆分音轨、提前分析下一首。默认关。 */
+    /** 「设置 → 存储」里的总开关：是否预先拆分音轨、提前分析下一首。默认打开（见下面初始化那行的理由）。 */
     prebuildTracksEnabled: boolean;
     audioOutputDeviceId: string;
     /** The listener's own sound, always: a mod's curve is never written into it. */
@@ -435,7 +436,10 @@ export type AudioSettingsState = {
     handleToggleMute: () => void;
     /** Sets the repeat mode and toasts it like the repeat button; the mode already in effect is a no-op. */
     handleSetLoopMode: (mode: 'off' | 'all' | 'one' | 'shuffle') => void;
-    handleToggleLoopMode: () => void;
+    handleToggleLoopMode: (isFmMode?: boolean) => void;
+    /** Shuffle in rounds: songs heard this round go after the rest; a finished round reshuffles under list loop. Off by default. (上游 v0.7.29) */
+    shuffleRoundNoRepeat: boolean;
+    handleToggleShuffleRoundNoRepeat: (enable: boolean) => void;
 };
 
 /*
@@ -505,7 +509,6 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     vocalCancelCacheBytes: 0,
     vocalCancelCacheLimit: 0,
     vocalTrackMode: 'off',
-    // 默认关：预拆两轨是几十秒的推理，不替用户决定要不要占这份负载。
     // 默认打开：这首歌与下一首的伴奏 / 清唱提前备好，切「人声 / 伴奏」才不用等几十秒。
     prebuildTracksEnabled: getStoredBoolean(PREBUILD_TRACKS_KEY, true),
     audioOutputDeviceId: readStoredAudioOutputDeviceId(),
@@ -633,6 +636,16 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         void setAudioFocusPolicy(enable);
     },
     handleToggleVocalCancel: (enable) => {
+        // 与 handleToggleVocalOnly 同理：伴奏轨也是 on-device 分离，闸门挡着就当场拒绝。
+        if (enable && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            if (get().vocalCancelEnabled) {
+                setStoredBoolean(VOCAL_CANCEL_KEY, false);
+                set({ vocalCancelEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) void nativePlayer.setVocalCancelEnabled(false).catch(() => undefined);
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_CANCEL_KEY, enable);
         if (enable) setStoredBoolean(VOCAL_ONLY_KEY, false);
         /*
@@ -658,6 +671,22 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         void nativePlayer.setVocalCancelEnabled(enable).catch(() => undefined);
     },
     handleToggleVocalOnly: (enable) => {
+        /*
+         * 要开分离就当场拒绝，而不是「先把开关拨过去、再让原生去拦」。
+         *
+         * 分离是人声 / 伴奏两轨的 on-device 推理（SCNet），推理被闸门挡着时拨过去只会让界面上
+         * 先出现一次「正在分离」再退回 —— 用户看到的就是「点了还是开始分离了」（#401 反馈）。
+         */
+        if (enable && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            // 界面可能已经乐观更新过开关，这里拨回去。
+            if (get().vocalOnlyEnabled) {
+                setStoredBoolean(VOCAL_ONLY_KEY, false);
+                set({ vocalOnlyEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) void nativePlayer.setVocalOnlyEnabled(false).catch(() => undefined);
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_ONLY_KEY, enable);
         if (enable) setStoredBoolean(VOCAL_CANCEL_KEY, false);
         set({
@@ -695,6 +724,21 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleSetVocalMode: (mode) => {
         const cancel = mode === 'instrumental';
         const only = mode === 'vocal';
+        // 三选一里切到「人声」或「伴奏」都要起分离：闸门挡着就当场拒绝，别让原生白跑一趟。
+        if ((cancel || only) && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            if (get().vocalCancelEnabled || get().vocalOnlyEnabled) {
+                setStoredBoolean(VOCAL_CANCEL_KEY, false);
+                setStoredBoolean(VOCAL_ONLY_KEY, false);
+                set({ vocalCancelEnabled: false, vocalOnlyEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) {
+                    void Promise.resolve()
+                        .then(() => nativePlayer.setVocalTrackMode('off'))
+                        .catch(() => undefined);
+                }
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_CANCEL_KEY, cancel);
         setStoredBoolean(VOCAL_ONLY_KEY, only);
         set({
@@ -881,10 +925,16 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
             nonce: Date.now(),
         });
     },
-    handleToggleLoopMode: () => {
+    handleToggleLoopMode: (isFmMode = false) => {
+        // 私人 FM 里只有 不循环 ↔ 单曲循环 两档：FM 的队列是电台给的，循环一圈没有意义，
+        // 也不进随机（上游 v0.7.29 的语义）。普通播放保持 fork 的四档：
         // 顺序（off）→ 列表循环（all）→ 单曲循环（one）→ 随机播放（shuffle）→ 回到顺序。
         // 随机放在最后：它是这一圈里唯一的「会把队列重排一遍」的模式，挨着顺序放容易误触。
         const prev = get().loopMode;
+        if (isFmMode) {
+            get().handleSetLoopMode(prev === 'one' ? 'off' : 'one');
+            return;
+        }
         const next = prev === 'off'
             ? 'all'
             : prev === 'all'
@@ -893,6 +943,11 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
                     ? 'shuffle'
                     : 'off';
         get().handleSetLoopMode(next);
+    },
+    shuffleRoundNoRepeat: getStoredBoolean('folia_shuffle_round_no_repeat', false),
+    handleToggleShuffleRoundNoRepeat: (enable) => {
+        setStoredBoolean('folia_shuffle_round_no_repeat', enable);
+        set({ shuffleRoundNoRepeat: enable });
     },
 }));
 
@@ -909,6 +964,8 @@ export const selectAudioSettingsSnapshot = (state: AudioSettingsState) => ({
     autoJumpToVisualizerOnLaunch: state.autoJumpToVisualizerOnLaunch,
     enableTranscodeFallback: state.enableTranscodeFallback,
     neteaseScrobbleEnabled: state.neteaseScrobbleEnabled,
+    shuffleRoundNoRepeat: state.shuffleRoundNoRepeat,
+    handleToggleShuffleRoundNoRepeat: state.handleToggleShuffleRoundNoRepeat,
     playbackFadeEnabled: state.playbackFadeEnabled,
     audioOutputDeviceId: state.audioOutputDeviceId,
     audioEqualizerSettings: state.audioEqualizerSettings,

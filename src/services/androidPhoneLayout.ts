@@ -1,72 +1,53 @@
 import { setSafeAreaBypass } from './phoneInsets';
+import { getStoredString, removeStoredKey, setStoredString } from '../stores/storagePrimitives';
 import { setSystemBarsAlwaysHidden } from '../platform/foliaNative';
 
-export const ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
+/*
+ * 「手机适配」那套覆盖样式（styles/androidPhoneFit.css 里 data-folia-phone-fit 那一半）
+ * 是废弃代码，已经整体删掉：它恒为 false，从来没有真正生效过，留着只会让「设置了却没效果」
+ * 这类问题反复出现。这里只剩**方向**（竖屏 / 横屏），「强制横屏」与 HDR 投影的镜像读它。
+ */
 export const ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY = 'folia_android_phone_fit_orientation';
+
+/*
+ * 废弃开关留下的那把键。
+ *
+ * 开关本身已经删了，但这把键是**发布过的**存储键（D507：已发布的键不改名、不删），所以它
+ * 还留在 dev/dedicatus/storageKeys.mjs 的登记表里。启动时顺手把它清掉：老用户机器上那份
+ * `true/false` 再没有任何代码会读，留着只是让「手机适配」看起来还在。
+ */
+export const LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
 
 export type AndroidPhoneFitOrientation = 'portrait' | 'landscape';
 
-export const readStoredAndroidPhoneFit = (): boolean => {
-    if (typeof window === 'undefined') return false;
-    try {
-        return localStorage.getItem(ANDROID_PHONE_FIT_STORAGE_KEY) === 'true';
-    } catch {
-        return false;
-    }
-};
-
-export const writeStoredAndroidPhoneFit = (enabled: boolean): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(ANDROID_PHONE_FIT_STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch {
-        // A storage failure must not make the switch unusable for the current session.
-    }
-};
-
-export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => {
-    if (typeof window === 'undefined') return 'portrait';
-    try {
-        return localStorage.getItem(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY) === 'landscape'
-            ? 'landscape'
-            : 'portrait';
-    } catch {
-        return 'portrait';
-    }
-};
+// 存储一律走 storagePrimitives：隐私模式 / 存储被裁的环境里裸 localStorage 会抛（D5xx）。
+export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => (
+    getStoredString(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, '') === 'landscape' ? 'landscape' : 'portrait'
+);
 
 export const writeStoredAndroidPhoneFitOrientation = (orientation: AndroidPhoneFitOrientation): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, orientation);
-    } catch {
-        // A storage failure must not make the switch unusable for the current session.
-    }
+    setStoredString(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, orientation);
 };
 
 /**
- * Applies the Android-only compact layout at the document root.
+ * 把方向写到文档根上。横屏那套缩放、「强制横屏」与 HDR 镜像都读它。
  *
- * Keeping this as one attribute means every override lives in one stylesheet and upstream
- * components keep their own markup and breakpoints.
+ * 这里原来还有一个「手机适配」总开关，写 `data-folia-phone-fit`；那套覆盖样式是废弃代码，
+ * 见 styles/androidPhoneFit.css 顶部说明，已整体删除。
  */
-export const applyAndroidPhoneFit = (
-    enabled: boolean,
+export const applyPhoneOrientation = (
     orientation: AndroidPhoneFitOrientation = readStoredAndroidPhoneFitOrientation(),
 ): void => {
     if (typeof document === 'undefined') return;
-    const root = document.documentElement;
-    root.setAttribute('data-folia-phone-fit', enabled ? 'true' : 'false');
-    root.setAttribute('data-folia-phone-orientation', orientation);
+    document.documentElement.setAttribute('data-folia-phone-orientation', orientation);
 };
 
-export const installAndroidPhoneFitPreference = (): void => {
-    /*
-     * 总开关恒为 false —— 「手机适配」那一行已经从设置里删掉了，没有入口的东西不该
-     * 在启动时被盘上那份旧值重新打开（以前打开过的人会一直带着那套覆盖样式）。
-     * 方向这一份还要照旧恢复：「强制横屏」要看它。
-     */
-    applyAndroidPhoneFit(false, readStoredAndroidPhoneFitOrientation());
+/** 启动时在首帧之前把方向落上去（「强制横屏」从上次的选择恢复）。 */
+export const installPhoneOrientationPreference = (): void => {
+    // 废弃开关留下的那份值顺手清掉（键名仍登记在 storageKeys.mjs，见上面的注释）。
+    removeStoredKey(LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY);
+
+    applyPhoneOrientation(readStoredAndroidPhoneFitOrientation());
 };
 
 /**
@@ -87,26 +68,13 @@ export const DEVICE_TYPE_STORAGE_KEY = 'folia_device_type';
 export type DeviceType = 'phone' | 'tablet';
 
 export const readStoredDeviceType = (): DeviceType | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-        const stored = localStorage.getItem(DEVICE_TYPE_STORAGE_KEY);
-        return stored === 'phone' || stored === 'tablet' ? stored : null;
-    } catch {
-        return null;
-    }
+    const stored = getStoredString(DEVICE_TYPE_STORAGE_KEY, '');
+    return stored === 'phone' || stored === 'tablet' ? stored : null;
 };
 
 export const writeStoredDeviceType = (deviceType: DeviceType | null): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (deviceType) {
-            localStorage.setItem(DEVICE_TYPE_STORAGE_KEY, deviceType);
-        } else {
-            localStorage.removeItem(DEVICE_TYPE_STORAGE_KEY);
-        }
-    } catch {
-        // A storage failure must not make the choice unusable for the current session.
-    }
+    if (deviceType) setStoredString(DEVICE_TYPE_STORAGE_KEY, deviceType);
+    else removeStoredKey(DEVICE_TYPE_STORAGE_KEY);
 };
 
 /* ---------------------------------------------------------------------------
@@ -135,28 +103,15 @@ const UI_SCALE_COMPACT_OFFSET = 10;
 const UI_SCALE_COMPACT_MIN = 55;
 
 export const readStoredUiScale = (): number | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-        const raw = localStorage.getItem(UI_SCALE_STORAGE_KEY);
-        if (raw === null || raw === '') return null;
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) ? clampUiScale(parsed) : null;
-    } catch {
-        return null;
-    }
+    const raw = getStoredString(UI_SCALE_STORAGE_KEY, '');
+    if (raw === '') return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampUiScale(parsed) : null;
 };
 
 export const writeStoredUiScale = (scale: number | null): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (scale === null) {
-            localStorage.removeItem(UI_SCALE_STORAGE_KEY);
-        } else {
-            localStorage.setItem(UI_SCALE_STORAGE_KEY, String(scale));
-        }
-    } catch {
-        // A storage failure must not make the slider unusable for the current session.
-    }
+    if (scale === null) removeStoredKey(UI_SCALE_STORAGE_KEY);
+    else setStoredString(UI_SCALE_STORAGE_KEY, String(scale));
 };
 
 /** 夹到滑条范围内并按步长对齐。存进去与读出来的都过这一道，脏值不会带进样式。 */

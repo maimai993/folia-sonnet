@@ -1,0 +1,2244 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>590 · 狂乱漫剪</title>
+<style>
+  html,body{margin:0;padding:0;height:100%;background:#080807;overflow:hidden}
+  #cv{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block;background:#080807}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script>
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '狂乱漫剪',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+(function () {
+  "use strict";
+
+  /* ============================================================
+     0. 自检口：脚本最外层、无条件赋值
+     ============================================================ */
+  var S = { lines: [], idx: -1, t: 0, playing: true, frames: 0, js: 0, err: "" };
+  var RM = false;
+  try { RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) {}
+  var GL = false; /* Canvas 2D 实现，如实上报 */
+
+  window.__stage = function () {
+    var i = S.idx;
+    var ln = (i >= 0 && S.lines && S.lines[i]) ? S.lines[i] : null;
+    return {
+      lines: S.lines ? S.lines.length : 0,
+      idx: i,
+      t: S.t,
+      playing: S.playing,
+      frames: S.frames,
+      js: Math.round(S.js * 100) / 100,
+      err: S.err,
+      text: (ln && ln.text) ? String(ln.text) : "",
+      gl: GL,
+      rm: RM
+    };
+  };
+
+  /* ============================================================
+     1. ready：首个 rAF 无条件发一次 + setTimeout 兜底
+     ============================================================ */
+  var readySent = false;
+  function sendReady() {
+    if (readySent) return;
+    readySent = true;
+    try { parent.postMessage({ __c100: 1, type: "ready" }, "*"); } catch (e) { console.error(e); }
+  }
+  requestAnimationFrame(sendReady);
+  setTimeout(sendReady, 800);
+
+  /* ============================================================
+     2. 画布 / 常量 / 工具
+     ============================================================ */
+  var cv = document.getElementById("cv");
+  var ctx = cv.getContext("2d", { alpha: false });
+  var scene = document.createElement("canvas");
+  var sctx = scene.getContext("2d", { alpha: false });
+  var tearSnap = document.createElement("canvas");
+  var tctx = tearSnap.getContext("2d", { alpha: false });
+
+  var W = 1440, H = 900, DPR = 1;
+  /* 安卓 WebView 标记（宿主在加载前注入 window.__liziAndroid）。
+     手机的 GPU 填充率、文字栅格化、阴影模糊都远弱于桌面，下面所有 ANDROID
+     分支只做“减负”：缓存静态图层、压 DPR、限制残影层数。桌面端 !ANDROID
+     始终走原来的完整路径，构图 / 配色 / 动效参数一点不改。 */
+  var ANDROID = !!window.__liziAndroid;
+  var FONT_BRUSH = '"STKaiti","KaiTi","Kaiti SC","FangSong","Songti SC","SimSun","Microsoft YaHei",serif';
+  var FONT_SANS = '"Arial Narrow","Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif';
+  var FONT_MONO = '"Consolas","SFMono-Regular","Menlo",monospace';
+
+  var PAPER = "#e9dfca";
+  var PAPER2 = "#d9cbae";
+  var INK = "#0b0a09";
+  var accentRGB = [205, 32, 48];
+  var accent = "rgb(205,32,48)";
+  var accentDim = "rgba(205,32,48,0.55)";
+  var sceneBg = "#080807";
+
+  var songName = "", songArtists = "", songDuration = 0;
+  var gotInit = false;
+  var state = "intro";
+
+  var live = { bass: 0, mid: 0, treble: 0, bpm: 0, level: 0 };
+  var beatCount = 0, hitEnergy = 0, beatSeed = 1, lastInvert = -1e9, invertUntil = 0;
+
+  var shotIdx = -2, shotMode = "ink", shotBorn = 0, panels = [];
+  var lyricRows = [], lyricTimes = [], lyricDur = 3.4;
+  var bubbleChars = [];
+  var tear = { active: false, t0: 0, dur: 0, pts: [], seed: 1 };
+
+  var cam = { rot: 0, rv: 0, sc: 1, sv: 0, x: 0, xv: 0, y: 0, yv: 0 };
+  var splats = [];
+  var lastErrAt = 0;
+  var lastTs = 0;
+
+  var P = {};
+
+  function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+  function easeOutQuint(p) { p = clamp(p, 0, 1); return 1 - Math.pow(1 - p, 5); }
+  function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; t = clamp(t, 0, 1); return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+  function pad(n, len) { var s = String(Math.max(0, Math.round(n))); for (var i = 0; i < len && s.length < len; i++) s = "0" + s; return s; }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function hash1(i) {
+    var x = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+    return (x - Math.floor(x)) * 2 - 1;
+  }
+  function noise1(x) {
+    var i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f);
+    return hash1(i) * (1 - u) + hash1(i + 1) * u;
+  }
+  function safeGrad(g, kind, args, stops) {
+    var gr = null;
+    try {
+      if (kind === "radial") gr = g.createRadialGradient(args[0], args[1], args[2], args[3], args[4], args[5]);
+      else gr = g.createLinearGradient(args[0], args[1], args[2], args[3]);
+    } catch (e) { return null; }
+    if (!gr) return null;
+    for (var i = 0; i < stops.length; i++) {
+      try { gr.addColorStop(stops[i][0], stops[i][1]); } catch (e2) {}
+    }
+    return gr;
+  }
+  function reportError(e) {
+    var now = performance.now();
+    if (now - lastErrAt < 1000) return;
+    lastErrAt = now;
+    var msg = e && e.message ? e.message : String(e);
+    if (!S.err) S.err = msg;
+    try { parent.postMessage({ __c100: 1, type: "error", payload: { msg: msg } }, "*"); } catch (e2) {}
+    try { console.error(e); } catch (e3) {}
+  }
+  function buildAccent() {
+    var r = clamp(Math.round(accentRGB[0]), 0, 255);
+    var g = clamp(Math.round(accentRGB[1]), 0, 255);
+    var b = clamp(Math.round(accentRGB[2]), 0, 255);
+    accent = "rgb(" + r + "," + g + "," + b + ")";
+    accentDim = "rgba(" + r + "," + g + "," + b + ",0.55)";
+  }
+
+  /* ============================================================
+     3. 尺寸 / 程序化纹理
+     ============================================================ */
+  function resize() {
+    W = window.innerWidth || 1440;
+    H = window.innerHeight || 900;
+    if (!isFinite(W) || W <= 0) W = 1440;
+    if (!isFinite(H) || H <= 0) H = 900;
+    /* 安卓 WebView 的 DPR 常是 2.5–3：若照 2 倍铺 backing store，1280 宽会变成
+       2560 像素，全屏合成 / 网点填充的像素量是 1.25 倍时的 2.56 倍。手机端把
+       上限压到 1.25，CSS 尺寸仍是 100vw/100vh，由浏览器拉伸回 1280，肉眼几乎无差。 */
+    DPR = Math.min(ANDROID ? 1.25 : 2, window.devicePixelRatio || 1);
+    if (!isFinite(DPR) || DPR <= 0) DPR = 1;
+    cv.width = Math.max(1, Math.round(W * DPR));
+    cv.height = Math.max(1, Math.round(H * DPR));
+    cv.style.width = W + "px";
+    cv.style.height = H + "px";
+    scene.width = cv.width;
+    scene.height = cv.height;
+    tearSnap.width = cv.width;
+    tearSnap.height = cv.height;
+    if (shotIdx !== -2) buildShot(shotIdx, true);
+    if (tear.active) buildCrack();
+  }
+
+  function mkDot(px, r, col) {
+    var c = document.createElement("canvas");
+    c.width = c.height = px;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(px / 2, px / 2, r, 0, Math.PI * 2);
+    g.fill();
+    try { return ctx.createPattern(c, "repeat"); } catch (e) { return null; }
+  }
+  function mkGrain(col) {
+    var c = document.createElement("canvas");
+    c.width = c.height = 160;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    var rnd = mulberry32(77);
+    for (var i = 0; i < 1300; i++) {
+      var a = 0.02 + rnd() * 0.07;
+      g.fillStyle = "rgba(" + col + "," + a.toFixed(3) + ")";
+      var x = rnd() * 160, y = rnd() * 160;
+      g.fillRect(x, y, 1 + rnd() * 1.6, 1);
+    }
+    for (var k = 0; k < 140; k++) {
+      g.strokeStyle = "rgba(" + col + "," + (0.02 + rnd() * 0.05).toFixed(3) + ")";
+      g.lineWidth = 0.7;
+      var x0 = rnd() * 160, y0 = rnd() * 160, a2 = rnd() * Math.PI;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x0 + Math.cos(a2) * (4 + rnd() * 12), y0 + Math.sin(a2) * (2 + rnd() * 4));
+      g.stroke();
+    }
+    try { return ctx.createPattern(c, "repeat"); } catch (e) { return null; }
+  }
+  function buildPatterns() {
+    P.dot = mkDot(10, 1.55, "rgba(10,9,8,0.95)");
+    P.dotBig = mkDot(16, 4.2, "rgba(10,9,8,0.9)");
+    P.dotLight = mkDot(10, 1.55, "rgba(240,232,214,0.95)");
+    P.dotLightBig = mkDot(16, 4.2, "rgba(240,232,214,0.9)");
+    P.grainDark = mkGrain("8,7,6");
+    P.grainLight = mkGrain("232,223,201");
+  }
+  function fillPat(g, pat, alpha, x, y, w, h) {
+    if (!pat || !(w > 0) || !(h > 0)) return;
+    g.save();
+    g.globalAlpha = alpha;
+    g.fillStyle = pat;
+    g.fillRect(x, y, w, h);
+    g.restore();
+  }
+  function radLines(g, cx, cy, n, len1, len2, seed, col, alpha, lw) {
+    var rnd = mulberry32(seed);
+    g.save();
+    g.globalAlpha = alpha;
+    g.strokeStyle = col;
+    g.lineWidth = lw || 1;
+    for (var i = 0; i < n; i++) {
+      var a = rnd() * Math.PI * 2;
+      var r1 = len1 * (0.2 + rnd() * 0.8);
+      var r2 = len2 * (0.5 + rnd() * 0.9);
+      g.beginPath();
+      g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
+      g.stroke();
+    }
+    g.restore();
+  }
+  function roughRect(g, x, y, w, h, seed, amt) {
+    var rnd = mulberry32(seed);
+    g.beginPath();
+    g.moveTo(x + (rnd() - 0.5) * amt, y + (rnd() - 0.5) * amt);
+    g.lineTo(x + w + (rnd() - 0.5) * amt, y + (rnd() - 0.5) * amt);
+    g.lineTo(x + w + (rnd() - 0.5) * amt, y + h + (rnd() - 0.5) * amt);
+    g.lineTo(x + (rnd() - 0.5) * amt, y + h + (rnd() - 0.5) * amt);
+    g.closePath();
+  }
+
+  /* ============================================================
+     4. 歌词数据 / 分镜结构
+     ============================================================ */
+  function normLines(arr) {
+    var out = [];
+    if (!Array.isArray(arr)) return out;
+    var cap = Math.min(arr.length, 500);
+    for (var i = 0; i < cap; i++) {
+      var L = arr[i];
+      if (!L) continue;
+      var t = Number(L.t);
+      if (!isFinite(t)) continue;
+      var text = (L.text == null) ? "" : String(L.text);
+      var dur = Number(L.dur);
+      if (!isFinite(dur) || dur < 0) dur = 0;
+      var chars = null;
+      if (Array.isArray(L.chars) && L.chars.length) {
+        var c0 = L.chars[0];
+        var rel = false;
+        if (c0 && isFinite(Number(c0.t)) && Number(c0.t) < t - 0.08) rel = true;
+        chars = [];
+        var ccap = Math.min(L.chars.length, 300);
+        for (var k = 0; k < ccap; k++) {
+          var rec = L.chars[k];
+          if (!rec) continue;
+          var ct = Number(rec.t);
+          if (!isFinite(ct)) continue;
+          chars.push({ c: (rec.c == null ? "" : String(rec.c)), t: rel ? (t + ct) : ct });
+        }
+        if (!chars.length) chars = null;
+      }
+      out.push({ t: t, dur: dur, text: text, chars: chars });
+    }
+    out.sort(function (a, b) { return a.t - b.t; });
+    return out;
+  }
+
+  function lineEnd(i) {
+    if (i >= 0 && i + 1 < S.lines.length) {
+      var d = S.lines[i + 1].t - S.lines[i].t;
+      if (isFinite(d) && d > 0) return d;
+    }
+    var L = S.lines[i];
+    if (L && L.dur > 0) return L.dur;
+    return 3.4;
+  }
+
+  function buildTimes(line, n) {
+    var times = [], i, dur = lineEnd(S.idx);
+    if (dur <= 0.1) dur = 3.4;
+    var stepD = Math.min(0.2, dur * 0.72 / Math.max(1, n));
+    if (line.chars && line.chars.length) {
+      var last = line.t;
+      for (i = 0; i < n; i++) {
+        var rec = line.chars[Math.min(i, line.chars.length - 1)];
+        var tt = (rec && isFinite(rec.t)) ? rec.t : (last + 0.12);
+        if (i > 0 && tt < times[i - 1]) tt = times[i - 1] + 0.02;
+        times.push(tt);
+        last = tt;
+      }
+    } else {
+      for (i = 0; i < n; i++) times.push(line.t + 0.05 + i * stepD);
+    }
+    return times;
+  }
+
+  var KANJI = ["狂", "乱", "断", "裂", "走", "斬", "炎", "影", "血", "刃"];
+
+  var LAYOUT_L = [
+    [[0.02, 0.05, 0.56, 0.60, -5], [0.59, 0.09, 0.37, 0.42, 7], [0.55, 0.57, 0.43, 0.36, -4]],
+    [[0.05, 0.18, 0.88, 0.50, -8], [0.66, 0.02, 0.30, 0.28, 11], [0.04, 0.60, 0.31, 0.31, 5]],
+    [[0.10, 0.04, 0.42, 0.86, 2], [0.56, 0.08, 0.40, 0.72, -4], [0.64, 0.62, 0.28, 0.26, 9]],
+    [[0.14, 0.12, 0.68, 0.64, -4], [0.04, 0.02, 0.90, 0.22, 1], [0.60, 0.70, 0.32, 0.25, -6]],
+    [[0.04, 0.07, 0.42, 0.50, 7], [0.50, 0.05, 0.45, 0.64, -7], [0.09, 0.64, 0.35, 0.30, -11]],
+    [[0.02, 0.00, 0.96, 0.44, -2], [0.14, 0.44, 0.70, 0.54, 3], [0.78, 0.28, 0.20, 0.30, 8]]
+  ];
+  var LAYOUT_P = [
+    [[0.02, 0.02, 0.96, 0.30, -3], [0.02, 0.35, 0.55, 0.30, 4], [0.57, 0.37, 0.41, 0.26, 7], [0.05, 0.70, 0.90, 0.26, -2]],
+    [[0.00, 0.04, 0.62, 0.42, -5], [0.50, 0.24, 0.50, 0.36, 6], [0.08, 0.56, 0.84, 0.36, 2]],
+    [[0.04, 0.03, 0.92, 0.28, 2], [0.01, 0.35, 0.48, 0.50, -6], [0.50, 0.43, 0.48, 0.42, 5]],
+    [[0.00, 0.00, 1.00, 0.40, -2], [0.06, 0.44, 0.70, 0.52, 3], [0.64, 0.26, 0.34, 0.22, 9]]
+  ];
+
+  function makeTorn(w, h, seed, rough) {
+    var rnd = mulberry32(seed);
+    var pts = [];
+    function edge(x0, y0, x1, y1, nx, ny) {
+      var dist = Math.sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
+      var n = Math.max(3, Math.round(dist / 18));
+      for (var i = 0; i < n; i++) {
+        var f = i / n;
+        var x = x0 + (x1 - x0) * f;
+        var y = y0 + (y1 - y0) * f;
+        var j = rnd() * rough * 0.7;
+        if (rnd() < 0.075) j += rough * (1.1 + rnd() * 0.9);
+        pts.push({ x: x + nx * j, y: y + ny * j, nx: nx, ny: ny });
+      }
+    }
+    edge(0, 0, w, 0, 0, -1);
+    edge(w, 0, w, h, 1, 0);
+    edge(w, h, 0, h, 0, 1);
+    edge(0, h, 0, 0, -1, 0);
+    return pts;
+  }
+
+  function pathPts(g, pts) {
+    if (!pts || !pts.length) return false;
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (var i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    g.closePath();
+    return true;
+  }
+
+  function buildPanels(layoutId, mode) {
+    var table = (W / H < 0.95) ? LAYOUT_P : LAYOUT_L;
+    var lay = table[layoutId % table.length];
+    var rnd = mulberry32(1000 + layoutId * 37 + (shotIdx < 0 ? 0 : shotIdx) * 11);
+    panels = [];
+    var scale = Math.min(W, H) / 900;
+    for (var i = 0; i < lay.length; i++) {
+      var r = lay[i];
+      var w = Math.max(40, r[2] * W);
+      var h = Math.max(40, r[3] * H);
+      var tone = (mode === "paper") ? (i % 2 ? "paper" : "ink") : (i % 2 ? "ink" : "paper");
+      var rough = clamp(13 * scale, 6, 22);
+      var p = {
+        x: r[0] * W + (rnd() - 0.5) * W * 0.02,
+        y: r[1] * H + (rnd() - 0.5) * H * 0.02,
+        w: w, h: h,
+        rot: (r[4] + (rnd() - 0.5) * 3.5) * Math.PI / 180,
+        tone: tone,
+        seed: 3000 + i * 97 + layoutId * 13 + (shotIdx < 0 ? 0 : shotIdx) * 7,
+        phase: rnd() * 6.28,
+        anim: 1.28 + i * 0.06,
+        av: 0,
+        art: (layoutId * 2 + i + (shotIdx < 0 ? 0 : shotIdx)) % 7,
+        pts: []
+      };
+      p.pts = makeTorn(w, h, p.seed, rough);
+      panels.push(p);
+    }
+  }
+
+  function buildShot(idx, keepLyric) {
+    shotIdx = idx;
+    if (S.lines.length === 0 && gotInit) state = "empty";
+    else if (idx >= 0 && S.lines.length) state = "lyric";
+    else state = "intro";
+    shotMode = (state === "lyric") ? (idx % 2 === 0 ? "paper" : "ink") : "ink";
+    shotBorn = performance.now();
+    var layoutId = idx < 0 ? 3 : Math.abs(idx) % 6;
+    buildPanels(layoutId, shotMode);
+    buildLyricLayout();
+    /* 画格 / 背景 / 背景大字都是“换句才变”的静态内容，换句时一次性烘焙成离屏位图，
+       手机端每帧只贴图。buildPanelCaches 内部对桌面端直接 return，原绘制路径不变。 */
+    buildPanelCaches();
+    glyphCache = {};
+    glyphCacheN = 0;
+    buildBubbleChars();
+  }
+
+  function buildLyricLayout() {
+    lyricRows = [];
+    lyricTimes = [];
+    var L = (S.idx >= 0 && S.lines[S.idx]) ? S.lines[S.idx] : null;
+    if (!L || !L.text) return;
+    var txt = String(L.text);
+    var chars = [];
+    try { chars = Array.from(txt); } catch (e) { chars = txt.split(""); }
+    if (!chars.length) return;
+    var n = chars.length;
+    lyricDur = lineEnd(S.idx);
+    lyricTimes = buildTimes(L, n);
+
+    var maxC = (W / H < 0.95) ? 4 : 5;
+    var rowCount = Math.max(1, Math.ceil(n / maxC));
+    if (rowCount > 4) rowCount = 4;
+    var per = Math.ceil(n / rowCount);
+    if (per > maxC + 1) per = maxC + 1;
+    var rowsRaw = [], gi = 0;
+    for (var r = 0; r < rowCount; r++) {
+      var take = (r === rowCount - 1) ? (n - gi) : per;
+      if (take <= 0) break;
+      rowsRaw.push(chars.slice(gi, gi + take));
+      gi += take;
+    }
+    if (!rowsRaw.length) return;
+
+    var heroN = Math.min(rowsRaw[0].length || 1, maxC);
+    var base = Math.min(W * 0.68 / Math.max(2, heroN), H * 0.27);
+    if (n <= 2) base = Math.min(W * 0.44, H * 0.35);
+    if (rowCount >= 3) base *= 0.9;
+    base = clamp(base, 34, H * 0.42);
+
+    var scaleDown = 1;
+    var totalH = 0;
+    for (var q = 0; q < rowsRaw.length; q++) {
+      totalH += (q === 0 ? base : base * 0.66) * 0.92;
+    }
+    if (totalH > H * 0.60) scaleDown = (H * 0.60) / totalH;
+    base *= scaleDown;
+
+    var rowOff = [0, W * 0.018, -W * 0.014, W * 0.008];
+    var rowRot = [-0.032, 0.038, -0.052, 0.02];
+    var top = H * 0.465 - totalH * scaleDown / 2;
+    var curY = top;
+    var gIndex = 0;
+    for (var rr = 0; rr < rowsRaw.length; rr++) {
+      var rowChars = rowsRaw[rr];
+      var size = (rr === 0 ? base : base * 0.66);
+      var step = size * 0.92;
+      var cy = curY + step / 2;
+      curY += step;
+      var font = "900 " + Math.round(size) + "px " + FONT_BRUSH;
+      sctx.save();
+      sctx.font = font;
+      sctx.textAlign = "left";
+      sctx.textBaseline = "middle";
+      var widths = [], totalW = 0;
+      for (var c = 0; c < rowChars.length; c++) {
+        var cw = 0;
+        try { cw = sctx.measureText(rowChars[c]).width; } catch (e2) { cw = size; }
+        if (!isFinite(cw) || cw <= 0) cw = size;
+        widths.push(cw);
+        totalW += cw;
+      }
+      sctx.restore();
+      var startX = -totalW / 2;
+      var gl = [];
+      var xCur = startX;
+      for (var cc = 0; cc < rowChars.length; cc++) {
+        gl.push({
+          ch: rowChars[cc],
+          x: xCur + widths[cc] / 2,
+          size: size,
+          k: gIndex,
+          rot: (mulberry32(500 + gIndex * 31)() - 0.5) * 0.24
+        });
+        xCur += widths[cc];
+        gIndex++;
+      }
+      lyricRows.push({
+        chars: gl,
+        size: size,
+        rot: rowRot[rr % rowRot.length],
+        cx: W * 0.5 + rowOff[rr % rowOff.length],
+        cy: cy
+      });
+    }
+  }
+
+  /* ============================================================
+     5. 程序化日漫分镜画格
+     ============================================================ */
+  function pal(p) {
+    var dark = p.tone === "ink";
+    return {
+      bg: dark ? "#0c0b0a" : PAPER,
+      bg2: dark ? "#171412" : PAPER2,
+      fg: dark ? "#ece3cf" : "#0c0b0a",
+      ink: INK,
+      paper: PAPER,
+      cream: "#f1e8d6",
+      accent: accent,
+      dark: dark
+    };
+  }
+
+  function captionTab(g, w, h, pal, txt) {
+    var s = Math.max(8, Math.min(w, h) * 0.035);
+    var tw = Math.min(w * 0.46, s * 5.6);
+    g.save();
+    g.fillStyle = pal.fg;
+    g.fillRect(w * 0.045, h * 0.045, tw, s * 1.9);
+    g.fillStyle = pal.bg;
+    g.font = "700 " + s.toFixed(1) + "px " + FONT_MONO;
+    g.textAlign = "left";
+    g.textBaseline = "middle";
+    try { g.fillText(txt, w * 0.045 + s * 0.6, h * 0.045 + s * 0.95); } catch (e) {}
+    g.restore();
+  }
+
+  function artEye(g, w, h, pa, seed) {
+    g.fillStyle = pa.bg;
+    g.fillRect(0, 0, w, h);
+    radLines(g, w * 0.5, h * 0.52, 22, Math.min(w, h) * 0.32, Math.max(w, h) * 0.9, seed + 3, pa.fg, 0.13, 1.2);
+    fillPat(g, pa.dark ? P.dotLightBig : P.dotBig, 0.16, 0, h * 0.62, w, h * 0.38);
+
+    var cx = w * 0.47, cy = h * 0.52, ew = w * 0.63, eh = h * 0.35;
+    /* 眼眶白 */
+    g.save();
+    g.beginPath();
+    g.moveTo(cx - ew / 2, cy + eh * 0.02);
+    g.quadraticCurveTo(cx - ew * 0.14, cy - eh * 0.66, cx + ew * 0.20, cy - eh * 0.34);
+    g.quadraticCurveTo(cx + ew * 0.46, cy - eh * 0.16, cx + ew / 2, cy - eh * 0.01);
+    g.quadraticCurveTo(cx + ew * 0.22, cy + eh * 0.60, cx - ew * 0.18, cy + eh * 0.34);
+    g.quadraticCurveTo(cx - ew * 0.40, cy + eh * 0.18, cx - ew / 2, cy + eh * 0.02);
+    g.closePath();
+    g.fillStyle = pa.cream;
+    g.fill();
+    g.save();
+    g.clip();
+    /* 虹膜 */
+    var ix = cx + ew * 0.05, iy = cy - eh * 0.03, ir = eh * 0.56;
+    var gr = safeGrad(g, "radial", [ix, iy, ir * 0.1, ix, iy, ir], [[0, "#7a1b21"], [0.55, accent], [1, "#2b0909"]]);
+    g.fillStyle = gr || accent;
+    g.beginPath(); g.arc(ix, iy, ir, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#070606";
+    g.beginPath(); g.arc(ix, iy, ir * 0.42, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#fbf6e9";
+    g.beginPath(); g.arc(ix - ir * 0.3, iy - ir * 0.34, ir * 0.16, 0, Math.PI * 2); g.fill();
+    fillPat(g, pa.dark ? P.dotLight : P.dot, 0.32, cx - ew / 2, cy - eh * 0.62, ew, eh * 0.55);
+    g.restore();
+    g.lineWidth = Math.max(2, w * 0.012);
+    g.strokeStyle = pa.ink;
+    g.stroke();
+    g.restore();
+
+    /* 上睫毛 */
+    g.beginPath();
+    g.moveTo(cx - ew * 0.54, cy - eh * 0.02);
+    g.lineTo(cx - ew * 0.42, cy - eh * 0.36);
+    g.lineTo(cx - ew * 0.20, cy - eh * 0.50);
+    g.lineTo(cx - ew * 0.02, cy - eh * 0.52);
+    g.lineTo(cx + ew * 0.16, cy - eh * 0.42);
+    g.lineTo(cx + ew * 0.36, cy - eh * 0.30);
+    g.lineTo(cx + ew * 0.51, cy - eh * 0.03);
+    g.lineTo(cx + ew * 0.34, cy - eh * 0.12);
+    g.lineTo(cx + ew * 0.12, cy - eh * 0.20);
+    g.lineTo(cx - ew * 0.12, cy - eh * 0.24);
+    g.lineTo(cx - ew * 0.32, cy - eh * 0.18);
+    g.closePath();
+    g.fillStyle = pa.ink;
+    g.fill();
+    /* 睫毛尖刺 */
+    for (var i = 0; i < 5; i++) {
+      var fx = cx - ew * 0.46 + i * ew * 0.22;
+      g.beginPath();
+      g.moveTo(fx, cy - eh * 0.36);
+      g.lineTo(fx - ew * 0.035, cy - eh * (0.56 + i * 0.02));
+      g.lineTo(fx + ew * 0.05, cy - eh * 0.40);
+      g.closePath();
+      g.fill();
+    }
+    /* 眉 */
+    g.beginPath();
+    g.moveTo(cx - ew * 0.56, cy - eh * 1.02);
+    g.lineTo(cx - ew * 0.10, cy - eh * 1.30);
+    g.lineTo(cx + ew * 0.46, cy - eh * 0.82);
+    g.lineTo(cx + ew * 0.44, cy - eh * 1.02);
+    g.lineTo(cx - ew * 0.12, cy - eh * 1.46);
+    g.closePath();
+    g.fillStyle = pa.ink;
+    g.fill();
+    /* 下眼线 */
+    g.strokeStyle = pa.ink;
+    g.lineWidth = Math.max(1.2, w * 0.004);
+    g.beginPath();
+    g.moveTo(cx - ew * 0.34, cy + eh * 0.26);
+    g.quadraticCurveTo(cx + ew * 0.05, cy + eh * 0.50, cx + ew * 0.42, cy + eh * 0.08);
+    g.stroke();
+    /* 血点 */
+    g.fillStyle = pa.accent;
+    for (var b = 0; b < 3; b++) {
+      var bx = cx - ew * 0.36 + b * ew * 0.08;
+      var bh = eh * (0.35 - b * 0.08);
+      g.beginPath();
+      g.moveTo(bx - w * 0.012, cy + eh * 0.22);
+      g.lineTo(bx + w * 0.012, cy + eh * 0.22);
+      g.lineTo(bx, cy + eh * 0.22 + bh);
+      g.closePath();
+      g.fill();
+    }
+    captionTab(g, w, h, pa, "EYE / CUT 02");
+  }
+
+  function artFigure(g, w, h, pa, seed) {
+    g.fillStyle = pa.bg;
+    g.fillRect(0, 0, w, h);
+    fillPat(g, pa.dark ? P.dotLightBig : P.dotBig, 0.14, 0, 0, w, h);
+    radLines(g, w * 0.55, h * 0.42, 18, Math.min(w, h) * 0.34, Math.max(w, h) * 0.8, seed + 8, pa.fg, 0.15, 1.3);
+    var rnd = mulberry32(seed + 11);
+    /* 身体 */
+    g.fillStyle = pa.ink;
+    g.beginPath();
+    g.moveTo(w * 0.30, h * 1.02);
+    g.lineTo(w * 0.34, h * 0.64);
+    g.lineTo(w * 0.46, h * 0.55);
+    g.lineTo(w * 0.62, h * 0.56);
+    g.lineTo(w * 0.74, h * 0.68);
+    g.lineTo(w * 0.78, h * 1.02);
+    g.closePath();
+    g.fill();
+    /* 头 */
+    g.beginPath();
+    g.arc(w * 0.53, h * 0.38, Math.min(w, h) * 0.17, 0, Math.PI * 2);
+    g.fill();
+    /* 尖发 */
+    g.beginPath();
+    var hx = w * 0.53, hy = h * 0.38, hr = Math.min(w, h) * 0.19;
+    for (var i = 0; i <= 14; i++) {
+      var a = Math.PI * 1.02 + (Math.PI * 1.02) * (i / 14);
+      var rr2 = hr * (i % 2 ? 1.55 + rnd() * 0.35 : 0.92);
+      var px = hx + Math.cos(a) * rr2;
+      var py = hy + Math.sin(a) * rr2 * 0.95;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+    /* 面部留白 */
+    g.fillStyle = pa.cream;
+    g.beginPath();
+    g.ellipse(hx + w * 0.03, hy + h * 0.055, w * 0.10, h * 0.075, 0.12, 0, Math.PI * 2);
+    g.fill();
+    /* 眼与嘴 */
+    g.fillStyle = pa.ink;
+    g.beginPath();
+    g.moveTo(hx + w * 0.02, hy + h * 0.025);
+    g.lineTo(hx + w * 0.075, hy + h * 0.03);
+    g.lineTo(hx + w * 0.055, hy + h * 0.055);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = pa.ink;
+    g.lineWidth = Math.max(1, w * 0.006);
+    g.beginPath();
+    g.moveTo(hx + w * 0.01, hy + h * 0.095);
+    g.lineTo(hx + w * 0.06, hy + h * 0.092);
+    g.stroke();
+    /* 持锯的手 */
+    g.fillStyle = pa.ink;
+    g.beginPath();
+    g.moveTo(w * 0.64, h * 0.66);
+    g.lineTo(w * 0.88, h * 0.46);
+    g.lineTo(w * 0.95, h * 0.52);
+    g.lineTo(w * 0.74, h * 0.75);
+    g.closePath();
+    g.fill();
+    /* 链锯横条 */
+    g.save();
+    g.translate(w * 0.80, h * 0.50);
+    g.rotate(-0.42);
+    var bg2 = safeGrad(g, "linear", [-w * 0.2, 0, w * 0.2, 0], [[0, "#6d6a63"], [0.5, "#d8d4c8"], [1, "#4a4741"]]);
+    g.fillStyle = bg2 || "#9a968c";
+    g.fillRect(-w * 0.26, -h * 0.05, w * 0.52, h * 0.10);
+    g.fillStyle = pa.ink;
+    for (var t = 0; t < 9; t++) {
+      var tx = -w * 0.24 + t * w * 0.055;
+      g.beginPath();
+      g.moveTo(tx, -h * 0.05);
+      g.lineTo(tx + w * 0.025, -h * 0.095);
+      g.lineTo(tx + w * 0.05, -h * 0.05);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+    /* 高光 */
+    g.strokeStyle = pa.fg;
+    g.lineWidth = Math.max(1, w * 0.004);
+    g.beginPath();
+    g.moveTo(hx - hr * 0.8, hy - hr * 0.45);
+    g.quadraticCurveTo(hx - hr * 0.2, hy - hr * 1.25, hx + hr * 0.55, hy - hr * 0.9);
+    g.stroke();
+    /* 血点 */
+    g.fillStyle = pa.accent;
+    for (var s = 0; s < 5; s++) {
+      g.beginPath();
+      g.arc(w * (0.2 + rnd() * 0.6), h * (0.18 + rnd() * 0.4), 2 + rnd() * 7, 0, Math.PI * 2);
+      g.fill();
+    }
+    captionTab(g, w, h, pa, "CH. 590");
+  }
+
+  function artChainsaw(g, w, h, pa, seed) {
+    g.fillStyle = "#0a0908";
+    g.fillRect(0, 0, w, h);
+    var rnd = mulberry32(seed + 21);
+    g.save();
+    for (var i = 0; i < 26; i++) {
+      g.strokeStyle = "rgba(240,232,214," + (0.04 + rnd() * 0.10).toFixed(2) + ")";
+      g.lineWidth = 1 + rnd() * 2;
+      var yy = rnd() * h;
+      g.beginPath();
+      g.moveTo(0, yy);
+      g.lineTo(w, yy + (rnd() - 0.5) * h * 0.1);
+      g.stroke();
+    }
+    g.restore();
+    fillPat(g, P.dotLight, 0.10, 0, 0, w, h);
+    g.save();
+    g.translate(w * 0.5, h * 0.52);
+    g.rotate(-0.34);
+    var bw = w * 0.92, bh = h * 0.24;
+    var gr = safeGrad(g, "linear", [-bw / 2, 0, bw / 2, 0], [[0, "#3f3d39"], [0.35, "#dad6c9"], [0.55, "#8b877d"], [1, "#2f2d2a"]]);
+    g.fillStyle = gr || "#9b978c";
+    g.fillRect(-bw / 2, -bh / 2, bw, bh);
+    g.strokeStyle = "#121110";
+    g.lineWidth = Math.max(2, h * 0.012);
+    g.strokeRect(-bw / 2, -bh / 2, bw, bh);
+    /* 齿 */
+    for (var t = 0; t < 14; t++) {
+      var tx = -bw / 2 + t * (bw / 14);
+      g.fillStyle = "#d9d5c8";
+      g.strokeStyle = "#121110";
+      g.beginPath();
+      g.moveTo(tx, -bh / 2);
+      g.lineTo(tx + bw / 28, -bh / 2 - bh * 0.34);
+      g.lineTo(tx + bw / 14, -bh / 2);
+      g.closePath();
+      g.fill();
+      g.stroke();
+      g.beginPath();
+      g.moveTo(tx, bh / 2);
+      g.lineTo(tx + bw / 28, bh / 2 + bh * 0.26);
+      g.lineTo(tx + bw / 14, bh / 2);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+    /* 链条铆钉 */
+    g.fillStyle = "#1b1918";
+    for (var k = 0; k < 12; k++) {
+      g.beginPath();
+      g.arc(-bw / 2 + k * (bw / 12) + bw / 24, 0, bh * 0.10, 0, Math.PI * 2);
+      g.fill();
+    }
+    /* 握把 */
+    g.fillStyle = accent;
+    g.fillRect(-bw / 2 - w * 0.16, -bh * 0.38, w * 0.18, bh * 0.75);
+    g.fillStyle = "#151312";
+    g.fillRect(-bw / 2 - w * 0.16, -bh * 0.38, w * 0.18, bh * 0.16);
+    g.restore();
+    /* 血 */
+    for (var s = 0; s < 9; s++) {
+      g.fillStyle = accent;
+      g.globalAlpha = 0.45 + rnd() * 0.5;
+      var bx = w * (0.1 + rnd() * 0.8), by = h * (0.55 + rnd() * 0.4);
+      g.beginPath();
+      g.ellipse(bx, by, 2 + rnd() * 10, 1 + rnd() * 4, rnd() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    captionTab(g, w, h, pa, "CHAIN / 04");
+  }
+
+  function artBurst(g, w, h, pa, seed) {
+    g.fillStyle = "#090807";
+    g.fillRect(0, 0, w, h);
+    var cx = w * 0.5, cy = h * 0.5;
+    var rnd = mulberry32(seed + 31);
+    g.save();
+    g.translate(cx, cy);
+    g.beginPath();
+    for (var i = 0; i < 48; i++) {
+      var a = (i / 48) * Math.PI * 2;
+      var r = (i % 2 ? 0.26 : 0.92) * Math.min(w, h) * (0.7 + rnd() * 0.3);
+      var x = Math.cos(a) * r * (w / Math.min(w, h));
+      var y = Math.sin(a) * r * (h / Math.min(w, h));
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
+    g.fillStyle = "#efe6d2";
+    g.fill();
+    g.restore();
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(0.2);
+    g.beginPath();
+    for (var j = 0; j < 32; j++) {
+      var a2 = (j / 32) * Math.PI * 2;
+      var r2 = (j % 2 ? 0.18 : 0.52) * Math.min(w, h);
+      var x2 = Math.cos(a2) * r2, y2 = Math.sin(a2) * r2;
+      if (j === 0) g.moveTo(x2, y2); else g.lineTo(x2, y2);
+    }
+    g.closePath();
+    g.fillStyle = accent;
+    g.globalAlpha = 0.85;
+    g.fill();
+    g.globalAlpha = 1;
+    g.restore();
+    g.fillStyle = "#0a0908";
+    g.beginPath(); g.arc(cx, cy, Math.min(w, h) * 0.16, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = "#efe6d2";
+    g.lineWidth = Math.max(2, w * 0.006);
+    g.beginPath(); g.arc(cx, cy, Math.min(w, h) * 0.20, 0, Math.PI * 2); g.stroke();
+    fillPat(g, P.dotLightBig, 0.12, 0, 0, w, h);
+    for (var s = 0; s < 14; s++) {
+      g.fillStyle = "#efe6d2";
+      g.globalAlpha = 0.3 + rnd() * 0.5;
+      g.beginPath();
+      g.arc(rnd() * w, rnd() * h, 1 + rnd() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    captionTab(g, w, h, pa, "IMPACT / 05");
+  }
+
+  function artHand(g, w, h, pa, seed) {
+    g.fillStyle = pa.bg;
+    g.fillRect(0, 0, w, h);
+    fillPat(g, pa.dark ? P.dotLightBig : P.dotBig, 0.15, 0, 0, w, h);
+    radLines(g, w * 0.3, h * 0.3, 20, Math.min(w, h) * 0.4, Math.max(w, h) * 0.9, seed + 41, pa.fg, 0.14, 1.2);
+    var rnd = mulberry32(seed + 44);
+    g.save();
+    g.translate(w * 0.52, h * 0.66);
+    g.rotate(-0.55);
+    g.fillStyle = pa.ink;
+    /* 手掌 */
+    g.beginPath();
+    g.moveTo(-w * 0.06, h * 0.30);
+    g.quadraticCurveTo(-w * 0.22, h * 0.02, -w * 0.08, -h * 0.14);
+    g.quadraticCurveTo(w * 0.06, -h * 0.26, w * 0.16, -h * 0.08);
+    g.lineTo(w * 0.20, h * 0.30);
+    g.closePath();
+    g.fill();
+    /* 手指 */
+    for (var f = 0; f < 4; f++) {
+      var fx = -w * 0.06 + f * w * 0.072;
+      var len = h * (0.46 - Math.abs(f - 1.5) * 0.05);
+      g.beginPath();
+      g.moveTo(fx - w * 0.034, -h * 0.08);
+      g.quadraticCurveTo(fx - w * 0.05, -len * 0.7, fx - w * 0.012, -len);
+      g.quadraticCurveTo(fx + w * 0.02, -len * 0.78, fx + w * 0.034, -h * 0.08);
+      g.closePath();
+      g.fill();
+    }
+    /* 拇指 */
+    g.beginPath();
+    g.moveTo(-w * 0.16, -h * 0.02);
+    g.quadraticCurveTo(-w * 0.32, -h * 0.26, -w * 0.24, -h * 0.38);
+    g.quadraticCurveTo(-w * 0.12, -h * 0.34, -w * 0.06, -h * 0.16);
+    g.closePath();
+    g.fill();
+    g.restore();
+    /* 抓痕 */
+    g.strokeStyle = accent;
+    for (var s = 0; s < 4; s++) {
+      g.lineWidth = Math.max(1, w * (0.006 + s * 0.002));
+      g.beginPath();
+      g.moveTo(w * (0.12 + s * 0.03), h * (0.18 + s * 0.02));
+      g.lineTo(w * (0.56 + s * 0.02), h * (0.62 + s * 0.02));
+      g.stroke();
+    }
+    for (var b = 0; b < 6; b++) {
+      g.fillStyle = pa.accent;
+      g.beginPath();
+      g.arc(w * (0.18 + rnd() * 0.6), h * (0.2 + rnd() * 0.5), 2 + rnd() * 6, 0, Math.PI * 2);
+      g.fill();
+    }
+    captionTab(g, w, h, pa, "REACH / 06");
+  }
+
+  function artMoon(g, w, h, pa, seed) {
+    g.fillStyle = "#0a0908";
+    g.fillRect(0, 0, w, h);
+    var cx = w * 0.56, cy = h * 0.36, r = Math.min(w, h) * 0.30;
+    g.save();
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
+    g.fillStyle = "#e7ddc6"; g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    fillPat(g, P.dot, 0.55, cx - r, cy - r, r * 2, r * 2);
+    g.fillStyle = "rgba(205,32,48,0.16)";
+    g.fillRect(cx - r, cy - r, r * 2, r * 2);
+    g.restore();
+    g.strokeStyle = accent;
+    g.lineWidth = Math.max(1.5, w * 0.006);
+    g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+    /* 天际线 */
+    var rnd = mulberry32(seed + 51);
+    g.fillStyle = "#11100e";
+    for (var i = 0; i < 14; i++) {
+      var bw = w * (0.02 + rnd() * 0.06);
+      var bx = (i / 14) * w;
+      var bh = h * (0.10 + rnd() * 0.24);
+      g.fillRect(bx, h - bh, bw, bh);
+      g.fillStyle = "rgba(239,230,210,0.55)";
+      for (var k = 0; k < 4; k++) {
+        if (rnd() < 0.55) g.fillRect(bx + bw * 0.2 + (k % 2) * bw * 0.4, h - bh + h * 0.03 + Math.floor(k / 2) * h * 0.05, bw * 0.16, h * 0.018);
+      }
+      g.fillStyle = "#11100e";
+    }
+    /* 电线 */
+    g.strokeStyle = "rgba(239,230,210,0.5)";
+    g.lineWidth = 1;
+    for (var l = 0; l < 3; l++) {
+      g.beginPath();
+      g.moveTo(0, h * (0.30 + l * 0.055));
+      g.quadraticCurveTo(w * 0.5, h * (0.38 + l * 0.05), w, h * (0.27 + l * 0.06));
+      g.stroke();
+    }
+    /* 红斜线 */
+    g.save();
+    g.globalAlpha = 0.8;
+    g.strokeStyle = accent;
+    for (var s = 0; s < 3; s++) {
+      g.lineWidth = w * (0.012 - s * 0.003);
+      g.beginPath();
+      g.moveTo(w * (0.06 + s * 0.06), h * (0.9 - s * 0.04));
+      g.lineTo(w * (0.42 + s * 0.06), h * (0.30 - s * 0.04));
+      g.stroke();
+    }
+    g.restore();
+    captionTab(g, w, h, pa, "NIGHT / 07");
+  }
+
+  function artTeeth(g, w, h, pa, seed) {
+    g.fillStyle = pa.bg;
+    g.fillRect(0, 0, w, h);
+    radLines(g, w * 0.5, h * 0.5, 24, Math.min(w, h) * 0.45, Math.max(w, h), seed + 61, pa.fg, 0.14, 1.4);
+    var cx = w * 0.5, cy = h * 0.54, mw = w * 0.66, mh = h * 0.34;
+    g.fillStyle = "#0a0908";
+    g.beginPath();
+    g.moveTo(cx - mw / 2, cy);
+    g.quadraticCurveTo(cx - mw * 0.36, cy - mh * 1.05, cx, cy - mh * 0.95);
+    g.quadraticCurveTo(cx + mw * 0.36, cy - mh * 1.05, cx + mw / 2, cy);
+    g.quadraticCurveTo(cx + mw * 0.30, cy + mh * 0.95, cx, cy + mh * 0.85);
+    g.quadraticCurveTo(cx - mw * 0.30, cy + mh * 0.95, cx - mw / 2, cy);
+    g.closePath();
+    g.fill();
+    /* 舌 */
+    g.fillStyle = accent;
+    g.beginPath();
+    g.ellipse(cx, cy + mh * 0.40, mw * 0.26, mh * 0.28, 0, 0, Math.PI * 2);
+    g.fill();
+    /* 牙 */
+    g.fillStyle = "#efe6d2";
+    for (var i = 0; i < 9; i++) {
+      var tx = cx - mw * 0.42 + i * mw * 0.105;
+      g.beginPath();
+      g.moveTo(tx, cy - mh * 0.72);
+      g.lineTo(tx + mw * 0.05, cy - mh * 0.18);
+      g.lineTo(tx + mw * 0.10, cy - mh * 0.72);
+      g.closePath();
+      g.fill();
+      g.beginPath();
+      g.moveTo(tx + mw * 0.02, cy + mh * 0.66);
+      g.lineTo(tx + mw * 0.07, cy + mh * 0.08);
+      g.lineTo(tx + mw * 0.12, cy + mh * 0.66);
+      g.closePath();
+      g.fill();
+    }
+    fillPat(g, pa.dark ? P.dotLightBig : P.dotBig, 0.16, 0, 0, w, h);
+    captionTab(g, w, h, pa, "ROAR / 08");
+  }
+
+  var ARTS = [artFigure, artEye, artChainsaw, artBurst, artHand, artMoon, artTeeth];
+
+  /* ============================================================
+     6. 纸片画格绘制（撕边 + 半调 + 纸纹）
+     ============================================================ */
+
+  /* ---- 手机端：画格静态内容烘焙 ----
+     画格里的程序化日漫插画、半调网点、纸纹、撕边纤维、投影 shadowBlur 都跟
+     时间无关，只有外层的漂浮 / 抖动 / 缩放是动画。原来这些矢量绘制每帧重跑
+     3–4 遍（每个画格 4 层网点 pattern 填充 + 大形状 shadowBlur + 几十根纤维线），
+     是安卓 WebView 最重的一笔开销。换句时画一次，之后每帧只做一次 drawImage。 */
+  var panelCachePool = [];
+
+  function buildPanelCaches() {
+    if (!ANDROID) return;
+    for (var i = 0; i < panels.length; i++) {
+      var p = panels[i];
+      if (!p) continue;
+      p.cache = null;
+      var size = Math.min(p.w, p.h);
+      var blur = Math.min(26, size * 0.10);
+      /* 投影会往右下溢出画格，缓存四周留出 blur + 偏移的安全边，避免裁掉阴影 */
+      var pad = Math.ceil(size * 0.05 + blur * 1.7 + 10);
+      var cw = Math.max(1, Math.ceil((p.w + pad * 2) * DPR));
+      var chh = Math.max(1, Math.ceil((p.h + pad * 2) * DPR));
+      /* 复用画布对象：重设 width/height（即使同值）会清空位图，
+         既省掉每句新建 3–4 张大画布的 GC 抖动，也不会串上一句的内容 */
+      var c = panelCachePool[i];
+      if (!c) { c = document.createElement("canvas"); panelCachePool[i] = c; }
+      c.width = cw;
+      c.height = chh;
+      var g = c.getContext("2d");
+      if (!g) continue;
+      g.setTransform(DPR, 0, 0, DPR, 0, 0);
+      g.translate(pad, pad);
+      try {
+        paintPanelContent(g, p);
+        p.cache = c;
+        p.cachePad = pad;
+      } catch (e) { p.cache = null; }
+    }
+  }
+
+  /* 画格的静态内容（原 drawPanel 去掉外层动画变换后的部分） */
+  function paintPanelContent(g, p) {
+    var pa = pal(p);
+    var size = Math.min(p.w, p.h);
+
+    /* 纸片投影 */
+    g.save();
+    g.translate(size * 0.02, size * 0.028);
+    g.shadowColor = "rgba(0,0,0,0.42)";
+    g.shadowBlur = Math.min(26, size * 0.10);
+    g.shadowOffsetX = size * 0.01;
+    g.shadowOffsetY = size * 0.015;
+    if (pathPts(g, p.pts)) {
+      g.fillStyle = p.tone === "ink" ? "#0b0a09" : PAPER;
+      g.fill();
+    }
+    g.restore();
+
+    /* 撕边纸基 */
+    if (!pathPts(g, p.pts)) return;
+    g.fillStyle = p.tone === "ink" ? "#0b0a09" : PAPER;
+    g.fill();
+
+    g.save();
+    g.clip();
+    try { ARTS[p.art % ARTS.length](g, p.w, p.h, pa, p.seed); } catch (e) { g.fillStyle = pa.bg; g.fillRect(0, 0, p.w, p.h); }
+    /* 半调网点 */
+    fillPat(g, p.tone === "ink" ? P.dotLight : P.dot, 0.13, 0, 0, p.w, p.h);
+    g.save();
+    g.beginPath();
+    g.rect(0, p.h * 0.66, p.w, p.h * 0.34);
+    g.clip();
+    fillPat(g, p.tone === "ink" ? P.dotLightBig : P.dotBig, 0.20, 0, p.h * 0.66, p.w, p.h * 0.34);
+    g.restore();
+    /* 纸纹 */
+    fillPat(g, p.tone === "ink" ? P.grainLight : P.grainDark, 0.55, 0, 0, p.w, p.h);
+    /* 内阴影 */
+    var ig = safeGrad(g, "radial", [p.w / 2, p.h / 2, Math.min(p.w, p.h) * 0.2, p.w / 2, p.h / 2, Math.max(p.w, p.h) * 0.75], [[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.30)"]]);
+    if (ig) { g.fillStyle = ig; g.fillRect(0, 0, p.w, p.h); }
+    g.restore();
+
+    /* 撕口边缘：纸白毛边 + 细线 + 纤维 */
+    g.save();
+    if (pathPts(g, p.pts)) {
+      g.strokeStyle = p.tone === "ink" ? "rgba(233,223,202,0.55)" : "rgba(11,10,9,0.55)";
+      g.lineWidth = Math.max(1, size * 0.007);
+      g.stroke();
+      g.strokeStyle = p.tone === "ink" ? "rgba(8,7,6,0.7)" : "rgba(245,238,222,0.65)";
+      g.lineWidth = Math.max(0.8, size * 0.003);
+      g.stroke();
+    }
+    var stepF = Math.max(1, Math.floor(p.pts.length / 46));
+    for (var i = 0; i < p.pts.length; i += stepF) {
+      var pt = p.pts[i];
+      if (!pt) continue;
+      var fl = size * (0.006 + ((i * 37) % 11) * 0.0016);
+      g.strokeStyle = p.tone === "ink" ? "rgba(233,223,202,0.55)" : "rgba(248,242,228,0.75)";
+      g.lineWidth = Math.max(0.6, size * 0.0022);
+      g.beginPath();
+      g.moveTo(pt.x, pt.y);
+      g.lineTo(pt.x + pt.nx * fl * 2.4, pt.y + pt.ny * fl * 2.4);
+      g.stroke();
+      if (i % 3 === 0) {
+        g.strokeStyle = "rgba(0,0,0,0.35)";
+        g.beginPath();
+        g.moveTo(pt.x, pt.y);
+        g.lineTo(pt.x + pt.nx * fl * 3.4 + pt.ny * fl, pt.y + pt.ny * fl * 3.4 - pt.nx * fl);
+        g.stroke();
+      }
+    }
+    g.restore();
+  }
+
+  function drawPanel(g, p, now) {
+    var size = Math.min(p.w, p.h);
+    var tsec = now / 1000;
+    var floatX = RM ? 0 : Math.sin(tsec * 1.1 + p.phase) * size * 0.012;
+    var floatY = RM ? 0 : Math.cos(tsec * 0.9 + p.phase * 1.7) * size * 0.014;
+    floatY += live.mid * size * 0.02;
+    var jitter = (RM || window.__liziShake === false) ? 0 : hitEnergy * size * 0.012;
+    var jx = Math.sin(now * 0.05 + p.phase) * jitter;
+    var jy = Math.cos(now * 0.043 + p.phase) * jitter;
+    var sc = clamp(p.anim + live.bass * 0.012, 0.35, 1.6);
+    var rot = p.rot + (RM ? 0 : Math.sin(tsec * 0.7 + p.phase) * 0.006);
+
+    g.save();
+    g.translate(p.x + p.w / 2 + floatX + jx, p.y + p.h / 2 + floatY + jy);
+    g.rotate(rot);
+    g.scale(sc, sc);
+    g.translate(-p.w / 2, -p.h / 2);
+
+    if (ANDROID && p.cache) {
+      /* 手机端只贴烘焙好的画格。缓存按 DPR 建、再按 DPR 换算回逻辑尺寸，
+         保证 1:1 不重采样；漂浮 / 抖动 / 缩放仍每帧实时做。 */
+      var pad = p.cachePad;
+      g.drawImage(p.cache, -pad, -pad, p.cache.width / DPR, p.cache.height / DPR);
+    } else {
+      paintPanelContent(g, p);
+    }
+
+    g.restore();
+  }
+
+  /* ============================================================
+     7. 场景合成：米白 / 纯黑 + 大字 + 分镜
+     ============================================================ */
+  var lastNow = 0;
+
+  /* ---- 手机端：背景静态层烘焙 ----
+     背景 = 底色 + 纸/暗渐变 + 巨大网点圆 + 上下网点条，其中只有暗场那团红色
+     呼吸光跟 bass 有关。把静态部分烘成 1x 位图（背景是低对比网点，1x 拉回
+     1.25 倍看不出），每帧只贴图 + 画那团红光，省掉 2 次全屏渐变和 3 次大面积
+     网点 pattern 填充。原来画在场景最上层的整屏纸纹也一并烘进来（画格自带
+     纸纹），省掉每帧一次全屏 pattern 填充。 */
+  var bgCache = null, bgCacheKey = "";
+
+  function paintBackgroundStatic(g) {
+    g.fillStyle = sceneBg;
+    g.fillRect(0, 0, W, H);
+    if (shotMode === "paper") {
+      var pg = safeGrad(g, "linear", [0, 0, 0, H], [[0, "#efe6d2"], [0.55, "#e6dcc6"], [1, "#d6c9ad"]]);
+      if (pg) { g.fillStyle = pg; g.fillRect(0, 0, W, H); }
+    } else {
+      var dg = safeGrad(g, "radial", [W * 0.5, H * 0.42, Math.min(W, H) * 0.05, W * 0.5, H * 0.5, Math.max(W, H) * 0.8], [[0, "#151311"], [1, "#050505"]]);
+      if (dg) { g.fillStyle = dg; g.fillRect(0, 0, W, H); }
+    }
+    /* 巨大半调圆：半径随 bass 的 3% 呼吸在缓存里固定为基准值，换来整块背景
+       只画一次；整体节拍感仍由相机、画格缩放、血点保留。 */
+    var cx = W * (shotMode === "paper" ? 0.76 : 0.78);
+    var cy = H * 0.24;
+    var rad = Math.min(W, H) * 0.30;
+    g.save();
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.clip();
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.22, cx - rad, cy - rad, rad * 2, rad * 2);
+    g.strokeStyle = shotMode === "paper" ? "rgba(11,10,9,0.25)" : "rgba(239,230,210,0.22)";
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.stroke();
+    g.restore();
+    /* 边缘网点条 */
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.10, 0, 0, W, H * 0.10);
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.10, 0, H * 0.90, W, H * 0.10);
+    /* 整屏纸纹（原来在 drawScene 里每帧画一次，现在烘进背景） */
+    fillPat(g, shotMode === "paper" ? P.grainDark : P.grainLight, 0.32, 0, 0, W, H);
+  }
+
+  function drawBackground(g, now) {
+    sceneBg = shotMode === "paper" ? "#e6dcc6" : "#080807";
+    if (ANDROID) {
+      var key = shotMode + "|" + W + "x" + H;
+      if (bgCacheKey !== key) {
+        /* 复用同一张画布：重设尺寸会清空位图，省掉每句新建 1280×900 画布的 GC */
+        if (!bgCache) bgCache = document.createElement("canvas");
+        bgCache.width = Math.max(1, Math.round(W));
+        bgCache.height = Math.max(1, Math.round(H));
+        var b = bgCache.getContext("2d");
+        if (b) {
+          b.setTransform(1, 0, 0, 1, 0, 0);
+          paintBackgroundStatic(b);
+        }
+        bgCacheKey = key;
+      }
+      if (bgCache) {
+        g.drawImage(bgCache, 0, 0, W, H);
+        /* 唯一保留的动态背景层：bass 呼吸红光 */
+        if (shotMode !== "paper") {
+          var ag = safeGrad(g, "radial", [W * (0.22 + live.bass * 0.1), H * 0.32, 10, W * 0.22, H * 0.32, Math.min(W, H) * 0.55], [[0, "rgba(205,32,48,0.22)"], [1, "rgba(205,32,48,0)"]]);
+          if (ag) { g.fillStyle = ag; g.fillRect(0, 0, W, H); }
+        }
+        return;
+      }
+    }
+    /* 桌面端：原路径（网点圆半径随 bass 呼吸，纸纹在 drawScene 里单独叠加） */
+    g.fillStyle = sceneBg;
+    g.fillRect(0, 0, W, H);
+    if (shotMode === "paper") {
+      var pg2 = safeGrad(g, "linear", [0, 0, 0, H], [[0, "#efe6d2"], [0.55, "#e6dcc6"], [1, "#d6c9ad"]]);
+      if (pg2) { g.fillStyle = pg2; g.fillRect(0, 0, W, H); }
+    } else {
+      var dg = safeGrad(g, "radial", [W * 0.5, H * 0.42, Math.min(W, H) * 0.05, W * 0.5, H * 0.5, Math.max(W, H) * 0.8], [[0, "#151311"], [1, "#050505"]]);
+      if (dg) { g.fillStyle = dg; g.fillRect(0, 0, W, H); }
+      var ag2 = safeGrad(g, "radial", [W * (0.22 + live.bass * 0.1), H * 0.32, 10, W * 0.22, H * 0.32, Math.min(W, H) * 0.55], [[0, "rgba(205,32,48,0.22)"], [1, "rgba(205,32,48,0)"]]);
+      if (ag2) { g.fillStyle = ag2; g.fillRect(0, 0, W, H); }
+    }
+    /* 巨大半调圆 */
+    var cx = W * (shotMode === "paper" ? 0.76 : 0.78);
+    var cy = H * 0.24;
+    var rad = Math.min(W, H) * (0.30 + live.bass * 0.03);
+    g.save();
+    g.beginPath();
+    g.arc(cx, cy, rad, 0, Math.PI * 2);
+    g.clip();
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.22, cx - rad, cy - rad, rad * 2, rad * 2);
+    g.strokeStyle = shotMode === "paper" ? "rgba(11,10,9,0.25)" : "rgba(239,230,210,0.22)";
+    g.lineWidth = 2;
+    g.beginPath(); g.arc(cx, cy, rad, 0, Math.PI * 2); g.stroke();
+    g.restore();
+    /* 边缘网点条 */
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.10, 0, 0, W, H * 0.10);
+    fillPat(g, shotMode === "paper" ? P.dot : P.dotLight, 0.10, 0, H * 0.90, W, H * 0.10);
+  }
+
+  /* ---- 手机端：背景大字缓存 ----
+     “狂”字以 ~900px 字号每帧 fillText + strokeText，安卓上光字形栅格化就要
+     几毫秒。这个字只随分镜变，按 0.5 倍分辨率烘一张（它是低透明度水印，放大
+     2 倍完全看不出），每帧只贴图 + 原来的轻微漂移。 */
+  var kanjiCache = null, kanjiKey = "", kanjiExt = 0;
+
+  function buildKanjiCache(kj, size) {
+    var ext = Math.ceil(size * 1.15);
+    var sc = 0.5;
+    var px = Math.max(1, Math.round(ext * sc));
+    var c = document.createElement("canvas");
+    c.width = px;
+    c.height = px;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    g.setTransform(sc, 0, 0, sc, 0, 0);
+    g.translate(ext / 2, ext / 2);
+    g.font = "900 " + Math.round(size) + "px " + FONT_BRUSH;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.globalAlpha = shotMode === "paper" ? 0.085 : 0.115;
+    g.fillStyle = shotMode === "paper" ? "#0b0a09" : "#efe6d3";
+    try { g.fillText(kj, 0, 0); } catch (e) {}
+    g.globalAlpha = 0.32;
+    g.strokeStyle = accent;
+    g.lineWidth = 2;
+    try { g.strokeText(kj, size * 0.018, size * 0.02); } catch (e2) {}
+    return { c: c, ext: ext };
+  }
+
+  function drawBgKanji(g, now) {
+    var kj = KANJI[Math.abs(shotIdx < 0 ? 0 : shotIdx) % KANJI.length];
+    var size = Math.min(W * 0.62, H * 1.05);
+    if (ANDROID) {
+      var key = kj + "|" + shotMode + "|" + W + "x" + H + "|" + accent;
+      if (kanjiKey !== key) {
+        var sp = buildKanjiCache(kj, size);
+        kanjiCache = sp;
+        kanjiExt = sp ? sp.ext : 0;
+        kanjiKey = key;
+      }
+      if (kanjiCache) {
+        g.save();
+        g.translate(W * 0.52 + (RM ? 0 : Math.sin(now * 0.0007) * 10), H * 0.52);
+        g.rotate(-0.06);
+        g.drawImage(kanjiCache.c, -kanjiExt / 2, -kanjiExt / 2, kanjiExt, kanjiExt);
+        g.restore();
+        return;
+      }
+    }
+    g.save();
+    g.translate(W * 0.52 + (RM ? 0 : Math.sin(now * 0.0007) * 10), H * 0.52);
+    g.rotate(-0.06);
+    g.font = "900 " + Math.round(size) + "px " + FONT_BRUSH;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.globalAlpha = shotMode === "paper" ? 0.085 : 0.115;
+    g.fillStyle = shotMode === "paper" ? "#0b0a09" : "#efe6d3";
+    try { g.fillText(kj, 0, 0); } catch (e) {}
+    g.globalAlpha = 0.32;
+    g.strokeStyle = accent;
+    g.lineWidth = 2;
+    try { g.strokeText(kj, size * 0.018, size * 0.02); } catch (e2) {}
+    g.restore();
+  }
+
+  function drawSpeedLines(g, now) {
+    if (hitEnergy < 0.02) return;
+    var rnd = mulberry32(beatSeed + 5);
+    var cx = W * 0.5, cy = H * (state === "lyric" ? 0.47 : 0.5);
+    var col = shotMode === "paper" ? "rgba(11,10,9," : "rgba(240,232,214,";
+    g.save();
+    g.translate(cx, cy);
+    /* 手机端速度线 34 → 20：每根是一次独立三角形填充，强拍时数量减半，
+       放射方向和高频感还在，少掉的多是重叠在暗部的短线。 */
+    var n = ANDROID ? 20 : 34;
+    for (var i = 0; i < n; i++) {
+      var a = rnd() * Math.PI * 2;
+      var inner = Math.min(W, H) * (0.22 + rnd() * 0.26);
+      var outer = Math.max(W, H) * (0.65 + rnd() * 0.45);
+      var wdt = (0.004 + rnd() * 0.010) * Math.min(W, H) * 2;
+      var al = hitEnergy * (0.10 + rnd() * 0.30);
+      g.fillStyle = (i % 9 === 0) ? "rgba(205,32,48," + al.toFixed(3) + ")" : col + al.toFixed(3) + ")";
+      g.beginPath();
+      var ca = Math.cos(a), sa = Math.sin(a);
+      g.moveTo(ca * inner, sa * inner);
+      g.lineTo(ca * outer - sa * wdt, sa * outer + ca * wdt);
+      g.lineTo(ca * outer + sa * wdt, sa * outer - ca * wdt);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
+  function spawnSplats(level) {
+    /* 手机端每次强拍少撒一点、存活上限也压低：每个血点都是两次 arc 填充
+       + save/rotate，150 个在安卓上纯属填充率浪费，70 个观感已经足够。 */
+    var count = ANDROID ? (6 + Math.round(level * 8)) : (8 + Math.round(level * 14));
+    for (var i = 0; i < count; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var sp = 70 + Math.random() * 290 * (0.5 + level);
+      var life = 0.5 + Math.random() * 0.8;
+      splats.push({
+        x: W * 0.5 + (Math.random() - 0.5) * W * 0.36,
+        y: H * 0.5 + (Math.random() - 0.5) * H * 0.34,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp - 40,
+        r: 2 + Math.random() * 13 * (0.6 + level),
+        life: life, max: life,
+        rot: Math.random() * 3,
+        shape: Math.random() < 0.35 ? 1 : 0
+      });
+    }
+    var cap = ANDROID ? 70 : 150;
+    if (splats.length > cap) splats.splice(0, splats.length - cap);
+  }
+  function updateSplats(dt) {
+    for (var i = splats.length - 1; i >= 0; i--) {
+      var s = splats[i];
+      s.life -= dt;
+      if (s.life <= 0) { splats.splice(i, 1); continue; }
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.vy += 360 * dt;
+      s.vx *= 0.988;
+      s.vy *= 0.995;
+    }
+  }
+  function drawSplats(g) {
+    if (!splats.length) return;
+    g.save();
+    for (var i = 0; i < splats.length; i++) {
+      var s = splats[i];
+      var a = clamp(s.life / s.max, 0, 1);
+      g.globalAlpha = a * 0.9;
+      g.fillStyle = accent;
+      g.save();
+      g.translate(s.x, s.y);
+      g.rotate(s.rot);
+      if (s.shape === 1) {
+        g.beginPath();
+        g.moveTo(-s.r, 0);
+        g.lineTo(0, -s.r * 0.55);
+        g.lineTo(s.r * 1.8, 0);
+        g.lineTo(0, s.r * 0.55);
+        g.closePath();
+        g.fill();
+      } else {
+        g.beginPath();
+        g.arc(0, 0, s.r, 0, Math.PI * 2);
+        g.fill();
+        g.beginPath();
+        g.arc(s.r * 1.5, s.r * 0.4, s.r * 0.35, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.restore();
+    }
+    g.globalAlpha = 1;
+    g.restore();
+  }
+
+  /* ============================================================
+     8. 主词大字 / 竖排对话框 / 标题态
+     ============================================================ */
+  /* ---- 手机端：歌词单字精灵缓存 ----
+     每个字每帧要做 3 次 fillText + 2 次 strokeText（其中一次是 0.145em 的粗描边）
+     + 4 道干笔划痕；一行 8–20 个字就是上百次文字栅格化。字形本身不随时间变，
+     只有外层的 alpha / 旋转 / 缩放是动画，所以按「字 + 字号」烘成小图，
+     每帧 drawImage 一次即可。缓存按换句清空，避免整首歌累积几百张。 */
+  var glyphCache = {}, glyphCacheN = 0;
+
+  function paintGlyph(g, ch, size, a) {
+    g.font = "900 " + Math.round(size) + "px " + FONT_BRUSH;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.lineJoin = "round";
+    g.lineCap = "round";
+    g.fillStyle = "rgba(0,0,0,0.52)";
+    g.fillText(ch, size * 0.045, size * 0.055);
+    g.fillStyle = accent;
+    g.fillText(ch, size * 0.072, size * 0.082);
+    g.strokeStyle = "#0a0908";
+    g.lineWidth = Math.max(3, size * 0.145);
+    g.strokeText(ch, 0, 0);
+    g.strokeStyle = "rgba(10,9,8,0.55)";
+    g.lineWidth = Math.max(1.5, size * 0.045);
+    g.strokeText(ch, 0, 0);
+    g.fillStyle = "#f6efdf";
+    g.fillText(ch, 0, 0);
+    /* 干笔划痕 */
+    var rnd = mulberry32(900 + (ch.charCodeAt(0) || 1) * 29 + Math.round(size));
+    g.globalAlpha = (a == null ? 1 : a) * 0.5;
+    g.strokeStyle = "rgba(9,8,7,0.30)";
+    for (var i = 0; i < 4; i++) {
+      g.lineWidth = size * (0.012 + rnd() * 0.014);
+      var yy = (-0.4 + rnd() * 0.8) * size;
+      var xs = (-0.44 + rnd() * 0.2) * size;
+      g.beginPath();
+      g.moveTo(xs, yy);
+      g.lineTo(xs + size * (0.42 + rnd() * 0.45), yy + (rnd() - 0.5) * size * 0.06);
+      g.stroke();
+    }
+  }
+
+  function buildGlyphSprite(ch, size) {
+    /* 1.4em 见方：字形本体 + 粗描边 + 阴影偏移 + 划痕都在这个范围内 */
+    var ext = Math.ceil(size * 1.4);
+    var px = Math.max(1, Math.round(ext * DPR));
+    var c = document.createElement("canvas");
+    c.width = px;
+    c.height = px;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.translate(ext / 2, ext / 2);
+    try { paintGlyph(g, ch, size); } catch (e) { return null; }
+    return { c: c, ext: ext };
+  }
+
+  function drawGlyph(g, ch, size, alpha, rot, sc) {
+    if (!ch || ch === " " || ch === "\n") return;
+    if (!(alpha > 0.001)) return;
+    g.save();
+    g.globalAlpha = alpha;
+    g.rotate(rot || 0);
+    g.scale(sc || 1, sc || 1);
+    if (ANDROID) {
+      var key = ch + "|" + Math.round(size);
+      var sp;
+      if (key in glyphCache) {
+        sp = glyphCache[key];
+      } else {
+        sp = buildGlyphSprite(ch, size);
+        glyphCache[key] = sp;
+        glyphCacheN++;
+        if (glyphCacheN > 64) {
+          glyphCache = {};
+          glyphCacheN = 0;
+          glyphCache[key] = sp;
+        }
+      }
+      /* 弹入瞬间会放大到 2.5 倍，这时贴精灵图会糊，退回直接绘制；
+         整个弹入只有 0.22s，代价可以忽略。 */
+      if (sp && (sc || 1) <= 1.35) {
+        g.drawImage(sp.c, -sp.ext / 2, -sp.ext / 2, sp.ext, sp.ext);
+        g.restore();
+        return;
+      }
+      /* 建缓存失败 / 正在放大，退回逐字绘制（alpha/rot/scale 已经设好） */
+    }
+    paintGlyph(g, ch, size, alpha);
+    g.restore();
+  }
+
+  function drawLyric(g, now) {
+    if (state !== "lyric" || !lyricRows.length) return;
+    var kick = RM ? 0 : hitEnergy * 0.012;
+    /* 主词底衬血色涂块 */
+    var r0 = lyricRows[0];
+    g.save();
+    g.translate(W * 0.5, r0.cy + (lyricRows.length > 1 ? -r0.size * 0.1 : 0));
+    g.rotate(-0.02 + (RM ? 0 : Math.sin(now * 0.0011) * 0.004));
+    g.globalAlpha = 0.20 + live.bass * 0.16;
+    g.fillStyle = accent;
+    g.beginPath();
+    g.moveTo(-W * 0.40, -r0.size * 0.56);
+    g.lineTo(W * 0.41, -r0.size * 0.46);
+    g.lineTo(W * 0.37, r0.size * 0.05);
+    g.lineTo(-W * 0.42, r0.size * 0.18);
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 0.22;
+    g.fillStyle = "#0a0908";
+    g.beginPath();
+    g.moveTo(-W * 0.37, r0.size * 0.12);
+    g.lineTo(W * 0.35, r0.size * 0.02);
+    g.lineTo(W * 0.33, r0.size * 0.42);
+    g.lineTo(-W * 0.39, r0.size * 0.50);
+    g.closePath();
+    g.fill();
+    g.restore();
+
+    for (var r = 0; r < lyricRows.length; r++) {
+      var row = lyricRows[r];
+      if (!row) continue;
+      var rk = Math.sin(now * 0.02 + r * 1.7) * kick * row.size;
+      g.save();
+      g.translate(row.cx + (RM ? 0 : rk), row.cy + (RM ? 0 : Math.cos(now * 0.017 + r) * kick * row.size * 0.6));
+      g.rotate(row.rot + (RM ? 0 : Math.sin(now * 0.0013 + r) * 0.004));
+      for (var c = 0; c < row.chars.length; c++) {
+        var gl = row.chars[c];
+        if (!gl) continue;
+        var tm = lyricTimes[gl.k];
+        if (!isFinite(tm)) tm = (S.lines[S.idx] ? S.lines[S.idx].t : 0) + gl.k * 0.1;
+        var age = S.t - tm;
+        if (age < 0) continue;
+        var p = clamp(age / 0.22, 0, 1);
+        var sc = 1 + 1.5 * Math.exp(-5.2 * p) * Math.cos(9.2 * p);
+        if (p >= 0.999) sc = 1;
+        sc = clamp(sc, 0.35, 2.8);
+        var dy = (1 - p) * row.size * 0.18;
+        var alpha = clamp(age / 0.06, 0, 1);
+        g.save();
+        g.translate(gl.x, dy);
+        drawGlyph(g, gl.ch, row.size, alpha, gl.rot * (1 - p), sc);
+        g.restore();
+      }
+      g.restore();
+    }
+  }
+
+  function drawTitleState(g, now) {
+    if (state === "lyric") return;
+    var isEmpty = (state === "empty");
+    var title = isEmpty ? "暂无歌词" : "狂乱漫剪";
+    var sub = isEmpty ? "INSTRUMENTAL · NO LYRIC" : "CHAINSAW MANGA COLLAGE";
+    var chars = [];
+    try { chars = Array.from(title); } catch (e) { chars = title.split(""); }
+    var size = Math.min(W * 0.16, H * 0.27);
+    if (W / H < 0.95) size = Math.min(W * 0.19, H * 0.24);
+    var n = chars.length;
+    var total = size * n * 0.94;
+    var sx = W * 0.5 - total / 2;
+    var cy = H * 0.46;
+    for (var i = 0; i < n; i++) {
+      var cx = sx + size * 0.47 + i * size * 0.94;
+      var rot = ((i % 2) ? 1 : -1) * 0.035 + (i - 1.5) * 0.008;
+      var bob = RM ? 0 : Math.sin(now * 0.0016 + i * 0.8) * size * 0.02;
+      g.save();
+      g.translate(cx, cy + bob);
+      drawGlyph(g, chars[i], size, 1, rot, 1);
+      g.restore();
+    }
+    /* 装饰线 */
+    g.save();
+    g.globalAlpha = 0.85;
+    g.strokeStyle = accent;
+    g.lineWidth = Math.max(2, size * 0.018);
+    g.beginPath();
+    g.moveTo(W * 0.5 - total * 0.56, cy + size * 0.66);
+    g.lineTo(W * 0.5 + total * 0.56, cy + size * 0.62);
+    g.stroke();
+    g.globalAlpha = 1;
+    g.restore();
+    /* 副标题 */
+    var fs = clamp(Math.min(W, H) * 0.020, 10, 18);
+    g.save();
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = "700 " + fs.toFixed(1) + "px " + FONT_MONO;
+    g.fillStyle = shotMode === "paper" ? "rgba(11,10,9,0.72)" : "rgba(239,230,211,0.72)";
+    try { g.fillText(sub, W * 0.5, cy + size * 0.88); } catch (e) {}
+    g.font = "600 " + (fs * 0.82).toFixed(1) + "px " + FONT_SANS;
+    var s2 = songName ? songName : (isEmpty ? "LIZI STAGE 590" : "MMV / STAGE 590");
+    if (songArtists) s2 += "  —  " + songArtists;
+    g.globalAlpha = 0.62;
+    try { g.fillText(s2, W * 0.5, cy + size * 1.12); } catch (e2) {}
+    g.globalAlpha = 1;
+    g.restore();
+  }
+
+  /* 竖排对话框的字数组只跟当前句有关，换句时算一次，别每帧 Array.from + trim */
+  function buildBubbleChars() {
+    bubbleChars = [];
+    var L = (S.idx >= 0 && S.lines[S.idx]) ? S.lines[S.idx] : null;
+    if (!L || !L.text) return;
+    try { bubbleChars = Array.from(String(L.text).trim()); } catch (e) { bubbleChars = String(L.text).split(""); }
+    if (bubbleChars.length > 26) bubbleChars = bubbleChars.slice(0, 26);
+  }
+
+  function drawBubble(g, now, tearProg) {
+    if (state !== "lyric" || S.idx < 0) return;
+    var chars = bubbleChars;
+    if (!chars.length) return;
+    var fs = clamp(Math.min(W, H) * 0.024, 11, 20);
+    var step = fs * 1.2;
+    var maxH = H * 0.54;
+    if (chars.length * step > maxH) {
+      fs *= maxH / (chars.length * step);
+      step = fs * 1.2;
+    }
+    if (fs < 7) return;
+    var rx = fs * 1.7;
+    var ry = chars.length * step / 2 + fs * 1.35;
+    var cx, cy;
+    if (W / H < 0.95) { cx = W * 0.82; cy = H * 0.30; }
+    else { cx = W - rx - Math.max(18, W * 0.032); cy = H * 0.48; }
+    var alpha = 1 - (tearProg || 0) * 0.55;
+    g.save();
+    g.globalAlpha = clamp(alpha, 0.25, 1);
+    /* 尾巴 */
+    g.beginPath();
+    g.moveTo(cx - rx * 0.7, cy + ry * 0.55);
+    g.lineTo(cx - rx * 2.2, cy + ry * 0.92);
+    g.lineTo(cx - rx * 0.35, cy + ry * 0.18);
+    g.closePath();
+    g.fillStyle = "#efe6d2";
+    g.strokeStyle = "#0a0908";
+    g.lineWidth = 3;
+    g.fill();
+    g.stroke();
+    /* 泡 */
+    g.beginPath();
+    g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    g.fillStyle = "#efe6d2";
+    g.fill();
+    g.lineWidth = 3.2;
+    g.strokeStyle = "#0a0908";
+    g.stroke();
+    g.save();
+    g.clip();
+    fillPat(g, P.dot, 0.18, cx, cy - ry, rx * 2, ry * 2);
+    var sh = safeGrad(g, "linear", [cx, cy - ry, cx, cy + ry], [[0, "rgba(0,0,0,0.10)"], [0.5, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.12)"]]);
+    if (sh) { g.fillStyle = sh; g.fillRect(cx - rx, cy - ry, rx * 2, ry * 2); }
+    g.restore();
+    /* 竖排字 */
+    g.font = "700 " + Math.max(7, Math.round(fs)) + "px " + FONT_SANS;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    var y0 = cy - (chars.length - 1) * step / 2;
+    for (var i = 0; i < chars.length; i++) {
+      var tt = lyricTimes[i];
+      var sung = isFinite(tt) && S.t >= tt;
+      g.fillStyle = sung ? accent : "#131110";
+      try { g.fillText(chars[i], cx, y0 + i * step); } catch (e2) {}
+    }
+    g.restore();
+  }
+
+  /* ============================================================
+     9. 撕纸转场 / 相机 / 后效
+     ============================================================ */
+  function buildCrack() {
+    var rnd = mulberry32(Math.floor(tear.seed * 1000) + 7);
+    tear.pts = [];
+    var n = 27;
+    for (var i = 0; i <= n; i++) {
+      var y = -H * 0.03 + (H * 1.06) * (i / n);
+      var x = W * (0.5 + Math.sin(i * 1.63 + tear.seed * 2.1) * 0.055 + (rnd() - 0.5) * 0.11);
+      tear.pts.push({ x: x, y: y });
+    }
+  }
+  function startTear() {
+    if (cv.width < 4 || cv.height < 4) return;
+    try {
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.globalAlpha = 1;
+      tctx.globalCompositeOperation = "source-over";
+      tctx.drawImage(cv, 0, 0);
+    } catch (e) { tear.active = false; return; }
+    tear.seed = Math.random() * 10;
+    tear.t0 = performance.now();
+    tear.dur = RM ? 260 : 470;
+    buildCrack();
+    tear.active = true;
+  }
+
+  function tearEdgePath(g, pts) {
+    if (!pts || !pts.length) return false;
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (var i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+    return true;
+  }
+
+  function drawTearPiece(g, side, sep, e, p) {
+    var pts = tear.pts;
+    if (!pts || !pts.length) return;
+    g.save();
+    g.translate(side * sep, (side < 0 ? -1 : 1) * e * H * 0.018);
+    g.beginPath();
+    if (side < 0) {
+      g.moveTo(-20, -H * 0.12);
+      for (var i = 0; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+      g.lineTo(-20, H * 1.12);
+    } else {
+      g.moveTo(W + 20, -H * 0.12);
+      for (var j = pts.length - 1; j >= 0; j--) g.lineTo(pts[j].x, pts[j].y);
+      g.lineTo(W + 20, H * 1.12);
+    }
+    g.closePath();
+    g.clip();
+    try { g.drawImage(tearSnap, 0, 0, W, H); } catch (err) {}
+    /* 撕口纸白边 */
+    g.beginPath();
+    g.moveTo(pts[0].x, pts[0].y);
+    for (var k = 1; k < pts.length; k++) g.lineTo(pts[k].x, pts[k].y);
+    g.strokeStyle = "rgba(244,237,220," + (0.85).toFixed(2) + ")";
+    g.lineWidth = Math.max(2, W * 0.0024);
+    g.stroke();
+    g.strokeStyle = "rgba(10,9,8,0.55)";
+    g.lineWidth = 1;
+    g.stroke();
+    /* 纤维：手机端隔 4 根画一根（撕口白边本身还在，纤维只是毛刺感） */
+    var rnd = mulberry32(500 + Math.floor(tear.seed * 100));
+    for (var f = 0; f < pts.length; f += (ANDROID ? 4 : 2)) {
+      var pt = pts[f];
+      if (!pt) continue;
+      var dir = (side < 0 ? 1 : -1);
+      var len = 4 + rnd() * 18;
+      g.strokeStyle = "rgba(246,239,224,0.75)";
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(pt.x, pt.y);
+      g.lineTo(pt.x + dir * len, pt.y + (rnd() - 0.5) * 10);
+      g.stroke();
+    }
+    g.restore();
+  }
+
+  function drawTear(g, now) {
+    if (!tear.active) return;
+    var p = clamp((now - tear.t0) / tear.dur, 0, 1);
+    var e = 1 - Math.pow(1 - p, 4);
+    var sep = e * W * (0.10 + 0.15 * Math.abs(Math.sin(tear.seed * 2.7)));
+    var pts = tear.pts;
+    if (!pts || !pts.length) { tear.active = false; return; }
+    /* 裂缝阴影 */
+    g.save();
+    g.beginPath();
+    g.moveTo(pts[0].x + 18, pts[0].y);
+    for (var i = 1; i < pts.length; i++) g.lineTo(pts[i].x + 18, pts[i].y);
+    for (var j = pts.length - 1; j >= 0; j--) g.lineTo(pts[j].x - 18, pts[j].y);
+    g.closePath();
+    g.fillStyle = "rgba(0,0,0," + (0.50 * e).toFixed(3) + ")";
+    g.fill();
+    g.restore();
+
+    drawTearPiece(g, -1, sep, e, p);
+    drawTearPiece(g, 1, sep, e, p);
+
+    /* 裂缝核心光 */
+    if (p < 0.55) {
+      g.save();
+      g.globalAlpha = clamp((1 - p / 0.55), 0, 1) * 0.8;
+      g.strokeStyle = accent;
+      g.lineWidth = Math.max(2, W * 0.0025);
+      tearEdgePath(g, pts);
+      g.stroke();
+      g.strokeStyle = "rgba(250,244,232,0.9)";
+      g.lineWidth = Math.max(1, W * 0.001);
+      g.stroke();
+      g.restore();
+    }
+
+    /* 飞散的纸屑：手机端 14 → 10，转场只持续 0.47s，少几片看不出来 */
+    var scraps = ANDROID ? 10 : 14;
+    var rnd = mulberry32(Math.floor(tear.seed * 777) + 3);
+    g.save();
+    for (var s = 0; s < scraps; s++) {
+      var yy = H * (s / scraps) + (rnd() - 0.5) * H * 0.05;
+      var idx = Math.max(0, Math.min(pts.length - 1, Math.round((yy + H * 0.03) / (H * 1.06) * (pts.length - 1))));
+      var base = pts[idx];
+      if (!base) continue;
+      var dir = (s % 2 ? 1 : -1);
+      var xx = base.x + dir * (sep * 0.7 + rnd() * W * 0.18) + (rnd() - 0.5) * 40;
+      var wy = yy + (rnd() - 0.5) * H * 0.2;
+      var sz = 3 + rnd() * 9;
+      g.save();
+      g.translate(xx, wy);
+      g.rotate(rnd() * 6.28);
+      g.globalAlpha = clamp(1 - p, 0, 1) * 0.9;
+      g.fillStyle = (s % 3 === 0) ? accent : "#efe6d2";
+      g.beginPath();
+      g.moveTo(-sz, -sz * 0.5);
+      g.lineTo(sz * 0.7, -sz * 0.8);
+      g.lineTo(sz * 0.3, sz * 0.6);
+      g.closePath();
+      g.fill();
+      g.restore();
+    }
+    g.restore();
+
+    if (p >= 1) tear.active = false;
+  }
+
+  function drawCamera(extraRot, dx, dy, alpha) {
+    var shx = RM ? 0 : noise1(lastNow * 0.032) * hitEnergy * 16;
+    var shy = RM ? 0 : noise1(lastNow * 0.041 + 9) * hitEnergy * 13;
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = alpha;
+    ctx.translate(W / 2 + cam.x + dx + shx, H / 2 + cam.y + dy + shy);
+    ctx.rotate(cam.rot + extraRot);
+    ctx.scale(cam.sc, cam.sc);
+    ctx.translate(-W / 2, -H / 2);
+    try { ctx.drawImage(scene, 0, 0, W, H); } catch (e) {}
+    ctx.restore();
+  }
+
+  /* ============================================================
+     10. 场景总装
+     ============================================================ */
+
+  /* ---- 手机端：暗角缓存 ----
+     暗角是每帧一次全屏 radial 渐变填充，安卓上纯属填充率开销；渐变本身极平滑，
+     用 320 宽的离屏图拉伸回全屏完全看不出，省掉一次全屏渐变光栅化。 */
+  var vigCache = null, vigCacheKey = "";
+
+  function drawVignetteCached(g) {
+    var key = shotMode + "|" + W + "x" + H;
+    if (vigCacheKey !== key) {
+      var vw = 320, vh = Math.max(1, Math.round(320 * H / W));
+      vigCache = document.createElement("canvas");
+      vigCache.width = vw;
+      vigCache.height = vh;
+      var v = vigCache.getContext("2d");
+      if (v) {
+        var vg = safeGrad(v, "radial", [vw * 0.5, vh * 0.5, Math.min(vw, vh) * 0.32, vw * 0.5, vh * 0.5, Math.max(vw, vh) * 0.80],
+          [[0, "rgba(0,0,0,0)"], [0.72, "rgba(0,0,0,0.05)"], [1, shotMode === "paper" ? "rgba(52,38,24,0.30)" : "rgba(0,0,0,0.66)"]]);
+        if (vg) { v.fillStyle = vg; v.fillRect(0, 0, vw, vh); }
+      }
+      vigCacheKey = key;
+    }
+    if (vigCache) g.drawImage(vigCache, 0, 0, W, H);
+  }
+
+  function drawScene(g, now) {
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = "source-over";
+    drawBackground(g, now);
+    drawBgKanji(g, now);
+    for (var i = 0; i < panels.length; i++) {
+      var p = panels[i];
+      if (!p) continue;
+      try { drawPanel(g, p, now); } catch (e) { reportError(e); }
+    }
+    drawSpeedLines(g, now);
+    drawSplats(g);
+    /* 全球纸纹 + 暗角 */
+    if (!ANDROID) {
+      /* 手机端的整屏纸纹已经烘进背景缓存（画格自带纸纹），
+         省掉每帧一次全屏 pattern 填充 */
+      fillPat(g, shotMode === "paper" ? P.grainDark : P.grainLight, 0.32, 0, 0, W, H);
+    }
+    if (ANDROID) {
+      drawVignetteCached(g);
+    } else {
+      var vg = safeGrad(g, "radial", [W * 0.5, H * 0.5, Math.min(W, H) * 0.32, W * 0.5, H * 0.5, Math.max(W, H) * 0.80],
+        [[0, "rgba(0,0,0,0)"], [0.72, "rgba(0,0,0,0.05)"], [1, shotMode === "paper" ? "rgba(52,38,24,0.30)" : "rgba(0,0,0,0.66)"]]);
+      if (vg) { g.fillStyle = vg; g.fillRect(0, 0, W, H); }
+    }
+    if (state === "lyric") drawLyric(g, now);
+    else drawTitleState(g, now);
+    /* 场景角落小标记 */
+    g.save();
+    g.globalAlpha = shotMode === "paper" ? 0.35 : 0.45;
+    g.fillStyle = shotMode === "paper" ? "#0b0a09" : "#efe6d3";
+    g.font = "700 " + Math.max(8, Math.min(W, H) * 0.008) + "px " + FONT_MONO;
+    g.textAlign = "left";
+    g.textBaseline = "bottom";
+    try { g.fillText("SEQ.590 / " + (shotIdx < 0 ? "--" : pad(shotIdx + 1, 2)) + " / TAKE 07", W * 0.035, H * 0.965); } catch (e) {}
+    g.restore();
+  }
+
+  /* ============================================================
+     11. HUD（固定层，不随相机摇摆）
+     ============================================================ */
+  function drawHUD(g, now) {
+    var paper = shotMode === "paper";
+    var fg = paper ? "rgba(14,12,10,0.88)" : "rgba(239,230,211,0.90)";
+    var dim = paper ? "rgba(14,12,10,0.46)" : "rgba(239,230,211,0.46)";
+    var fs = clamp(Math.min(W, H) * 0.0125, 9, 15);
+    var m = Math.max(16, Math.min(W, H) * 0.030);
+    g.save();
+    g.globalAlpha = 1;
+    g.textBaseline = "middle";
+    /* 四角准星 */
+    g.strokeStyle = dim;
+    g.lineWidth = 1;
+    var corners = [[m, m], [W - m, m], [m, H - m], [W - m, H - m]];
+    for (var i = 0; i < 4; i++) {
+      var cx = corners[i][0], cy = corners[i][1];
+      var sx = (i === 1 || i === 3) ? -1 : 1;
+      var sy = (i >= 2) ? -1 : 1;
+      g.beginPath();
+      g.moveTo(cx + sx * fs * 0.6, cy);
+      g.lineTo(cx + sx * fs * 2.2, cy);
+      g.moveTo(cx, cy + sy * fs * 0.6);
+      g.lineTo(cx, cy + sy * fs * 2.2);
+      g.stroke();
+    }
+    /* 左上标识 */
+    g.textAlign = "left";
+    g.fillStyle = fg;
+    g.font = "800 " + (fs * 1.05).toFixed(1) + "px " + FONT_SANS;
+    try { g.fillText("590 · 狂乱漫剪", m + fs * 0.6, m + fs * 1.05); } catch (e) {}
+    g.fillStyle = dim;
+    g.font = "500 " + (fs * 0.78).toFixed(1) + "px " + FONT_MONO;
+    try { g.fillText("CHAINSAW MANGA COLLAGE / MMV", m + fs * 0.6, m + fs * 2.55); } catch (e2) {}
+    /* 右上时间码 */
+    var tt = isFinite(S.t) ? Math.max(0, S.t) : 0;
+    var ff = Math.floor(tt * 30) % 30;
+    var ss = Math.floor(tt) % 60;
+    var mm = Math.floor(tt / 60);
+    var tcs = pad(mm, 2) + ":" + pad(ss, 2) + ":" + pad(ff, 2);
+    g.textAlign = "right";
+    g.fillStyle = fg;
+    g.font = "700 " + (fs * 1.25).toFixed(1) + "px " + FONT_MONO;
+    try { g.fillText(tcs, W - m - fs * 0.4, m + fs * 1.05); } catch (e3) {}
+    g.fillStyle = dim;
+    g.font = "500 " + (fs * 0.78).toFixed(1) + "px " + FONT_MONO;
+    var cutTxt = "CUT " + pad(Math.max(0, S.idx + 1), 2) + " / " + pad(S.lines.length, 2);
+    try { g.fillText(cutTxt, W - m - fs * 0.4, m + fs * 2.55); } catch (e4) {}
+    /* 左下歌曲信息 */
+    var nm = songName || "LIZI STAGE 590";
+    if (songArtists) nm += "  —  " + songArtists;
+    if (nm.length > 40) nm = nm.slice(0, 40) + "…";
+    g.textAlign = "left";
+    g.fillStyle = dim;
+    g.font = "600 " + fs.toFixed(1) + "px " + FONT_SANS;
+    try { g.fillText(nm, m + fs * 0.6, H - m - fs * 1.1); } catch (e5) {}
+    /* 右下工艺标记 */
+    g.textAlign = "right";
+    g.font = "500 " + (fs * 0.78).toFixed(1) + "px " + FONT_MONO;
+    try { g.fillText("半调网点 · 撕纸遮罩 · 残影摇摆", W - m - fs * 0.4, H - m - fs * 1.1); } catch (e6) {}
+    /* 进度线 */
+    var py = H - m * 0.35;
+    g.fillStyle = dim;
+    g.globalAlpha = 0.5;
+    g.fillRect(m + fs * 0.6, py, Math.max(0, W - 2 * m - fs * 1.2), 1);
+    g.globalAlpha = 1;
+    if (songDuration > 0) {
+      var pw = clamp(tt / songDuration, 0, 1);
+      g.fillStyle = accent;
+      g.fillRect(m + fs * 0.6, py - 1, Math.max(0, (W - 2 * m - fs * 1.2) * pw), 2);
+    }
+    /* BPM */
+    if (live.bpm > 0) {
+      g.textAlign = "center";
+      g.fillStyle = dim;
+      g.font = "500 " + (fs * 0.7).toFixed(1) + "px " + FONT_MONO;
+      try { g.fillText("BPM " + Math.round(live.bpm), W * 0.5, H - m * 0.5); } catch (e7) {}
+    }
+    g.restore();
+  }
+
+  /* ============================================================
+     12. 物理弹簧 / 更新
+     ============================================================ */
+  function stepSpring(o, key, vkey, target, ks, ds, dt) {
+    var acc = (target - o[key]) * ks - o[vkey] * ds;
+    o[vkey] += acc * dt;
+    o[key] += o[vkey] * dt;
+  }
+
+  function update(dt, now) {
+    var targetRot = RM ? 0 : (Math.sin(S.t * 0.55) * 0.010 + Math.sin(S.t * 1.31 + 1.7) * 0.004);
+    var targetSc = 1 + live.bass * 0.026 + (S.playing ? Math.sin(S.t * 2.1) * 0.004 : 0);
+    var targetX = RM ? 0 : (noise1(S.t * 0.23) * 9 + live.mid * 7);
+    var targetY = RM ? 0 : (noise1(S.t * 0.31 + 20) * 7);
+    stepSpring(cam, "rot", "rv", targetRot, 95, 8.5, dt);
+    stepSpring(cam, "sc", "sv", targetSc, 130, 10, dt);
+    stepSpring(cam, "x", "xv", targetX, 110, 9, dt);
+    stepSpring(cam, "y", "yv", targetY, 110, 9, dt);
+    cam.rot = clamp(cam.rot, -0.22, 0.22);
+    cam.sc = clamp(cam.sc, 0.86, 1.30);
+    cam.x = clamp(cam.x, -60, 60);
+    cam.y = clamp(cam.y, -60, 60);
+
+    hitEnergy *= Math.exp(-dt * 6.2);
+    if (hitEnergy < 0.001) hitEnergy = 0;
+
+    updateSplats(dt);
+
+    for (var i = 0; i < panels.length; i++) {
+      var p = panels[i];
+      if (!p) continue;
+      var ks = 150 + i * 26;
+      var ds = 12 + i * 1.6;
+      var acc = (1 - p.anim) * ks - p.av * ds;
+      p.av += acc * dt;
+      p.anim += p.av * dt;
+      p.anim = clamp(p.anim, 0.45, 1.55);
+    }
+
+    if (tear.active && now - tear.t0 >= tear.dur) tear.active = false;
+  }
+
+  /* ============================================================
+     13. 渲染主循环
+     ============================================================ */
+  function render(now) {
+    var js0 = performance.now();
+    if (!lastTs || now - lastTs > 500) lastTs = now;
+    var dt = clamp((now - lastTs) / 1000, 0.004, 0.05);
+    lastTs = now;
+    lastNow = now;
+
+    update(dt, now);
+    drawScene(sctx, now);
+
+    /* 底 */
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = sceneBg;
+    ctx.fillRect(0, 0, cv.width, cv.height);
+
+    /* 旋转残影：多帧旋转叠加。每一层都是一次全屏、带旋转重采样的 drawImage，
+       5 层就是 5 次全屏合成，是安卓 WebView 最大的填充率开销之一；手机端压到
+       2 层，拖尾方向和高频摇摆感保留，只是尾巴短一点。 */
+    var maxGhost = ANDROID ? 2 : 5;
+    var n = RM ? 0 : Math.min(maxGhost, Math.round(hitEnergy * 4 + Math.min(3, Math.abs(cam.rv) * 0.7)));
+    for (var i = n; i >= 1; i--) {
+      var f = i / (n + 1);
+      drawCamera(cam.rot + cam.rv * 0.0085 * i, -cam.xv * 0.0065 * i, -cam.yv * 0.0065 * i, 0.16 * (1 - f * 0.7));
+    }
+    drawCamera(0, 0, 0, 1);
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    var tp = 0;
+    if (tear.active) {
+      tp = clamp((now - tear.t0) / tear.dur, 0, 1);
+      drawTear(ctx, now);
+    }
+
+    /* 强拍反相冲击 */
+    if (!RM && now < invertUntil) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = "difference";
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.restore();
+    }
+
+    drawBubble(ctx, now, tp);
+    drawHUD(ctx, now);
+
+    S.js = performance.now() - js0;
+  }
+
+  function loop() {
+    var now = performance.now();
+    try {
+      S.frames++;
+      render(now);
+    } catch (e) {
+      reportError(e);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  /* ============================================================
+     14. 协议消息
+     ============================================================ */
+  function applyIdx(forceTear) {
+    var ni = -1;
+    if (S.lines && S.lines.length) {
+      for (var i = S.lines.length - 1; i >= 0; i--) {
+        if (S.lines[i] && S.t >= S.lines[i].t) { ni = i; break; }
+      }
+    }
+    var changed = (ni !== S.idx) || !!forceTear;
+    S.idx = ni;
+    if (changed) {
+      buildShot(ni);
+      if (S.frames > 4) startTear();
+      if (!RM) {
+        cam.rv += (Math.random() < 0.5 ? -1 : 1) * (forceTear ? 3.0 : 2.3);
+        cam.sv += 0.7;
+      }
+    }
+  }
+
+  function handleInit(payload) {
+    var p = payload || {};
+    var song = p.song || {};
+    songName = song.name ? String(song.name) : "";
+    if (Array.isArray(song.artists)) songArtists = song.artists.join(" / ");
+    else songArtists = song.artists ? String(song.artists) : "";
+    songDuration = Number(p.duration);
+    if (!isFinite(songDuration) || songDuration < 0) songDuration = 0;
+
+    var ac = p.accent;
+    var okAccent = Array.isArray(ac) && ac.length >= 3 &&
+      isFinite(Number(ac[0])) && isFinite(Number(ac[1])) && isFinite(Number(ac[2])) &&
+      (Number(ac[0]) + Number(ac[1]) + Number(ac[2]) > 24);
+    if (okAccent) {
+      accentRGB = [
+        clamp(Math.round(Number(ac[0])), 0, 255),
+        clamp(Math.round(Number(ac[1])), 0, 255),
+        clamp(Math.round(Number(ac[2])), 0, 255)
+      ];
+    } else {
+      accentRGB = [205, 32, 48];
+    }
+    buildAccent();
+
+    gotInit = true;
+    S.lines = normLines(p.lines);
+    if (!Array.isArray(S.lines)) S.lines = [];
+    applyIdx(true);
+  }
+
+  function handleTick(payload) {
+    var p = payload || {};
+    var nt = Number(p.time);
+    if (typeof nt === "number" && isFinite(nt)) S.t = nt;
+    if (typeof p.playing === "boolean") S.playing = p.playing;
+    applyIdx(false);
+  }
+
+  function handleBeat(payload) {
+    var p = payload || {};
+    beatCount++;
+    var bi = Number(p.index);
+    if (!isFinite(bi)) bi = 0;
+    var lv = clamp(Number(p.level) || 0, 0, 1);
+    hitEnergy = Math.max(hitEnergy, lv);
+    beatSeed = (beatCount * 97 + Math.round(bi * 31) + 1) % 1000000;
+    var dir = (Math.round(bi) % 2 === 0) ? 1 : -1;
+    if (!RM) {
+      cam.rv += dir * (0.8 + lv * 1.6);
+      cam.sv += 0.30 + lv * 0.55;
+      cam.xv += Math.sin(beatCount * 2.1) * lv * 46;
+      cam.yv += dir * lv * 28;
+    } else {
+      cam.rv += dir * 0.16;
+    }
+    var pnow = performance.now();
+    if (!RM && lv > 0.76 && pnow - lastInvert > 280) {
+      lastInvert = pnow;
+      invertUntil = pnow + 46;
+    }
+    spawnSplats(lv);
+  }
+
+  function handleLive(payload) {
+    var p = payload || {};
+    live.bass = clamp(Number(p.bass) || 0, 0, 1);
+    live.mid = clamp(Number(p.mid) || 0, 0, 1);
+    live.treble = clamp(Number(p.treble) || 0, 0, 1);
+    live.level = clamp(Number(p.level) || 0, 0, 1);
+    live.bpm = Number(p.bpm) || 0;
+  }
+
+  window.addEventListener("message", function (ev) {
+    var d = ev && ev.data;
+    if (!d || d.__c100 !== 1) return;
+    try {
+      if (d.type === "init") handleInit(d.payload);
+      else if (d.type === "tick") handleTick(d.payload);
+      else if (d.type === "beat") handleBeat(d.payload);
+      else if (d.type === "live") handleLive(d.payload);
+    } catch (e) {
+      reportError(e);
+    }
+  });
+
+  /* ============================================================
+     15. 用户活动 / 键盘
+     ============================================================ */
+  var lastAct = 0;
+  function sendActivity() {
+    var now = performance.now();
+    if (now - lastAct < 160) return;
+    lastAct = now;
+    try { parent.postMessage({ __c100: 1, type: "activity" }, "*"); } catch (e) {}
+  }
+  window.addEventListener("mousemove", sendActivity, { passive: true });
+  window.addEventListener("pointerdown", sendActivity, { passive: true });
+  window.addEventListener("touchstart", sendActivity, { passive: true });
+  window.addEventListener("keydown", function (ev) {
+    if (!ev) return;
+    if (ev.code === "Space" || ev.key === " " || ev.key === "Spacebar") {
+      try { parent.postMessage({ __c100: 1, type: "key", payload: { key: "Space" } }, "*"); } catch (e) {}
+    }
+  });
+
+  window.addEventListener("resize", function () {
+    try { resize(); } catch (e) { reportError(e); }
+  });
+
+  /* ============================================================
+     16. 启动
+     ============================================================ */
+  buildPatterns();
+  resize();
+  buildShot(-1);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -97,6 +97,7 @@ export const BEAT_EFFECT_IDS = {
     nebbiaFogDensity: 'nebbia.fogDensity',
     pendoloJewelGlow: 'pendolo.jewelGlow',
     temperaSeamPulse: 'tempera.seamPulse',
+    metaphorAnnihilation: 'metaphor.annihilation',
 } as const;
 
 /**

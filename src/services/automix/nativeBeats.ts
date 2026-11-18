@@ -10,6 +10,7 @@
 // 这个模块不依赖 window.electron，与上游 Electron 版的差别就在这一层。
 
 import { registerPlugin } from '@capacitor/core';
+import { isLocalInferenceAllowed } from '../aiMemoryGate';
 import { isCapacitorAndroid } from '../../platform/runtime';
 import { cancelNativeSeparation } from './nativeModels';
 import { reportBeatAnalysisProgress } from '../beatFx/beatProgress';
@@ -68,11 +69,27 @@ type NativeBeatsPlugin = {
         eventName: 'beatAnalysisChunk',
         listener: (event: { beats?: NativeBeat[]; until?: number; final?: boolean }) => void,
     ): Promise<{ remove: () => Promise<void> }>;
+    /**
+     * 开 / 关原生 ONNX 推理（Kotlin 侧的 setInferenceEnabled），**默认关着**。
+     *
+     * 关的时候原生不但拒收新请求，还会把已加载的 OrtSession 与权重一起放掉 —— 那是几十 MB
+     * 的常驻内存，光「不再发起」还不回去（issue #401）。
+     */
+    setInferenceEnabled?(options: { enabled: boolean }): Promise<{ enabled?: boolean }>;
 };
 
-const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels');
+export const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels');
 
-export const isNativeBeatAnalysisAvailable = (): boolean => isCapacitorAndroid();
+/**
+ * 能不能在原生侧跑分析模型（beat_this 拍点、SCNet/htdemucs 分轨）。
+ *
+ * 低内存 / 近期频繁被系统杀掉时一律 false（issue #401）：这几个模型是整机内存的大头
+ * （beat_this 79MB 权重 + 整曲 PCM），在手机已经吃紧时再起推理，只会把进程自己送进 OOM。
+ * 闸门恢复后调用方本来就会重算，表达式不缓存。
+ */
+export const isNativeBeatAnalysisAvailable = (): boolean => (
+    isCapacitorAndroid() && isLocalInferenceAllowed()
+);
 
 /**
  * 把任意采样率的 PCM 降到 22050Hz 单声道。

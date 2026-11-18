@@ -621,7 +621,7 @@ export const loadBeatFxTrackEnvelopes = (
             wanted: () => wantedEnvelopeKey === key,
             durationSec: (song.durationMs || 0) / 1000,
         }) ?? stored;
-    })().catch((error) => {
+    })().catch((error: unknown) => {
         console.warn('[BeatFx] music envelopes failed', error);
         return null;
     });

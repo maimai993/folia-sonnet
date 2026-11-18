@@ -96,7 +96,6 @@ export const useLibraryHomeOnlineFeeds = ({
         });
     }, [
         albumOwners, canUseAlbums, canUseRadio, favoriteAlbums, providerId, radioFeed, radioOwners, tab, userId,
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         feedOwners,
     ]);
 

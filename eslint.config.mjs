@@ -41,6 +41,12 @@ export default tseslint.config(
             'api/qq.js', 'mods/**', 'docs/**',
             // 已签名的模组和测试夹具：签名覆盖原始字节，不能被 --fix 改动
             'test/fixtures/folium-signature/**',
+            /*
+             * 歌词舞台（lizi-stages）随舞台分发的第三方产物：gsap / three / 字形表 / 自定义背景脚本。
+             * 它们是第三方库的构建输出（压缩过、单行几 MB），本仓库只原样搬运，与 mods/** 同理 ——
+             * 排版规则与 --fix 都不该碰，否则等于重写别人压缩过的代码。
+             */
+            'public/mods/builtin/lizi-stages/stages/assets/**',
             'sync-server/dist/**', 'build/*/**',
         ],
     },

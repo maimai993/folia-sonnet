@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>静雪歌词</title>
+<style>
+  html,body{margin:0;height:100%;background:#040814;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(190,215,255,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '静雪',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================================
+   008 · 静雪歌词 —— 雪一颗颗落进笔画里，把整句凝出来
+   和 004（沙粒）的区别：
+     · 004 是把沙粒**堆在落点**上，自下而上成形，唱完整堆往下垮
+     · 这里雪在字形里**逐格凝结**：每个雪晶按自己的时刻从上方 10px 落进
+       笔画里的一个格子，落定就画进离屏画布（之后整层 blit，不耗帧）；
+       整句是一层带颗粒感的压实雪，唱完被一阵横风整片吹走
+
+   为什么重写（旧版不可读的三个原因）：
+     · 旧版雪只在"第一次碰到笔画"的位置冻结，而雪从上面来 —— 只有每根
+       笔画的**上边缘**积到雪，字看着像一排横线；
+     · 5200 颗中层雪最多只有一千多颗撞得上，撞上就不再补充，永远填不满；
+     · 换句/踩拍各吹一次横风，连正在显示的字一起吹成横向糊条。
+
+   现在的做法（按字形补全，保证可读）：
+     1) 整句排好版（长句自动折行，最多 4 行，字号随行数/宽度收缩），
+        字形采成 3px 一格的"雪格"，格上记着属于哪个字；
+     2) 每格的到达时间 = 它那个字的 YRC 逐字时间（没有就按整句时长铺开）
+        + 0~0.28s 抖动 —— 雪跟着唱词一颗颗落，字是**唱到哪积雪到哪**；
+     3) 已唱到的字底下垫一层上白下冷的字形渐变当"雪底"（按行裁切，
+        没唱到的字不提前露出），雪晶落得越多、毛边和闪面越足；
+     4) 横风只吹飘雪和上一句（换句一阵大的、踩拍小幅掀动），
+        上一句 0.26s 内被吹散，不和这一句叠在一起。
+   ========================================================================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+const hint = document.getElementById('hint');
+let W = 0, H = 0, DPR = 1;
+let booted = false;
+
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (booted) { makeAmbientSprites(); rebuildCurrent(); }
+}
+resize();
+addEventListener('resize', resize);
+
+/* ---- 三层飘雪：近/中/远，速度和大小不同，形成视差 ----
+   用带柔边的粒子而不是方块：方块在高分辨率下像雨点，柔边的才像雪。
+   最前面还有一层"糊掉的近雪"和几团大光斑，负责景深。 */
+const LAYERS = [
+  { n: 380,  r: 1.3, sp: 16, a: 0.16, par: 0.45, tint: '150,190,245' }, // 远：慢、小、淡
+  { n: 1500, r: 2.0, sp: 30, a: 0.24, par: 0.80, tint: '205,225,255' }, // 中：主体
+  { n: 280,  r: 3.2, sp: 54, a: 0.38, par: 1.20, tint: '244,250,255' }, // 近：快、大、亮
+];
+const FRONT = { n: 120, r: 5.0, sp: 74, a: 0.11, par: 1.55, tint: '255,255,255' };
+const BOKEH = 18;
+const N = LAYERS.reduce((a, l) => a + l.n, 0);
+const px = new Float32Array(N + FRONT.n + BOKEH), py = new Float32Array(N + FRONT.n + BOKEH);
+const vx = new Float32Array(N + FRONT.n + BOKEH), vy = new Float32Array(N + FRONT.n + BOKEH);
+const sway = new Float32Array(N + FRONT.n + BOKEH);
+const lay = new Uint8Array(N + FRONT.n + BOKEH);
+{
+  let k = 0;
+  LAYERS.forEach((L, li) => {
+    for (let i = 0; i < L.n; i++, k++) {
+      px[k] = Math.random() * W; py[k] = Math.random() * H;
+      vy[k] = L.sp * (0.7 + Math.random() * 0.6);
+      sway[k] = Math.random() * 6.283;
+      lay[k] = li;
+    }
+  });
+  for (let i = 0; i < FRONT.n; i++, k++) {
+    px[k] = Math.random() * W; py[k] = Math.random() * H;
+    vy[k] = FRONT.sp * (0.7 + Math.random() * 0.6);
+    sway[k] = Math.random() * 6.283;
+    lay[k] = 3;
+  }
+  for (let i = 0; i < BOKEH; i++, k++) {
+    px[k] = Math.random() * W; py[k] = Math.random() * H;
+    vy[k] = 10 + Math.random() * 16;
+    sway[k] = Math.random() * 6.283;
+    lay[k] = 4;
+  }
+}
+const ALL = N + FRONT.n + BOKEH;
+
+let ambSpr = [], frontSpr = null, bokehSpr = null;
+function softSprite(size, tint, core) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d');
+  const r = size / 2;
+  const grd = g.createRadialGradient(r, r, 0, r, r, r);
+  grd.addColorStop(0, `rgba(${tint},1)`);
+  grd.addColorStop(core, `rgba(${tint},0.82)`);
+  grd.addColorStop(1, `rgba(${tint},0)`);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, size, size);
+  return c;
+}
+function makeAmbientSprites() {
+  ambSpr = LAYERS.map((L) => softSprite(Math.ceil(L.r * 3.4 * DPR) + 2, L.tint, 0.34));
+  frontSpr = softSprite(Math.ceil(FRONT.r * 3.0 * DPR) + 2, FRONT.tint, 0.30);
+  bokehSpr = softSprite(Math.ceil(11 * 2 * DPR) + 2, '210,230,255', 0.55);
+}
+
+/* ---- 字：测量 / 折行 / 排版 ---- */
+const FONT = (fs) => `800 ${fs}px "PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif`;
+const mctx = document.createElement('canvas').getContext('2d');
+const tw = (text, fs) => { mctx.font = FONT(fs); return mctx.measureText(text).width; };
+
+const PUNCT = '，。！？、；：,.!?;:…—';
+const OPEN = '（【《“‘';
+function wrapRows(text, rows) {
+  const n = text.length;
+  if (rows <= 1 || n <= rows) return [[0, n]];
+  const out = [];
+  let s = 0;
+  for (let r = 1; r < rows; r++) {
+    const remain = rows - r + 1;
+    const target = s + Math.round((n - s) / remain);
+    let cut = -1, fallback = -1;
+    for (let d = 0; d <= 6; d++) {
+      for (const c of [target + d, target - d]) {
+        if (c <= s + 1 || c >= n) continue;
+        const prev = text[c - 1], next = text[c];
+        if (OPEN.includes(next)) continue;                             // 行首不能是开引号/括号
+        if (/[A-Za-z0-9']/.test(prev) && /[A-Za-z0-9']/.test(next)) continue; // 不拆拉丁词
+        if (fallback < 0) fallback = c;
+        if (PUNCT.includes(prev) || prev === ' ') { cut = c; break; }   // 优先断在标点之后
+      }
+      if (cut > 0) break;
+    }
+    if (cut < 0) cut = fallback > 0 ? fallback : Math.min(n, target);
+    out.push([s, cut]);
+    s = cut;
+  }
+  out.push([s, n]);
+  return out;
+}
+
+const F_MAX = 96;
+const ROW_LH = 1.30;
+function buildLayout(text) {
+  const n = text.length;
+  const maxW = Math.min(W * 0.84, 1180);
+  const maxH = H * 0.54;
+  let rows = n <= 13 ? 1 : n <= 28 ? 2 : n <= 42 ? 3 : 4;
+  const ranges = wrapRows(text, rows);
+  rows = ranges.length;
+  let cols = 1;
+  for (const [a, b] of ranges) cols = Math.max(cols, b - a);
+  const fs = Math.max(22, Math.min(F_MAX, maxW / cols, maxH / (rows * ROW_LH)));
+  const rowH = fs * ROW_LH;
+  const totalH = rowH * rows;
+  const top = H * 0.47 - totalH / 2;
+  const out = ranges.map(([a, b], r) => {
+    const s = text.slice(a, b);
+    const w = tw(s, fs);
+    return { text: s, i0: a, i1: b, w, x: (W - w) / 2, y: top + rowH * (r + 0.5) };
+  });
+  const bw = Math.max(...out.map((r) => r.w));
+  return { fs, rowH, rows: out, bw, bh: totalH, x: (W - bw) / 2, y: top };
+}
+
+/* ---- 每句一层"雪画"：字形遮罩 / 雪格 / 已落定的雪晶 ---- */
+const DROP = 0.26;          // 一颗雪晶从上方落进格里的时间
+const LEAVE = 0.26;         // 上一句被风吹走的时长（短一点，别让两句叠在一起）
+
+const arts = [];
+let lines = [];
+let accent = [190, 215, 255];
+
+function mix(a, b, t) {
+  return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+}
+
+function makeSprites(grain) {
+  const out = [];
+  const side = Math.ceil(grain * 2 * DPR) + 2;
+  for (let v = 0; v < 4; v++) {
+    const c = document.createElement('canvas');
+    c.width = c.height = side;
+    const g = c.getContext('2d');
+    const r = side / 2;
+    const grd = g.createRadialGradient(r, r, 0, r, r, r);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.70 + v * 0.06, 'rgba(242,249,255,0.96)');
+    grd.addColorStop(1, 'rgba(200,226,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, side, side);
+    out.push(c);
+  }
+  return out;
+}
+
+function buildArt(idx) {
+  const line = lines[idx];
+  if (!line || !line.text) return null;
+  const text = line.text;
+  const endT = (idx + 1 < lines.length) ? lines[idx + 1].t : line.t + (line.dur || 8);
+  const lay = buildLayout(text);
+  const fs = lay.fs;
+  const PAD = Math.ceil(22 + fs * 0.10);
+  const bw = Math.ceil(lay.bw + PAD * 2);
+  const bh = Math.ceil(lay.bh + PAD * 2);
+
+  /* 1. 字形遮罩（1x，同时用来采样雪格） */
+  const mask = document.createElement('canvas');
+  mask.width = bw; mask.height = bh;
+  const mg = mask.getContext('2d', { willReadFrequently: true });
+  mg.font = FONT(fs); mg.textAlign = 'center'; mg.textBaseline = 'middle'; mg.fillStyle = '#fff';
+  for (const r of lay.rows) mg.fillText(r.text, bw / 2, PAD + (r.y - lay.y));
+
+  /* 2. 采雪格：每 3px 一格（小字号 2px）。格间距略大于雪晶，字面才有颗粒感 */
+  const data = mg.getImageData(0, 0, bw, bh).data;
+  const step = fs >= 64 ? 3 : 2;
+  const pre = lay.rows.map((r) => {
+    const a = new Float32Array(r.text.length + 1);
+    for (let k = 1; k <= r.text.length; k++) a[k] = tw(r.text.slice(0, k), fs);
+    return a;
+  });
+  const bx = lay.x - PAD, by = lay.y - PAD;
+  const cells = [];
+  const alphaAt = (x, y) => data[(y * bw + x) * 4 + 3];
+  for (let y = 0; y < bh; y += step) {
+    for (let x = 0; x < bw; x += step) {
+      if (data[(y * bw + x) * 4 + 3] <= 150) continue;
+      if (Math.random() < 0.02) continue;                       // 留一点孔，雪才有疏密
+      const gx = bx + x, gy = by + y;
+      let ri = Math.floor((gy - lay.y) / lay.rowH);
+      if (ri < 0) ri = 0; else if (ri >= lay.rows.length) ri = lay.rows.length - 1;
+      const row = lay.rows[ri];
+      const lx = gx - row.x;
+      let k = 0;
+      while (k + 1 < row.text.length && pre[ri][k + 1] <= lx) k++;
+      /* 边缘格（上下左右有一个是空）留亮雪晶；内部格只留很淡的一层霜，
+         不然整片字都是均匀噪点，既不像雪也影响读。 */
+      const edge =
+        (x - step < 0 || alphaAt(x - step, y) <= 150) ||
+        (x + step >= bw || alphaAt(x + step, y) <= 150) ||
+        (y - step < 0 || alphaAt(x, y - step) <= 150) ||
+        (y + step >= bh || alphaAt(x, y + step) <= 150);
+      cells.push({
+        x: gx, y: gy, ch: row.i0 + k, edge,
+        cap: y + step * 2 >= bh || alphaAt(x, y + step * 2) <= 150,
+        seed: Math.random(),
+      });
+    }
+  }
+  if (!cells.length) return null;
+
+  /* 3. 每颗雪晶的到达时间：YRC 逐字时间优先，没有就按整句时长铺开 */
+  const n = text.length;
+  const chars = (line.chars && line.chars.length === n) ? line.chars : null;
+  const span = Math.max(0.9, Math.min(2.2, (endT - line.t) * 0.6));
+  const ct = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    let t = (chars && Number.isFinite(chars[i] && chars[i].t))
+      ? chars[i].t
+      : line.t + span * (i / Math.max(1, n - 1));
+    t = Math.max(line.t, Math.min(t, endT - 0.35));
+    ct[i] = t;
+  }
+  for (let i = 1; i < n; i++) if (ct[i] < ct[i - 1]) ct[i] = ct[i - 1];
+
+  /* 每个字的横向范围与时间：只有唱到的字才露出"雪底"，
+     没唱到的部分不提前显示（否则整句会像一行灰字摆在那里） */
+  const charRects = [];
+  for (let ri = 0; ri < lay.rows.length; ri++) {
+    const row = lay.rows[ri];
+    for (let k = 0; k < row.text.length; k++) {
+      const gi = row.i0 + k;
+      charRects.push({ i: gi, t: ct[gi], row: ri, x: row.x + pre[ri][k], xe: row.x + pre[ri][k + 1] });
+    }
+  }
+  const rowRects = lay.rows.map((row) => ({ x: row.x, y: row.y - lay.rowH / 2, h: lay.rowH }));
+  for (const c of cells) {
+    c.arrive = ct[c.ch] + Math.random() * 0.28;
+    if (c.arrive < line.t) c.arrive = line.t;
+    if (Number.isFinite(endT) && c.arrive > endT - 0.30) c.arrive = Math.max(line.t, endT - 0.30);
+    c.a = c.edge ? 0.78 + Math.random() * 0.22 : 0.10 + Math.random() * 0.16;
+    c.g = (Math.random() * 4) | 0;
+    c.jx = (Math.random() - 0.5) * 1.8;      // 格点抖一点，边缘才不是方格
+    c.jy = (Math.random() - 0.5) * 1.8;
+  }
+  cells.sort((a, b) => a.arrive - b.arrive);
+
+  /* 4. 雪晶精灵 + 落定画布（只往上画一次，之后整层 blit） */
+  const grain = Math.max(2.4, Math.min(3.2, fs * 0.031));
+  const spr = makeSprites(grain);
+  const settled = document.createElement('canvas');
+  settled.width = Math.max(1, Math.ceil(bw * DPR));
+  settled.height = Math.max(1, Math.ceil(bh * DPR));
+  const sg = settled.getContext('2d');
+  sg.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  /* 5. 底层：清晰的字形 + 上白下冷的渐变（像月光照着的积雪）。
+     另做一张模糊版当冷光晕，边缘的雪晶负责"毛边"，字本身保持清楚。 */
+  const body = document.createElement('canvas');
+  body.width = Math.ceil(bw * DPR); body.height = Math.ceil(bh * DPR);
+  const bg = body.getContext('2d');
+  bg.setTransform(DPR, 0, 0, DPR, 0, 0);
+  bg.font = FONT(fs); bg.textAlign = 'center'; bg.textBaseline = 'middle'; bg.fillStyle = '#fff';
+  for (const r of lay.rows) bg.fillText(r.text, bw / 2, PAD + (r.y - lay.y));
+  bg.globalCompositeOperation = 'source-in';
+  const gTop = mix(accent, [255, 255, 255], 0.94);
+  const gMid = mix(accent, [240, 249, 255], 0.78);
+  const gBot = mix(accent, [214, 232, 250], 0.55);
+  const grd = bg.createLinearGradient(0, 0, 0, bh);
+  grd.addColorStop(0, `rgb(${gTop[0]},${gTop[1]},${gTop[2]})`);
+  grd.addColorStop(0.52, `rgb(${gMid[0]},${gMid[1]},${gMid[2]})`);
+  grd.addColorStop(1, `rgb(${gBot[0]},${gBot[1]},${gBot[2]})`);
+  bg.fillStyle = grd;
+  bg.fillRect(0, 0, bw, bh);
+
+  const glow = document.createElement('canvas');
+  glow.width = bw; glow.height = bh;
+  const gg = glow.getContext('2d');
+  if ('filter' in gg) gg.filter = `blur(${Math.max(4, fs * 0.055).toFixed(2)}px)`;
+  gg.drawImage(mask, 0, 0);
+  gg.filter = 'none';
+  gg.globalCompositeOperation = 'source-in';
+  gg.fillStyle = `rgb(${accent[0]},${accent[1]},${accent[2]})`;
+  gg.fillRect(0, 0, bw, bh);
+
+  return {
+    idx, text, lay, fs, grain, spr,
+    x0: bx, y0: by, bw, bh,
+    cells, total: cells.length, front: 0, painted: 0,
+    mask, body, glow, settled, sg, charRects, rowRects,
+    state: 'in', leaveAt: 0, progress: 0,
+    lineT: line.t, endT, lastCellT: ct[n - 1] + 0.28,
+  };
+}
+
+function paintCell(art, c) {
+  const g = art.sg;
+  const gx = c.x + c.jx - art.x0, gy = c.y + c.jy - art.y0;
+  const s = art.grain * 2;
+  g.globalAlpha = c.a;
+  g.drawImage(art.spr[c.g], gx - art.grain, gy - art.grain, s, s);
+  if (c.cap) {
+    // 笔画下沿再挂一小颗：像积雪的檐口
+    const s2 = s * 0.62;
+    g.globalAlpha = c.a * 0.78;
+    g.drawImage(art.spr[1], gx - s2 / 2, gy + 1.2 - s2 / 2, s2, s2);
+  }
+}
+
+function updateArt(art, T) {
+  if (art.state !== 'in') return;
+  while (art.front < art.total && art.cells[art.front].arrive <= T) art.front++;
+  let guard = 0;
+  while (art.painted < art.front && art.cells[art.painted].arrive + DROP <= T && guard < 1500) {
+    paintCell(art, art.cells[art.painted]);
+    art.painted++; guard++;
+  }
+  art.progress = art.total ? art.painted / art.total : 1;
+}
+
+/* 上一句被横风吹散：从已落定的雪晶里抽一批飞出去 */
+const sweeps = [];
+function spawnSweep(art) {
+  const n = Math.min(180, Math.ceil(art.front * 0.06));
+  for (let k = 0; k < n; k++) {
+    const c = art.cells[(Math.random() * art.front) | 0];
+    if (!c) break;
+    sweeps.push({
+      x: c.x, y: c.y, vx: 140 + Math.random() * 340, vy: -70 + Math.random() * 150,
+      life: 0.35 + Math.random() * 0.40, age: 0,
+      r: 0.9 + Math.random() * 1.7,
+    });
+  }
+}
+
+function drawArt(art, T) {
+  let alpha = 1, dx = 0;
+  const live = art.state === 'in';
+  if (!live) {
+    const p = Math.min(1, (T - art.leaveAt) / LEAVE);
+    alpha = 1 - p;
+    if (alpha <= 0.01) return;
+    dx = p * p * 90;
+  }
+
+  // 1+2) 雪底：只画已经唱到的字（按行裁到当前字），没唱到的地方不提前露出来
+  if (live) {
+    const lim = [0, 0, 0, 0];
+    for (const c of art.charRects) if (T >= c.t && c.xe > lim[c.row]) lim[c.row] = c.xe;
+    let any = false;
+    const path = new Path2D();
+    for (let ri = 0; ri < art.rowRects.length; ri++) {
+      const rr = art.rowRects[ri];
+      if (lim[ri] > rr.x + 0.5) {
+        path.rect(rr.x - 8, rr.y - 8, lim[ri] - rr.x + 2, rr.h + 16);
+        any = true;
+      }
+    }
+    if (any) {
+      ctx.save();
+      ctx.clip(path);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 0.70 + 0.16 * art.progress;
+      ctx.drawImage(art.body, art.x0, art.y0, art.bw, art.bh);
+      ctx.restore();
+    }
+  } else {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha * 0.10;
+    ctx.drawImage(art.glow, art.x0 + dx, art.y0, art.bw, art.bh);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = alpha * 0.95;
+    ctx.drawImage(art.body, art.x0 + dx, art.y0, art.bw, art.bh);
+    ctx.restore();
+  }
+
+  // 3) 落定的雪晶
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(art.settled, art.x0 + dx, art.y0, art.bw, art.bh);
+
+  if (live) {
+    // 4) 正在往下落的雪晶
+    for (let i = art.painted; i < art.front; i++) {
+      const c = art.cells[i];
+      const p = Math.min(1, (T - c.arrive) / DROP);
+      const yy = c.y + c.jy - 10 * (1 - p) * (1 - p);
+      const s = art.grain * 2 * (0.55 + 0.45 * p);
+      ctx.globalAlpha = alpha * (0.15 + 0.85 * p);
+      ctx.drawImage(art.spr[c.g], c.x + c.jx - s / 2, yy - s / 2, s, s);
+    }
+    // 5) 表面闪一下的雪晶（静态层上叠一点呼吸，字不会死板）
+    ctx.globalCompositeOperation = 'lighter';
+    const every = Math.max(1, Math.floor(art.total / 90));
+    for (let i = 0; i < art.painted; i += every) {
+      const c = art.cells[i];
+      const a = 0.14 + 0.34 * (0.5 + 0.5 * Math.sin(T * 1.9 + c.seed * 11));
+      const s = art.grain * 1.15;
+      ctx.globalAlpha = alpha * a;
+      ctx.drawImage(art.spr[0], c.x + c.jx - s / 2, c.y + c.jy - s / 2, s, s);
+    }
+  }
+  ctx.restore();
+}
+
+function updateSweeps(dt) {
+  if (!sweeps.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = 'rgba(242,249,255,1)';
+  for (let i = sweeps.length - 1; i >= 0; i--) {
+    const s = sweeps[i];
+    s.age += dt;
+    if (s.age >= s.life) { sweeps.splice(i, 1); continue; }
+    s.vy += 60 * dt;
+    s.x += (s.vx + gust * 220) * dt;
+    s.y += s.vy * dt;
+    ctx.globalAlpha = (1 - s.age / s.life) * 0.85;
+    ctx.fillRect(s.x - s.r, s.y - s.r, s.r * 2, s.r * 2);
+  }
+  ctx.restore();
+}
+
+/* ============================================================================
+   时序：整句 / 逐字
+   ========================================================================== */
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+let curIdx = -1, lastT = -1;
+let gust = 0;
+
+function setActive(ci, T) {
+  if (ci === curIdx) return;
+  const prev = arts.find((a) => a.state === 'in');
+  if (prev) {
+    prev.state = 'out';
+    prev.leaveAt = T;
+    spawnSweep(prev);
+    gust = Math.max(gust, 0.9);           // 换句 = 一阵横风（只吹飘雪和上一句）
+  }
+  curIdx = ci;
+  if (ci >= 0) {
+    const art = buildArt(ci);
+    if (art) arts.push(art);
+  }
+  hint.style.opacity = lines.length ? (ci >= 0 ? '0' : '1') : '0.4';
+}
+
+function timing(T) {
+  if (!lines.length) return;
+  if (T < lastT - 0.6) {                  // 往回拖：整句重建
+    arts.length = 0;
+    curIdx = -1;
+  }
+  lastT = T;
+  let ci = curIdx;
+  if (ci >= lines.length) ci = lines.length - 1;
+  while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  if (ci >= 0 && T < lines[ci].t) {       // 小幅回拖也按真实时间重算
+    ci = -1;
+    while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+  }
+  if (ci !== curIdx) setActive(ci, T);
+  for (let i = arts.length - 1; i >= 0; i--) {
+    if (arts[i].state === 'out' && T - arts[i].leaveAt > LEAVE) arts.splice(i, 1);
+  }
+}
+
+function rebuildCurrent() {
+  arts.length = 0;
+  if (curIdx >= 0) {
+    const a = buildArt(curIdx);
+    if (a) arts.push(a);
+  }
+}
+
+/* ============================================================================
+   帧
+   ========================================================================== */
+let last = performance.now();
+let t0 = 0;
+
+const BOKEH_L = { sp: 12, par: 1.7, a: 0.07, r: 11 };
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs;
+  t0 += dt;
+  const T = now();
+
+  timing(T);
+  gust *= Math.pow(0.10, dt);
+
+  /* ---- 飘雪 ---- */
+  for (let i = 0; i < ALL; i++) {
+    const li = lay[i];
+    const L = li < 3 ? LAYERS[li] : li === 3 ? FRONT : BOKEH_L;
+    const wind = gust * (100 + 150 * L.par);
+    const target = Math.sin(t0 * 0.50 + sway[i]) * (5 + 7 * L.par) + 3 + 3 * L.par + wind;
+    vx[i] += (target - vx[i]) * Math.min(1, dt * 1.4);
+    vy[i] += (L.sp - vy[i]) * Math.min(1, dt * 1.2);
+    px[i] += vx[i] * dt;
+    py[i] += vy[i] * dt;
+    if (py[i] > H + 24 || px[i] > W + 50) {
+      px[i] = Math.random() * W - 30;
+      py[i] = -10 - Math.random() * 80;
+      vy[i] = L.sp * (0.8 + Math.random() * 0.5);
+      vx[i] = 0;
+    } else if (px[i] < -50) {
+      px[i] = W + 30;
+    }
+  }
+
+  /* ---- 拖尾：每帧压暗一点，雪才有"落"的动感 ---- */
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(4,8,20,0.62)';
+  ctx.fillRect(0, 0, W, H);
+
+  /* ---- 字后面三层雪（柔边粒子，不是方块） ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  for (let li = 0; li < 3; li++) {
+    const L = LAYERS[li];
+    const spr = ambSpr[li];
+    if (!spr) continue;
+    const s = L.r * 2.6;
+    ctx.globalAlpha = L.a;
+    for (let i = 0; i < N; i++) {
+      if (lay[i] !== li) continue;
+      ctx.drawImage(spr, px[i] - s / 2, py[i] - s / 2, s, s);
+    }
+  }
+
+  /* ---- 字 ---- */
+  for (const art of arts) updateArt(art, T);
+  for (const art of arts) if (art.state === 'out') drawArt(art, T);
+  for (const art of arts) if (art.state === 'in') drawArt(art, T);
+  updateSweeps(dt);
+
+  /* ---- 字前面一层糊雪 + 几团大光斑：景深 ---- */
+  ctx.globalCompositeOperation = 'lighter';
+  if (frontSpr) {
+    const s = FRONT.r * 2.6;
+    ctx.globalAlpha = FRONT.a;
+    for (let i = N; i < N + FRONT.n; i++) ctx.drawImage(frontSpr, px[i] - s / 2, py[i] - s / 2, s, s);
+  }
+  if (bokehSpr) {
+    const s = 24;
+    ctx.globalAlpha = 0.07;
+    for (let i = N + FRONT.n; i < ALL; i++) ctx.drawImage(bokehSpr, px[i] - s / 2, py[i] - s / 2, s, s);
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+makeAmbientSprites();
+booted = true;
+requestAnimationFrame(frame);
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const p = d.payload || {};
+    lines = (p.lines || []).slice().sort((a, b) => a.t - b.t);
+    arts.length = 0; sweeps.length = 0;
+    curIdx = -1; lastT = -1; gust = 0;
+    if (p.accent) {
+      const [r, g, b] = p.accent;
+      accent = [Math.round((r + 190 * 2) / 3), Math.round((g + 215 * 2) / 3), Math.round((b + 255 * 2) / 3)];
+    }
+    clockT = 0; clockAt = performance.now();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hint.style.opacity = lines.length ? '1' : '0.5';
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    /* 踩拍只掀飘雪。旧版连正在显示的字一起吹，字就被吹糊了。
+       震动关闭时不接这一脚；换句的横风（setActive）不受影响。 */
+    if (window.__liziShake !== false) gust = Math.max(gust, 0.22 * (0.5 + (d.payload.level || 0)));
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+window.__stage = () => {
+  const art = arts.find((a) => a.state === 'in');
+  return {
+    lines: lines.length, curIdx, arts: arts.length,
+    cells: art ? art.total : 0, front: art ? art.front : 0, painted: art ? art.painted : 0,
+    gust: +gust.toFixed(2), t: +now().toFixed(2),
+  };
+};
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ import type { OmniCollection, OmniProviderId } from '../../../types/onlineMusic'
 import LatticePlaybackProvider, { type LatticePlaybackActions } from './LatticePlaybackProvider';
 import { LatticeTransportContext, type LatticeTransport } from './LatticeTransportContext';
 import PosterWall from './PosterWall';
+import RadioWall from './radio/RadioWall';
 import LatticeFocusButton from './LatticeFocusButton';
 import WallBackButton from '../../wall/WallBackButton';
 import { buildLatticeTiles, type LatticeTile } from './latticeModel';
@@ -32,7 +33,9 @@ import { Button } from '@/components/ui';
 
 // The wall's display layer. It renders the play queue and never mutates it; opened from the
 // explore tab (`latticeSource` in useAppViewStore) it renders the explore page's entries in the
-// queue's place (useExploreWall.ts), and the queue stays what the player plays.
+// queue's place (useExploreWall.ts), and the queue stays what the player plays. The queue can also be drawn as
+// the radio wall (radio/RadioWall.tsx, a ring of cards): the wall form setting (useLatticeSettingsStore.latticeWallForm)
+// picks it for a plain queue, and Personal FM always has it, its cards played within the radio.
 // 翻牌交接（设计稿 §7「进入队列」，与资料库墙 bravais）：根节点挂 data-wall-handoff（in / out）与阶段。叠在资料库墙上面的
 // 这段时间里墙面底色不画（下面那面墙的墙面就是同一份），颗粒与暗角由上面这层统一画一份（见 Lattice.css）。
 
@@ -40,6 +43,8 @@ type LatticeProps = {
     controls: LatticePlaybackActions;
     lyrics: LyricData | null;
     lyricSource: LatticeLyricSource;
+    /** 隐喻等样式的关键字着色总开关（上游 v0.7.29 改为 prop 注入；不传时组件自己读 store）。 */
+    lyricKeywordColoringEnabled?: boolean;
     currentSong: SongResult | null;
     playerState: PlayerState;
     currentTime: MotionValue<number>;
@@ -53,7 +58,8 @@ type LatticeProps = {
     /** 工具面板的「主页」：总是回首页（左上角返回仍是历史返回）；缺省时没有那一格。 */
     onGoHome?: () => void;
     onOpenPlayer: () => void;
-    onPlaySong: (song: SongResult, queue: SongResult[]) => void;
+    /** `asFm`: a card of the radio wall, played within Personal FM (the queue stays the radio's). */
+    onPlaySong: (song: SongResult, queue: SongResult[], asFm: boolean) => void;
     onTogglePlayback: () => void;
     onSeek: (time: number) => void;
     /** For a wall of the explore page's entries: the provider and the account the explore tab shows its page for. */
@@ -67,6 +73,7 @@ export default function Lattice({
     controls,
     lyrics,
     lyricSource,
+    lyricKeywordColoringEnabled,
     currentSong,
     playerState,
     currentTime,
@@ -88,7 +95,9 @@ export default function Lattice({
     countRender('Lattice');
     const { t } = useTranslation();
     // 关键词着色走全局开关（useVisualizerSettingsStore）——曾看莫奈的 tuning，已被收编。
-    const keywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    // probe / 上游调用方以 prop 注入时优用 prop。
+    const storedKeywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    const keywordColoringEnabled = lyricKeywordColoringEnabled ?? storedKeywordColoringEnabled;
     const vignette = useLatticeSettingsStore(state => state.latticeVignette);
     const lightsOn = useLatticeSettingsStore(state => state.latticeLightsOn);
     const posterTintEnabled = useLatticeSettingsStore(state => state.latticePosterTintEnabled);
@@ -98,6 +107,12 @@ export default function Lattice({
     const badgeCurrentOnly = useLatticeSettingsStore(state => state.latticeBadgeCurrentOnly);
     // Set by the way the wall was opened, and the same for as long as it is up.
     const isExplore = useAppViewStore(state => state.latticeSource) === 'explore';
+    // The queue as the radio wall: always in Personal FM (it comes and goes with FM while the wall is up),
+    // and for a plain queue when the wall form setting says so.
+    const wallForm = useLatticeSettingsStore(state => state.latticeWallForm);
+    const radioHidesUpcoming = useLatticeSettingsStore(state => state.latticeRadioHideUpcoming);
+    const isFm = controls.playback.isFmMode;
+    const isRadio = !isExplore && (isFm || wallForm === 'radio');
     const explore = useExploreWall({ isOn: isExplore, currentSong, providerId: exploreProviderId, accountId: exploreAccountId });
     const queueTiles = useMemo(() => buildLatticeTiles({ queue, currentSong }), [currentSong, queue]);
     const tiles = isExplore ? explore.tiles : queueTiles;
@@ -165,7 +180,7 @@ export default function Lattice({
         const appView = useAppViewStore.getState();
         if (appView.view !== 'lattice') return;
         if (tile.kind === 'song') {
-            onPlaySong(tile.song, tile.queue ?? queue);
+            onPlaySong(tile.song, tile.queue ?? queue, isRadio && isFm);
             return;
         }
         beginWallTrip('open');
@@ -207,7 +222,7 @@ export default function Lattice({
         <LatticeLyricsProvider source={lyricSource} songKey={currentSong ? getPlaybackSongKey(currentSong) : ''}
             keywordColoringEnabled={keywordColoringEnabled}>
         <section
-            className={`lattice-root lattice-queue-root ${isDaylight ? 'is-daylight' : ''} ${vignette ? 'has-vignette' : ''} ${lightsOn ? '' : 'is-lights-out'} ${posterTintEnabled ? 'has-poster-tint' : ''} ${posterTintUseCustomColor ? 'uses-custom-poster-tint' : ''} ${badgeCurrentOnly ? 'has-badge-current-only' : ''} ${surfaceOff ? 'is-handoff-surface-off' : ''} ${fadesIn && !reducedMotion ? 'is-returning' : ''}`}
+            className={`lattice-root lattice-queue-root ${isDaylight ? 'is-daylight' : ''} ${vignette ? 'has-vignette' : ''} ${lightsOn ? '' : 'is-lights-out'} ${posterTintEnabled ? 'has-poster-tint' : ''} ${posterTintUseCustomColor ? 'uses-custom-poster-tint' : ''} ${badgeCurrentOnly ? 'has-badge-current-only' : ''} ${surfaceOff ? 'is-handoff-surface-off' : ''} ${fadesIn && !reducedMotion ? 'is-returning' : ''} ${isRadio ? 'is-radio' : ''}`}
             data-wall-handoff={handoffRole ?? undefined}
             data-wall-handoff-phase={handoffPhase}
             data-wall-handoff-mode={handoffSession?.mode}
@@ -218,10 +233,25 @@ export default function Lattice({
                 '--lattice-poster-tint-color': posterTintColor,
                 '--lattice-poster-tint-intensity': posterTintIntensity,
             } as CSSProperties}
-            aria-label={t(isExplore ? 'home.latticeExplore' : 'home.latticeLabel')}
+            aria-label={t(isExplore ? 'home.latticeExplore' : isRadio ? (isFm ? 'home.latticeRadioLabel' : 'home.latticeRadioQueueLabel') : 'home.latticeLabel')}
             {...{ [LATTICE_WALL_ATTR]: '' }}
         >
-            <PosterWall
+            {isRadio ? (
+                <RadioWall
+                    tiles={queueTiles}
+                    isFm={isFm}
+                    // Personal FM's next songs are the radio's to reveal; a plain queue's only when the setting asks.
+                    hidesUpcoming={isFm || radioHidesUpcoming}
+                    // List loop: the cards after the last song go on from the head of the queue, as playback does.
+                    wrapsAround={!isFm && controls.loopMode === 'all'}
+                    onPlay={wall.onPlay}
+                    onPlayFromWall={wall.onPlayFromWall}
+                    onTogglePlayback={wall.onTogglePlayback}
+                    onSeek={wall.onSeek}
+                    onOpenPlayer={wall.onOpenPlayer}
+                    onBack={onBack}
+                />
+            ) : <PosterWall
                 tiles={tiles}
                 sections={isExplore ? explore.sections : undefined}
                 startTileId={startTileId}
@@ -232,9 +262,9 @@ export default function Lattice({
                 onSeek={wall.onSeek}
                 onOpenPlayer={wall.onOpenPlayer}
                 onBack={onBack}
-            />
+            />}
             <WallTripLog isReturn={isReturn} />
-            <LatticeFocusButton isDaylight={isDaylight} tiles={tiles} onGoHome={onGoHome} />
+            <LatticeFocusButton isDaylight={isDaylight} tiles={tiles} isRadio={isRadio} showsWallForm={!isExplore} onGoHome={onGoHome} />
             <WallBackButton label={t('home.latticeBack')} onBack={onBack} />
             {/* The explore page's own control, beside the way back: other entries take the tiles' places. */}
             {isExplore && (

@@ -26,7 +26,8 @@ import {
     subscribeDirectorState,
     updateDirectorSettings,
 } from '../../../services/lyricDirector/state';
-import { listDirectorModes, describeHostDirectorMode } from '../../../services/lyricDirector/catalog';
+import { listDirectorModes, describeHostDirectorMode, isLockedDirectorMode } from '../../../services/lyricDirector/catalog';
+import { localInferenceBlockedReason } from '../../../services/aiMemoryGate';
 import { getVisualizerModeLabel, VISUALIZER_REGISTRY } from '@/components/visualizer/registry';
 import {
     testConfiguredAiConnection,
@@ -97,6 +98,12 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     // the values are read during render.
     useSyncExternalStore(subscribeDirectorState, getDirectorStateVersion);
     const directorSettings = readDirectorSettings();
+    /*
+     * 内存压力那两档（系统报低内存 / 最近几次启动被系统杀掉）：这时**本地**推理（拍点、分轨）跑不了，
+     * 在线补全不受影响 —— 所以这里只提示内存这一半，别让用户以为 AI 主题也坏了。
+     */
+    const blockedReason = localInferenceBlockedReason();
+    const memoryBlockedReason = blockedReason === 'low-memory' || blockedReason === 'recent-oom' ? blockedReason : null;
 
     /*
      * 剩余额度：进来问一次，「刷新」再问一次。
@@ -197,6 +204,8 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     );
 
     const toggleBlockedMode = (mode: string) => {
+        // 锁死的样式（fork 自己写的、模组投稿的）点不动：AI 只能用上游自带的那几个。
+        if (isLockedDirectorMode(mode)) return;
         const current = readDirectorSettings().blockedModes;
         const next = current.includes(mode)
             ? current.filter((entry) => entry !== mode)
@@ -311,38 +320,38 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                 )}
 
                 {!isFreeChannel && (
-                <div className="space-y-1.5 text-left">
-                    <label className="block space-y-1">
-                        <span className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.aiApiKey')}
-                            {provider !== 'custom' && preset?.label ? ` · ${preset.label}` : ''}
-                        </span>
-                        <TextField
-                            type="password"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={apiKey}
-                            onChange={(event) => update(provider === 'gemini'
-                                ? { geminiApiKey: event.target.value }
-                                : { apiKeys: { ...settings.apiKeys, [provider]: event.target.value } })}
-                            placeholder={provider === 'gemini' ? 'AIza...' : 'sk-...'}
-                            className={fieldClass}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
-                    </label>
-                    {consoleUrl && (
-                        <a
-                            href={consoleUrl}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 opacity-60 hover:opacity-100 transition-opacity"
-                            style={{ color: 'var(--text-secondary)' }}
-                        >
-                            {t('options.openProviderConsole', { provider: t('options.aiProvider_' + provider) })}
-                            <ExternalLink size={11} aria-hidden="true" />
-                        </a>
-                    )}
-                </div>
+                    <div className="space-y-1.5 text-left">
+                        <label className="block space-y-1">
+                            <span className="text-sm opacity-70" style={{ color: 'var(--text-secondary)' }}>
+                                {t('options.aiApiKey')}
+                                {provider !== 'custom' && preset?.label ? ` · ${preset.label}` : ''}
+                            </span>
+                            <TextField
+                                type="password"
+                                autoComplete="off"
+                                spellCheck={false}
+                                value={apiKey}
+                                onChange={(event) => update(provider === 'gemini'
+                                    ? { geminiApiKey: event.target.value }
+                                    : { apiKeys: { ...settings.apiKeys, [provider]: event.target.value } })}
+                                placeholder={provider === 'gemini' ? 'AIza...' : 'sk-...'}
+                                className={fieldClass}
+                                style={{ color: 'var(--text-primary)' }}
+                            />
+                        </label>
+                        {consoleUrl && (
+                            <a
+                                href={consoleUrl}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="inline-flex items-center gap-1 text-[11px] font-medium underline underline-offset-2 opacity-60 hover:opacity-100 transition-opacity"
+                                style={{ color: 'var(--text-secondary)' }}
+                            >
+                                {t('options.openProviderConsole', { provider: t('options.aiProvider_' + provider) })}
+                                <ExternalLink size={11} aria-hidden="true" />
+                            </a>
+                        )}
+                    </div>
                 )}
 
                 {/* 免费渠道：机器码（可复制）+ 剩余额度 + 贡献账号 */}
@@ -470,7 +479,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                                 : <X size={12} className="text-red-400" />}
                             {testResult.ok
                                 ? `${t('options.aiTestSuccess')} · ${t('options.aiTestDuration')} ${testResult.durationMs} ms`
-                                    + `${testResult.model ? ` · ${t('options.aiTestModel')} ${testResult.model}` : ''}`
+                                    + (testResult.model ? ` · ${t('options.aiTestModel')} ${testResult.model}` : '')
                                 : `${t('options.aiTestFailed')}${testResult.error ? `: ${testResult.error}` : ''}`}
                         </span>
                     )}
@@ -500,6 +509,22 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                     )}
                 </div>
 
+                {/* 低内存 / 近期频繁被系统杀掉时，所有 AI 推理都被闸门挡住（issue #401）。
+                    不说一声的话，用户只会看到「AI 主题半天没反应」，以为功能坏了。 */}
+                {memoryBlockedReason && (
+                    <div
+                        className="rounded-xl border px-3 py-2 text-xs leading-relaxed"
+                        style={{
+                            borderColor: 'color-mix(in srgb, var(--st-accent) 35%, transparent)',
+                            color: 'var(--text-secondary)',
+                        }}
+                        role="status"
+                    >
+                        {/* 这里只说内存那两档：总闸关着是本页上面那一项自己的事，不用再提示一遍。 */}
+                        {t(memoryBlockedReason === 'recent-oom' ? 'aiDirector.memoryGuardRecentOom' : 'aiDirector.memoryGuardLowMemory')}
+                    </div>
+                )}
+
                 <div className="space-y-2 pt-1 text-left">
                     <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                         {t('aiDirector.blockedModes')}
@@ -509,14 +534,20 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
                         {directorModes.map((mode) => {
-                            const blocked = directorSettings.blockedModes.includes(mode.id);
+                            /*
+                             * 锁死的一律划掉、点不动：AI 只允许用上游自带的样式。fork 自己写的
+                             * （blank / kinetic / prompt）与模组投稿的都在这一档 —— 它们的行为只有
+                             * fork 或模组自己说得清，交出去只会让 AI 选到完全不合预期的画面。
+                             */
+                            const blocked = mode.locked || directorSettings.blockedModes.includes(mode.id);
                             return (
                                 <Button
                                     key={mode.id}
                                     aria-pressed={blocked}
+                                    disabled={mode.locked}
                                     onClick={() => toggleBlockedMode(mode.id)}
-                                    title={mode.hint}
-                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'}`}
+                                    title={mode.locked ? t('aiDirector.modeLockedHint') : mode.hint}
+                                    className={`px-2.5 py-1 rounded-full border text-xs transition-opacity ${modModeIds.has(mode.id) ? 'border-[color:var(--st-accent)]/40' : (isDaylight ? 'border-black/15' : 'border-white/15')} ${blocked ? 'line-through opacity-55' : 'opacity-90'} ${mode.locked ? 'cursor-not-allowed' : ''}`}
                                     style={{ color: 'var(--text-primary)' }}
                                 >
                                     {mode.label}

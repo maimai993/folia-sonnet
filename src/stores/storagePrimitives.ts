@@ -20,7 +20,9 @@ const storageOrNull = (): Storage | null => {
         return null;
     }
     try {
-        return window.localStorage ?? null;
+        // window.localStorage 在真浏览器里就是全局那份；WebView 被裁掉存储时它是 undefined，
+        // 这时退回全局 localStorage（测试 stub 的就是这一份），两处都没有才算没有存储。
+        return window.localStorage ?? (typeof localStorage !== 'undefined' ? localStorage : null);
     } catch {
         // 取 localStorage 本身就可能抛（安全策略禁掉存储时）。
         return null;

@@ -6,12 +6,14 @@ import { installConsoleLogCapture } from './utils/consoleLogBuffer';
 import { installDebugModule } from './services/debug/debugModule';
 import { installMemorySampleFeed } from './services/debug/memorySamples';
 import { installNativeAndroidBridge } from './services/nativeAndroidBridge';
+import { installAiMemoryGate } from './services/aiMemoryGate';
 import { installPerfDiagnosticsSwitch } from './utils/frameTimingDiagnostics';
 import { setMediaDiagnosticsEnabledReader } from './utils/mediaDiagnostics';
 import { usePerfDiagnosticsStore } from './stores/usePerfDiagnosticsStore';
-import { installAndroidPhoneFitPreference, installDeviceProfilePreference } from './services/androidPhoneLayout';
+import { installDeviceProfilePreference, installPhoneOrientationPreference } from './services/androidPhoneLayout';
 import { installHdrProjectionPreference } from './services/hdrProjection';
 import { installAndroidModsBridge } from './mods/android/androidModsBridge';
+import { isPerfCheckSurface } from './utils/appSurface';
 // import { installCoverSizeAudit } from './services/debug/coverSizeSamples';
 // @ts-ignore
 globalThis.Buffer = Buffer;
@@ -20,10 +22,12 @@ globalThis.Buffer = Buffer;
 installConsoleLogCapture();
 // Right after it, so the startup lines reach the runtime log file too and not only the in-memory
 // buffer. Both no-op off Electron. See services/debug/debugModule.ts.
-installDebugModule();
-installMemorySampleFeed();
-// 只在安卓原生端有作用；桌面/网页会立刻返回，不会碰 Capacitor。
-// 莱茵生命的原生桥由插件 load() 自启动，入口不再需要唤醒（分层边界：只有 registry 能碰 suite）。
+// Not in the performance check's window: the log pipe is the first-party windows' (the main process
+// refuses it there), and the check writes its result through its own channel (electron/perfCheck.cjs).
+if (!isPerfCheckSurface) {
+    installDebugModule();
+    installMemorySampleFeed();
+}
 // Cover size audit, left wired but switched off: it answered whether the provider CDNs honour the
 // size in a cover URL - they do - and that is not a question worth re-asking every session. The
 // collector and its panel are still in the tree, and `?probe=coverSizeAudit` still reaches them.
@@ -66,9 +70,13 @@ setMediaDiagnosticsEnabledReader(perfDiagnosticsPort.isEnabled);
 // 本地登录的地基：把内置的接口代码挂到页面与原生之间。它是异步的（要 import 那份 JS），
 // 但装好之前页面发来的请求会被排队，装好后统一补发，所以不用 await。
 void installNativeAndroidBridge();
-// 手机适配的属性必须在首帧之前落到 <html> 上：否则用户开了开关后，React 挂载那一瞬
-// 会先按桌面布局量一遍尺寸，再被 CSS 拉回手机布局，开屏那一下看得见跳变。
-installAndroidPhoneFitPreference();
+// AI 低内存闸门（issue #401）：读上一回「有没有活到稳定期」算连续被杀次数，并起内存水位轮询。
+// 必须早于任何 AI 入口 —— 闸门关着时 requestAiCompletion 与原生分析模型都不发起（见 utils/aiMemoryGate）。
+installAiMemoryGate();
+// 方向属性（竖屏 / 横屏）要在首帧之前落到 <html> 上：横屏那套缩放与「强制横屏」都读它，
+// 晚一步就会先按原始尺寸铺完再变，开屏那一下看得见跳变。
+// （原来的「手机适配」总开关是废弃代码，已删；这里只剩方向。）
+installPhoneOrientationPreference();
 // 设备类型（手机 / 平板）：选了手机的话横屏整屏缩一档，同样要在首帧之前落到 <html> 上，
 // 否则第一帧按原始尺寸铺完再缩，开屏那一下看得见跳变。
 installDeviceProfilePreference();

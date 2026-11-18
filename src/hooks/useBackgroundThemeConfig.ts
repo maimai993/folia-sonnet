@@ -8,7 +8,7 @@ import {
 } from '../services/backgroundThemeBridge';
 import { readDirectorSettings, subscribeDirectorState } from '../services/lyricDirector/state';
 import { readFoliaCloudSettings, subscribeFoliaCloudSettings } from '../services/foliaCloud';
-import { listDirectorModes, isBlockedDirectorMode } from '../services/lyricDirector/catalog';
+import { effectiveBlockedDirectorModes, listDirectorModes, isBlockedDirectorMode } from '../services/lyricDirector/catalog';
 import i18n from '../i18n/config';
 import { useThemeSettingsStore } from '../stores/useThemeSettingsStore';
 
@@ -19,7 +19,9 @@ export const useBackgroundThemeConfig = (enabled: boolean): void => {
             const settings = readDirectorSettings();
             const cloud = readFoliaCloudSettings();
             const hint = settings.userHint;
+            // 清单按生效禁区过滤；策略只认用户自己那份（理由见 aiStage 同处注释）。
             const blocked = settings.blockedModes;
+            const selectable = effectiveBlockedDirectorModes(blocked);
             const next = {
                 enabled,
                 cloudEnabled: cloud.enabled,
@@ -30,7 +32,7 @@ export const useBackgroundThemeConfig = (enabled: boolean): void => {
                     songTitle: '{{FOLIA_TITLE}}',
                     song: { title: '{{FOLIA_TITLE}}', artist: '{{FOLIA_ARTIST}}', album: null },
                     lines: [{ fullText: '{{FOLIA_LYRICS}}', translation: '', songPart: '', isChorus: false }],
-                    modes: listDirectorModes(key => i18n.t(key)).filter(mode => !isBlockedDirectorMode(mode.id, blocked)),
+                    modes: listDirectorModes(key => i18n.t(key)).filter(mode => !isBlockedDirectorMode(mode.id, selectable)),
                     currentMode: '', hint, recentModes: [], blockedModes: blocked,
                 }),
                 policy: buildStagePolicy({ hint, blocked }),

@@ -6,8 +6,6 @@ import type { VisualizerBackgroundRenderProps } from './definition';
 // Selects the active shell background through the discoverable background registry.
 
 interface BackgroundBoundaryProps {
-    /** Which background is inside: the boundary starts over when this changes. */
-    mode: string;
     children: React.ReactNode;
 }
 
@@ -24,22 +22,26 @@ interface BackgroundBoundaryProps {
  * 有了它，出错的结果是「这一层什么都不画」（页面其余部分照常，还能去设置里换回
  * 别的背景），并且**换一个背景就重置** —— 不必重开应用。
  */
-class BackgroundBoundary extends React.Component<BackgroundBoundaryProps, { failedMode: string | null }> {
-    state: { failedMode: string | null } = { failedMode: null };
+class BackgroundBoundary extends React.Component<BackgroundBoundaryProps, { hasError: boolean }> {
+    state: { hasError: boolean } = { hasError: false };
 
     static getDerivedStateFromError() {
-        return { failedMode: null as string | null };
+        /*
+         * ★ 这里必须真的改状态。React 拿到这份状态后会立刻重渲染边界，render() 才会
+         * 返回 null、把崩掉的那层收掉。原来返回 { failedMode: null } 等于没改 ——
+         * children 又被原样渲染一遍、再抛一次，React 判定边界无效，继续往上冒，
+         * 最后整棵树还是卸载（黑屏兜底根本没兜住）。componentDidCatch 里的 setState
+         * 在 commit 阶段才跑，已经太晚。
+         */
+        return { hasError: true };
     }
 
     componentDidCatch(error: unknown) {
         console.warn('[Background] this background failed to draw; the rest of the page stays', error);
-        this.setState({ failedMode: this.props.mode });
     }
 
     render() {
-        // 崩过的那一款就不再画；切到别的背景时 props.mode 变了，自然重新开始。
-        if (this.state.failedMode !== null && this.state.failedMode === this.props.mode) return null;
-        return this.props.children;
+        return this.state.hasError ? null : this.props.children;
     }
 }
 
@@ -50,7 +52,8 @@ const VisualizerBackgroundRenderer: React.FC<VisualizerBackgroundRenderProps> = 
 
     const mode = props.config?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE;
     return (
-        <BackgroundBoundary mode={mode}>
+        // key={mode}：换背景换一个新边界实例，崩过的一款不会拖累下一款。
+        <BackgroundBoundary key={mode}>
             {getVisualizerBackgroundRegistryEntry(mode).render(props)}
         </BackgroundBoundary>
     );

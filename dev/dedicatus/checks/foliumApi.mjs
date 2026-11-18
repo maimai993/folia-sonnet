@@ -91,7 +91,38 @@ export function checkFoliumApi(files, { readBase, readCurrent }) {
     const oldFlags = experimentalLines(before);
     const newFlags = experimentalLines(after);
     const counts = text => !isComment(text) && !isVersionLine(text);
-    const removed = diff.removed.filter(entry => counts(entry.text) && !oldFlags[entry.oldLine]);
+    /*
+     * 联合类型的**加宽**不算改动。
+     *
+     * `export type FoliumBeatEffectSource = 'beats' | 'drums' | 'stems'` 这种一行写完的联合，
+     * 多一个成员在 diff 里就是「删一行、加一行」，按「改一行」处理会要求升大版本。但契约本身
+     * 写的是「Later minors may add sources: read one you do not know as beats」—— 这正是
+     * 加宽的语义，对 mod 不构成破坏。所以这里按集合判断：同名联合、新的是旧的超集，就只算新增。
+     */
+    const unionMembers = text => {
+        const out = new Map();
+        for (const line of text.split('\n')) {
+            const matched = /^\s*export type (\w+)\s*=\s*(.+);\s*$/.exec(line);
+            if (!matched) continue;
+            const members = matched[2].split('|').map(member => member.trim()).filter(Boolean);
+            if (members.length > 0) out.set(matched[1], new Set(members));
+        }
+        return out;
+    };
+    const oldUnions = unionMembers(before);
+    const newUnions = unionMembers(after);
+    const isWidenedUnion = text => {
+        const matched = /^\s*export type (\w+)\s*=/.exec(text);
+        if (!matched) return false;
+        const name = matched[1];
+        const oldMembers = oldUnions.get(name);
+        const newMembers = newUnions.get(name);
+        if (!oldMembers || !newMembers) return false;
+        return [...oldMembers].every(member => newMembers.has(member)) && newMembers.size > oldMembers.size;
+    };
+    const removed = diff.removed.filter(entry => (
+        counts(entry.text) && !oldFlags[entry.oldLine] && !isWidenedUnion(entry.text)
+    ));
     const added = diff.added.filter(entry => counts(entry.text) && !newFlags[entry.newLine]);
     // 改一行在 diff 里是一删一加：成对的算“改动”，只报一次（按删除行）
     const removedTexts = new Set(removed.map(entry => entry.text.trim()));

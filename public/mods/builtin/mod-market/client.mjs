@@ -598,7 +598,6 @@ export default function activate(folium) {
         toast(t(`开始更新 ${pending.length} 个模组`, `Updating ${pending.length} mods`), 'info');
         // 一次一个：宿主的 install 会在结尾重载所有模组，并发会把彼此的安装搅在一起。
         for (const row of pending) {
-            // eslint-disable-next-line no-await-in-loop
             await install(row);
         }
     };

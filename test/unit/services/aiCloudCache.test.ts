@@ -212,7 +212,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
     expect(result.status).toBe('hit');
     if (result.status === 'hit') {
       expect(result.matched).toBe('words');
-      expect(result.sourceKey).toBe(KEY_A);
+      expect(result!.sourceKey).toBe(KEY_A);
       expect(result.payload).toEqual(payload);
     }
     /*
@@ -341,7 +341,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
     expect(result.status).toBe('hit');
     if (result.status === 'hit') {
       expect(result.matched).toBe('words');
-      expect(result.sourceKey).toBe(KEY_H);
+      expect(result!.sourceKey).toBe(KEY_H);
       expect(result.payload).toEqual(secondPayload);
     }
   });
@@ -376,7 +376,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
       songTitle: '晴天',
     });
 
-    expect(result.source).toBe('cloud');
+    expect(result!.source).toBe('cloud');
     expect(puts).toHaveLength(0);
   });
 
@@ -427,7 +427,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
     expect(result.status).toBe('hit');
     if (result.status === 'hit') {
       expect(result.matched).toBe('forced');
-      expect(result.sourceKey).toBe(KEY_A);
+      expect(result!.sourceKey).toBe(KEY_A);
       expect(result.payload).toEqual(payload);
     }
   });
@@ -465,7 +465,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
     if (result.status === 'hit') {
       expect(result.matched).toBe('words');
       /* 两条都是 2 条证据（一样多）→ 留服务端给的顺序（歌名全等优先、更新时间倒序）。 */
-      expect(result.sourceKey).toBe(KEY_A);
+      expect(result!.sourceKey).toBe(KEY_A);
       expect(result.payload).toEqual(payload);
     }
     /* 串行那条路问到第一个就返回了 —— 第二个也被问过才说明是一起发的。 */
@@ -554,7 +554,7 @@ describe('推上去之后自己要还能拉到', () => {
       songTitle: '晴天',
       lyricText: '故事的小黄花',
     });
-    expect(first.source).toBe('ai');
+    expect(first!.source).toBe('ai');
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(stored).toBe(true);
 
@@ -599,7 +599,7 @@ describe('withAiCloudCache 把按内容捞到的那条回填', () => {
       lyricText: '故事的小黄花',
     });
 
-    expect(result.source).toBe('cloud');
+    expect(result!.source).toBe('cloud');
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(puts).toHaveLength(1);
     expect(JSON.parse(puts[0]).payload).toEqual(payload);

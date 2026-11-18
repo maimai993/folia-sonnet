@@ -56,7 +56,7 @@ export default defineVisualizer({
             source: 'beats',
             retired: true,
         },
-            {
+        {
             id: BEAT_EFFECT_IDS.pendoloJewelGlow,
             nameKey: 'options.beatEffect_pendoloJewelGlow',
             descKey: 'options.beatEffect_pendoloJewelGlowDesc',

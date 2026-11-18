@@ -13,7 +13,7 @@ import id from '../../../src/i18n/locales/in';
 const echo = (key: string) => key;
 
 const ALL_SECTIONS: SettingsSectionId[] = [
-    'appearance', 'player', 'home', 'graphics', 'playback', 'lyrics', 'general', 'interaction', 'integration', 'storage', 'desktop', 'mods', 'developer',
+    'appearance', 'player', 'home', 'graphics', 'playback', 'lyrics', 'general', 'interaction', 'integration', 'ai', 'storage', 'desktop', 'remote', 'mods', 'developer',
 ];
 
 const lookup = (bundle: Record<string, unknown>, key: string): unknown => (
@@ -39,7 +39,8 @@ describe('settingsNavModel', () => {
          * 在 web / 安卓上都该出现。
          */
         expect(ids).toContain('mods');
-        expect(ids).toHaveLength(ALL_SECTIONS.length - 1);
+        // 桌面专属被摘掉：desktop / ai / remote（fork 把 ai 与 remote 也标了 electronOnly）。
+        expect(ids).toHaveLength(ALL_SECTIONS.length - 3);
         expect(groups.every(group => group.items.length > 0)).toBe(true);
     });
 

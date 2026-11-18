@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
+// @note lattice_wall_form、lattice_radio_hide_upcoming 同上（2026-11-15）：Lattice 的墙面形态（海报墙 / 电台墙）与电台墙的问号卡，
+// OBS 页面上看不到这面墙，按同一个决定不进外观配置导入导出。
+const LATTICE_WALL_FORM_KEY = 'lattice_wall_form';
+const LATTICE_RADIO_HIDE_UPCOMING_KEY = 'lattice_radio_hide_upcoming';
+
+/** Lattice 画播放队列的形态：海报墙（PosterWall），或一圈卡牌的电台墙（radio/RadioWall）。私人 FM 下总是电台墙。 */
+export type LatticeWallForm = 'poster' | 'radio';
+
+const readWallForm = (): LatticeWallForm => (getStoredString(LATTICE_WALL_FORM_KEY, 'poster') === 'radio' ? 'radio' : 'poster');
 
 // src/stores/useLatticeSettingsStore.ts
 // Persistent queue-collage preferences. Deliberately separate from useLatticeControlsStore: that
@@ -73,6 +82,15 @@ export type LatticeSettingsState = {
      * 放在这个 store 里，bravais ↔ Lattice 交接时两面墙读同一份。
      */
     wallToolsQueueIslandOpen: boolean;
+    /** 普通队列用哪种墙（私人 FM 下不看它，总是电台墙）。默认海报墙。（上游 v0.7.29） */
+    latticeWallForm: LatticeWallForm;
+    /**
+     * 普通队列的电台墙上，接下来的歌也背面朝上（隔着棱纹玻璃的模糊封面、曲名打码），轮到时才翻开。默认关。
+     * 私人 FM 下不看它，接下来的歌总是背面朝上。（上游 v0.7.29）
+     */
+    latticeRadioHideUpcoming: boolean;
+    handleSetLatticeWallForm: (form: LatticeWallForm) => void;
+    handleToggleLatticeRadioHideUpcoming: (enabled: boolean) => void;
     handleToggleLatticeVignette: (enabled: boolean) => void;
     handleToggleAutoFocusOnSongChange: (enabled: boolean) => void;
     handleToggleLatticeLights: (enabled: boolean) => void;
@@ -98,6 +116,16 @@ export const useLatticeSettingsStore = create<LatticeSettingsState>(set => ({
     latticeBadgeCurrentOnly: getStoredBoolean(LATTICE_BADGE_CURRENT_ONLY_KEY, false),
     wallZoom: getStoredWallZoom(),
     wallToolsQueueIslandOpen: getStoredBoolean(WALL_TOOLS_QUEUE_ISLAND_OPEN_KEY, false),
+    latticeWallForm: readWallForm(),
+    latticeRadioHideUpcoming: getStoredBoolean(LATTICE_RADIO_HIDE_UPCOMING_KEY, false),
+    handleSetLatticeWallForm: (form) => {
+        set({ latticeWallForm: form });
+        setStoredString(LATTICE_WALL_FORM_KEY, form);
+    },
+    handleToggleLatticeRadioHideUpcoming: (enabled) => {
+        set({ latticeRadioHideUpcoming: enabled });
+        setStoredBoolean(LATTICE_RADIO_HIDE_UPCOMING_KEY, enabled);
+    },
     handleToggleLatticeVignette: (enabled) => {
         set({ latticeVignette: enabled });
         setStoredBoolean(LATTICE_VIGNETTE_KEY, enabled);

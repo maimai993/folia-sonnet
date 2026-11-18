@@ -418,6 +418,22 @@ export const createAndroidModsBridge = () => {
             },
             { ok: false, error: 'node-unavailable' },
         ),
+        /*
+         * 原生最近一次采到的设备指标（CPU / 内存 / 温度）。
+         *
+         * 不挂 guarded：它不依赖 Node 运行时，Node 起不来时这几个数照样有用 ——
+         * AI 低内存闸门（utils/aiMemoryGate）就是靠它读内存水位的。
+         */
+        getDeviceMetrics: async (): Promise<{ metrics?: Record<string, number | string | null> | null }> => {
+            try {
+                const response = (await FoliaMods.getDeviceMetrics()) as
+                    | { metrics?: Record<string, number | string | null> | null; result?: { metrics?: Record<string, number | string | null> | null } | null }
+                    | undefined;
+                return { metrics: response?.result?.metrics ?? response?.metrics ?? null };
+            } catch {
+                return { metrics: null };
+            }
+        },
         cancelExport: async () => ({ ok: false }),
         reportModsStartSettled: async () => ({ ok: true }),
         reportModsStartAlive: async () => ({ ok: true }),

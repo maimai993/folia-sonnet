@@ -15,7 +15,7 @@ const HANDLE_POSITION_KEY = 'scratchpad_handle_position';
 const HANDLE_STYLE_KEY = 'scratchpad_handle_style';
 
 /** 把手在左缘的高度：0 是最上面（标题栏与左上角返回钮之下，原来的位置），1 是贴近窗口底部。 */
-export const SCRATCHPAD_HANDLE_POSITION_DEFAULT = 0;
+export const SCRATCHPAD_HANDLE_POSITION_DEFAULT = 0.5;
 
 /**
  * 把手常驻时（指针还没进左缘热区）的样子：米白小条、细竖线、小圆点、几何体（圆 / 三角 / 「》」三颗小记号）。

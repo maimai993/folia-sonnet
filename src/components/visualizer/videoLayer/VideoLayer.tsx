@@ -57,6 +57,8 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
      * 这层替他做主就是把他的背景改了。
      */
     const isInjected = Boolean(stripInjectPrefix(injectedUrl));
+    const isInjectedRef = useRef(isInjected);
+    isInjectedRef.current = isInjected;
     const objectFit = isInjected ? 'contain' : fit;
     /*
      * 亮度同理：这层的不透明度是「用户给自己的背景调的透明感」（别的层要从它下面透出来）。
@@ -142,6 +144,28 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         const onSeeking = () => setBuffering(true);
         const onSeeked = () => setBuffering(false);
         /*
+         * 加载失败要说出来。
+         *
+         * 没有这条监听，源坏了（本地文件被删、句柄失效、url 403、编解码不支持）的表现是
+         * 一块永远转圈的空白 —— 用户只能报「视频层加载不出来」，日志里一个字都没有。
+         * 这里记下 error.code（MEDIA_ERR_SRC_NOT_SUPPORTED 之类）并标一个 data 属性，
+         * 转圈的那一层读到就停，界面不会一直假装在等。
+         */
+        const onError = () => {
+            const error = video.error;
+            console.warn('[VideoLayer] the video failed to load', {
+                source,
+                injected: isInjectedRef.current,
+                code: error?.code ?? null,
+                message: error?.message ?? '',
+            });
+            video.dataset.error = 'true';
+            setBuffering(false);
+        };
+        const onLoadedData = () => {
+            delete video.dataset.error;
+        };
+        /*
          * ★ 换源之后**立刻**站到播放器当下的位置，不要从头开始。
          *
          * 换画质 = 换一条 <video> 的 src。新流的时间轴和原来那条是同一支 MV，
@@ -171,6 +195,8 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
         video.addEventListener('stalled', onStalled);
         video.addEventListener('seeking', onSeeking);
         video.addEventListener('seeked', onSeeked);
+        video.addEventListener('error', onError);
+        video.addEventListener('loadeddata', onLoadedData);
         if (video.readyState >= HTMLMediaElement.HAVE_METADATA) onMetadata();
         // 换源那一刻就是缓冲的开始：元数据还没到，画面还什么都没有。
         if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) setBuffering(true);
@@ -213,6 +239,8 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
             video.removeEventListener('stalled', onStalled);
             video.removeEventListener('seeking', onSeeking);
             video.removeEventListener('seeked', onSeeked);
+            video.removeEventListener('error', onError);
+            video.removeEventListener('loadeddata', onLoadedData);
             /*
              * 换源时**别在这里 pause**。
              *

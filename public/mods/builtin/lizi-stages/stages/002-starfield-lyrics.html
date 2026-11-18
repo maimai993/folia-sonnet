@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>星际歌词</title>
+<style>
+  html,body{margin:0;height:100%;background:#04050b;overflow:hidden}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #hint{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);font:500 11px/1.5 ui-monospace,Consolas,monospace;
+        color:rgba(200,210,255,.30);letter-spacing:.08em;pointer-events:none;transition:opacity .6s}
+</style>
+</head>
+<body data-chrome="off">
+<canvas id="c"></canvas>
+<div id="hint">等待第一句…</div>
+<script>
+"use strict";
+
+/* ---- 形态设置面板：宿主在 ready 后同步读取，必须先于 ready 声明 ---- */
+window.__liziShake = true;
+window.__stagePanel = {
+  title: '星际歌词',
+  items: [
+    { key: 'shake', label: '震动', type: 'switch', def: true }
+  ]
+};
+addEventListener('message', function (e) {
+  var d = e.data;
+  if (!d || d.__c100 !== 1 || d.type !== 'setting' || !d.payload) return;
+  if (d.payload.key === 'shake') window.__liziShake = d.payload.value !== false;
+});
+/* ============================================================================
+   002 · 星际歌词 —— 在星海里穿行，一句一句掠过
+   **连贯性**是这一版的重点：
+   相邻两句的粒子**同时在场**。上一句被相机甩到身后（越变越大、冲出画面），
+   下一句从远处逼近（由小变大）—— 衔接是连续的，不存在"上一句啪地消失"。
+   做法：三个槽位分别装「上一句 / 当前句 / 下一句」，各有自己的空间坐标。
+
+   ---- 性能（实测 41.7 → 60+ fps）：瓶颈只有两处，都是「逐颗一次绘制调用 ----
+   ① 每句 4000 颗点原来是**每帧逐颗 fillRect**（最多 3 句 = 12000 次/帧）。
+      现在换句时把整句的点点**烘焙成一张贴图**，之后每帧每槽位只 drawImage 一次。
+      透视对同一平面上的点是仿射的：粒子 z 抖动只有 ±5 / 620（<1%），
+      逐颗投影和"整图等比缩放"的差别肉眼看不出来 —— 见坑 ⑨⑩。
+   ② 星点 2600 条线段原来是**逐颗拼 rgba 字符串 + beginPath/stroke**
+      （2600 次样式解析 + 2600 次绘制调用）。现在按深度分 4 档：
+      每档只设一次 strokeStyle/lineWidth，全部 moveTo/lineTo 进同一条 path，
+      每档一次 stroke。
+   ========================================================================== */
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha: false });
+let W = 0, H = 0, DPR = 1, FOV = 620;
+let SCALE = 2;            // 贴图分辨率：每字形单位多少像素（跟着 DPR 走，缩放时别糊）
+
+let slotsReady = false;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  FOV = Math.max(520, Math.min(W, H) * 1.05);
+  SCALE = Math.min(3, Math.max(1.5, 1.4 * DPR));
+  // 换尺寸后字号/边距都变了，贴图要重新烘焙
+  if (slotsReady) for (const s of slots) s.dirty = true;
+}
+resize();
+addEventListener('resize', resize);
+
+/* ---- 星场 ---- */
+const SN = 2600;
+const sx = new Float32Array(SN), sy = new Float32Array(SN), sz = new Float32Array(SN);
+const sc = new Float32Array(SN);
+for (let i = 0; i < SN; i++) {
+  sx[i] = (Math.random() - 0.5) * 5200;
+  sy[i] = (Math.random() - 0.5) * 5200;
+  sz[i] = Math.random() * 5200 + 40;
+  sc[i] = Math.random();
+}
+/* 合批用的投影缓冲（预分配，避免每帧 GC） */
+const SB = 4;                                  // 深度分档数
+const stX1 = new Float32Array(SN), stY1 = new Float32Array(SN);
+const stX2 = new Float32Array(SN), stY2 = new Float32Array(SN);
+const stB = new Uint8Array(SN);
+const stSkip = 255;
+
+/* ---- 每句词在空间里的位置：z 递增，x/y 用黄金角散开 → 相机左右上下地飞 ---- */
+const SPACING = 1700;
+function linePos(i) {
+  const g = i * 2.399963;
+  const r = 240 + 300 * (((i * 37) % 97) / 97);
+  return { x: Math.cos(g) * r, y: Math.sin(g) * r * 0.62, z: (i + 1) * SPACING };
+}
+
+/* ---- 三个槽位：上一句 / 当前句 / 下一句，各自独立 ----
+   每个槽位存的是那句词的**贴图**（换句时才烘焙），不是逐颗粒子。 */
+const TXN = 4000;          // 每句铺多少颗点
+const DOT = 3.6;           // 点径（字形单位）≈ 原来的 3.6 * 透视缩放
+function makeSlot() {
+  return { idx: -1, img: null, hx: 0, hy: 0, bk: 2, dirty: false };
+}
+const slots = [makeSlot(), makeSlot(), makeSlot()];
+slotsReady = true;
+
+let lines = [];
+let curIdx = -1;
+let accent = [150, 170, 255];
+const cam = { x: 0, y: 0, z: 0 };
+let speed = 300;
+
+const off = document.createElement('canvas');
+const octx = off.getContext('2d', { willReadFrequently: true });
+
+/** 把一句词烘焙进槽位：字形采样 → 点点画到一张居中于字形中心的贴图上 */
+function bakeSlot(slot, idx) {
+  const text = lines[idx].text;
+  const F = 80;
+  const maxW = Math.min(1250, W * 0.8);
+  octx.font = `800 ${F}px "PingFang SC","Microsoft YaHei",system-ui,sans-serif`;
+  let w = Math.ceil(octx.measureText(text).width) + 8;
+  const fs = w > maxW ? F * (maxW / w) : F;
+  octx.font = `800 ${fs}px "PingFang SC","Microsoft YaHei",system-ui,sans-serif`;
+  w = Math.ceil(octx.measureText(text).width) + 8;
+  const h = Math.ceil(fs * 1.35);
+  off.width = w; off.height = h;
+  octx.clearRect(0, 0, w, h);
+  octx.font = `800 ${fs}px "PingFang SC","Microsoft YaHei",system-ui,sans-serif`;
+  octx.textAlign = 'center'; octx.textBaseline = 'middle';
+  octx.fillStyle = '#fff';
+  octx.fillText(text, w / 2, h / 2);
+
+  const d = octx.getImageData(0, 0, w, h).data;
+  const pts = [];
+  const step = 2;
+  for (let y = 0; y < h; y += step) {
+    for (let x = 0; x < w; x += step) {
+      if (d[(y * w + x) * 4 + 3] > 128) pts.push(x - w / 2, y - h / 2);
+    }
+  }
+  if (pts.length < 2) {           // 空句（纯标点/空白）：给张 1px 贴图，别让包围盒算出天文数字
+    slot.idx = idx; slot.hx = 8; slot.hy = 8; slot.dirty = false;
+    const e = slot.img || (slot.img = document.createElement('canvas'));
+    e.width = 1; e.height = 1;
+    return;
+  }
+  const pc = pts.length / 2 || 1;
+  /* 字形包围盒（只用来定贴图尺寸；点仍然按等间隔铺满整行） */
+  let bx0 = 1e9, bx1 = -1e9, by0 = 1e9, by1 = -1e9;
+  for (let k = 0; k < pts.length; k += 2) {
+    if (pts[k] < bx0) bx0 = pts[k];
+    if (pts[k] > bx1) bx1 = pts[k];
+    if (pts[k + 1] < by0) by0 = pts[k + 1];
+    if (pts[k + 1] > by1) by1 = pts[k + 1];
+  }
+  const pad = 8;
+  const hx = Math.max(Math.abs(bx0), Math.abs(bx1)) + pad;
+  const hy = Math.max(Math.abs(by0), Math.abs(by1)) + pad;
+
+  const img = slot.img || (slot.img = document.createElement('canvas'));
+  const bk = SCALE;                 // 高分屏上烘得细一点，放大回来才不糊
+  img.width = Math.max(1, Math.round(hx * 2 * bk));
+  img.height = Math.max(1, Math.round(hy * 2 * bk));
+  const g = img.getContext('2d');
+  /* 贴图原点 = 字形中心，缩放 bk —— 这样点直接用字形坐标画 */
+  g.setTransform(bk, 0, 0, bk, img.width / 2, img.height / 2);
+  g.fillStyle = `rgb(${Math.min(255, accent[0] + 115)},${Math.min(255, accent[1] + 110)},${Math.min(255, accent[2] + 75)})`;
+  const hd = DOT / 2;
+  g.beginPath();
+  for (let i = 0; i < TXN; i++) {
+    // 等间隔取样铺满整行（按扫描顺序取只会用到上面一部分行，字会被压扁）
+    const p = (Math.floor(i * pc / TXN) % pc) * 2;
+    g.rect(pts[p] + (Math.random() - 0.5) * 1.6 - hd, pts[p + 1] + (Math.random() - 0.5) * 1.6 - hd, DOT, DOT);
+  }
+  g.fill();                       // 一条 path 一次 fill（不是 4000 次 fillRect）
+
+  slot.idx = idx; slot.hx = hx; slot.hy = hy; slot.bk = bk; slot.dirty = false;
+}
+
+/** 找一个槽位来装第 idx 句（已经有就直接用；没有就复用最旧的那个） */
+function ensureSlot(idx) {
+  if (idx < 0 || idx >= lines.length) return null;
+  for (const s of slots) if (s.idx === idx) return s;
+  let best = null;
+  for (const s of slots) {
+    if (s.idx < 0) { best = s; break; }
+    // 只复用"比上一句还旧"的槽位，当前句和下一句绝不能被顶掉
+    if (s.idx < curIdx - 1 && (!best || s.idx < best.idx)) best = s;
+  }
+  if (!best) best = slots.find((s) => s.idx !== curIdx && s.idx !== curIdx + 1);
+  if (!best) return null;
+  bakeSlot(best, idx);
+  return best;
+}
+
+let clockT = 0, clockAt = 0, playing = false;
+const now = () => clockT + (playing ? (performance.now() - clockAt) / 1000 : 0);
+
+const hint = document.getElementById('hint');
+let hintO = '';
+let last = performance.now();
+let t0 = 0;
+let lastT = -1;
+
+function frame(nowMs) {
+  const dt = Math.min(0.05, (nowMs - last) / 1000);
+  last = nowMs; t0 += dt;
+  const T = now();
+
+  /* ================= 节奏 =================
+     **显示切换正好在句首**，不提前。
+     切过去之后上一句不会消失 —— 它还留在自己的槽位里，
+     被相机甩到身后时自然冲出画面，衔接是连续的。 */
+  if (lines.length) {
+    if (T < lastT - 0.6) { curIdx = -1; for (const s of slots) { s.idx = -1; } }
+    lastT = T;
+    let ci = curIdx;
+    while (ci + 1 < lines.length && T >= lines[ci + 1].t) ci++;
+    if (ci !== curIdx) {
+      curIdx = ci;
+      if (curIdx >= 0) ensureSlot(curIdx);
+    }
+    // 下一句提前建好，才能"从远处逼近"而不是突然冒出来
+    if (curIdx >= 0 && curIdx + 1 < lines.length) ensureSlot(curIdx + 1);
+    const ho = lines.length ? (curIdx >= 0 ? '0' : '1') : '0.5';
+    if (ho !== hintO) { hintO = ho; hint.style.opacity = ho; }
+  }
+  // 换尺寸后（字号变了）重新烘焙
+  for (const s of slots) if (s.dirty && s.idx >= 0 && s.idx < lines.length) bakeSlot(s, s.idx);
+
+  /* ---- 相机：飞向当前句的空间位置，停在它前方 READ 处 ---- */
+  const READ = 620;
+  const p = curIdx >= 0 ? linePos(curIdx) : { x: 0, y: 0, z: SPACING };
+  const k = 1 - Math.pow(0.02, dt);
+  cam.x += (p.x - cam.x) * k;
+  cam.y += (p.y - cam.y) * k;
+  cam.z += (p.z - READ - cam.z) * k;
+
+  /* ---- 星场推进 ---- */
+  const dz0 = Math.max(1, p.z - cam.z);
+  speed = 240 + Math.max(0, Math.min(1, (dz0 - 500) / 1200)) * 900;
+  for (let i = 0; i < SN; i++) {
+    sz[i] -= speed * dt * (0.5 + sc[i] * 0.9);
+    if (sz[i] < cam.z + 12) {
+      sz[i] = cam.z + 5200;
+      sx[i] = cam.x + (Math.random() - 0.5) * 5200;
+      sy[i] = cam.y + (Math.random() - 0.5) * 5200;
+    }
+  }
+
+  /* ================= 绘制 ================= */
+  ctx.fillStyle = 'rgba(4,5,11,0.30)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'lighter';
+
+  const cx = W / 2, cy = H / 2;
+  const [ar, ag, ab] = accent;
+
+  /* ---- 星点：一次投影，按深度分 4 档合批，每档一条 path 一次 stroke ---- */
+  for (let i = 0; i < SN; i++) {
+    const dzs = sz[i] - cam.z;
+    if (dzs < 20) { stB[i] = stSkip; continue; }
+    const kk = FOV / dzs;
+    const X = cx + (sx[i] - cam.x) * kk;
+    const Y = cy + (sy[i] - cam.y) * kk;
+    if (X < -40 || X > W + 40 || Y < -40 || Y > H + 40) { stB[i] = stSkip; continue; }
+    const k2 = FOV / (dzs + speed * 0.05);
+    const dep = Math.max(0, Math.min(0.999, 1 - dzs / 3600));
+    stB[i] = (dep * SB) | 0;
+    stX1[i] = cx + (sx[i] - cam.x) * k2;
+    stY1[i] = cy + (sy[i] - cam.y) * k2;
+    stX2[i] = X; stY2[i] = Y;
+  }
+  for (let b = 0; b < SB; b++) {
+    const dep = (b + 0.5) / SB;
+    ctx.strokeStyle = `rgba(${Math.min(255, ar + 70)},${Math.min(255, ag + 70)},${Math.min(255, ab + 50)},${(0.10 + dep * 0.55).toFixed(3)})`;
+    ctx.lineWidth = b === SB - 1 ? 1.7 : 1.1;
+    ctx.beginPath();
+    for (let i = 0; i < SN; i++) {
+      if (stB[i] !== b) continue;
+      ctx.moveTo(stX1[i], stY1[i]);
+      ctx.lineTo(stX2[i], stY2[i]);
+    }
+    ctx.stroke();
+  }
+
+  /* ---- 所有在场句子：一张贴图一次 drawImage ----
+     上一句还在，只是被甩到身后、越变越大直到冲出画面；
+     下一句从远处逼近。三句各自按自己的空间坐标投影。 */
+  for (const s of slots) {
+    if (s.idx < 0 || !s.img || !s.img.width) continue;
+    const lp = linePos(s.idx);
+    const dz = lp.z - cam.z;
+    if (dz < 50 || dz > 5200) continue;          // 已在身后 / 太远看不清
+    const kk = FOV / dz;
+    const X = cx + (lp.x - cam.x) * kk;
+    const Y = cy + (lp.y - cam.y) * kk;
+    /* 放大上限：原来点径也被夹在 6px，这里对应地夹住整体缩放，
+       免得贴图被放大到十几倍、把整屏都盖住（那是白白烧栅格化） */
+    const ks = Math.min(kk, 3.6);
+    const hw = s.hx * ks, hh = s.hy * ks;
+    if (X + hw < 0 || X - hw > W || Y + hh < 0 || Y - hh > H) continue;
+    const fade = Math.max(0, Math.min(1, (4200 - dz) / 2400));
+    // 当前句最亮，前后两句淡一些 —— 分得出主次，但都看得见
+    const main = s.idx === curIdx;
+    const al = main ? (0.34 + fade * 0.64) : (0.13 + fade * 0.32);
+    const sc2 = (ks / s.bk) * (1 + Math.sin(t0 * 1.7 + s.idx * 1.3) * 0.006);  // 轻微呼吸
+    ctx.save();
+    ctx.translate(X, Y);
+    ctx.scale(sc2, sc2);
+    ctx.globalAlpha = al;
+    ctx.drawImage(s.img, -s.img.width / 2, -s.img.height / 2);
+    ctx.restore();
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+
+/* 空格暂停/播放。焦点在 iframe 里时父页面收不到键盘事件，
+   所以要主动转发过去（和 F5 是同一个道理）。 */
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+    try { parent.postMessage({ __c100: 1, type: 'key', payload: { key: 'Space' } }, '*'); } catch (_) {}
+  }
+}, true);
+
+/* ---- 与播放器通信 ---- */
+const ping = () => { try { parent.postMessage({ __c100: 1, type: 'activity' }, '*'); } catch (_) {} };
+addEventListener('pointermove', ping, { passive: true });
+addEventListener('pointerdown', ping, { passive: true });
+addEventListener('wheel', ping, { passive: true });
+addEventListener('keydown', ping);
+
+addEventListener('message', (e) => {
+  const d = e.data;
+  if (!d || d.__c100 !== 1) return;
+  if (d.type === 'init') {
+    const pl = d.payload || {};
+    lines = (pl.lines || []).slice().sort((a, b) => a.t - b.t);
+    curIdx = -1; lastT = -1;
+    for (const s of slots) { s.idx = -1; s.dirty = false; }
+    cam.x = 0; cam.y = 0; cam.z = 0;
+    if (pl.accent) accent = pl.accent;
+    clockT = 0; clockAt = performance.now();
+    hint.textContent = lines.length ? '等待第一句…' : '这首没有歌词';
+    hintO = lines.length ? '1' : '0.5'; hint.style.opacity = hintO;
+  } else if (d.type === 'tick') {
+    clockT = d.payload.time; clockAt = performance.now(); playing = !!d.payload.playing;
+  } else if (d.type === 'beat') {
+    speed += 170 * (0.4 + (d.payload.level || 0));
+  }
+});
+try { parent.postMessage({ __c100: 1, type: 'ready' }, '*'); } catch (_) {}
+window.__stage = () => ({
+  lines: lines.length, curIdx,
+  slots: slots.map((s) => s.idx),
+  cam: { x: Math.round(cam.x), y: Math.round(cam.y), z: Math.round(cam.z) },
+  t: +now().toFixed(2),
+});
+</script>
+</body>
+</html>

@@ -182,14 +182,14 @@ export const useNativePlaybackRuntime = ({
             // 只让当前 source 的起播意图同步状态，避免迟到的结果覆盖恢复、换歌或 ABA 换源。
             // applied === false：这次 play 被原生判为已被取代（例如同一瞬间通知栏暂停），不能写 PLAYING。
             if (
-                applied !== false
+                applied
                 && nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
                 && nativePlaybackEngine.sourceGeneration() === sourceGeneration
                 && nativePlaybackEngine.currentSongKey() === songKey
             ) {
                 setPlayerState(PlayerState.PLAYING);
             }
-        }).catch(error => {
+        }).catch((error: unknown) => {
             if (
                 nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
                 || nativePlaybackEngine.sourceGeneration() !== sourceGeneration
