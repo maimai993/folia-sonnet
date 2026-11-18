@@ -2541,7 +2541,6 @@ export default {
         'consoleGroupMaster': 'Mastering',
         'consoleGroupPlayback': 'Phát lại',
         'consoleGroupSmart': 'Thông minh',
-        'consoleGroupSpace': 'Không gian âm thanh',
         'consoleMasteringAir': 'Độ thoáng',
         'consoleMasteringAmount': 'Mức',
         'consoleMasteringBalance': 'Cân bằng',
