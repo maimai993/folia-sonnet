@@ -12,6 +12,7 @@ import { isNativePlayerAvailable, nativePlayer } from '../../../services/playbac
 import { Segmented, Toggle } from '../../modal/settings/kit';
 import { Button } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
+import EqualizerCurve from './EqualizerCurve';
 import Fader from '../equalizer/Fader';
 import SpectrumChart from './SpectrumChart';
 import { ConsoleSlider, formatDb } from './controls';
@@ -91,6 +92,7 @@ const PostEqPane: React.FC = () => {
 
             <div className={`st-t-move ${postEq.enabled ? '' : 'opacity-40'}`}>
                 <EqualizerSection title={t('ui.consolePostEqBands')} hint={`${AUDIO_EQUALIZER_MIN_GAIN_DB} ~ +${AUDIO_EQUALIZER_MAX_GAIN_DB} dB`}>
+                    <EqualizerCurve gains={postEq.gains} mode={postEq.curve} q={postEq.q} globalGainDb={postEq.globalGainDb} dimmed={!postEq.enabled} />
                     <div className="st-scroll flex gap-2 overflow-x-auto px-4 pb-3 pt-3 [&::-webkit-scrollbar]:h-3" inert={!postEq.enabled}>
                         <div className="relative grid min-w-[360px] flex-1 grid-cols-10">
                             {Array.from({ length: POST_BAND_COUNT }, (_, index) => {

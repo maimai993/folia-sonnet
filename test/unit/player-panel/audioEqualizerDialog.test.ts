@@ -2,6 +2,7 @@
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as NativePlayerPlugin from '@/services/playbackEngine/nativePlayerPlugin';
 
 // Stores read localStorage at import time; see foliumUiRegistries.test.ts.
 const storage = vi.hoisted(() => {
@@ -27,10 +28,17 @@ vi.mock('@/components/shared/Sheet', () => ({
     ),
 }));
 
+vi.mock('@/services/playbackEngine/nativePlayerPlugin', async importOriginal => ({
+    ...await importOriginal<typeof NativePlayerPlugin>(),
+    isNativePlayerAvailable: vi.fn(() => true),
+}));
+import { isNativePlayerAvailable } from '@/services/playbackEngine/nativePlayerPlugin';
+import EqualizerCurve from '@/components/panelTab/console/EqualizerCurve';
 import i18n from '@/i18n/config';
 import AudioEqualizerDialog from '@/components/panelTab/AudioEqualizerDialog';
 import { AUDIO_EQUALIZER_MOD_CURVE_KEY, useAudioSettingsStore } from '@/stores/useAudioSettingsStore';
 import { useAudioProfilesStore } from '@/stores/useAudioProfilesStore';
+import { usePlaybackStore } from '@/stores/usePlaybackStore';
 import { AUDIO_EQUALIZER_STORAGE_KEY, resolveAudioEqualizerSettings, type AudioEqualizerSettings } from '@/utils/audioEqualizer';
 import { normalizeAudioEffects } from '@/utils/audioEffects';
 
@@ -217,6 +225,37 @@ describe('the audio effects window', () => {
         expect(storage.has(AUDIO_EQUALIZER_MOD_CURVE_KEY)).toBe(false);
     });
 
+    it('does not offer native console effects without the native engine', () => {
+        vi.mocked(isNativePlayerAvailable).mockReturnValue(false);
+        try {
+            draw();
+            expect(place.textContent).not.toContain(i18n.t('ui.consoleTabRepair'));
+            expect(place.textContent).not.toContain(i18n.t('ui.equalizerCurvePeq'));
+            expect(sliders().length).toBeGreaterThanOrEqual(10);
+        } finally { vi.mocked(isNativePlayerAvailable).mockReturnValue(true); }
+    });
+
+    it('drops the console tabs while the current song is a blob: the native engine cannot take it', () => {
+        draw();
+        expect(place.textContent).toContain(i18n.t('ui.consoleTabRepair'));
+        act(() => usePlaybackStore.setState({ audioSrc: 'blob:http://localhost/1' }));
+        try {
+            expect(place.textContent).not.toContain(i18n.t('ui.consoleTabRepair'));
+            act(() => usePlaybackStore.setState({ audioSrc: 'https://cdn.example/a.mp3' }));
+            expect(place.textContent).toContain(i18n.t('ui.consoleTabRepair'));
+        } finally { usePlaybackStore.setState({ audioSrc: null }); }
+    });
+
+    it('shows peaking rather than shelves on both ends in PEQ mode', () => {
+        for (const [band, point] of [[0, 0], [9, 80]]) {
+            const gains = Array<number>(10).fill(0); gains[band] = 12;
+            draw(React.createElement(EqualizerCurve, { gains, mode: 'peq', q: 8, globalGainDb: 0 }));
+            const points = place.querySelector('polyline')!.getAttribute('points')!.split(' ');
+            // 0.1 SVG units is 0.024 dB. Shelves at these frequencies are several dB off zero.
+            expect(Math.abs(Number(points[point].split(',')[1]) - 50)).toBeLessThan(0.1);
+        }
+    });
+
     it('shows no notice without a curve', () => {
         draw();
         expect(place.textContent).not.toContain(i18n.t('ui.equalizerModCurveRelease'));
@@ -238,6 +277,26 @@ describe('the audio effects window', () => {
             useAudioProfilesStore.getState().profiles[0].id,
         );
         expect(place.textContent).toContain(i18n.t('ui.consoleCompressorCrossovers'));
+    });
+
+    it('opens the five console panes from their groups; spatial edits the mix, not separated tracks', () => {
+        draw();
+        for (const [group, tab, label] of [
+            ['Base', 'Repair', 'consoleMasteringGate'],
+            ['Color', 'Reverb', 'consoleReverbPresetFactory'],
+            ['Color', 'Spatial', 'consoleStereoCrossfeed'],
+            ['Master', 'Mastering', 'consoleMasteringCompEnabled'],
+            ['Smart', 'Studio', 'consoleStudioABEnabled'],
+        ]) {
+            const groups = place.querySelectorAll('[role="group"]');
+            const groupButton = Array.from(groups[0].querySelectorAll('button')).find(b => b.textContent === i18n.t(`ui.consoleGroup${group}`));
+            expect(groupButton).toBeDefined();
+            press(groupButton!);
+            const tabButton = Array.from(groups[1].querySelectorAll('button')).find(b => b.textContent === i18n.t(`ui.consoleTab${tab}`));
+            expect(tabButton).toBeDefined();
+            press(tabButton!);
+            expect(place.textContent).toContain(i18n.t(`ui.${label}`));
+        }
     });
 
     it('closes the open flag a microtask after it goes away', async () => {

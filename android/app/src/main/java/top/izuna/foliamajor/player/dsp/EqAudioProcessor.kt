@@ -76,6 +76,8 @@ class EqAudioProcessor(
     private val saturation = SaturationStage()
     private val stereo = StereoStage()
     private val reverb = ReverbStage()
+    private val mastering = MasteringStage()
+    private val studio = StudioStage()
     private val spectrum = SpectrumAnalyzer()
     private val limiter = LookaheadLimiter()
     private val pcm = Pcm16Codec()
@@ -97,6 +99,8 @@ class EqAudioProcessor(
     private var raw = ByteArray(0)
     private var carry = ByteArray(0)
     private var carrySize = 0
+    private var dryRing = ByteArray(0)
+    private var dryIndex = 0
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         // 只处理 16bit。走到别的编码说明链路和预期不一样（见文件头第 3 条），
@@ -123,9 +127,12 @@ class EqAudioProcessor(
         saturation.configure(sampleRate)
         stereo.configure(sampleRate)
         reverb.configure(sampleRate, channels)
+        mastering.configure(sampleRate, channels)
+        studio.configure(sampleRate, channels)
         spectrum.configure(sampleRate)
         dynamics.configure(sampleRate, DSP_BLOCK_FRAMES)
         limiter.configure(sampleRate, channels)
+        dryRing = ByteArray(limiter.delayFrames * 2 * channels)
 
         // 先取一份参数再清状态：第一块音频直接落在目标增益上，不从 0 dB 淡进来。
         settings = EqSettings.NEUTRAL
@@ -135,6 +142,7 @@ class EqAudioProcessor(
     }
 
     override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
+        carrySize = 0
         // seek / 换源 / 单曲循环：把滤波器与混响的尾巴清掉，否则新位置会拖着旧信号。
         resetStages(primeGains = true)
     }
@@ -172,16 +180,22 @@ class EqAudioProcessor(
 
         val sampleCount = frames * channels
 
+        // A/B 对比：工作室里的 compare 打开时，输出同一时轴上的干声，湿声链保持运行（频谱照常显示）。
+        // 这样用户能在「调音后」与「原声」间无缝切换，判断调音到底有没有变好听。
+        val abCompare = settings.mastering.studio.scene.compare
         // 关掉、或打开但全平且没有音效：按字节直通，输出与输入逐字节相同。
         // 频谱是「看」不是「听」，直通时照样取样 —— 否则关了效果就看不到曲线，很奇怪。
+        //
+        // A/B 固定为原声时不能走这条无延迟的直通：开关最后一个实际 DSP（或把它调平）会让输出在
+        // 「无延迟」与「延迟 delayFrames 帧」之间切换，表现为头 delayFrames 帧静音、回平又跳 delayFrames 帧。
+        // 所以 A/B 开着时，平的/关掉的链也只输出等延迟的干声；干声环在任何状态下都保持最新。
         if (!settings.enabled || settings.isFlat()) {
             AudioPipelineTelemetry.noteDspPassthroughFrames(frames)
+            pushDry(used, exchange = abCompare)
             if (state.spectrumEnabled) {
                 ensureScratch(sampleCount)
                 pcm.decode(raw, sampleCount, scratch)
-                if (spectrum.push(scratch, 0, frames, channels)) {
-                    state.publishSpectrum(spectrum.bands)
-                }
+                pushSpectrumBlocks(frames)
             }
             val out = replaceOutputBuffer(used)
             out.put(raw, 0, used)
@@ -191,6 +205,8 @@ class EqAudioProcessor(
 
         ensureScratch(sampleCount)
         pcm.decode(raw, sampleCount, scratch)
+        // Keep both timelines warm. Only exchange the original bytes after decoding the wet input.
+        pushDry(used, exchange = abCompare)
         AudioPipelineTelemetry.noteDspFrames(frames)
 
         var frame = 0
@@ -204,8 +220,49 @@ class EqAudioProcessor(
         }
 
         val out = replaceOutputBuffer(used)
-        pcm.encode(scratch, sampleCount, out)
+        if (abCompare) {
+            out.put(raw, 0, used)
+            if (state.spectrumEnabled) {
+                pcm.decode(raw, sampleCount, scratch)
+                pushSpectrumBlocks(frames)
+            }
+        } else pcm.encode(scratch, sampleCount, out)
         out.flip()
+    }
+
+    /**
+     * 把 [scratch] 里已解码的前 [frames] 帧按 DSP 块长（128 帧，小于频谱的 48 ms 间隔）切开喂给频谱。
+     * 干声直通与 A/B 原声路径一次拿到整个 queueInput（可达数千帧），而一次 push 只会报告一帧新频谱；
+     * 切块后每 48 ms 的音频恰好发布一帧，与湿声链一致。
+     */
+    private fun pushSpectrumBlocks(frames: Int) {
+        var frame = 0
+        while (frame < frames) {
+            val block = minOf(DSP_BLOCK_FRAMES, frames - frame)
+            if (spectrum.push(scratch, frame * channels, block, channels)) state.publishSpectrum(spectrum.bands)
+            frame += block
+        }
+    }
+
+    /**
+     * 把本块的原始字节写进干声环（与湿声链的限幅延迟等长）。exchange 为真时把环里 delayFrames 帧之前的
+     * 字节换进 [raw]，输出的就是等延迟的原声；为假时只写环、[raw] 不变。
+     */
+    private fun pushDry(used: Int, exchange: Boolean) {
+        if (dryRing.isEmpty()) return
+        var pos = 0
+        while (pos < used) {
+            val n = minOf(used - pos, dryRing.size - dryIndex)
+            if (exchange) {
+                for (i in 0 until n) {
+                    val incomingByte = raw[pos + i]
+                    raw[pos + i] = dryRing[dryIndex + i]
+                    dryRing[dryIndex + i] = incomingByte
+                }
+            } else raw.copyInto(dryRing, dryIndex, pos, pos + n)
+            dryIndex = (dryIndex + n) % dryRing.size
+            pos += n
+        }
     }
 
     /** 只在本进程里读快照；seq 没变就什么都不做（每 128 帧调一次，必须便宜）。 */
@@ -214,13 +271,17 @@ class EqAudioProcessor(
         if (snapshot.seq == seenSeq) return
 
         val wasEnabled = settings.enabled
+        val wasBypassed = settings.isFlat()
+        val crossfeedWasActive = settings.stereo.enabled && settings.stereo.crossfeed > 0f
         val previousReverb = settings.reverb
         pullSettings(snapshot)
 
         // 开/关切换：清掉旧状态。开启时增益从 0 dB 滑上来（Web 也是滑入），不硬切。
-        if (wasEnabled != snapshot.enabled) {
-            resetStages(primeGains = !snapshot.enabled)
+        // 干声环不在这里清：它与开关无关，清了就是 A/B 固定原声时的一段静音。
+        if (wasEnabled != snapshot.enabled || (wasBypassed && !snapshot.isFlat())) {
+            resetStages(primeGains = !snapshot.enabled, clearDry = false)
         }
+        if (crossfeedWasActive && (!snapshot.stereo.enabled || snapshot.stereo.crossfeed <= 0f)) stereo.reset()
         // 混响从开到关：把尾巴留在缓冲里自然落下去，下一次打开不会突然接上旧房间。
         if (previousReverb.enabled && !snapshot.reverb.enabled) {
             reverb.reset()
@@ -248,7 +309,7 @@ class EqAudioProcessor(
         }
     }
 
-    private fun resetStages(primeGains: Boolean) {
+    private fun resetStages(primeGains: Boolean, clearDry: Boolean = true) {
         frontEq.reset()
         postEq.reset()
         highPass.reset()
@@ -258,9 +319,11 @@ class EqAudioProcessor(
         saturation.reset()
         stereo.reset()
         reverb.reset()
+        mastering.reset()
+        studio.reset()
         spectrum.reset()
         limiter.reset()
-        carrySize = 0
+        if (clearDry) { dryRing.fill(0); dryIndex = 0 }
         snapGainsNext = false
         applyPostEqNext = true
         if (primeGains) {
@@ -277,6 +340,9 @@ class EqAudioProcessor(
 
         val offset = startFrame * channels
         val count = blockFrames * channels
+
+        val compensate = settings.mastering.compensation.enabled
+        val reference = if (compensate) meanPower(scratch, offset, count) else 0f
 
         // ① 前置十段
         frontEq.update(smoothedGains, settings.mode, settings.q, smoothedGlobalGainDb)
@@ -325,11 +391,21 @@ class EqAudioProcessor(
         // ⑧ 混响：新参数优先，没开时退回 Web 的 space
         reverb.process(scratch, offset, blockFrames, channels, settings.space, settings.reverb)
 
+        // ⑧.5 母带台：混响之后、限幅之前。修复/塑造/增强十项，其中损失补偿按最终
+        //      输出电平把响度补回 —— 必须在这里（限幅之前），补完再由限幅兜住峰值。
+        mastering.process(scratch, offset, blockFrames, channels, settings.mastering)
+
+        // ⑧.6 工作室台：母带之后、限幅之前。响度标准化 / 修复 / 进阶效果 / 智能场景。
+        //      标准化缓慢调节 RMS 电平，同样在限幅前，补完由限幅兜峰值。
+        studio.process(scratch, offset, blockFrames, channels, settings.mastering.studio)
+
+        if (compensate) mastering.compensate(scratch, offset, blockFrames, channels, reference)
+
         // ⑨ 前瞻限幅：整条链最后一步。波形不弯，只乘一个慢变增益。
         limiter.process(scratch, offset, blockFrames, channels)
 
         // ⑩ 频谱（只读）
-        if (state.spectrumEnabled && spectrum.push(scratch, offset, blockFrames, channels)) {
+        if (!settings.mastering.studio.scene.compare && state.spectrumEnabled && spectrum.push(scratch, offset, blockFrames, channels)) {
             state.publishSpectrum(spectrum.bands)
         }
     }

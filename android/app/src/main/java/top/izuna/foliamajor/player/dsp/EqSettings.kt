@@ -209,6 +209,10 @@ class StereoSettings(
      * 人也听不出方向。
      */
     val bassMonoHz: Float = 0f,
+    /** 耳机交叉馈送 0 ~ 1：把对侧声道的一点点（延时 + 高频衰减）混进本侧。0 关。 */
+    val crossfeed: Float = 0f,
+    /** 旧协议范围 -180 ~ +180，映射到声像 -100% ~ +100%。 */
+    val rotation: Float = 0f,
 ) {
     companion object {
         val NEUTRAL = StereoSettings()
@@ -257,6 +261,9 @@ class PostEqSettings(
     }
 }
 
+// ——— 母带块（Mastering）：十项修复 / 塑造 / 增强处理，位于混响之后、限幅之前 ———
+// 每一项都是「一个滑杆一个效果」，内部参数固定，用户不必懂 DSP。缺席时按 NEUTRAL（全关）兜底。
+
 /**
  * 一次听感设置的不可变快照。
  *
@@ -284,6 +291,8 @@ class EqSettings(
     val stereo: StereoSettings = StereoSettings.NEUTRAL,
     val saturation: SaturationSettings = SaturationSettings.NEUTRAL,
     val limiter: LimiterSettings = LimiterSettings.NEUTRAL,
+    /** 母带块：十项修复 / 塑造 / 增强，缺席时全中性。 */
+    val mastering: MasteringSettings = MasteringSettings.NEUTRAL,
     val seq: Long = 0L,
 ) {
 
@@ -305,6 +314,7 @@ class EqSettings(
         stereo = stereo,
         saturation = saturation,
         limiter = limiter,
+        mastering = mastering,
         seq = next,
     )
 
@@ -320,6 +330,8 @@ class EqSettings(
         && !postEq.enabled
         && !stereo.enabled
         && !saturation.enabled
+        // 母带块十项全中性时，整条链仍是恒等变换。
+        && mastering.isNeutral()
         // 限幅器永远在链上，但它出厂时是「保护」而不是「效果」：只有用户动过
         // 天花板或释放时间，才认为整条链不再是恒等变换（否则动这两个滑杆会没反应）。
         && kotlin.math.abs(limiter.ceilingDb + 0.3f) < 0.05f
@@ -357,6 +369,8 @@ class EqSettings(
             put("enabled", stereo.enabled)
             put("width", stereo.width.toDouble())
             put("bassMonoHz", stereo.bassMonoHz.toDouble())
+            put("crossfeed", stereo.crossfeed.toDouble())
+            put("rotation", stereo.rotation.toDouble())
         }
         val saturationJson = JSONObject().apply {
             put("enabled", saturation.enabled)
@@ -383,6 +397,64 @@ class EqSettings(
             put("q", postEq.q.toDouble())
             put("globalGainDb", postEq.globalGainDb.toDouble())
         }
+        val m = mastering
+        val masteringJson = JSONObject().apply {
+            put("compensation", JSONObject().apply {
+                put("enabled", m.compensation.enabled); put("amount", m.compensation.amount.toDouble())
+                put("maxGainDb", m.compensation.maxGainDb.toDouble()); put("responseMs", m.compensation.responseMs.toDouble())
+            })
+            put("noiseGate", JSONObject().apply {
+                put("enabled", m.noiseGate.enabled); put("thresholdDb", m.noiseGate.thresholdDb.toDouble())
+                put("attackMs", m.noiseGate.attackMs.toDouble()); put("releaseMs", m.noiseGate.releaseMs.toDouble())
+                put("reductionDb", m.noiseGate.reductionDb.toDouble())
+            })
+            put("deEsser", JSONObject().apply {
+                put("enabled", m.deEsser.enabled); put("frequencyHz", m.deEsser.frequencyHz.toDouble())
+                put("thresholdDb", m.deEsser.thresholdDb.toDouble()); put("ratio", m.deEsser.ratio.toDouble())
+            })
+            put("dePlosive", JSONObject().apply {
+                put("enabled", m.dePlosive.enabled); put("reductionDb", m.dePlosive.reductionDb.toDouble())
+            })
+            put("bassBoost", JSONObject().apply {
+                put("enabled", m.bassBoost.enabled); put("gainDb", m.bassBoost.gainDb.toDouble())
+                put("frequencyHz", m.bassBoost.frequencyHz.toDouble())
+            })
+            put("exciter", JSONObject().apply {
+                put("enabled", m.exciter.enabled); put("amount", m.exciter.amount.toDouble()); put("mix", m.exciter.mix.toDouble())
+            })
+            put("transient", JSONObject().apply {
+                put("enabled", m.transient.enabled); put("amount", m.transient.amount.toDouble())
+            })
+            put("tone", JSONObject().apply {
+                put("air", m.tone.air.toDouble()); put("presence", m.tone.presence.toDouble())
+                put("warmth", m.tone.warmth.toDouble()); put("clarity", m.tone.clarity.toDouble())
+            })
+            put("loudness", JSONObject().apply {
+                put("enabled", m.loudness.enabled); put("amount", m.loudness.amount.toDouble())
+            })
+            put("balance", JSONObject().apply {
+                put("enabled", m.balance.enabled); put("value", m.balance.value.toDouble())
+            })
+            val s = m.studio
+            put("studio", JSONObject().apply {
+                put("normalize", JSONObject().apply {
+                    put("enabled", s.normalize.enabled); put("targetLufs", s.normalize.targetLufs.toDouble())
+                    put("truePeak", s.normalize.truePeak)
+                })
+                put("restore", JSONObject().apply {
+                    put("declick", s.restore.declick); put("hum", s.restore.hum)
+                    put("denoise", s.restore.denoise); put("amount", s.restore.amount.toDouble())
+                })
+                put("advanced", JSONObject().apply {
+                    put("dynamicEq", s.advanced.dynamicEq); put("dynamicEqFreq", s.advanced.dynamicEqFreq.toDouble())
+                    put("dynamicEqAmount", s.advanced.dynamicEqAmount.toDouble()); put("vocalBoost", s.advanced.vocalBoost.toDouble())
+                })
+                put("scene", JSONObject().apply {
+                    put("genre", s.scene.genre); put("compare", s.scene.compare)
+                    put("headphone", s.scene.headphone); put("amount", s.scene.amount.toDouble())
+                })
+            })
+        }
         return JSONObject().apply {
             put("version", version)
             put("enabled", enabled)
@@ -395,6 +467,7 @@ class EqSettings(
             put("stereo", stereoJson)
             put("saturation", saturationJson)
             put("limiter", limiterJson)
+            put("mastering", masteringJson)
             put("glideMs", glideMs)
         }
     }
@@ -462,6 +535,13 @@ class EqSettings(
             }
         }
 
+        /** 子对象可能整体缺席（optJSONObject 返回 null）：按兜底值读，绝不 NPE。 */
+        private fun JSONObject?.bool(key: String, fallback: Boolean): Boolean =
+            this?.optBoolean(key, fallback) ?: fallback
+
+        private fun JSONObject?.string(key: String, fallback: String): String =
+            this?.optString(key, fallback) ?: fallback
+
         /**
          * 从 Web 的 `NativeEqualizerPayload` 解析。
          *
@@ -489,6 +569,7 @@ class EqSettings(
                 stereo = readStereo(json.optJSONObject("stereo")),
                 saturation = readSaturation(json.optJSONObject("saturation")),
                 limiter = readLimiter(json.optJSONObject("limiter")),
+                mastering = readMastering(json.optJSONObject("mastering")),
             )
         }
 
@@ -516,6 +597,8 @@ class EqSettings(
                 width = json.number("width", 1.0, 0f, 2f),
                 // 0 = 关。老包没有这个字段，按「不改变原来听感」处理。
                 bassMonoHz = json.number("bassMonoHz", 0.0, 0f, 400f),
+                crossfeed = json.number("crossfeed", 0.0, 0f, 1f),
+                rotation = json.number("rotation", 0.0, -180f, 180f),
             )
         }
 
@@ -587,6 +670,112 @@ class EqSettings(
                 mode = readMode(json),
                 q = json.number("q", 0.85, EQ_MIN_Q, EQ_MAX_Q),
                 globalGainDb = json.number("globalGainDb", 0.0, -24f, 12f),
+            )
+        }
+
+        /** 母带块解析：任一项缺席就按 NEUTRAL，绝不抛异常。 */
+        private fun readMastering(json: JSONObject?): MasteringSettings {
+            if (json == null) return MasteringSettings.NEUTRAL
+            val comp = json.optJSONObject("compensation")
+            val gate = json.optJSONObject("noiseGate")
+            val deess = json.optJSONObject("deEsser")
+            val deplos = json.optJSONObject("dePlosive")
+            val bass = json.optJSONObject("bassBoost")
+            val exc = json.optJSONObject("exciter")
+            val tran = json.optJSONObject("transient")
+            val tone = json.optJSONObject("tone")
+            val loud = json.optJSONObject("loudness")
+            val bal = json.optJSONObject("balance")
+            val studio = readStudio(json.optJSONObject("studio"))
+            return MasteringSettings(
+                compensation = CompensationSettings(
+                    enabled = comp.bool("enabled", false),
+                    amount = comp.number("amount", 0.7, 0f, 1f),
+                    maxGainDb = comp.number("maxGainDb", 6.0, 0f, 12f),
+                    responseMs = comp.number("responseMs", 300.0, 50f, 800f),
+                ),
+                noiseGate = NoiseGateSettings(
+                    enabled = gate.bool("enabled", false),
+                    thresholdDb = gate.number("thresholdDb", -50.0, -80f, -20f),
+                    attackMs = gate.number("attackMs", 5.0, 0.5f, 50f),
+                    releaseMs = gate.number("releaseMs", 120.0, 20f, 600f),
+                    reductionDb = gate.number("reductionDb", -24.0, -60f, -6f),
+                ),
+                deEsser = DeEsserSettings(
+                    enabled = deess.bool("enabled", false),
+                    frequencyHz = deess.number("frequencyHz", 6500.0, 4000f, 10000f),
+                    thresholdDb = deess.number("thresholdDb", -24.0, -48f, 0f),
+                    ratio = deess.number("ratio", 4.0, 1f, 10f),
+                ),
+                dePlosive = DePlosiveSettings(
+                    enabled = deplos.bool("enabled", false),
+                    reductionDb = deplos.number("reductionDb", -12.0, -24f, 0f),
+                ),
+                bassBoost = BassBoostSettings(
+                    enabled = bass.bool("enabled", false),
+                    gainDb = bass.number("gainDb", 4.0, 0f, 12f),
+                    frequencyHz = bass.number("frequencyHz", 90.0, 40f, 250f),
+                ),
+                exciter = ExciterSettings(
+                    enabled = exc.bool("enabled", false),
+                    amount = exc.number("amount", 0.4, 0f, 1f),
+                    mix = exc.number("mix", 0.35, 0f, 1f),
+                ),
+                transient = TransientSettings(
+                    enabled = tran.bool("enabled", false),
+                    amount = tran.number("amount", 0.5, -1f, 1f),
+                ),
+                tone = ToneSettings(
+                    air = tone.number("air", 0.0, 0f, 6f),
+                    presence = tone.number("presence", 0.0, 0f, 6f),
+                    warmth = tone.number("warmth", 0.0, 0f, 6f),
+                    clarity = tone.number("clarity", 0.0, 0f, 6f),
+                ),
+                loudness = LoudnessSettings(
+                    enabled = loud.bool("enabled", false),
+                    amount = loud.number("amount", 0.5, 0f, 1f),
+                ),
+                balance = BalanceSettings(
+                    enabled = bal.bool("enabled", false),
+                    value = bal.number("value", 0.0, -1f, 1f),
+                ),
+                studio = studio,
+            )
+        }
+
+        /** 工作室块解析：任一项缺席按 NEUTRAL，字符串用白名单，绝不抛异常。 */
+        private fun readStudio(json: JSONObject?): StudioSettings {
+            if (json == null) return StudioSettings.NEUTRAL
+            val norm = json.optJSONObject("normalize")
+            val rest = json.optJSONObject("restore")
+            val adv = json.optJSONObject("advanced")
+            val scene = json.optJSONObject("scene")
+            val genres = setOf("flat", "pop", "rock", "jazz", "classical", "electronic", "vocal")
+            val headphones = setOf("flat", "airpods", "sony", "sennheiser")
+            return StudioSettings(
+                normalize = NormalizeSettings(
+                    enabled = norm.bool("enabled", false),
+                    targetLufs = norm.number("targetLufs", -14.0, -20f, -9f),
+                    truePeak = norm.bool("truePeak", true),
+                ),
+                restore = RestoreSettings(
+                    declick = rest.bool("declick", false),
+                    hum = rest.bool("hum", false),
+                    denoise = rest.bool("denoise", false),
+                    amount = rest.number("amount", 0.5, 0f, 1f),
+                ),
+                advanced = AdvancedSettings(
+                    dynamicEq = adv.bool("dynamicEq", false),
+                    dynamicEqFreq = adv.number("dynamicEqFreq", 180.0, 80f, 400f),
+                    dynamicEqAmount = adv.number("dynamicEqAmount", 4.0, 0f, 12f),
+                    vocalBoost = adv.number("vocalBoost", 0.0, 0f, 1f),
+                ),
+                scene = SceneSettings(
+                    genre = scene.string("genre", "flat").let { if (genres.contains(it)) it else "flat" },
+                    compare = scene.bool("compare", false),
+                    headphone = scene.string("headphone", "flat").let { if (headphones.contains(it)) it else "flat" },
+                    amount = scene.number("amount", 0.6, 0f, 1f),
+                ),
             )
         }
     }

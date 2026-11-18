@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { AI_NOT_CONFIGURED } from '@/services/aiCompletion';
 import { DEFAULT_BLOCKED_DIRECTOR_MODES } from '@/services/lyricDirector/state';
 import type { SongResult } from '@/types';
@@ -108,6 +108,8 @@ type CloudCall = {
 const loadDirector = async () => {
     vi.resetModules();
     const director = await import('@/services/lyricDirector/director');
+    // A pending song-change timer can otherwise persist this case’s settings into the next case.
+    onTestFinished(() => director.abortLyricDirectorRequests());
     const stage = await import('@/services/aiStage');
     const playback = await import('@/stores/usePlaybackStore');
     return { director, stage, playback };

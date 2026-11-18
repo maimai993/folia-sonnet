@@ -8,6 +8,7 @@ import { searchCommands } from './searchCommands';
 import { archiveCommands } from './archiveCommands';
 import { playbackCommands } from './playbackCommands';
 import { settingsCommands } from './settingsCommands';
+import { audioConsoleCommands } from './audioConsoleCommands';
 import { vocalCancelCommand } from './vocalCancelCommand';
 import { gyroTiltCommand } from './gyroTiltCommand';
 import { hifiCommands } from './hifiCommands';
@@ -92,6 +93,7 @@ export const ALL_COMMAND_PALETTE_COMMANDS: CommandPaletteCommand[] = assertExecu
     ...playbackCommands,
     ...settingsCommands,
     vocalCancelCommand,
+    ...audioConsoleCommands,
     gyroTiltCommand,
     ...hifiCommands,
     ...navigationCommands,

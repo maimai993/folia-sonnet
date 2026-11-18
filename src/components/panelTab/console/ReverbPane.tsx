@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    AUDIO_CONSOLE_BASS_MONO_MAX,
     AUDIO_CONSOLE_DAMPING_MAX,
     AUDIO_CONSOLE_DAMPING_MIN,
     AUDIO_CONSOLE_PRE_DELAY_MAX,
@@ -10,8 +9,6 @@ import {
     AUDIO_CONSOLE_REVERB_SHAPES,
     AUDIO_CONSOLE_ROOM_LEVEL_MAX,
     AUDIO_CONSOLE_ROOM_LEVEL_MIN,
-    AUDIO_CONSOLE_STEREO_WIDTH_MAX,
-    AUDIO_CONSOLE_STEREO_WIDTH_MIN,
     analyzeImpulseWav,
     type AudioConsoleImpulseProfile,
     type AudioConsoleReverbPreset,
@@ -20,10 +17,10 @@ import { useAudioConsoleStore } from '../../../stores/useAudioConsoleStore';
 import { Toggle } from '../../modal/settings/kit';
 import { Button, TextField } from '../../ui';
 import EqualizerSection from '../equalizer/EqualizerSection';
-import { ConsoleSlider, formatDb, formatHz, formatMs, formatPercent, formatSeconds } from './controls';
+import { ConsoleSlider, formatDb, formatMs, formatPercent, formatSeconds } from './controls';
 
 // src/components/panelTab/console/ReverbPane.tsx
-// 调音台的第三页：空间环境混响，外加声场宽度。
+// 调音台的第三页：空间环境混响。
 //
 // 与截图里那个「全局混音（Session 0）」的方案不同的地方：Folia 只处理**自己的**声音，
 // 没有系统级的音频会话可以接管，所以这里没有「跟随外部应用流」那一组开关。
@@ -54,9 +51,7 @@ const pickPreset = (profile: AudioConsoleImpulseProfile): AudioConsoleReverbPres
 const ReverbPane: React.FC = () => {
     const { t } = useTranslation();
     const reverb = useAudioConsoleStore(state => state.settings.reverb);
-    const stereo = useAudioConsoleStore(state => state.settings.stereo);
     const setReverb = useAudioConsoleStore(state => state.setReverb);
-    const setStereo = useAudioConsoleStore(state => state.setStereo);
     const fileRef = useRef<HTMLInputElement>(null);
     const [profile, setProfile] = useState<AudioConsoleImpulseProfile | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -192,50 +187,6 @@ const ReverbPane: React.FC = () => {
                                 onChange={tailOnPause => setReverb({ tailOnPause })}
                                 label={t('ui.consoleReverbTail')}
                             />
-                        </div>
-                    </div>
-                </div>
-            </EqualizerSection>
-
-            <EqualizerSection title={t('ui.consoleStereo')} hint={t('ui.consoleStereoHint')}>
-                <div className="space-y-3.5 px-4 pb-4 pt-3">
-                    <div className="flex items-center justify-between gap-3">
-                        <span className="text-[13px] leading-5">{t('ui.consoleStereoEnabled')}</span>
-                        <Toggle
-                            checked={stereo.enabled}
-                            onChange={enabled => setStereo({ enabled })}
-                            label={t('ui.consoleStereoEnabled')}
-                        />
-                    </div>
-                    <div className={stereo.enabled ? '' : 'opacity-40'}>
-                        <ConsoleSlider
-                            label={t('ui.consoleStereoWidth')}
-                            valueText={formatPercent(stereo.width)}
-                            value={stereo.width}
-                            min={AUDIO_CONSOLE_STEREO_WIDTH_MIN}
-                            max={AUDIO_CONSOLE_STEREO_WIDTH_MAX}
-                            decimals={2}
-                            disabled={!stereo.enabled}
-                            onChange={width => setStereo({ width })}
-                            onCommit={() => undefined}
-                        />
-                        <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoWidthHint')}</p>
-                        {/* 低频单声道：拖到最左边是关。它和宽度是两件事 —— 宽度管「侧向有多少」，
-                            这一根管「多低的频率不算侧向」。 */}
-                        <div className="mt-3">
-                            <ConsoleSlider
-                                label={t('ui.consoleStereoBassMono')}
-                                valueText={stereo.bassMonoHz < 1 ? t('ui.consoleOff') : formatHz(stereo.bassMonoHz)}
-                                value={stereo.bassMonoHz}
-                                min={0}
-                                max={AUDIO_CONSOLE_BASS_MONO_MAX}
-                                log
-                                decimals={0}
-                                disabled={!stereo.enabled}
-                                onChange={bassMonoHz => setStereo({ bassMonoHz })}
-                                onCommit={() => undefined}
-                            />
-                            <p className="mt-1.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleStereoBassMonoHint')}</p>
                         </div>
                     </div>
                 </div>

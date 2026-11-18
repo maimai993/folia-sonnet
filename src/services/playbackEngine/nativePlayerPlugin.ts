@@ -2,7 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 // src/services/playbackEngine/nativePlayerPlugin.ts
 //
-// 原生播放内核的 JS 侧声明（P1）。与 android/.../player/FoliaNativePlayerPlugin.java 一一对应：
+// 原生播放内核的 JS 侧声明（P1）。与 android/.../player/FoliaNativePlayerPlugin.kt 一一对应：
 // 方法名、事件名（`foliaNativePlayer`）、字段名改一处两边都要改。
 
 export type NativePlaybackEventType =
@@ -148,6 +148,10 @@ export type NativeEqualizerSettings = {
         width: number;
         /** 低频单声道：该频率以下的侧向归零；0 表示关。 */
         bassMonoHz: number;
+        /** 耳机交叉馈送 0 ~ 1。 */
+        crossfeed: number;
+        /** 保留旧协议范围 -180 ~ +180，对应声像 -100% ~ +100%。 */
+        rotation: number;
     };
     /** 饱和 / 染色：给信号加谐波，挂在后置 EQ 之后、立体声之前。 */
     saturation: {
@@ -167,6 +171,77 @@ export type NativeEqualizerSettings = {
         ceilingDb: number;
         /** 回落时间 40 ~ 500 ms。 */
         releaseMs: number;
+    };
+    /**
+     * 母带块：损失补偿 + 九项修复/塑造/增强效果。可缺省，原生对缺席的块按中性（全关）处理。
+     * 协议仍是 v2 —— 这是增量扩展字段，老包不带也能照常播放。
+     */
+    mastering?: {
+        compensation: {
+            enabled: boolean;
+            /** 补偿强度 0 ~ 1。 */
+            amount: number;
+            /** 最大补偿增益 0 ~ 12 dB。 */
+            maxGainDb: number;
+            /** AGC 响应时间 50 ~ 800 ms。 */
+            responseMs: number;
+        };
+        noiseGate: {
+            enabled: boolean;
+            thresholdDb: number;
+            attackMs: number;
+            releaseMs: number;
+            reductionDb: number;
+        };
+        deEsser: {
+            enabled: boolean;
+            frequencyHz: number;
+            thresholdDb: number;
+            ratio: number;
+        };
+        dePlosive: {
+            enabled: boolean;
+            reductionDb: number;
+        };
+        bassBoost: {
+            enabled: boolean;
+            gainDb: number;
+            frequencyHz: number;
+        };
+        exciter: {
+            enabled: boolean;
+            amount: number;
+            mix: number;
+        };
+        transient: {
+            enabled: boolean;
+            amount: number;
+        };
+        /** 音色塑造四旋钮，0 ~ 6 dB。 */
+        tone: {
+            air: number;
+            presence: number;
+            warmth: number;
+            clarity: number;
+        };
+        loudness: {
+            enabled: boolean;
+            amount: number;
+        };
+        balance: {
+            enabled: boolean;
+            value: number;
+        };
+        /** 工作室块：四大方向 12 项，可缺省，原生按中性兜底。 */
+        studio?: {
+            normalize: { enabled: boolean; targetLufs: number; truePeak: boolean };
+            restore: { declick: boolean; hum: boolean; denoise: boolean; amount: number };
+            advanced: {
+                dynamicEq: boolean; dynamicEqFreq: number; dynamicEqAmount: number;
+                vocalBoost: number;
+            };
+            scene: { genre: string; compare: boolean; headphone: string; amount: number };
+        };
     };
     /** 增益滑入时间（毫秒）：用户改动 15，mod 曲线 250（对齐 Web 的 setTargetAtTime 常数）。 */
     glideMs: number;

@@ -29,7 +29,8 @@ class LookaheadLimiter {
 
     private var sampleRate = 0
     private var channels = 0
-    private var delayFrames = 0
+    var delayFrames = 0
+        private set
     private var ring = FloatArray(0)
     private var writeIndex = 0
     private var gain = 1f
