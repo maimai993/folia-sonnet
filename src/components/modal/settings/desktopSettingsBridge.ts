@@ -15,7 +15,7 @@ export const canReadDesktopSettings = (): boolean => {
     if (typeof window === 'undefined') {
         return false;
     }
-    const bridge = (window as typeof window & { electron?: Record<string, unknown> }).electron;
+    const bridge = window.electron;
     if (!bridge) {
         return false;
     }

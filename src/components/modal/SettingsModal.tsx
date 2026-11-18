@@ -443,8 +443,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     // window again. Read together and applied as one transition, they render it once, between frames.
     // Together also because the key's status is read from the settings and their "loaded" at once.
     useEffect(() => {
-        const electron = (window as any).electron;
-        if (!canReadDesktopSettings()) {
+        const electron = window.electron;
+        if (!canReadDesktopSettings()
+            || typeof electron?.getSettings !== 'function'
+            || typeof electron.getCacheDirectory !== 'function') {
             return;
         }
         setIsElectron(true);
@@ -476,10 +478,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     setCacheDirectory(cacheDirectoryResult.path);
                     setCacheDirectoryIsDefault(cacheDirectoryResult.isDefault);
                 }
-                if (electron.getUpdateStatus && updateAnswer.status === 'fulfilled') {
+                if (typeof electron.getUpdateStatus === 'function' && updateAnswer.status === 'fulfilled') {
                     setUpdateStatus(updateAnswer.value as ElectronUpdateStatus);
                 }
-                if (electron.getDiscordPresenceStatus && discordAnswer.status === 'fulfilled') {
+                if (typeof electron.getDiscordPresenceStatus === 'function' && discordAnswer.status === 'fulfilled') {
                     setDiscordPresenceStatus(discordAnswer.value as ElectronDiscordPresenceStatus);
                 }
             });
@@ -534,7 +536,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     };
 
     const saveElectronSettings = async () => {
-        if (hasElectronBridge() && typeof (window as any).electron?.saveSettings === 'function') {
+        const electron = window.electron;
+        if (hasElectronBridge() && typeof electron?.saveSettings === 'function') {
             // What is saved is the number that was typed, so "0,7" is kept as 0.7 and the main process
             // reads it as that; anything that is not a number from 0 to 2 falls back to the default.
             const configuredTemperature = parseNumberText(electronSettings.OPENAI_API_TEMPERATURE);
@@ -547,26 +550,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             const geminiKeyDraft = electronSettings.GEMINI_API_KEY.trim();
             const openaiKeyDraft = electronSettings.OPENAI_API_KEY.trim();
             if (geminiKeyDraft) {
-                await (window as any).electron.saveSettings('GEMINI_API_KEY', geminiKeyDraft);
+                await electron.saveSettings('GEMINI_API_KEY', geminiKeyDraft);
             }
             // fork：Gemini 的自建 / 反代地址，存进设置文件后主进程按它发请求。
-            await (window as any).electron.saveSettings('GEMINI_API_URL', electronSettings.GEMINI_API_URL.trim());
+            await electron.saveSettings('GEMINI_API_URL', electronSettings.GEMINI_API_URL.trim());
             // URL before key: a new OpenAI-compatible key is bound to the URL saved at that moment.
-            await (window as any).electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
+            await electron.saveSettings('OPENAI_API_URL', electronSettings.OPENAI_API_URL);
             if (openaiKeyDraft) {
-                await (window as any).electron.saveSettings('OPENAI_API_KEY', openaiKeyDraft);
+                await electron.saveSettings('OPENAI_API_KEY', openaiKeyDraft);
             }
-            await (window as any).electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
-            await (window as any).electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
-            await (window as any).electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM);
-            await (window as any).electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
-            await (window as any).electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
-            await (window as any).electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
-            await (window as any).electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
-            await (window as any).electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
-            await (window as any).electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
-            await (window as any).electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
-            const savedSettings = await (window as any).electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
+            await electron.saveSettings('OPENAI_API_MODEL', electronSettings.OPENAI_API_MODEL);
+            await electron.saveSettings('OPENAI_API_TEMPERATURE', temperature);
+            await electron.saveSettings('OPENAI_API_STREAM', electronSettings.OPENAI_API_STREAM);
+            await electron.saveSettings('GEMINI_API_MODEL', electronSettings.GEMINI_API_MODEL);
+            await electron.saveSettings('AI_PROVIDER_PRESET', electronSettings.AI_PROVIDER_PRESET);
+            await electron.saveSettings('AI_PROVIDER', electronSettings.AI_PROVIDER);
+            await electron.saveSettings('USE_SYSTEM_PROXY_FOR_AI', electronSettings.USE_SYSTEM_PROXY_FOR_AI);
+            await electron.saveSettings('ENABLE_UPDATE_CHECK', electronSettings.ENABLE_UPDATE_CHECK);
+            await electron.saveSettings('ENABLE_AUTO_UPDATE', electronSettings.ENABLE_AUTO_UPDATE);
+            await electron.saveSettings('UPDATE_CHANNEL', electronSettings.UPDATE_CHANNEL);
+            const savedSettings = await electron.saveSettings('DISCORD_RICH_PRESENCE_ENABLED', electronSettings.DISCORD_RICH_PRESENCE_ENABLED);
             const configuredKeys = savedSettings?.AI_API_KEYS_CONFIGURED;
             setSavedElectronAiCredentials({
                 AI_PROVIDER: electronSettings.AI_PROVIDER === 'openai' ? 'openai' : 'gemini',
@@ -810,7 +813,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
 
     const handleChooseCacheDirectory = async () => {
-        const bridge = (window as any).electron;
+        const bridge = window.electron;
         if (!hasElectronBridge() || typeof bridge?.chooseCacheDirectory !== 'function') {
             return;
         }

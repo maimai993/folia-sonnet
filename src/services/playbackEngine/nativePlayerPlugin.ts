@@ -251,10 +251,10 @@ interface FoliaNativePlayerPlugin {
         /** 这一次装源的令牌（`w:` 开头）；原生随事件回传，Web 侧据此丢旧 source 的迟到事件。 */
         sourceToken?: string | null;
     }): Promise<NativeCommandResult>;
-    play(): Promise<NativeCommandResult | void>;
-    pause(): Promise<NativeCommandResult | void>;
-    stop(): Promise<NativeCommandResult | void>;
-    seek(options: { positionMs: number }): Promise<NativeCommandResult | void>;
+    play(): Promise<NativeCommandResult | undefined>;
+    pause(): Promise<NativeCommandResult | undefined>;
+    stop(): Promise<NativeCommandResult | undefined>;
+    seek(options: { positionMs: number }): Promise<NativeCommandResult | undefined>;
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;

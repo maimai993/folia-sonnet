@@ -10,7 +10,6 @@ import { resolveTrackAlbumLink, resolveTrackArtistLinks } from '../../core/share
 import { useCollectionResourceState } from '../../core/collection/resource/useCollectionResourceState';
 import { useCollectionView } from '../../core/collection/useCollectionView';
 import { useTrackSorting } from '../../core/collection/useTrackSorting';
-import type { SongSortField } from '../../../utils/songSorting';
 import type { LocalSongFolderSortField } from '../../../utils/localSongSorting';
 import { useCollectionActions } from '../../core/collection/mutations/useCollectionActions';
 import { useCollectionMutationSnapshot } from '../../core/collection/mutations/useCollectionMutations';
@@ -201,7 +200,7 @@ const BravaisCollection: React.FC<LibraryCollectionSurfaceProps> = ({
                 ? (sorting.field as LocalSongFolderSortField)
                 : 'fileName',
             direction: sorting.direction === 'desc' ? 'desc' : 'asc',
-            setField: field => sorting.setField(field as SongSortField),
+            setField: field => sorting.setField(field),
             setDirection: sorting.setDirection,
         },
         trackByKey,

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SongResult } from '../../../src/types';
 import { resolveProxiedSongCover } from '../../../src/services/onlineMusic/onlineCoverFallback';
+import type * as OnlineCoverFallback from '../../../src/services/onlineMusic/onlineCoverFallback';
 import {
     buildQueueMirrorEntries,
     buildQueueMirrorEntry,
@@ -11,7 +12,7 @@ import { getPlaybackSongKey } from '../../../src/utils/appPlaybackGuards';
 
 // 封面兜底会把渲染过的封面换成 WebView 内的 blob: 地址；这里只需要控制它的返回值。
 vi.mock('../../../src/services/onlineMusic/onlineCoverFallback', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../../src/services/onlineMusic/onlineCoverFallback')>()),
+    ...(await importOriginal<typeof OnlineCoverFallback>()),
     resolveProxiedSongCover: vi.fn((_song: unknown, url: string) => url),
     requestSongCoverFallback: vi.fn(),
 }));

@@ -627,7 +627,7 @@ export class TemperaPixiRuntime {
             width,
             height,
             tint,
-            off: Boolean(this.options.staticMode),
+            off: this.options.staticMode,
         });
     }
 
