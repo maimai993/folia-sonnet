@@ -34,7 +34,11 @@ export const useRandomPool = () => {
     return {
         options,
         modes: knownModes,
-        setModes: (next: readonly VisualizerMode[]) => setModes(next),
+        /*
+         * 把注册表查询一起递下去（#414）：store 那边拿不到注册表，不给它这个判据就只能
+         * 按内置白名单归一化，勾上的 mod 样式会被过滤掉、表现为「点了没反应」。
+         */
+        setModes: (next: readonly VisualizerMode[]) => setModes(next, isRegisteredMode),
         /** The saved selection names every registered style. */
         allOn: knownModes.length === VISUALIZER_REGISTRY.filter(entry => !entry.hiddenFromPickers).length,
         /**

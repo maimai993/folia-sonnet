@@ -76,7 +76,17 @@ const EXPANDED_SIZE = EXPANSION_SPAN.cols * (CELL_SIZE + GAP) - GAP;
 // under the wall's buttons. A section the explore wall is taken to has its heading put there.
 const CAMERA_HOME = { x: 34, y: 80 };
 
-const getScale = (width: number) => width < 640 ? 0.52 : width < 1100 ? 0.64 : 0.76;
+/*
+ * 墙的基准倍率：按视口宽度分档，但**手机横过来那一档要单独看**。
+ *
+ * 只看宽度时，手机横屏的宽（700~900）落进桌面档，倍率从竖屏的 0.52 跳到 0.64 —— 磁贴大了 23%。
+ * 更显眼的是相机能看到的世界范围 = 视口 ÷ 倍率：横屏高度只剩 360，范围一下小了一大截，
+ * 于是「磁贴变大、范围变小、得多拖几下才看全」。按短边压一档即可。
+ */
+const getScale = (width: number, height: number) => {
+    const byWidth = width < 640 ? 0.52 : width < 1100 ? 0.64 : 0.76;
+    return Math.min(width, height) < 480 ? Math.min(byWidth, 0.52) : byWidth;
+};
 
 const getWorldBounds = (camera: LatticeCamera, viewport: { width: number; height: number }): Bounds => ({
     left: -camera.x / camera.scale,
@@ -128,16 +138,19 @@ export default function PosterWall({
     const [cameraScale, setCameraScale] = useState(() => cameraRef.current.scale);
     const reducedMotion = useReducedMotionFor('lattice');
     // 从资料库墙翻牌交接进来（或淡入交叉）：入场由交接代替，不跑抬起落下的波次。
-    const entranceSuppressed = useWallHandoffStore(state => resolveWallHandoffRole(state.session, 'lattice') === 'in');
+    const handoffRole = useWallHandoffStore(state => resolveWallHandoffRole(state.session, 'lattice'));
+    const entranceSuppressed = handoffRole === 'in';
+    // 接安卓返回的那一面墙：交接期间两面墙都在场，出场那一程（role 'out'）归下面的资料库墙，别抢同一次返回。
+    const backEnabled = handoffRole === null || handoffRole === 'in';
     const autoFocusOnSongChange = useLatticeSettingsStore(state => state.autoFocusOnSongChange);
-    /*
-     * 墙面缩放（#409）。基准档位是 getScale(视口宽度)，用户双指捏合 / Ctrl+滚轮在它上下改倍率；
-     * 倍率存在 store 的 wallZoom 里（跨会话保留），手势停下才写回 —— 缩放途中每帧都写会让整面墙重渲染。
-     */
+    // 用户的缩放倍率（双指捏合 / Ctrl+滚轮，与 bravais 墙共用一份）。缩放途中不经过这里 ——
+    // 那时 useWallPointerPan 直接改 cameraRef 的 scale，手势停下来才把倍率交回来。
     const wallZoom = useLatticeSettingsStore(state => state.wallZoom);
-    /** 上一次生效的尺寸档位（getScale 那三档）：只有它变了才重设 scale，见下面 ResizeObserver。 */
-    const lastBaseScaleRef = useRef<number | null>(null);
     const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
+    /** 基准档位（只跟视口宽度走）：倍率的上下限是它的倍数，缩放途中读它夹范围。 */
+    const baseScaleRef = useRef(getScale(viewportRef.current.width, viewportRef.current.height));
+    const wallZoomRef = useRef(wallZoom);
+    wallZoomRef.current = wallZoom;
     const devicePixelRatio = useDevicePixelRatio();
     const pixelScale = cameraScale * devicePixelRatio;
 
@@ -179,18 +192,9 @@ export default function PosterWall({
         if (!container) return;
         const observer = new ResizeObserver(([entry]) => {
             viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
-            /*
-             * 只在这个尺寸档位**变了**的时候才重设 scale（#409）。
-             *
-             * 以前这里无条件写 scale = getScale(宽度)：任何一次 ResizeObserver 回调都会把
-             * 相机倍率拉回基准 —— 双指缩放刚改完的 scale 立刻被覆盖，看起来就是「捏合没用」。
-             * 现在只把「基准档位 × 倍率」当作新档位生效的初值，用户自己的缩放交给手势维护。
-             */
-            const baseScale = getScale(entry.contentRect.width);
-            const scale = baseScale === lastBaseScaleRef.current
-                ? cameraRef.current.scale
-                : baseScale * wallZoom;
-            lastBaseScaleRef.current = baseScale;
+            const base = getScale(entry.contentRect.width, entry.contentRect.height);
+            baseScaleRef.current = base;
+            const scale = base * wallZoomRef.current;
             applyCamera({ ...cameraRef.current, scale }, true);
             setCameraScale(previous => previous === scale ? previous : scale);
             setMeasured(true);
@@ -202,6 +206,16 @@ export default function PosterWall({
             frameRef.current = null;
         };
     }, [applyCamera]);
+
+    // 捏合落定（或别处改了倍率）：把档位 × 倍率写回相机，并按新的倍率重取封面档。
+    // 缩放途中不走这里 —— 那一段是 useWallPointerPan 直接改 cameraRef，不按帧 setState。
+    useEffect(() => {
+        if (!measured) return;
+        const scale = baseScaleRef.current * wallZoom;
+        if (Math.abs(scale - cameraRef.current.scale) < 1e-4) return;
+        applyCamera({ ...cameraRef.current, scale }, true);
+        setCameraScale(previous => previous === scale ? previous : scale);
+    }, [applyCamera, measured, wallZoom]);
 
     // Widens the culled region to cover a pan's destination the moment it starts. Held arrow
     // keys interrupt each pan before it settles, so bounds cannot wait for the animation to end.
@@ -307,13 +321,8 @@ export default function PosterWall({
          * 所以窄屏 / 宽屏上「能缩到多小 / 多大」是同一套相对量。
          */
         zoom: {
-            /*
-             * 基准档位必须和「相机 scale 是怎么算出来的」用同一个来源（#409）：这里读
-             * viewportRef，而相机那一侧读的是 ResizeObserver 给的 contentRect 宽度，
-             * 两者在首帧前会差一档（viewportRef 还是 0 时退回 window.innerWidth），
-             * 算出来的倍率就会偏 —— 松手后镜头跳一下正是这个偏量在生效。
-             */
-            baseScale: () => getScale(viewportRef.current.width || window.innerWidth),
+            // 基准档位只跟视口宽度走：cameraRef 里的 scale 已经含了倍率，不能拿它当基准。
+            baseScale: () => baseScaleRef.current,
             minFactor: WALL_ZOOM_MIN,
             maxFactor: WALL_ZOOM_MAX,
             onZoomEnd: factor => setWallZoom(factor),
@@ -383,8 +392,8 @@ export default function PosterWall({
         tiles,
         worldRef,
         onBack,
+        backEnabled,
     });
-
     // Permanent identities for the two handlers every poster receives. An arrow per poster is
     // re-created on each wall render, which alone would defeat LatticePoster's memo and put all
     // 50+ poster bodies back on the critical path of every unrelated App re-render.

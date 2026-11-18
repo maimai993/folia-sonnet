@@ -29,7 +29,7 @@ import { setStatusMessage } from './useStatusMessageStore';
 import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress, WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, readStoredWallpaperVideoRotation } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 import { RANDOM_VISUALIZER_MODES_STORAGE_KEY, readStoredRandomVisualizerModes } from './visualizerSettingsPersistence';
-import { normalizeRandomVisualizerModes, type RandomVisualizerMode } from '../utils/randomVisualizerModes';
+import { normalizeRandomVisualizerModes, normalizeRandomVisualizerModesWith, type RandomVisualizerMode } from '../utils/randomVisualizerModes';
 
 export type SetVisualizerModeOptions = { notify?: boolean; preserveRandom?: boolean };
 
@@ -68,7 +68,11 @@ type OwnSettingsState = {
     renderPixelRatio: RenderPixelRatio | null;
     visualizerMode: VisualizerMode;
     randomVisualizerModePerSong: boolean;
-    randomVisualizerModes: RandomVisualizerMode[];
+    /**
+     * 随机池。**可以含 mod 样式**（mod:<modId>:<id>），所以这里是 VisualizerMode
+     * 而不是 RandomVisualizerMode —— 后者只是内置那几个的字面量联合（#414）。
+     */
+    randomVisualizerModes: VisualizerMode[];
     /** Snap animated glow blur radii to a bounded set. See components/visualizer/wordGlow.ts. */
     glowBlurQuantize: boolean;
     /**
@@ -91,7 +95,11 @@ type OwnSettingsState = {
     handleSetRenderPixelRatio: (limit: RenderPixelRatio | null) => void;
     handleSetVisualizerMode: (mode: VisualizerMode, options?: SetVisualizerModeOptions) => void;
     handleToggleRandomVisualizerModePerSong: (enable: boolean, options?: { notify?: boolean }) => void;
-    handleSetRandomVisualizerModes: (modes: readonly VisualizerMode[]) => void;
+    /**
+     * 设定随机池。isKnown 给了就按它判断哪些 id 有效（选择器会传入注册表查询，
+     * 让 mod 样式也能进池）；不给则只认内置白名单（存储恢复 / 配置导入这类拿不到注册表的地方）。
+     */
+    handleSetRandomVisualizerModes: (modes: readonly VisualizerMode[], isKnown?: (mode: string) => boolean) => void;
     handleToggleGlowBlurQuantize: (enable: boolean) => void;
     handleSetKeywordColoringEnabled: (enable: boolean) => void;
     handleSetSmartBeat: (patch: SmartBeatPatch) => void;
@@ -459,8 +467,18 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
             });
         }
     },
-    handleSetRandomVisualizerModes: (modes) => {
-        const next = normalizeRandomVisualizerModes(modes);
+    handleSetRandomVisualizerModes: (modes, isKnown) => {
+        /*
+         * 认不认 mod 样式由调用方说了算（#414）。
+         *
+         * 这里以前固定走 normalizeRandomVisualizerModes —— 那个版本**只认内置白名单**
+         * （它给 store 初始化、同步 schema 这类拿不到注册表的地方用）。于是选择器里勾一个
+         * mod 样式，传进来的池子被过滤回内置，「点了没反应」。
+         * 选择器手上有注册表，会把 isKnown 递进来；没递（存储恢复、配置导入）就仍按内置归一化。
+         */
+        const next = isKnown
+            ? normalizeRandomVisualizerModesWith(modes, isKnown)
+            : normalizeRandomVisualizerModes(modes);
         setStoredString(RANDOM_VISUALIZER_MODES_STORAGE_KEY, JSON.stringify(next));
         set({ randomVisualizerModes: next });
     },
