@@ -133,9 +133,9 @@ const isWebViewOnlyUrl = (url: string): boolean => /^(blob:|data:)/i.test(url);
  * 换成的回环代理地址，原生是下得动的），是 `blob:` / `data:` 就退回 provider 的原始地址，再不行就留空。
  */
 const nativeMirrorArtworkUrl = (song: SongResult): string => {
-    const ui = String(getSongCoverUrl(song) || '').trim();
+    const ui = (getSongCoverUrl(song) || '').trim();
     if (ui && !isWebViewOnlyUrl(ui)) return ui;
-    const raw = String(getProviderSongMetadata(song).coverUrl || '').trim();
+    const raw = (getProviderSongMetadata(song).coverUrl || '').trim();
     return raw && !isWebViewOnlyUrl(raw) ? raw : '';
 };
 

@@ -16,7 +16,7 @@ const harness = vi.hoisted(() => {
         play: vi.fn(async () => undefined),
         pause: vi.fn(async () => undefined),
         stop: vi.fn(async () => undefined),
-        seek: vi.fn(async (_positionMs?: number) => undefined),
+        seek: vi.fn<(positionMs?: number) => Promise<undefined>>(async () => undefined),
         setVolume: vi.fn(async () => undefined),
         setSpeed: vi.fn(async () => undefined),
         getSnapshot: vi.fn(async () => ({ positionMs: 0, durationMs: 0, playing: false })),

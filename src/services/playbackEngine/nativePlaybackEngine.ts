@@ -313,7 +313,7 @@ class NativePlaybackEngine {
          */
         this.sourceReadyPromise = sourceReady.then(
             () => { },
-            error => {
+            (error: unknown) => {
                 if (sourceReadyGeneration === this.sourceReadyGeneration) this.sourceReadyFailure = error;
             },
         );
@@ -353,7 +353,7 @@ class NativePlaybackEngine {
                     }),
                     () => this.currentUrl === retryUrl,
                 );
-            })().catch(error => {
+            })().catch((error: unknown) => {
                 this.sourceReadyFailure = error;
             });
         }

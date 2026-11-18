@@ -1,3 +1,4 @@
+import type * as Pixi from 'pixi.js';
 import { BEAT_EFFECT_IDS } from '../../../services/beatFx/beatEffects';
 import { getBeatEffectStrength, getBeatFxHeard } from '../../../services/beatFx/beatFxLive';
 import { getMusicEnvelope, sampleMusicEnvelope } from '../../../services/analysis/musicEnvelope';
@@ -23,7 +24,7 @@ import { musicEnvelopes } from '../../../stores/motionSignals';
 // 与 TemperaInkFlash 同一套做法：每个效果 0..2 的强度各自缩放，四个都为 0 时整层隐藏，
 // 不做任何计算。每帧由「当前播放时间」直接决定，不累积状态，拖进度条后画面一致。
 
-type PixiModule = typeof import('pixi.js');
+type PixiModule = typeof Pixi;
 
 /** Screen-space uv in the shader: vPosition / uSize. */
 const vertex = `#version 300 es
@@ -106,17 +107,17 @@ export interface TemperaMusicMotionFrame {
 }
 
 export class TemperaMusicMotion {
-    readonly container: import('pixi.js').Container;
-    private geometry: import('pixi.js').MeshGeometry | null = null;
-    private mesh: import('pixi.js').Mesh<import('pixi.js').MeshGeometry, import('pixi.js').Shader> | null = null;
-    private shader: import('pixi.js').Shader | null = null;
+    readonly container: Pixi.Container;
+    private geometry: Pixi.MeshGeometry | null = null;
+    private mesh: Pixi.Mesh<Pixi.MeshGeometry, Pixi.Shader> | null = null;
+    private shader: Pixi.Shader | null = null;
     private size = { width: 0, height: 0 };
     private readonly levels = new Float32Array(4);
     private readonly strengths = new Float32Array(4);
     private readonly tint = new Float32Array(3);
     private readonly uSize = new Float32Array(2);
     /** 标量走 Pixi 的 uniforms 表（`uniform1f` 只认 number，塞 Float32Array 进去会变成 NaN）。 */
-    private motionUniforms: import('pixi.js').UniformGroup | null = null;
+    private motionUniforms: Pixi.UniformGroup | null = null;
     private tintKey = '';
 
     constructor(private readonly pixi: PixiModule) {
@@ -151,11 +152,11 @@ export class TemperaMusicMotion {
     }
 
     private resize(width: number, height: number) {
-        if (this.size.width === width && this.size.height === height) return;
+        if (!this.geometry || (this.size.width === width && this.size.height === height)) return;
         this.size = { width, height };
         this.uSize[0] = width;
         this.uSize[1] = height;
-        this.geometry!.positions = new Float32Array([0, 0, width, 0, width, height, 0, height]);
+        this.geometry.positions = new Float32Array([0, 0, width, 0, width, height, 0, height]);
     }
 
     update(frame: TemperaMusicMotionFrame) {

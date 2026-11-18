@@ -217,7 +217,7 @@ export const useAppPlaybackActions = (model: Input) => {
             }
             void publishStagePlayerPlaybackUpdate();
         }
-    }, [publishStagePlayerPlaybackUpdate]);
+    }, [audioRef, nativeTakesRef, publishStagePlayerPlaybackUpdate, seekDuringTransitionRef, setPlayerState]);
     seekMainAudioRef.current = seekMainAudio;
 
     const handleMonetLyricLineSeek = useCallback((lyricTimeSec: number) => {

@@ -57,6 +57,8 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
      * 这层替他做主就是把他的背景改了。
      */
     const isInjected = Boolean(stripInjectPrefix(injectedUrl));
+    const isInjectedRef = useRef(isInjected);
+    isInjectedRef.current = isInjected;
     const objectFit = isInjected ? 'contain' : fit;
     /*
      * 亮度同理：这层的不透明度是「用户给自己的背景调的透明感」（别的层要从它下面透出来）。
@@ -153,7 +155,7 @@ const VideoLayer: React.FC<VideoLayerProps> = ({ paused }) => {
             const error = video.error;
             console.warn('[VideoLayer] the video failed to load', {
                 source,
-                injected: Boolean(stripInjectPrefix(injectedUrl)),
+                injected: isInjectedRef.current,
                 code: error?.code ?? null,
                 message: error?.message ?? '',
             });

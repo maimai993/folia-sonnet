@@ -187,7 +187,7 @@ const startRun = (
      */
     const handlePartial = (beats: NativeBeat[], seconds: number) => {
         if (beats.length) {
-            void storeBeatGrid(key, nativeGrid(beats), seconds).catch((error) => {
+            void storeBeatGrid(key, nativeGrid(beats), seconds).catch((error: unknown) => {
                 console.warn('[BeatGrid] storing a partial beat list failed', error);
             });
         }
@@ -318,7 +318,7 @@ export const getTrackBeatGrid = async (
              * 不 await 那次补齐 —— 用户要的是「立刻有拍点」，补齐只把表接长，
              * 末尾与已有的重叠，时钟不会因此跳。
              */
-            void startRun(key, readMid, options).catch((error) => {
+            void startRun(key, readMid, options).catch((error: unknown) => {
                 console.warn('[BeatGrid] finishing a stored partial beat list failed', error);
             });
         }

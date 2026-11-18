@@ -6,7 +6,7 @@ import { handleSetVisualizerMode } from '../../../stores/useVisualizerSettingsSt
 import { handleSetVolume, handleToggleMute, setAudioQuality } from '../../../stores/useAudioSettingsStore';
 import { openSettings } from '../../../stores/useSettingsModalStore';
 import { handleToggleCoverColorBg } from '../../../stores/useThemeSettingsStore';
-import { useBilibiliMvStore, type MvVideoQuality } from '../../../stores/useBilibiliMvStore';
+import { useBilibiliMvStore } from '../../../stores/useBilibiliMvStore';
 
 // src/components/app/player-panel/buildPlayerPanelModel.ts
 
@@ -293,7 +293,7 @@ export const buildPlayerPanelModel = ({
             onAudioQualityChange: quality => {
                 setAudioQuality(quality);
                 if (quality === 'standard' || quality === 'high' || quality === 'ultra') {
-                    useBilibiliMvStore.getState().setQuality(quality as MvVideoQuality);
+                    useBilibiliMvStore.getState().setQuality(quality);
                 } else {
                     useBilibiliMvStore.getState().setQuality('ultra');
                 }
