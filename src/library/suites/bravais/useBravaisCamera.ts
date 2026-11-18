@@ -11,7 +11,8 @@ import {
     type WallViewCenter,
 } from '../../../components/wall/wallView';
 import type { WallCameraRange } from '../../../components/wall/finiteWall';
-import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN } from './bravaisConstants';
+import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN, getBravaisScale } from './bravaisConstants';
+import { useLatticeSettingsStore, WALL_ZOOM_MAX, WALL_ZOOM_MIN } from '../../../stores/useLatticeSettingsStore';
 import { rubberBand } from './bravaisFiniteWall';
 import { computeBravaisFrame, getTiltReach } from './bravaisFrame';
 import type { BravaisFrameState } from './useBravaisFrame';
@@ -105,6 +106,8 @@ export const useBravaisCamera = ({
     fieldRef: RefObject<HTMLDivElement | null>;
     reducedMotion: boolean;
 }) => {
+    // 缩放倍率交回 store（与播放页磁贴墙共用一份，跨会话保留）。
+    const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
     // 已裁剪（渲染了 slot）的可见范围；墙渲染它外扩 overscan 的 slot。
     const [bounds, setBounds] = useState<Bounds | null>(null);
     const boundsRef = useRef<Bounds | null>(null);
@@ -249,6 +252,18 @@ export const useBravaisCamera = ({
         cameraRef,
         getWorldBounds,
         viewportRef,
+        /*
+         * 捏合 / Ctrl+滚轮缩放（#409）。Bravais 墙一直没给这个宿主 —— useWallPointerPan 里
+         * `if (!zoomRef.current) return false` 直接把捏合挡在门外，所以「双指彻底没反应」。
+         * 倍率与播放页的磁贴墙共用 useLatticeSettingsStore.wallZoom（BravaisStage 读它，
+         * useBravaisViewport 用它乘到基准档位上）。
+         */
+        zoom: {
+            baseScale: () => getBravaisScale(frameRef.current.view?.width ?? window.innerWidth),
+            minFactor: WALL_ZOOM_MIN,
+            maxFactor: WALL_ZOOM_MAX,
+            onZoomEnd: factor => setWallZoom(factor),
+        },
     });
 
     useEffect(() => () => {
