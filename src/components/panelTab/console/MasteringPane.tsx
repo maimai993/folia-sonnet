@@ -143,7 +143,7 @@ const MasteringPane: React.FC = () => {
                             <Toggle checked={mastering.transient.enabled} onChange={enabled => setTransient({ enabled })} label={t('ui.consoleMasteringTransient')} />
                         </div>
                         <div className={mastering.transient.enabled ? '' : 'opacity-40'}>
-                            <ConsoleSlider label={t('ui.consoleMasteringTransientAmount')} valueText={mastering.transient.amount === 0 ? '0' : (mastering.transient.amount > 0 ? '+' : '') + Math.round(mastering.transient.amount * 100) + '%'} value={mastering.transient.amount} min={AUDIO_CONSOLE_TRANSIENT_MIN} max={AUDIO_CONSOLE_TRANSIENT_MAX} onChange={amount => setTransient({ amount })} onCommit={() => undefined} />
+                            <ConsoleSlider label={t('ui.consoleMasteringTransientAmount')} valueText={mastering.transient.amount === 0 ? '0' : `${mastering.transient.amount > 0 ? '+' : ''}${Math.round(mastering.transient.amount * 100)}%`} value={mastering.transient.amount} min={AUDIO_CONSOLE_TRANSIENT_MIN} max={AUDIO_CONSOLE_TRANSIENT_MAX} onChange={amount => setTransient({ amount })} onCommit={() => undefined} />
                             <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringTransientHint')}</p>
                         </div>
                     </div>
@@ -171,7 +171,7 @@ const MasteringPane: React.FC = () => {
                     <div className={mastering.balance.enabled ? '' : 'opacity-40'}>
                         <ConsoleSlider
                             label={t('ui.consoleMasteringBalance')}
-                            valueText={mastering.balance.value === 0 ? t('ui.consoleMasteringCenter') : (mastering.balance.value < 0 ? t('ui.consoleMasteringLeft') : t('ui.consoleMasteringRight')) + ' ' + Math.round(Math.abs(mastering.balance.value) * 100) + '%'}
+                            valueText={mastering.balance.value === 0 ? t('ui.consoleMasteringCenter') : `${mastering.balance.value < 0 ? t('ui.consoleMasteringLeft') : t('ui.consoleMasteringRight')} ${Math.round(Math.abs(mastering.balance.value) * 100)}%`}
                             value={mastering.balance.value}
                             min={AUDIO_CONSOLE_BALANCE_MIN}
                             max={AUDIO_CONSOLE_BALANCE_MAX}

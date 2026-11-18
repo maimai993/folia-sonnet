@@ -19,7 +19,7 @@ import HifiBypassNotice from '../hifi/HifiBypassNotice';
 import ExternalPlayerNotice, { useIsExternalPlayerRoute } from './ExternalPlayerNotice';
 import { useIsHifiRoute } from '../hifi/useHifiSignalPath';
 import ModCurveNotice from './equalizer/ModCurveNotice';
-import ConsoleTabs, { type ConsoleTabGroup } from './console/ConsoleTabs';
+import ConsoleTabs from './console/ConsoleTabs';
 import ProfileBar from './console/ProfileBar';
 import EqualizerPane from './console/EqualizerPane';
 import CompressorPane from './console/CompressorPane';

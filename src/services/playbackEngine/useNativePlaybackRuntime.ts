@@ -120,7 +120,7 @@ export const useNativePlaybackRuntime = ({
          */
         if (resumeAtSec !== null && sameSourceReady) {
             console.info('[NativePlayer] 续播位置晚到，seek 到', resumeAtSec);
-            void nativePlaybackEngine.seek(resumeAtSec).catch(error => {
+            void nativePlaybackEngine.seek(resumeAtSec).catch((error: unknown) => {
                 console.error('[NativePlayer] resume seek failed', error);
             });
             return;
@@ -138,7 +138,7 @@ export const useNativePlaybackRuntime = ({
                 && nativePlaybackEngine.activeUrl() === audioSrc
                 && !nativePlaybackEngine.sourceReadyError()) {
                 console.info('[NativePlayer] 装源后 seek 续播位置', resumeAtSec);
-                void nativePlaybackEngine.seek(resumeAtSec).catch(error => {
+                void nativePlaybackEngine.seek(resumeAtSec).catch((error: unknown) => {
                     console.error('[NativePlayer] resume seek failed', error);
                 });
             }
