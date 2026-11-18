@@ -77,12 +77,20 @@ const Lattice = lazy(loadLattice);
 
 export type AppModel = AppFoundation & AppAudioOutput & AppThemeAndNavigation & AppAccountsAndStage & AppLibraryControllers & AppPlaybackQueue & AppPlaybackBridges & AppChromeAndGestures & AppPublishers & AppCommandPalette & AppPlaybackActions & AppWallAndHome & AppPlayerPanel & AppOverlayModels;
 
+/*
+ * 「与其他音源同时播放」自动恢复的节流状态。
+ *
+ * ★ 放模块级而不是组件 ref：ref 跟着实例走，AppSurface 一旦重建（主题切换、key 变化、
+ * React 严格模式的二次挂载）就归零 —— 与另一个应用「抢焦点 → 被暂停 → 接回来 → 又抢」
+ * 的循环就只在同一次实例生命周期内被封顶三次，跨实例无限重来。节流要防的正是这件事，
+ * 所以它的寿命必须比组件长。
+ */
+let lastAutoResumeAt = 0;
+let autoResumeAttempts = 0;
+
 const AppSurface = ({ model }: { model: AppModel }) => {
     // 「与其他音源同时播放」：被外部打断后自动恢复只在它开着时生效（见 onPause）。
     const mixWithOtherAudio = useAudioSettingsStore(state => state.mixWithOtherAudio);
-    // 自动恢复的节流状态：1.5 秒冷却、连续 3 次封顶、安静 10 秒重置。
-    const lastAutoResumeAt = React.useRef(0);
-    const autoResumeAttempts = React.useRef(0);
     const {
         accountController, activeProviderId, addPickedSongsToLocalPlaylist, addPickedSongsToNavidromePlaylist,
         addPickedSongsToOnlinePlaylist, alwaysShowMainWindowTitlebar, appDialogsModel, appOverlaysModel, appStyle,
@@ -201,30 +209,22 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                  * 到这里时状态机还停在 PLAYING。若这时照常落到 PAUSED，界面就变成「显示在播、
                  * 其实没声音」，用户再点播放要先把 pause 走一遍，经常就卡在那。
                  *
-                 * 只在开关打开时接管：开着这个开关，含义就是「别的应用出声时我继续放」，
-                 * 那被暂停就不是用户的本意。节流见下面的常量，别跟对面抢焦点抢成互相打断。
+                 * ★ 必须能分清「这是外部打断」还是「用户自己按了暂停」。判据是 `shouldAutoPlay`：
+                 * 用户按暂停时 transport 会先把它置 false 再暂停元素，所以到这里还是 true 就说明
+                 * 这一下不是用户要的。少了这一条，用户按了暂停 1.5 秒后音乐自己又响 —— 那是更糟的 bug。
                  */
-                if (mixWithOtherAudio && isCapacitorAndroid()) {
-                    /*
-                     * 被系统（别的应用抢走音频焦点）打断之后，接回去继续放。
-                     *
-                     * 只在「与其他音源同时播放」开着时接手：这个开关的含义就是「别的应用出声时
-                     * 我照放」，那这次被暂停就不是用户的本意。状态机此刻还停在 PLAYING，照常
-                     * 落到 PAUSED 就变成「界面显示在播、其实没声音」，用户再点播放要先把 pause
-                     * 走一遍，经常卡在那里。
-                     *
-                     * 节流是为了别和对面抢焦点抢成互相打断：1.5 秒内只接一次，连续接三次就
-                     * 停手，安静 10 秒后重新给机会。
-                     */
+                if (mixWithOtherAudio && isCapacitorAndroid() && shouldAutoPlay.current) {
                     const now = Date.now();
-                    if (now - lastAutoResumeAt.current > 10_000) autoResumeAttempts.current = 0;
-                    const cooling = now - lastAutoResumeAt.current < 1_500;
-                    const exhausted = autoResumeAttempts.current >= 3;
-                    if (cooling || exhausted) return;
-                    autoResumeAttempts.current += 1;
-                    lastAutoResumeAt.current = now;
-                    void e.currentTarget.play().catch(() => undefined);
-                    return;
+                    if (now - lastAutoResumeAt > 10_000) autoResumeAttempts = 0;
+                    const cooling = now - lastAutoResumeAt < 1_500;
+                    const exhausted = autoResumeAttempts >= 3;
+                    if (!cooling && !exhausted) {
+                        autoResumeAttempts += 1;
+                        lastAutoResumeAt = now;
+                        void e.currentTarget.play().catch(() => undefined);
+                        return;
+                    }
+                    // 接不回来（冷却中 / 已接三次）：老老实实落到 PAUSED，别把界面留在「正在播」。
                 }
                 shouldAutoPlay.current = false;
                 if (!e.currentTarget.ended) {

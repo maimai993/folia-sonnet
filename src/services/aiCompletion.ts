@@ -1,6 +1,5 @@
 import { createAiFetch } from './aiNativeFetch';
 import { requestAiCompletionViaNative } from './aiNativeCompletion';
-import { assertOnlineInferenceAllowed } from './aiMemoryGate';
 import {
     aiProtocolOf,
     isAiConfigured,
@@ -344,10 +343,14 @@ export const requestAiCompletion = async (request: AiCompletionRequest): Promise
     const { target, configured } = readAiTarget();
     if (!configured) throw new Error(AI_NOT_CONFIGURED);
 
-    // 总闸被打开时不发起在线补全（issue #401）。注意这里**不看内存水位**：在线补全只是一次
-    // 网络请求，内存紧的时候禁它没有任何收益。闸门关着就以 ai-memory-guarded 开头抛出，
-    // 调用方按「这台机器现在不该算」处理，别当普通失败反复重试。
-    assertOnlineInferenceAllowed();
+    /*
+     * 这里**不再**因为「禁用 AI 推理」而拒绝（#418）。
+     *
+     * 那道开关管的是**本机模型**（拍点分析、音轨分离）—— 它们要加载几十 MB 权重、占满内存。
+     * 在线补全只是一次网络请求，本机只解析一段文本，关掉它没有任何资源上的收益，只会让
+     * 用户以为功能坏了。开关自己的说明也是这么写的：「AI 主题、歌词动画导演这些走网络的
+     * 补全不受影响」。文案与实现必须一致。
+     */
 
     /*
      * 安卓先走原生补全：请求由原生发起后，WebView 冻不冻结都与它无关 —— OkHttp 在

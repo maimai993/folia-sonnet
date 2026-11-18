@@ -107,15 +107,9 @@ export const useBravaisCamera = ({
     reducedMotion: boolean;
 }) => {
     // 缩放倍率交回 store（与播放页磁贴墙共用一份，跨会话保留）。
-    const wallZoom = useLatticeSettingsStore(state => state.wallZoom);
+    // 缩放倍率交回 store（与播放页磁贴墙共用一份，跨会话保留）。
+    // 只读它来给 zoom 宿主取基准，写回只在捏合落定那一次（onZoomEnd）—— 途中不写 store。
     const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
-    const wallZoomRef = useRef(wallZoom);
-    wallZoomRef.current = wallZoom;
-    /** 捏合途中把倍率写回 store：夹在上下限内，存的是相对基准档位的倍数。 */
-    const onZoomFactor = useCallback((factor: number) => {
-        setWallZoom(Math.min(WALL_ZOOM_MAX, Math.max(WALL_ZOOM_MIN, factor)));
-    }, [setWallZoom]);
-    // 已裁剪（渲染了 slot）的可见范围；墙渲染它外扩 overscan 的 slot。
     const [bounds, setBounds] = useState<Bounds | null>(null);
     const boundsRef = useRef<Bounds | null>(null);
     boundsRef.current = bounds;
@@ -278,8 +272,22 @@ export const useBravaisCamera = ({
             minFactor: WALL_ZOOM_MIN,
             maxFactor: WALL_ZOOM_MAX,
             onZoomEnd: factor => setWallZoom(factor),
-            // Bravais 的倍率真源是 view.scale：applyCamera 只吃位置，所以缩放途中要每帧接住。
-            onZoomChange: onZoomFactor,
+            /*
+             * Bravais 的倍率真源是 view.scale，而 applyCamera 只吃位置 —— 缩放途中不接住就
+             * 完全不缩。但这里**不能**每帧写 store：那会每帧一次 React 重排 + 一次
+             * localStorage 同步写（播放页磁贴墙与 Bravais 共用 wallZoom）。
+             *
+             * 所以途中只改帧状态里的 scale 并重画 DOM，松手那一刻才由 onZoomEnd 写回 store。
+             * 这正是 useBravaisViewport 注释里说的「缩放途中不经过 React」。
+             */
+            onZoomChange: factor => {
+                const view = frameRef.current.view;
+                if (!view) return;
+                const next = getBravaisScale(view.width) * factor;
+                if (!Number.isFinite(next) || Math.abs(next - view.scale) < 1e-4) return;
+                frameRef.current.view = { ...view, scale: next };
+                renderFrame();
+            },
         },
     });
 
