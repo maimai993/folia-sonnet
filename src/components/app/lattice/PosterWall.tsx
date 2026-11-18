@@ -135,6 +135,8 @@ export default function PosterWall({
      * 倍率存在 store 的 wallZoom 里（跨会话保留），手势停下才写回 —— 缩放途中每帧都写会让整面墙重渲染。
      */
     const wallZoom = useLatticeSettingsStore(state => state.wallZoom);
+    /** 上一次生效的尺寸档位（getScale 那三档）：只有它变了才重设 scale，见下面 ResizeObserver。 */
+    const lastBaseScaleRef = useRef<number | null>(null);
     const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
     const devicePixelRatio = useDevicePixelRatio();
     const pixelScale = cameraScale * devicePixelRatio;
@@ -177,8 +179,18 @@ export default function PosterWall({
         if (!container) return;
         const observer = new ResizeObserver(([entry]) => {
             viewportRef.current = { width: entry.contentRect.width, height: entry.contentRect.height };
-            // 基准档位 × 用户倍率（#409）：换设备 / 转屏时基准跟着宽度变，倍率是相对的。
-            const scale = getScale(entry.contentRect.width) * wallZoom;
+            /*
+             * 只在这个尺寸档位**变了**的时候才重设 scale（#409）。
+             *
+             * 以前这里无条件写 scale = getScale(宽度)：任何一次 ResizeObserver 回调都会把
+             * 相机倍率拉回基准 —— 双指缩放刚改完的 scale 立刻被覆盖，看起来就是「捏合没用」。
+             * 现在只把「基准档位 × 倍率」当作新档位生效的初值，用户自己的缩放交给手势维护。
+             */
+            const baseScale = getScale(entry.contentRect.width);
+            const scale = baseScale === lastBaseScaleRef.current
+                ? cameraRef.current.scale
+                : baseScale * wallZoom;
+            lastBaseScaleRef.current = baseScale;
             applyCamera({ ...cameraRef.current, scale }, true);
             setCameraScale(previous => previous === scale ? previous : scale);
             setMeasured(true);
@@ -295,7 +307,13 @@ export default function PosterWall({
          * 所以窄屏 / 宽屏上「能缩到多小 / 多大」是同一套相对量。
          */
         zoom: {
-            baseScale: () => getScale(viewportRef.current?.width ?? window.innerWidth),
+            /*
+             * 基准档位必须和「相机 scale 是怎么算出来的」用同一个来源（#409）：这里读
+             * viewportRef，而相机那一侧读的是 ResizeObserver 给的 contentRect 宽度，
+             * 两者在首帧前会差一档（viewportRef 还是 0 时退回 window.innerWidth），
+             * 算出来的倍率就会偏 —— 松手后镜头跳一下正是这个偏量在生效。
+             */
+            baseScale: () => getScale(viewportRef.current.width || window.innerWidth),
             minFactor: WALL_ZOOM_MIN,
             maxFactor: WALL_ZOOM_MAX,
             onZoomEnd: factor => setWallZoom(factor),
