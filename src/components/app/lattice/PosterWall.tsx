@@ -439,6 +439,14 @@ export default function PosterWall({
         <div
             ref={containerRef}
             className="lattice-field"
+            /*
+             * 触屏手势全交给页面自己处理（#409）：不写这一条，安卓 WebView 会把双指捏合
+             * 当成**页面缩放**吃掉 —— 手指按下去了，pointermove 却不再来（浏览器直接发
+             * pointercancel），于是 useWallPointerPan 里的捏合判定永远走不到。
+             * 队列墙的 .lattice-field 一直是这么写的（见 radio/RadioWall.css 的注释），
+             * 海报墙这一条漏了，双指缩放因此「彻底不能用」。
+             */
+            style={{ touchAction: 'none' }}
             tabIndex={-1}
             onKeyDown={handleFieldKeyDown}
             onFocusCapture={handleFocusCapture}
