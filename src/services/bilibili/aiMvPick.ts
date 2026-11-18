@@ -93,6 +93,33 @@ export const pickMvHitWithAi = async (
     if (hits.length === 0) return { hit: null, reason: '没有候选' };
     if (!isAiTargetConfigured()) return { hit: null, reason: '没有可用的 AI 连接' };
 
+    /*
+     * 图是一维交出去的，模型分不清哪张属于哪条候选 —— 对应关系必须写进提示词。
+     *
+     * 以前这里把每组的图前插一条 `dataUrl: ''` 的伪图当标签，那走不通：
+     * 传图那一层会按 data URL 格式校验，空串直接跳过，标签根本发不出去。
+     */
+    const groups = (input.imagesByCandidate ?? [])
+        .map((group, index) => ({ index, images: group.filter(image => image.dataUrl) }))
+        .filter(group => group.images.length > 0);
+    const images = groups.flatMap(group => group.images);
+    const imageRows: string[] = [];
+    for (const group of groups) {
+        for (let offset = 0; offset < group.images.length; offset += 1) {
+            const image = group.images[offset];
+            const label = image.label ? `（${image.label}）` : '';
+            imageRows.push(`  第 ${group.index} 条候选的第 ${offset + 1} 张${label}`);
+        }
+    }
+    const imageGuide = imageRows.length > 0
+        ? [
+            '',
+            `随本次提问附上 ${imageRows.length} 张图，按顺序分别属于：`,
+            ...imageRows,
+            '请把这些图与上面对应编号的候选对上，再据此判断。',
+        ]
+        : [];
+
     const candidates = hits.slice(0, MAX_CANDIDATES);
     const prompt = [
         `歌曲：${input.title}`,
@@ -106,6 +133,7 @@ export const pickMvHitWithAi = async (
         '**没有一条能确认是这首歌时，index 必须给 -1** —— 不要挑最接近的凑数，',
         '也不要用时长或播放量去猜。',
         '回答格式：{"index": <数字>, "reason": "<一句话理由>"}',
+        ...imageGuide,
     ].join('\n');
 
     /*
@@ -114,7 +142,6 @@ export const pickMvHitWithAi = async (
      * 为什么允许回退：不是所有供应商 / 中转都吃图片，有的直接 400，有的把图忽略当没看见。
      * 看图这条路任何一步失败都不该让「挑 MV」整个崩掉 —— 退回纯文本至少还是原来那套判据。
      */
-    const images = (input.imagesByCandidate ?? []).flat().filter(image => image.dataUrl);
     const ask = async (withImages: boolean) => requestAiCompletion({
         system: SYSTEM,
         prompt,

@@ -534,7 +534,11 @@ const resolveStage = async (ctx: StageContext): Promise<StageResult | null> => {
          * 缓存命中本来就在 withAiCloudCache 里先 return，不受影响。
          */
     });
-    // 没命中、又不许生成：这一轮没有答案（调用方按「暂时没有」处理，不当作失败）。
+    /*
+     * 保底：withAiCloudCache 只在传了 canGenerate 且它返回 false 时才给 null。
+     * 这条链路现在不传（#418：在线生成不受「禁用 AI 推理」管），所以正常不会走到这里；
+     * 留着是为了将来谁再加一层闸时不会拿到一个 null 继续往下用。
+     */
     if (!cached) return null;
     return { ...cached.value, source: cached.source };
 };
