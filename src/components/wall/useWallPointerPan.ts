@@ -157,8 +157,6 @@ export const useWallPointerPan = ({
     };
 
     const beginPinch = useCallback(() => {
-        // TEMP(#409 诊断)：捏合为什么没开始。
-        console.info('[WallGesture] beginPinch zoomHost=' + Boolean(zoomRef.current), 'active=' + Boolean(pinchRef.current), 'pointers=' + pointersRef.current.size);
         if (!zoomRef.current || pinchRef.current) return false;
         // 取最早按下的两根（控件上的也算）：第三根手指参与时不再换锚点，免得中心跳一下。
         const ids = [...pointersRef.current.keys()].slice(0, 2) as [number, number];
@@ -174,8 +172,6 @@ export const useWallPointerPan = ({
     }, []);
 
     const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-        // TEMP(#409 诊断)：确认双指事件到底有没有到达这里。验证完删掉。
-        console.info('[WallGesture] down', event.pointerType, event.pointerId, 'button=' + event.button, 'zoomHost=' + Boolean(zoomRef.current));
         /*
          * 触屏上第二根手指的 button 在某些 WebView 里不是 0（是 -1 或 1）；只认 0 会让
          * 捏合的第二根手指被整条丢掉，表现就是「双指没反应」（#409）。所以触屏一律放行，
