@@ -58,11 +58,17 @@
         <package android:name="com.meizu.safe" />
     </queries>
 
+    <!--
+        大堆：AI 推理（ONNX Runtime + 权重）与整曲 PCM 是这几条 OOM 报告的主角。默认 256MB 堆时，
+        一次「decodeMono 整曲 + 频谱 + 模型中间张量」就会撞顶。largeHeap 把它抬到机型的上限，
+        但这只是延后撞顶，不替代「默认禁用推理」那道闸（见 services/aiMemoryGate.ts）。
+    -->
     <application
         android:name=".FoliaApplication"
         android:allowBackup="true"
         android:appCategory="game"
         android:isGame="true"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"

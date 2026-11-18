@@ -29,6 +29,25 @@ import java.util.concurrent.Executors
 @CapacitorPlugin(name = "FoliaAutomixModels")
 class FoliaAutomixModelsPlugin : Plugin() {
 
+    companion object {
+        /**
+         * ONNX 推理总闸（issue #401）。
+         *
+         * false 时：所有推理方法入口直接 reject，**并且**不加载模型 —— OrtEnvironment /
+         * OrtSession / 权重全都不碰。这就是「从根源上禁止启动推理」：默认关着，由 Web 侧的
+         * services/aiMemoryGate.ts 在用户主动关掉「禁用 AI 推理」之后调 setInferenceEnabled 打开。
+         *
+         * 做成进程级静态量而不是实例字段：插件实例会随 Activity 重建而重建，而 ONNX 会话是
+         * JVM 级资源；用实例字段会让「刚重建那一刻」偷偷放行一次。
+         */
+        @Volatile
+        @JvmStatic
+        var inferenceEnabled: Boolean = false
+
+        /** 总闸关着时给 JS 的那句话（Web 侧按前缀识别，别改）。 */
+        const val INFERENCE_DISABLED_MESSAGE = "automix-inference-disabled"
+    }
+
     /** 拍点分析进度的事件名，与 Web 侧 nativeBeats.ts 的监听一致。 */
     private val beatProgressEvent = "beatAnalysisProgress"
 
@@ -88,6 +107,27 @@ class FoliaAutomixModelsPlugin : Plugin() {
     }
 
     /** 让正在跑的推理在下一个窗口边界停下来。没有在跑也安全（下一代由下一次请求开启）。 */
+    /**
+     * 开/关 ONNX 推理（issue #401）。默认关着。
+     *
+     * 关的时候不但后续请求不再受理，已经加载的会话也会被丢弃 —— 权重与 OrtSession 本身就是
+     * 几十 MB 的常驻内存，光「不再发起新推理」并不能把已经占住的还回去。
+     */
+    @PluginMethod
+    fun setInferenceEnabled(call: PluginCall) {
+        val enabled = call.getBoolean("enabled") ?: false
+        inferenceEnabled = enabled
+        if (!enabled) {
+            // 主动释放：把两个 Runner 的会话与缓存权重放掉，并停掉在跑的那一趟。
+            cancelGeneration.incrementAndGet()
+            runCatching { BeatThisRunner.close() }
+            runCatching { ScnetRunner.release() }
+        }
+        val result = JSObject()
+        result.put("enabled", inferenceEnabled)
+        call.resolve(result)
+    }
+
     @PluginMethod
     fun cancelAutomix(call: PluginCall) {
         cancelGeneration.incrementAndGet()
@@ -265,6 +305,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
 
     @PluginMethod
     fun analyzeBeatsFromUrl(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
@@ -357,6 +398,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
      */
     @PluginMethod
     fun analyzeDrumBandsFromUrl(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
@@ -424,6 +466,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
      */
     @PluginMethod
     fun analyzeMusicEnvelopesFromUrl(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
@@ -581,6 +624,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
 
     @PluginMethod
     fun separateDrumsBandsFromUrl(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
@@ -952,6 +996,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
      */
     @PluginMethod
     fun separateStemsFromUrl(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val url = call.getString("url")
         if (url.isNullOrBlank()) return call.reject("缺少 url")
         val context: Context = context
@@ -1064,6 +1109,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
      */
     @PluginMethod
     fun analyzeBeats(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val encoded = call.getString("samples") ?: return call.reject("缺少 samples")
         val context: Context = context
         worker.execute {
@@ -1121,6 +1167,7 @@ class FoliaAutomixModelsPlugin : Plugin() {
      */
     @PluginMethod
     fun separateStems(call: PluginCall) {
+        if (!inferenceEnabled) return call.reject(INFERENCE_DISABLED_MESSAGE) // ONNX 总闸（#401），见 companion object
         val leftEncoded = call.getString("left") ?: return call.reject("缺少 left")
         val rightEncoded = call.getString("right") ?: leftEncoded
         val stems = parseStems(call.getString("stems"))

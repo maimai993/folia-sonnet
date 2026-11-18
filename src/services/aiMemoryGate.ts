@@ -91,6 +91,24 @@ const setLowMemory = (low: boolean, availMemKb: number | null) => {
 };
 
 /**
+ * 把「本地推理能不能跑」推给原生，让 ONNX 在根源上就起不来。
+ *
+ * 原生侧（FoliaAutomixModelsPlugin.inferenceEnabled）默认 false：关着时 9 个推理方法入口直接
+ * 拒绝，而且**不加载模型**；这里改成 false 时还会让原生把已加载的 OrtSession 与权重放掉。
+ * 所以「禁掉之后内存真的还回去」，而不是只是不再发起新推理。
+ *
+ * 无插件方法（老包 / 非安卓）时静默跳过。
+ */
+const syncNativeInferenceSwitch = async (): Promise<void> => {
+    if (!isCapacitorAndroid()) return;
+    try {
+        const { NativeBeats } = await import('./automix/nativeBeats');
+        await NativeBeats.setInferenceEnabled?.({ enabled: isLocalInferenceAllowed() });
+    } catch (error) {
+        console.warn('[AiMemoryGate] 同步原生推理开关失败', error);
+    }
+};
+/**
  * 读一次原生指标并更新闸门。
  *
  * 走 `window.electron.mods.getDeviceMetrics`（安卓上是 androidModsBridge 装的那份 shim，
@@ -154,6 +172,8 @@ export const installAiMemoryGate = (): void => {
     }, STABLE_AFTER_MS);
 
     if (!isCapacitorAndroid()) return;
+    // 原生那边的 ONNX 总闸：装闸门时先按当前结论设一次（默认关 = 不加载任何模型）。
+    void syncNativeInferenceSwitch();
     void sample();
     pollTimer = setInterval(() => { void sample(); }, POLL_INTERVAL_MS);
     // 页面回到前台时补采一次：后台期间系统的内存状况可能已经变了。

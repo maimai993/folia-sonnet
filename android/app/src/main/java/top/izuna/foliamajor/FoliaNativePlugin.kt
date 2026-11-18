@@ -141,17 +141,28 @@ class FoliaNativePlugin : Plugin() {
          * 走桥的整段响应在 Java heap 里会被放大好几倍：原始 byte[] → base64 字符串（1.33×）
          * → `PluginResult.toString()` 再把整份 JSON 序列化成一条完整字符串。实测 256MB 堆
          * 的机器上 20MB 左右就会 OOM（#261，`Failed to allocate 150994952 byte`）。
-         * 所以默认只给 8MiB：接口 JSON 远小于它，真更大的东西本来就不该走桥（#262）。
+         *
+         * ⚠️ 2026-11-18 又炸了一次（`Failed to allocate 16874384 byte`，崩溃时堆只剩 6.7MB）：
+         * 一份**在 8MiB 以内**的响应，只靠序列化放大就补上了最后一刀。所以上限再收一档到 2MiB ——
+         * 歌单 / 歌词 / 推荐这类 JSON 绝大多数远小于它；真正更大的东西该走落盘 + 返回路径（#262）。
          */
-        const val DEFAULT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+        const val DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
         /**
          * 调用方可以按需放宽到这么大，但不会再大。
          *
-         * 32MiB 已经是「8 倍放大后仍然可能撞穿 256MB 堆」的临界值，只留给调用方明确知道
-         * 自己在干什么的场景（例如导出用的文本），不作为默认值。
+         * 从 32MiB 收到 8MiB：按 8 倍放大算是 64MB 的瞬时峰值，在 256MB 堆上已经贴着危险线。
+         * 再大的场景必须改成原生落盘 + 返回文件路径，而不是把整份塞进桥里。
          */
-        const val HARD_MAX_RESPONSE_BYTES = 32 * 1024 * 1024
+        const val HARD_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
+
+        /**
+         * 大到这个尺寸的响应在交出前记一条日志（只看 size + host）。
+         *
+         * 崩溃往往发生在 call.resolve() 的序列化里 —— 那时已经打不出日志了，
+         * 所以要在**交出去之前**把现场留下。1MiB 是个不会刷屏、又能盖住危险区间的档。
+         */
+        const val LARGE_RESPONSE_LOG_BYTES = 1024 * 1024
 
         /**
          * 超限时给 JS 的那句话。
@@ -1096,6 +1107,20 @@ class FoliaNativePlugin : Plugin() {
                             result.put("headers", responseHeaders)
                             // 实际字节数：排查「谁把响应撑大了」时唯一可信的口径。
                             result.put("byteLength", bytes.size)
+                            /*
+                             * 大响应留一条痕迹（2026-11-18 OOM 报告 §5 的排查盲点）：
+                             * 崩溃恰好发生在 call.resolve() 的序列化里，那时已经来不及打日志，
+                             * 所以要在**交出去之前**把「多大、哪个主机」记下来。只记 host，
+                             * 不记整条 URL —— 那些 query 里带 cookie 与签名。
+                             */
+                            if (bytes.size >= LARGE_RESPONSE_LOG_BYTES) {
+                                Log.w(
+                                    TAG,
+                                    "httpRequest large response: " + bytes.size + " bytes from " + runCatching { java.net.URI(url).host }.getOrNull()
+                                        + " (heap " + Runtime.getRuntime().let { (it.totalMemory() - it.freeMemory()) / 1048576 } +
+                                        "MiB used of " + Runtime.getRuntime().maxMemory() / 1048576 + "MiB max)",
+                                )
+                            }
                             val text = if (wantsTextPayload(responseMode, response.headers.get("Content-Type"))) {
                                 decodeUtf8Strict(bytes)
                             } else {

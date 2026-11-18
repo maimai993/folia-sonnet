@@ -69,9 +69,16 @@ type NativeBeatsPlugin = {
         eventName: 'beatAnalysisChunk',
         listener: (event: { beats?: NativeBeat[]; until?: number; final?: boolean }) => void,
     ): Promise<{ remove: () => Promise<void> }>;
+    /**
+     * 开 / 关原生 ONNX 推理（Kotlin 侧的 setInferenceEnabled），**默认关着**。
+     *
+     * 关的时候原生不但拒收新请求，还会把已加载的 OrtSession 与权重一起放掉 —— 那是几十 MB
+     * 的常驻内存，光「不再发起」还不回去（issue #401）。
+     */
+    setInferenceEnabled?(options: { enabled: boolean }): Promise<{ enabled?: boolean }>;
 };
 
-const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels');
+export const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels');
 
 /**
  * 能不能在原生侧跑分析模型（beat_this 拍点、SCNet/htdemucs 分轨）。
