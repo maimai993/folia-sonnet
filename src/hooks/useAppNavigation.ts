@@ -630,5 +630,7 @@ export function useAppNavigation() {
         pushCollection,
         popCollectionTo,
         backCollection,
+        // 逐层返回：搜索页（#411）与别处都靠它退一层，自己判断是 history 还是本地弹栈。
+        popCollectionLayer,
     };
 }

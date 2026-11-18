@@ -63,6 +63,7 @@ const SearchScrollBarProbe: React.FC = () => {
                 theme={DEFAULT_THEME}
                 isDaylight={false}
                 onClose={() => { }}
+                onBackCollection={() => { }}
                 onSubmitSearch={() => { }}
                 onLoadMore={() => { }}
                 onPlayTrack={() => { }}
