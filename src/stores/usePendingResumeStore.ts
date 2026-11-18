@@ -1,24 +1,48 @@
 import { create } from 'zustand';
 
-// src/stores/usePendingResumeStore.ts
-// 会话恢复出的「上次听到哪儿」。恢复是异步的，位置可能比原生装源 effect 更晚落地；只放
-// ref 里不会触发重渲染，装源 effect 读不到就不会重跑。这里用 store 状态，让装源 effect 在
-// 位置就绪后再跑一次（已经装过源时只 seek、不重装）。
-//
-// 连同 songKey 一起存：只认「恢复出的那一首」，换歌之后旧位置不能被错用。会话恢复那条路
-// 同时写 ref（给 <audio> 路），其余路径仍只写 ref，store 里没有或对不上当前这首歌就退回 ref。
-
-type PendingResume = {
+// 会话位置只在确认恢复了哪个音源时交接；原生与 <audio> 不共享一份未标记的秒数。
+export type SessionResume = {
     songKey: string;
+    url: string;
     seconds: number;
+    stillWanted: () => boolean;
+    /** 已经排过一次 seek：前台不能换一代播放器再补它。 */
+    sourceToken?: string;
 };
 
-type PendingResumeState = {
-    pendingResume: PendingResume | null;
-    setPendingResume: (resume: PendingResume | null) => void;
+type ResumeState = {
+    // 只在发布新位置时唤醒装源 effect。消费或取消不是一次新的装源/重试请求。
+    revision: number;
+    pending: SessionResume | null;
 };
 
-export const usePendingResumeStore = create<PendingResumeState>(set => ({
-    pendingResume: null,
-    setPendingResume: resume => set({ pendingResume: resume }),
-}));
+export const usePendingResumeStore = create<ResumeState>(() => ({ revision: 0, pending: null }));
+
+export function publishNativeResume(resume: SessionResume) {
+    usePendingResumeStore.setState(state => ({ pending: resume, revision: state.revision + 1 }));
+}
+
+export function takeNativeResume() {
+    const { pending } = usePendingResumeStore.getState();
+    if (pending) usePendingResumeStore.setState({ pending: null });
+    return pending;
+}
+
+// 保留非会话的 current 读写协议；会话的位置只在读取时意图仍有效才可见。
+export function createResumeTimeRef() {
+    let value: number | null = null;
+    let valid: (() => boolean) | null = null;
+    return {
+        get current(): number | null { return !valid || valid() ? value : null; },
+        set current(next: number | null) { value = next; valid = null; },
+        setSessionPosition(seconds: number, stillWanted: () => boolean) { value = seconds; valid = stillWanted; },
+    };
+}
+
+// 原生分流的 next/prev 不一定经过 startPlay；读盘、准备音源、排队的 seek 都须让位。
+let playbackIntent = 0;
+export const resumeIntentAtStart = () => playbackIntent;
+export function cancelSessionResume() {
+    playbackIntent += 1;
+    takeNativeResume();
+}

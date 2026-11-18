@@ -255,6 +255,7 @@ interface FoliaNativePlayerPlugin {
     pause(): Promise<NativeCommandResult | undefined>;
     stop(): Promise<NativeCommandResult | undefined>;
     seek(options: { positionMs: number }): Promise<NativeCommandResult | undefined>;
+    seekForResume(options: { positionMs: number; songKey: string; sourceToken: string }): Promise<NativeCommandResult>;
     setVolume(options: { volume: number }): Promise<void>;
     setSpeed(options: { speed: number }): Promise<void>;
     setRepeatMode(options: { repeatMode: number }): Promise<void>;
@@ -353,7 +354,9 @@ export const nativePlayer = {
     play: () => FoliaNativePlayer.play(),
     pause: () => FoliaNativePlayer.pause(),
     stop: () => FoliaNativePlayer.stop(),
-    seek: (positionMs: number) => FoliaNativePlayer.seek({ positionMs }),
+    seek: (positionMs: number, expected?: { songKey: string; sourceToken: string }) => expected
+        ? FoliaNativePlayer.seekForResume({ positionMs, ...expected })
+        : FoliaNativePlayer.seek({ positionMs }),
     setVolume: (volume: number) => FoliaNativePlayer.setVolume({ volume }),
     setSpeed: (speed: number) => FoliaNativePlayer.setSpeed({ speed }),
     setRepeatMode: (repeatMode: number) => FoliaNativePlayer.setRepeatMode({ repeatMode }),

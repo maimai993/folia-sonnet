@@ -93,6 +93,8 @@ type RestorePlaybackSourceParams = {
      * there and spends it here. Not given: it starts at its beginning.
      */
     pendingResumeTimeRef?: MutableRefObject<number | null>;
+    /** 会话恢复只在真实地址就绪时向对应播放器交接位置；外部播放或失败不发布。 */
+    onRestoredSource?: (url: string, songKey: string) => void;
 };
 
 // null on the HiFi route, which makes no blob URL: the one that was there is revoked all the same.
@@ -165,10 +167,15 @@ const restoreSourceForSong = async (
         hasFallbackSource = false,
         queueWritesAtStart,
         pendingResumeTimeRef,
+        onRestoredSource,
     }: RestorePlaybackSourceParams,
 ): Promise<RestorePlaybackSourceOutcome> => {
     let restoredSongKey = getPlaybackSongKey(song);
     const overtaken = () => !stillWanted() || askedSongKeyRef.current !== restoredSongKey;
+    const landAudio = (url: string) => {
+        setAudioSrc(url);
+        onRestoredSource?.(url, restoredSongKey);
+    };
     // A sign-out of another platform while this restore waits takes that platform's songs out of the queue it
     // writes and saves as well (as a play does, see keepSongsOfProvidersStanding): the store's queue lost them already.
     const providerDropsAtStart = providerDropsSoFar();
@@ -219,7 +226,7 @@ const restoreSourceForSong = async (
                 ...deferredHifiLoad(overtaken),
             });
         } else {
-            setAudioSrc(audio.streamUrl);
+            landAudio(audio.streamUrl);
         }
         const restoredCoverUrl = getSongCoverUrl(song) || navidromeSongToRestore.navidromeData.coverArtUrl;
         if (restoredCoverUrl) {
@@ -328,7 +335,7 @@ const restoreSourceForSong = async (
                 ...deferredHifiLoad(overtaken),
             });
         } else {
-            setAudioSrc(audio.blobUrl);
+            landAudio(audio.blobUrl);
         }
 
         const resolvedLyrics = await resolveLocalSongLyrics(
@@ -422,7 +429,7 @@ const restoreSourceForSong = async (
         replaceBlobUrl(blobUrlRef, audioResult.blobUrl);
     }
     currentOnlineAudioUrlFetchedAtRef.current = audioResult.fetchedAt;
-    setAudioSrc(audioResult.audioSrc);
+    landAudio(audioResult.audioSrc);
 
     const restoredSong = applyOnlineAudioSourceMetadata(song, audioResult.replayGain);
     if (restoredSong.replayGain) {

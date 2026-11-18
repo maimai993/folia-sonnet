@@ -36,6 +36,8 @@ object SessionSnapshotStore {
         val index: Int,
         val songKey: String,
         val positionMs: Long,
+        /** 位置记录的写入时间（epoch 毫秒）；没有同曲位置记录时为 0。前台按它与 WebView 那份比谁更新。 */
+        val positionSavedAtMs: Long = 0L,
     )
 
     private fun prefs(context: Context) =
@@ -87,14 +89,19 @@ object SessionSnapshotStore {
     /** 读回来。两份都没写过、或解析不出来时返回 null（调用方按「没有会话」处理）。 */
     fun load(context: Context): Snapshot? {
         val preferences = runCatching { prefs(context) }.getOrNull() ?: return null
-        val queue = runCatching { preferences.getString(KEY_QUEUE, null) }.getOrNull()
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?: return null
+        return parse(
+            runCatching { preferences.getString(KEY_QUEUE, null) }.getOrNull(),
+            runCatching { preferences.getString(KEY_POSITION, null) }.getOrNull(),
+        )
+    }
+
+    /** 从两份存下的 JSON 文本还原快照（纯函数，便于 JVM 单测）。 */
+    internal fun parse(queueJson: String?, positionJson: String?): Snapshot? {
+        val queue = queueJson?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return null
         val entries = queue.optJSONArray("entries") ?: return null
         if (entries.length() == 0) return null
 
-        val position = runCatching { preferences.getString(KEY_POSITION, null) }.getOrNull()
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+        val position = positionJson?.let { runCatching { JSONObject(it) }.getOrNull() }
         val songKey = queue.optString("songKey", "")
         // 位置只认同一首：换过歌之后队列先落盘、位置还没跟上时，别把上一首的秒数
         // 安到这一首头上。
@@ -104,6 +111,7 @@ object SessionSnapshotStore {
             index = queue.optInt("index", -1),
             songKey = songKey,
             positionMs = if (sameSong) position!!.optLong("positionMs", 0L) else 0L,
+            positionSavedAtMs = if (sameSong) position!!.optLong("at", 0L) else 0L,
         )
     }
 
