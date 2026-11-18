@@ -254,6 +254,41 @@ const buildOpenAiUserContent = (request: AiCompletionRequest): OpenAiUserContent
     }
     return parts.length > 1 ? parts : request.prompt;
 };
+/**
+ * Anthropic 的 user content：没图时是纯字符串，有图时是 block 数组（image 在前，文字在后）。
+ *
+ * 图放前面是有讲究的：Claude 对「先看图再看指令」的遵从度明显更好，问「这条视频像不像
+ * 这首歌」时它得先看见画面。
+ */
+const buildAnthropicUserContent = (request: AiCompletionRequest) => {
+    if (!request.images || request.images.length === 0) return request.prompt;
+    const blocks: Array<Record<string, unknown>> = [];
+    for (const image of request.images) {
+        const split = splitImageDataUrl(image.dataUrl);
+        if (!split) continue;
+        blocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: split.mediaType, data: split.data },
+        });
+    }
+    if (blocks.length === 0) return request.prompt;
+    blocks.push({ type: 'text', text: request.prompt });
+    return blocks;
+};
+
+/** Gemini 的 parts：inlineData 与 	ext（顺序同 Anthropic，图在前）。 */
+const buildGeminiParts = (request: AiCompletionRequest) => {
+    const parts: Array<Record<string, unknown>> = [];
+    if (request.images && request.images.length > 0) {
+        for (const image of request.images) {
+            const split = splitImageDataUrl(image.dataUrl);
+            if (!split) continue;
+            parts.push({ inlineData: { mimeType: split.mediaType, data: split.data } });
+        }
+    }
+    parts.push({ text: request.prompt });
+    return parts;
+};
 const runAnthropic = async (request: AiCompletionRequest, send: typeof fetch): Promise<string> => {
     const settings = readAiSettings();
     const apiKey = resolveAiApiKey(settings);
@@ -271,7 +306,7 @@ const runAnthropic = async (request: AiCompletionRequest, send: typeof fetch): P
             model: resolveAiModel(settings),
             max_tokens: request.maxTokens ?? 4096,
             ...(request.system ? { system: request.system } : {}),
-            messages: [{ role: 'user', content: request.prompt }],
+            messages: [{ role: 'user', content: buildAnthropicUserContent(request) }],
         }),
         signal: request.signal,
     });
@@ -305,7 +340,7 @@ const runGemini = async (request: AiCompletionRequest, send: typeof fetch): Prom
         },
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: request.system }] },
-            contents: [{ parts: [{ text: request.prompt }] }],
+            contents: [{ parts: buildGeminiParts(request) }],
             generationConfig: {
                 ...(request.json === false ? {} : { responseMimeType: 'application/json' }),
                 ...(request.maxTokens ? { maxOutputTokens: request.maxTokens } : {}),

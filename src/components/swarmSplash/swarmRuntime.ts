@@ -27,8 +27,6 @@ export type SwarmRuntime = {
 
 /** 一群光标先聚多久（毫秒）。太短看不出「群体」，太长显得慢。 */
 const GATHER_MS = 900;
-/** 每块之间的间隔（毫秒）。 */
-const BLOCK_GAP_MS = 220;
 /** 一块本身要多久画完（毫秒）。 */
 const BLOCK_DRAW_MS = 520;
 /** 撤离最长给多久，超时直接结束。 */
