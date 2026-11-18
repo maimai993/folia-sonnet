@@ -212,7 +212,6 @@ const KineticEditorOverlay: React.FC<Props> = ({
             syncEditorTransport(target, playingRef.current);
         }, delay));
         return () => timers.forEach(timer => window.clearTimeout(timer));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     /** folia 播放头只向编辑台单向校时；boot 的代表帧 seek 不再参与用户操作判断。 */
@@ -449,7 +448,6 @@ const KineticEditorOverlay: React.FC<Props> = ({
             pushSnapshot(true);
             channel?.close();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [songKey]);
 
     /**

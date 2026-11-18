@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { YTM_HISTORY_BROWSE_ID, readYtmAccountHistory, type YtmAndroidHistoryHost } from '@/services/onlineMusic/ytm/android/ytmAndroidHistory';
 import type { YtmWireSong } from '@/services/onlineMusic/ytm/ytmTransport';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 // The helper classes stand in for youtubei.js's parsed nodes: a page's memo takes the class
 // itself as the marker (`contents_memo.getType(YTNodes.MusicPlaylistShelf)`), so fakes of them

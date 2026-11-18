@@ -173,7 +173,6 @@ const VisualizerKinetic: React.FC<VisualizerKineticProps> = (props) => {
     const savedProjectKey = savedProject ? JSON.stringify(savedProject) : '';
 
     const projectKey = `${lrc}\u0000${songKey ?? ''}\u0000${savedProjectKey}\u0000${themeColors.bg}\u0000${themeColors.fg}\u0000${themeColors.sub}\u0000${themeColors.accent}\u0000${fontFamily}\u0000${fontPayload?.family ?? ''}\u0000${wordColors ? JSON.stringify(wordColors) : ''}`;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     /** 上次保存下来的 plan：重启后靠它原样还原排版。 */
     // 新工程必须与当前宿主源精确一致（含时间戳），legacy 无来源工程不恢复旧 plan。
     const savedPlan = savedProject?.sourceLyrics === lrc ? savedProject.plan ?? null : null;

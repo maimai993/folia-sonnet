@@ -143,7 +143,6 @@ export const useLibraryHomeSources = ({
         };
     }, [
         // capabilities 每次读都是新对象：按用到的几个开关比较。
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         allProviders, canListPlaylists, cloudPlaylist, explore, isLxmusic, lxSquare, personalFmModes, playlists, provider, providers, providerId,
         recommendations, t, user, userAlbums, userLibrary,
     ]);

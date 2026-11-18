@@ -1,4 +1,5 @@
 import { setSafeAreaBypass } from './phoneInsets';
+import { getStoredString, removeStoredKey, setStoredString } from '../stores/storagePrimitives';
 import { setSystemBarsAlwaysHidden } from '../platform/foliaNative';
 
 /*
@@ -19,24 +20,13 @@ export const LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY = 'folia_android_phone_fit';
 
 export type AndroidPhoneFitOrientation = 'portrait' | 'landscape';
 
-export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => {
-    if (typeof window === 'undefined') return 'portrait';
-    try {
-        return localStorage.getItem(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY) === 'landscape'
-            ? 'landscape'
-            : 'portrait';
-    } catch {
-        return 'portrait';
-    }
-};
+// 存储一律走 storagePrimitives：隐私模式 / 存储被裁的环境里裸 localStorage 会抛（D5xx）。
+export const readStoredAndroidPhoneFitOrientation = (): AndroidPhoneFitOrientation => (
+    getStoredString(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, '') === 'landscape' ? 'landscape' : 'portrait'
+);
 
 export const writeStoredAndroidPhoneFitOrientation = (orientation: AndroidPhoneFitOrientation): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        localStorage.setItem(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, orientation);
-    } catch {
-        // A storage failure must not make the switch unusable for the current session.
-    }
+    setStoredString(ANDROID_PHONE_FIT_ORIENTATION_STORAGE_KEY, orientation);
 };
 
 /**
@@ -55,13 +45,8 @@ export const applyPhoneOrientation = (
 /** 启动时在首帧之前把方向落上去（「强制横屏」从上次的选择恢复）。 */
 export const installPhoneOrientationPreference = (): void => {
     // 废弃开关留下的那份值顺手清掉（键名仍登记在 storageKeys.mjs，见上面的注释）。
-    if (typeof window !== 'undefined') {
-        try {
-            localStorage.removeItem(LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY);
-        } catch {
-            // 存储不可用就算了：那里本来也没有可清的东西。
-        }
-    }
+    removeStoredKey(LEGACY_ANDROID_PHONE_FIT_STORAGE_KEY);
+
     applyPhoneOrientation(readStoredAndroidPhoneFitOrientation());
 };
 
@@ -83,26 +68,13 @@ export const DEVICE_TYPE_STORAGE_KEY = 'folia_device_type';
 export type DeviceType = 'phone' | 'tablet';
 
 export const readStoredDeviceType = (): DeviceType | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-        const stored = localStorage.getItem(DEVICE_TYPE_STORAGE_KEY);
-        return stored === 'phone' || stored === 'tablet' ? stored : null;
-    } catch {
-        return null;
-    }
+    const stored = getStoredString(DEVICE_TYPE_STORAGE_KEY, '');
+    return stored === 'phone' || stored === 'tablet' ? stored : null;
 };
 
 export const writeStoredDeviceType = (deviceType: DeviceType | null): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (deviceType) {
-            localStorage.setItem(DEVICE_TYPE_STORAGE_KEY, deviceType);
-        } else {
-            localStorage.removeItem(DEVICE_TYPE_STORAGE_KEY);
-        }
-    } catch {
-        // A storage failure must not make the choice unusable for the current session.
-    }
+    if (deviceType) setStoredString(DEVICE_TYPE_STORAGE_KEY, deviceType);
+    else removeStoredKey(DEVICE_TYPE_STORAGE_KEY);
 };
 
 /* ---------------------------------------------------------------------------
@@ -131,28 +103,15 @@ const UI_SCALE_COMPACT_OFFSET = 10;
 const UI_SCALE_COMPACT_MIN = 55;
 
 export const readStoredUiScale = (): number | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-        const raw = localStorage.getItem(UI_SCALE_STORAGE_KEY);
-        if (raw === null || raw === '') return null;
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) ? clampUiScale(parsed) : null;
-    } catch {
-        return null;
-    }
+    const raw = getStoredString(UI_SCALE_STORAGE_KEY, '');
+    if (raw === '') return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? clampUiScale(parsed) : null;
 };
 
 export const writeStoredUiScale = (scale: number | null): void => {
-    if (typeof window === 'undefined') return;
-    try {
-        if (scale === null) {
-            localStorage.removeItem(UI_SCALE_STORAGE_KEY);
-        } else {
-            localStorage.setItem(UI_SCALE_STORAGE_KEY, String(scale));
-        }
-    } catch {
-        // A storage failure must not make the slider unusable for the current session.
-    }
+    if (scale === null) removeStoredKey(UI_SCALE_STORAGE_KEY);
+    else setStoredString(UI_SCALE_STORAGE_KEY, String(scale));
 };
 
 /** 夹到滑条范围内并按步长对齐。存进去与读出来的都过这一道，脏值不会带进样式。 */
