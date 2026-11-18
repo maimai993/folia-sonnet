@@ -180,8 +180,6 @@ const AppSurface = ({ model }: { model: AppModel }) => {
                 automix.handleActiveDeckPlaying();
             }}
             onPause={(e) => {
-                // 见下面那段的说明：被外部打断后自动恢复的节流状态。
-                // （ref 在组件作用域，见 const autoResumeAttempts）
                 // A pause that flushing a fade-out made, while a new song is already being set up:
                 // the transport state and play intent belong to that song now.
                 if (consumeProgrammaticPause(e.currentTarget)) return;
