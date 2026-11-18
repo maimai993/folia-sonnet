@@ -87,8 +87,11 @@ export const NativeBeats = registerPlugin<NativeBeatsPlugin>('FoliaAutomixModels
  * （beat_this 79MB 权重 + 整曲 PCM），在手机已经吃紧时再起推理，只会把进程自己送进 OOM。
  * 闸门恢复后调用方本来就会重算，表达式不缓存。
  */
+/** 这个平台有没有原生推理这条路（安卓有）。与「此刻允不允许跑」分开：闸门关着不改变平台能力。 */
+export const isNativeBeatPlatform = (): boolean => isCapacitorAndroid();
+
 export const isNativeBeatAnalysisAvailable = (): boolean => (
-    isCapacitorAndroid() && isLocalInferenceAllowed()
+    isNativeBeatPlatform() && isLocalInferenceAllowed()
 );
 
 /**

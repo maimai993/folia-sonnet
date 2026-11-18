@@ -31,6 +31,11 @@ export type WallZoomHost = {
     maxFactor: number;
     /** 手势停下来之后把倍率交回宿主（写 store 或 React state）。 */
     onZoomEnd: (factor: number) => void;
+    /**
+     * 缩放途中每帧的倍率（相对 baseScale）。宿主自己的相机以别的东西为真源时（Bravais 的
+     * 倍率真源是 view.scale，applyCamera 只吃位置），必须靠这个实时接住，否则画面不会跟着缩。
+     */
+    onZoomChange?: (factor: number) => void;
 };
 
 type WallPointerPanOptions = {
@@ -119,6 +124,10 @@ export const useWallPointerPan = ({
         const worldY = (anchor.y - camera.y) / camera.scale;
         interrupt();
         updateCamera(anchor.x - worldX * scale, anchor.y - worldY * scale, scale);
+        // 实时交回：宿主相机不认 scale 的情况（Bravais）靠这一句才能跟着缩。
+        if (zoomRef.current?.onZoomChange) {
+            zoomRef.current.onZoomChange(scale / Math.max(zoomRef.current.baseScale(), 0.0001));
+        }
     }, [cameraRef, clampScale, interrupt, updateCamera]);
 
     /** 手势停下来才把倍率交回宿主：缩放途中每一次都交会让整面墙按帧重渲染。 */

@@ -5,6 +5,7 @@ import ConfirmDialog from '../../../shared/ConfirmDialog';
 import { MOTION_SURFACE_IDS, useMotionSettingsStore, type MotionSurfaceId } from '../../../../stores/useMotionSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
+import { useSwarmSplashStore } from '../../../../stores/useSwarmSplashStore';
 import { useAiInferenceSettingsStore } from '../../../../stores/useAiInferenceSettingsStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
@@ -55,6 +56,8 @@ const O = {
     aiInferenceDisabled: option(PERFORMANCE, 'aiInferenceDisabled', 'options.aiInferenceDisabled', { noteKey: 'options.aiInferenceDisabledDesc' }),
     gpuPreference: option(PERFORMANCE, 'gpuPreference', 'options.gpuPreference', { electronOnly: true, available: () => IS_WINDOWS_DESKTOP }),
     followSystem: option(MOTION, 'reduceMotionFollowSystem', 'options.reduceMotionFollowSystem'),
+    // 启动时播放群体光标建造动画（默认打开）。
+    swarmSplash: option(PERFORMANCE, 'swarmSplashEnabled', 'options.swarmSplashEnabled'),
 };
 
 /** One row per part of the interface whose motion can be reduced, in the store's order. */
@@ -93,6 +96,8 @@ const GraphicsPage: React.FC = () => {
     const setAiInferenceDisabled = useAiInferenceSettingsStore(state => state.setAiInferenceDisabled);
     const nativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
     const setNativeBlur = usePlayerChromeSettingsStore(state => state.handleTogglePlayerPageNativeBlur);
+    const swarmSplashEnabled = useSwarmSplashStore(state => state.swarmSplashEnabled);
+    const setSwarmSplashEnabled = useSwarmSplashStore(state => state.setSwarmSplashEnabled);
     const backgroundThrottling = useDesktopSettingsStore(state => state.backgroundThrottling);
     const setBackgroundThrottling = useDesktopSettingsStore(state => state.handleToggleBackgroundThrottling);
     const visualizer = useVisualizerSettingsStore(useShallow(state => ({
@@ -138,6 +143,9 @@ const GraphicsPage: React.FC = () => {
                         <Toggle checked={nativeBlur} onChange={enabled => (enabled ? setNativeBlurAsking(true) : setNativeBlur(false))} />
                     </Row>
                 )}
+                <Row option={O.swarmSplash} hint={t('options.swarmSplashEnabledDesc')}>
+                    <Toggle checked={swarmSplashEnabled} onChange={setSwarmSplashEnabled} />
+                </Row>
                 <Row option={O.frameRate} hint={t('options.visualizerFrameRateDesc')}>
                     <Toggle
                         checked={frameRateLimited}

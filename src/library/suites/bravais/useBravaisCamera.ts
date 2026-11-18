@@ -249,14 +249,8 @@ export const useBravaisCamera = ({
     const applyCamera = useCallback((next: LatticeCamera, updateBounds?: boolean) => {
         const view = frameRef.current.view;
         if (!view) return;
-        const base = getBravaisScale(view.width);
-        if (base > 0 && Number.isFinite(next.scale)) {
-            const factor = next.scale / base;
-            // 只在真的变了时写：拖动时 next.scale 不变，不该因此触发 store 更新。
-            if (Math.abs(factor - wallZoomRef.current) > 1e-3) onZoomFactor(factor);
-        }
         moveTo(constrain(viewCenterFromCamera(next, view)), Boolean(updateBounds));
-    }, [constrain, frameRef, moveTo, onZoomFactor]);
+    }, [constrain, frameRef, moveTo]);
     const getWorldBounds = useCallback((camera: LatticeCamera) => {
         const view = frameRef.current.view;
         if (!view) return { left: 0, right: 0, top: 0, bottom: 0 };
@@ -284,6 +278,8 @@ export const useBravaisCamera = ({
             minFactor: WALL_ZOOM_MIN,
             maxFactor: WALL_ZOOM_MAX,
             onZoomEnd: factor => setWallZoom(factor),
+            // Bravais 的倍率真源是 view.scale：applyCamera 只吃位置，所以缩放途中要每帧接住。
+            onZoomChange: onZoomFactor,
         },
     });
 
