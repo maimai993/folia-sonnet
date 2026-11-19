@@ -9,6 +9,7 @@ import type {
     Word,
 } from '@/types';
 import { buildLineRenderHints, getLineRenderHints } from '@/utils/lyrics/renderHints';
+import { INTERLUDE_FULL_TEXT } from '@/utils/lyrics/parserCore';
 import { isValidWordSegmentation } from '@/utils/lyrics/wordSegmentation';
 import { getLineBackgroundVocals } from '@/components/visualizer/harmonyRuntime';
 import { getPlaybackSourceRef } from '@/utils/appPlaybackGuards';
@@ -90,6 +91,7 @@ const toFoliumLine = (line: Line): FoliumLine => {
         ...(line.agentId !== undefined ? { agentId: line.agentId } : {}),
         ...(line.songPart !== undefined ? { songPart: line.songPart } : {}),
         ...(line.blockIndex !== undefined ? { blockIndex: line.blockIndex } : {}),
+        ...(line.isInterlude === true ? { isInterlude: true } : {}),
         ...(line.isChorus !== undefined ? { isChorus: line.isChorus } : {}),
         ...(line.chorusEffect !== undefined ? { chorusEffect: line.chorusEffect } : {}),
         ...(backgroundVocals.length > 0
@@ -387,6 +389,8 @@ export const fromFoliumLines = (original: readonly Line[], originalDtos: readonl
             ...optionalString('agentId', dto.agentId),
             ...optionalString('songPart', dto.songPart),
             ...optionalNumber('blockIndex', dto.blockIndex),
+            // An interlude placeholder the mod rebuilt is still the host's '......' marker line.
+            ...(dto.isInterlude === true && dto.fullText === INTERLUDE_FULL_TEXT ? { isInterlude: true as const } : {}),
             ...optionalBoolean('isChorus', dto.isChorus),
             ...(CHORUS_EFFECTS.has(dto.chorusEffect as string) ? { chorusEffect: dto.chorusEffect } : {}),
             ...(backgroundVocals ? { backgroundVocals } : {}),

@@ -132,7 +132,11 @@ const AWLRC_LINE_REGEX = /^\[(\d{1,3}(?::\d{1,3}){0,2})\.(\d{1,3})\](.*)$/;
 const AWLRC_WORD_REGEX = /<(\d+),(\d+)(?:,\d+)?>([^<]*)/g;
 export const INTERLUDE_FULL_TEXT = '......';
 
-export const isInterludeLine = (line: Pick<Line, 'fullText'>): boolean => line.fullText === INTERLUDE_FULL_TEXT;
+// A placeholder line, not something someone sang: `attachInterludes` marks the lines it inserts,
+// so callers never have to guess from the text (a real lyric can read '......' too).
+export const isInterludeLine = (line: Pick<Line, 'fullText'> & { isInterlude?: boolean }): boolean => (
+    line.isInterlude === true || line.fullText === INTERLUDE_FULL_TEXT
+);
 
 export const attachInterludes = (lines: Line[]): Line[] => {
     const finalLines: Line[] = [];
@@ -154,7 +158,8 @@ export const attachInterludes = (lines: Line[]): Line[] => {
             startTime: start,
             endTime: end,
             fullText: INTERLUDE_FULL_TEXT,
-            words
+            words,
+            isInterlude: true
         };
     };
 

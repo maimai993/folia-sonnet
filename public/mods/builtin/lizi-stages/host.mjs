@@ -98,16 +98,103 @@ function wordChars(word, fallbackStart, wordColors) {
     return out;
 }
 
+/*
+ * Interlude rows. parserCore's attachInterludes inserts a placeholder row into every gap over three
+ * seconds (and before the first line when singing starts after 0:03): fullText is
+ * INTERLUDE_FULL_TEXT ('......') and its words are six '.'. It marks "no words here" for other code;
+ * it is not a lyric anybody wrote. The stage pages find the current line by its `t`, so left alone the
+ * row gets performed as a line of dots.
+ *
+ * The explicit `isInterlude` flag attachInterludes stamps on the row decides it (the flag survives the
+ * Folium DTO projection). The text alone cannot: the pipeline deletes lines and regenerates interludes
+ * with includeInterludes:true, so a real lyric that reads '......' really does reach here.
+ *
+ * Without the flag (a host that has not reloaded this mod, or a hand-built row) fall back to the exact
+ * fingerprint: fullText is those six ASCII dots, words are exactly six '.', back to back and spanning
+ * the whole line. A '......' with no words does not count — that is what a line-level lyric looks like
+ * before the parser fills its words in, and swallowing it would drop real lyrics.
+ */
+const INTERLUDE_TEXT = '......';
+const INTERLUDE_DOT_COUNT = 6;
+
+function isInterludeLine(line) {
+    if (!line) return false;
+    if (line.isInterlude === true) return true;
+    if (String(line.fullText) !== INTERLUDE_TEXT) return false;
+    const words = Array.isArray(line.words) ? line.words : [];
+    if (!words.length) return false;
+    if (words.length !== INTERLUDE_DOT_COUNT) return false;
+    const start = Number(line.startTime);
+    const end = Number(line.endTime);
+    if (!(Number.isFinite(start) && Number.isFinite(end) && end > start)) return false;
+    // Back to back with no gaps at either end: a real lyric's '.' words are never this tidy.
+    const tolerance = 0.01;
+    if (Math.abs(Number(words[0].startTime) - start) > tolerance) return false;
+    if (Math.abs(Number(words[words.length - 1].endTime) - end) > tolerance) return false;
+    for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if (String(word.text) !== '.') return false;
+        const wordStart = Number(word.startTime);
+        const wordEnd = Number(word.endTime);
+        if (!(Number.isFinite(wordStart) && Number.isFinite(wordEnd) && wordEnd >= wordStart)) return false;
+        if (i > 0 && Math.abs(wordStart - Number(words[i - 1].endTime)) > tolerance) return false;
+    }
+    return true;
+}
+
+/**
+ * Keep every stage's "current line" defined from time 0.
+ *
+ * The stages pick the current line as the last row whose `t` has passed (001 walks `while (ci + 1 <
+ * lines.length && T >= lines[ci + 1].t)`, 505 binary-searches the same way). Before the first explicit
+ * `t` that lookup returns -1, and the pages each do their own thing with it: 001 shows its
+ * 「等待第一句…」 hint, 505 blanks `decodeTarget` (a clear screen). That happens whenever the song's
+ * first line starts late, which is exactly the intro interlude case: attachInterludes inserts a
+ * '......' row for any song whose singing starts after 0:03, and once that row is dropped the table
+ * begins at the first sung line.
+ *
+ * So the first row's `t` becomes 0 and nothing else moves: during the intro the stage already shows
+ * the first lyric, 001 brewing it and then forming it, and the row's own `chars` keep the lyric's
+ * word timing. The text is kept on purpose — the stages treat a row whose text is empty as "no lyrics
+ * at all" (001 sets `hint.style.opacity = lines.length ? … : '0.4'` while its `hint.textContent`
+ * still says 这首没有歌词), so a blank first row would put 「等待第一句…」 / 「这首没有歌词」 back on
+ * screen for the whole intro, which is the symptom itself.
+ */
+function clampFirstRow(rows) {
+    if (!rows.length) return rows;
+    const first = rows[0];
+    if (!(first.t > 0)) return rows;
+    return [{ ...first, t: 0 }, ...rows.slice(1)];
+}
+
 /** ctx.lines (FoliumLine[]) → LIZI's { t, dur, text, chars } rows. */
-function linesToLizi(lines, wordColors) {
-    const rows = [];
+export function linesToLizi(lines, wordColors) {
     const list = lines || [];
+    // 只有 intro 一条间奏、后面没有任何真歌词时，这首等于没歌词。
+    // A lone intro interlude with nothing sung after it: this song has no lyrics.
+    if (list.every((line) => isInterludeLine(line))) return [];
+
+    // Interlude rows never become a row of their own; see isInterludeLine above.
+    const rows = [];
     for (let i = 0; i < list.length; i++) {
         const line = list[i] || {};
-        const next = list[i + 1];
+        if (isInterludeLine(line)) continue;
+        let next = null;
+        let afterInterlude = false;
+        for (let j = i + 1; j < list.length; j++) {
+            if (isInterludeLine(list[j])) afterInterlude = true;
+            else { next = list[j]; break; }
+        }
         const t = Number.isFinite(line.startTime) ? line.startTime : 0;
         let end = Number.isFinite(line.endTime) ? line.endTime : 0;
         if (!(end > t)) end = next && Number.isFinite(next.startTime) ? next.startTime : t + 6;
+        // 这一句和下一句歌词之间隔着间奏时，把 dur 撑到下一句真正的歌词开始：间奏期间舞台
+        // 停在这一句上，不出现点，也不落回「等待第一句」。
+        // An interlude between this line and the next: hold this one until the next sung line, so
+        // the gap shows neither dots nor the 「等待第一句…」 hint.
+        if (afterInterlude && next && Number.isFinite(next.startTime)) {
+            end = Math.max(end, next.startTime);
+        }
         const dur = Math.max(0.4, end - t);
         const words = line.words || [];
         let chars = [];
@@ -119,7 +206,7 @@ function linesToLizi(lines, wordColors) {
             chars: chars.length ? chars : null,
         });
     }
-    return rows;
+    return clampFirstRow(rows);
 }
 
 function songPayload(ctx) {

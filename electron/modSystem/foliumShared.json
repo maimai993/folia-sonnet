@@ -1,5 +1,5 @@
 {
-    "version": { "major": 1, "minor": 10 },
+    "version": { "major": 1, "minor": 11 },
     "permissions": {
         "filesystem.data": { "guards": ["folium.storage", "api.storage"] },
         "playback.read": { "guards": ["api.runtime.getPlaybackSnapshot"] },

@@ -86,6 +86,10 @@ export interface Line {
   backgroundVocal?: LyricBackgroundVocal;
   backgroundVocals?: LyricBackgroundVocal[];
   renderHints?: LineRenderHints;
+  // Set by attachInterludes on the placeholder line it inserts into a gap (fullText '......'):
+  // this line is a marker for "no words here", not a lyric someone wrote. Anything that has to
+  // tell the two apart (a real line that happens to be '......') must read this, not the text.
+  isInterlude?: true;
   isChorus?: boolean;
   chorusEffect?: 'bars' | 'circles' | 'beams';
   // User-saved fine word boundaries for fullText, baked in upstream by the lyric setter.

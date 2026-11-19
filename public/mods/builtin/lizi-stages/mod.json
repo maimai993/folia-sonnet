@@ -2,7 +2,7 @@
     "folium": 1,
     "id": "lizi-stages",
     "name": "LIZI 舞台 · 68 形态",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "author": "LIZI",
     "description": "LIZI 粒子播放器的 68 个可视化歌词舞台，全部原样搬进 Folia：每个舞台仍是它自己那张单文件页面，跑在 iframe 里，画布、滤镜、逐字动画、本地参数一概不改。纯渲染端歌词动画，无权限。",
     "client": "client.mjs",
