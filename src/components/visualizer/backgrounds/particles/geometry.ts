@@ -8,6 +8,7 @@
 //   applyCoverDepth   —— 从封面图算一张低频「景深」写进 aDepth
 
 import * as THREE from 'three';
+import { coverUvFromGrid, type CoverFrame } from './coverMapping';
 
 export interface ParticleGrid {
     total: number;
@@ -15,6 +16,24 @@ export interface ParticleGrid {
     grid: Float32Array;
     rand: Float32Array;
     depth: Float32Array;
+}
+
+/**
+ * 网格里的一个粒子沿「封面那一格」排布所需的映射。
+ *
+ * `grid` 是屏幕上的均匀格（决定位置和涟漪），`coverGrid` 是同一颗粒子
+ * 在**封面框**里的归一化位置（决定凸起的取样点与盖住封面时的落点）。
+ * 两者分开，是因为封面不再铺满屏幕：直接把屏幕网格当封面 UV 用，
+ * 就是 #435 里「粒子被拉伸铺满全屏」的那条路。
+ */
+export interface ParticleGridOptions {
+    /** 网格铺满的那块区域（世界空间宽高），就是可视区。 */
+    planeWidth: number;
+    planeHeight: number;
+    /** 封面框（世界空间），由 resolveCoverFrame 算好。 */
+    frame: CoverFrame;
+    /** 该形态是否让粒子本身按封面框排布（silk），默认 false（保留满屏网格）。 */
+    layoutByCover?: boolean;
 }
 
 /**
@@ -36,6 +55,7 @@ export const buildParticleGrid = (
     rows: number,
     planeWidth: number,
     planeHeight: number,
+    options?: Partial<ParticleGridOptions>,
 ): ParticleGrid => {
     const total = cols * rows;
     const pos = new Float32Array(total * 3);
@@ -43,14 +63,29 @@ export const buildParticleGrid = (
     const rand = new Float32Array(total);
     const depth = new Float32Array(total);
 
+    const frame = options?.frame;
+    const layoutByCover = options?.layoutByCover === true && frame !== undefined;
+    /*
+     * 按封面框排布时的尺寸：粒子只铺在封面的那一块里（等比、居中），
+     * 屏幕其余部分留给真空 —— 这正是 #435 要的「按封面真实比例摆放」。
+     * 网格位置仍然写满 0..1 的 uv，只是把世界坐标换算到封面框上。
+     */
+    const spanWidth = layoutByCover ? frame.width : planeWidth;
+    const spanHeight = layoutByCover ? frame.height : planeHeight;
+
     for (let i = 0; i < total; i += 1) {
         const gx = i % cols;
         const gy = Math.floor(i / cols);
         const u = cols > 1 ? gx / (cols - 1) : 0;
         const v = rows > 1 ? gy / (rows - 1) : 0;
-        pos[i * 3] = (u - 0.5) * planeWidth;
-        pos[i * 3 + 1] = (v - 0.5) * planeHeight;
+        pos[i * 3] = (u - 0.5) * spanWidth + (layoutByCover ? frame.centerX : 0);
+        pos[i * 3 + 1] = (v - 0.5) * spanHeight + (layoutByCover ? frame.centerY : 0);
         pos[i * 3 + 2] = 0;
+        /*
+         * aGrid 存的是「粒子在封面框里的位置」，不是屏幕位置。
+         * 片元按它采样封面；景深也按它取像素 —— 两边用同一份坐标，
+         * 凸起才会正好落在它对应那块封面上（#435 的第三条现象）。
+         */
         grid[i * 2] = u;
         grid[i * 2 + 1] = v;
         rand[i] = Math.random();
@@ -74,10 +109,20 @@ const DEPTH_SAMPLE = 64;
  *
  * 失败时静默保留 0（平面）：一个算不出来的景深不该让整个背景不显示。
  * 返回 true 表示成功写入了景深（调用方据此决定要不要打开 uHasDepth）。
+ *
+ * ★ 怎么把「布局坐标」换算成「封面像素」（#435）：
+ *
+ * 布局有两种（见 buildParticleGrid），这里按传进来的 planeWidth / planeHeight 与 frame 区分：
+ *   · layoutByCover（丝绸）—— aGrid 就是封面框里的 0..1，直接乘到像素；
+ *   · 满屏网格（滚筒 / 星球 / 唱片）—— aGrid 是屏幕上的 0..1，要先经
+ *     coverUvFromGrid 的同一套「屏幕世界坐标 → 封面框」映射，才知道该读封面哪一个像素。
+ *     以前这里直接把屏幕网格当封面像素坐标读，正方形封面被拉伸铺满屏幕，
+ *     凸起于是和画面对不上。
  */
 export const applyCoverDepthToGeometry = (
     source: CanvasImageSource | undefined,
     geometry: THREE.BufferGeometry,
+    layout?: { planeWidth: number; planeHeight: number; frame: CoverFrame; layoutByCover?: boolean },
 ): boolean => {
     if (!source) return false;
     try {
@@ -97,9 +142,33 @@ export const applyCoverDepthToGeometry = (
         for (let i = 0; i < count; i += 1) {
             const u = gridAttr.getX(i);
             const v = gridAttr.getY(i);
-            /* 同一套 0..1 → 像素的换算法；v 不翻转，和采样封面的约定保持一致。 */
-            const px = Math.min(size - 1, Math.max(0, Math.round(u * (size - 1))));
-            const py = Math.min(size - 1, Math.max(0, Math.round(v * (size - 1))));
+            let cu = u;
+            let cv = v;
+            if (layout && !layout.layoutByCover) {
+                /*
+                 * 满屏网格：先把网格坐标换算到封面坐标，再读像素。
+                 *
+                 * 用 coverUvFromGrid 而不是自己内联一套，是因为纵向那一次翻转只该有一处 ——
+                 * 复制一份就会有一份翻、一份不翻，正好又是「凸起方向反了」。
+                 * 这里和片元采样封面用的是同一个 coverUvFromGrid。
+                 */
+                const uv = coverUvFromGrid(u, v, layout.planeWidth, layout.planeHeight, layout.frame);
+                cu = uv.u;
+                cv = uv.v;
+            }
+            /* 换算到「封面自己的 0..1」，再夹到边缘（和采样器取边缘色的行为一致）。 */
+            cu = Math.min(1, Math.max(0, cu));
+            cv = Math.min(1, Math.max(0, cv));
+            /*
+             * 0..1 的封面坐标 → 像素。
+             *
+             * 像素行 py 从图片顶部数，而 cv 是翻转纹理的采样坐标（cv=0 是图片底部），
+             * 所以 `1 - cv` 才是那一行。这一步和 gridFromCoverPixel 里的翻转互逆 ——
+             * 「把封面第 0 行交给网格 v=1」和「网格 v=1 读第 0 行」对得上，
+             * 凸起才会和封面同向。
+             */
+            const px = Math.min(size - 1, Math.max(0, Math.round(cu * (size - 1))));
+            const py = Math.min(size - 1, Math.max(0, Math.round((1 - cv) * (size - 1))));
             const at = (py * size + px) * 4;
             const r = data[at] / 255;
             const g = data[at + 1] / 255;

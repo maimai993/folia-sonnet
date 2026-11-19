@@ -49,6 +49,17 @@ uniform vec3 uRipples[8];
 uniform int uRippleCount;
 uniform vec3 uTint;
 uniform float uTintStrength;
+/**
+ * 「网格坐标 → 封面采样坐标」的线性系数（#435）：
+ *
+ *     coverUv = vSampleUv * uCoverUvScale + uCoverUvOffset
+ *
+ * 由 JS 侧按封面框 / 可视区算好（coverMapping.ts 的 coverUvCoefficients），
+ * 不是着色器里按屏幕比例猜的 —— 屏幕比例只说明画面有多大，
+ * 说明不了「封面该多大」，后者取封面自身的宽高比。
+ */
+uniform vec2 uCoverUvScale;
+uniform vec2 uCoverUvOffset;
 /** 网格每边的格数，用来把粒子直径算到匹配间距。 */
 uniform float uGridSize;
 /** 封面的景深算好了没有。为 0 时顶点不做 z 位移。 */
@@ -109,7 +120,10 @@ void main() {
     vec3 pos = position;
 
     /*
-     * 采样坐标：默认就是粒子的网格位置（丝绸形态直接用）。
+     * 采样坐标：默认就是粒子在**封面框**里的位置（丝绸形态直接用）。
+     *
+     * aGrid 是粒子在封面框里的 0..1（丝绸的顶点位置也是按封面框排布的，
+     * 见 geometry.ts 的 layoutByCover），所以这里能直接取。
      *
      * 别的形态要把封面重新映射到自己的几何上 —— 滚筒要按 flow 采样、
      * 星球按经纬度、唱片只在中英圆盘里采样。所以这里传一个单独的
@@ -145,8 +159,8 @@ void main() {
         pos.x = cos(angle) * r;
         pos.y = sin(angle) * r;
         pos.z = zPos;
-        /* 封面按「环向 × flow」贴到隧道内壁。 */
-        sampleUv = vec2(aGrid.x, flow);
+        /* 封面按「环向 × flow」贴到隧道内壁；进隧道之前先按封面比例归到封面框里。 */
+        sampleUv = vec2(aGrid.x, flow) * uCoverUvScale + uCoverUvOffset;
     }
 
     /* ---------- 形态 2：星球（球面 + 自转）---------- */
@@ -166,8 +180,11 @@ void main() {
         float cy = cos(yaw);
         float sy = sin(yaw);
         pos.xz = mat2(cy, -sy, sy, cy) * pos.xz;
-        /* 经纬度就是封面 UV：赤道一圈是封面的横边。 */
-        sampleUv = aGrid;
+        /*
+         * 经纬度就是封面 UV：赤道一圈是封面的横边。
+         * 按封面比例归到封面框里再贴 —— 不然正方形封面会被铺满整个球面（#435）。
+         */
+        sampleUv = aGrid * uCoverUvScale + uCoverUvOffset;
     }
 
     /*
@@ -204,8 +221,8 @@ void main() {
         pos = vec3(rp * (1.0 + bassDrive * 0.012 + uBeat * 0.026), 0.0);
 
         if (d < coverR) {
-            /* 中心：圆形封面。UV 在圆盘内部重新居中映射。 */
-            sampleUv = p / (coverR * 2.0) + 0.5;
+            /* 中心：圆形封面。UV 在圆盘内部重新居中映射，再按封面比例归到封面框里。 */
+            sampleUv = (p / (coverR * 2.0) + 0.5) * uCoverUvScale + uCoverUvOffset;
             pos.z = 0.040 + uBeat * 0.018;
         } else {
             /* 外围：黑胶纹。UV 指向封面之外，片元那边会取到边缘色，这里不关心。 */
@@ -384,24 +401,21 @@ void main() {
 /**
  * 粒子片元着色器：采样封面纹理决定颜色，带一个圆形软边。
  *
- * 采样用的是粒子的网格坐标（vGrid），不是屏幕坐标 ——
+ * 采样用的是粒子的封面坐标（vSampleUv），不是屏幕坐标 ——
  * 所以涟漪把粒子推开时，颜色还是跟着封面走，看起来像「封面被搅动」。
  */
 export const PARTICLE_FRAGMENT = `
 uniform sampler2D uCover;
 uniform float uHasCover;
-/**
- * 封面纹理的宽高比（宽 / 高）。
+/*
+ * ★ 屏幕比例裁切已经挪回顶点着色器（#435）。
  *
- * 网格铺满的是**屏幕**（16:9），而封面通常是正方形。直接把 vGrid 当 UV 用，
- * 等于把封面横向拉成 16:9 —— 设备上看到的就是「封面显示不全/被压扁」。
- *
- * 用它做一次「cover 缩放」：把 UV 从屏幕比例换算回封面比例、居中裁切，
- * 保持封面本身的形状不变形（和 CSS 的 background-size: cover 同一个意思）。
+ * 这里原来有 uCoverAspect / uScreenAspect 两个 uniform，在片元里按屏幕比例
+ * 把 vSampleUv 拉伸/压缩一次。问题是这只决定「取封面哪一点的颜色」，
+ * 决定不了「粒子本身排在哪」—— 粒子仍然铺满视口，所以设备上看到的还是
+ * 「粒子背景拉满全屏、比例不对」。现在粒子的世界坐标（丝绸）和采样坐标
+ * （所有形态）都在 JS 侧按封面框算好（coverMapping.ts），片元只管采样。
  */
-uniform float uCoverAspect;
-/** 屏幕（画布）的宽高比，和封面比例一起算出裁切系数。 */
-uniform float uScreenAspect;
 uniform float uMid;
 uniform float uBass;
 uniform float uBeat;
@@ -432,7 +446,10 @@ void main() {
     /*
      * 封面采样。
      *
-     * 按粒子的网格坐标去取封面上的对应像素。
+     * 按顶点着色器算好的封面坐标（vSampleUv，见 coverMapping.ts 的 coverUvFromGrid）取像素。
+     * 那个坐标已经做了「按封面宽高比居中」，这里不再做任何比例换算 ——
+     * 以前在这里按 uScreenAspect / uCoverAspect 裁切，只裁了取样范围，
+     * 粒子本身仍然铺满屏幕（#435 的第一条现象）。
      *
      * ★ v 轴这里**不能再翻**。
      *
@@ -443,35 +460,18 @@ void main() {
      *
      * 之前这里写了 1.0 - vGrid.y，等于多翻了一次 ——
      * 设备上看到的就是「粒子里的封面是倒着的、和封面卡片完全反方向」。
+     * 现在凸起（aDepth）和颜色用的是同一份 vSampleUv，两边不会再各翻各的。
      */
     vec3 coverColor = vec3(0.0);
     float coverLum = 0.0;
     if (uHasCover > 0.5) {
         /*
-         * 把屏幕 UV 换算成「按封面比例居中裁切」的 UV。
-         *
-         * 屏幕比封面宽时（16:9 的屏幕 + 正方形封面），横向多出来的部分要往外扩，
-         * 纵向刚好铺满；反之亦然。系数 = 两个比例的比值。
-         */
-        /*
          * 采样坐标来自顶点着色器的按形态重映射（vSampleUv）。
          *
-         * 丝绸和星球直接用它当封面 UV，所以要按屏幕比例裁切；
-         * 滚筒和唱片已经在顶点着色器里自己算好了「封面怎么贴」，
-         * 再套一次屏幕裁切会把它们的位置算歪（隧道壁上的图会错位）。
+         * 丝绸、星球、滚筒的「封面怎么贴」都已在顶点着色器里按封面比例算好，
+         * 这里原样照取即可。
          */
         vec2 coverUv = vSampleUv;
-        bool ownMapping = (uForm > 0.5 && uForm < 2.5) || uForm > 3.5;
-        if (!ownMapping) {
-            float ratio = uScreenAspect / max(0.0001, uCoverAspect);
-            if (ratio > 1.0) {
-                // 屏幕更宽：横向看到封面更多的“外侧”，把它压回中心
-                coverUv.x = (coverUv.x - 0.5) * ratio + 0.5;
-            } else {
-                // 屏幕更高：纵向同理
-                coverUv.y = (coverUv.y - 0.5) / ratio + 0.5;
-            }
-        }
         coverColor = texture2D(uCover, coverUv).rgb;
         // 亮度用来决定这个粒子的「实体感」：暗的地方让位给主题色
         coverLum = dot(coverColor, vec3(0.299, 0.587, 0.114));

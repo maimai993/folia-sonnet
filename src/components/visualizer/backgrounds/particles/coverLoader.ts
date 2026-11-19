@@ -97,6 +97,14 @@ export interface LoadCoverOptions {
     url: string;
     loader: RetryableLoader<CoverTexture>;
     uniforms: CoverUniforms;
+    /**
+     * 封面真实宽高比（宽 / 高）算好之后回调。
+     *
+     * 粒子背景要靠它把封面按自己的比例居中摆放（#435）：封面铺满的那块区域、
+     * 以及「网格坐标 → 封面采样坐标」的系数，都从这里拿到比例之后才算得出来。
+     * 拿不到尺寸时按 1（正方形）处理。
+     */
+    onCoverAspect?: (aspect: number) => void;
     /** 装好之后按这张图算景深（写进几何的 aDepth）。 */
     applyDepth?: (image: CanvasImageSource | undefined) => void;
     /** 拿到图之后的回调：调用方用它记住那张图，几何重建时再算一遍景深。 */
@@ -123,11 +131,12 @@ export interface CoverTexture {
  * 从 `ParticlesBackground.tsx` 搬过来的：那边贴着 800 行的门禁，而这一段（加载 + 设采样
  * 参数 + 记宽高比 + 算景深 + 失败回调）是自成一体的，和粒子本身的绘制没有关系。
  *
- * `flipY` 保持 three 的默认 true：片元里用 `(vGrid.x, 1.0 - vGrid.y)` 采样，两者一正一反
- * 正好抵消，画面上封面的上下方向才是对的。改这里要同步改着色器。
+ * `flipY` 保持 three 的默认 true：uv 的 v 方向按「网格 v=0 = 画面底部 = 图片第 0 行」
+ * 对齐（见 coverMapping.ts 的 coverUvFromGrid），两边本来就一致、不要再翻一次。
+ * 改这里要同步改着色器和 coverMapping.ts。
  */
 export const loadCoverTexture = (options: LoadCoverOptions): (() => void) => {
-    const { url, loader, uniforms, applyDepth, onImage, isDisposed, onTexture } = options;
+    const { url, loader, uniforms, applyDepth, onImage, onCoverAspect, isDisposed, onTexture } = options;
     return loadWithRetry<CoverTexture>(loader, url, (loaded) => {
         if (isDisposed()) {
             loaded.dispose();
@@ -147,7 +156,14 @@ export const loadCoverTexture = (options: LoadCoverOptions): (() => void) => {
         const image = loaded.image as { width?: number; height?: number } | undefined;
         const cw = image?.width ?? 0;
         const ch = image?.height ?? 0;
-        uniforms.uCoverAspect.value = cw > 0 && ch > 0 ? cw / ch : 1;
+        const aspect = cw > 0 && ch > 0 ? cw / ch : 1;
+        uniforms.uCoverAspect.value = aspect;
+        /*
+         * 把比例交给调用方（#435）：封面按这个比例居中摆放，采样坐标也按它换算。
+         * 必须在 applyDepth 之前 —— 景深要按「封面的哪一格」去取像素，
+         * 那个换算式里的封面框就是由这个比例算出来的。
+         */
+        onCoverAspect?.(aspect);
         const bitmap = loaded.image as CanvasImageSource | undefined;
         onImage?.(bitmap);
         applyDepth?.(bitmap);
