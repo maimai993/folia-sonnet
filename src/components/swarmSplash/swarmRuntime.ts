@@ -52,6 +52,12 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
     canvas.height = Math.round(height * dpr);
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+    /*
+     * 量真实界面前先逼一次布局：覆盖层是刚挂上的，若不读一次样式，界面可能还没完成布局，
+     * 量出来的矩形会全是 0（那样就只能退回兜底版式，用户看到的又变成「假装画」）。
+     * 读一次 offsetHeight 就够了，代价是一次同步布局，发生在启动动画开始时。
+     */
+    void document.body.offsetHeight;
     const blocks = buildBlueprint({ width, height });
     // 移动端少一些光标：每只都要画形状，36 只在低端机上会掉帧。
     const count = width * height > 900 * 1600 ? 32 : 20;
