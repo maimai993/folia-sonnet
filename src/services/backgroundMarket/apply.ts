@@ -183,7 +183,9 @@ const applyImageToVisualizer = async (
      */
     const video = useVideoLayerSettingsStore.getState();
     if (video.videoLayerEnabled) {
-        video.setVideoLayerEnabled(false);
+        // 来源记成 lease：这是服务层的自动写入，不是用户动开关。用户开着视频层、
+        // 而某个租约正借着一半画面时设了背景图，不该让那个租约把这层当成自己开的再关一遍。
+        video.setVideoLayerEnabled(false, 'lease');
     }
     // 把这份 File 交回去：同一张图还要存进「莫奈肖像」时不必再下一次。
     return { error: null, file };
@@ -284,7 +286,7 @@ const applyVideoToVisualizer = async (
     next.setVideoLayerUrl('');
     const fresh = useVideoLayerSettingsStore.getState();
     fresh.setVideoLayerUrl(downloaded.url);
-    fresh.setVideoLayerEnabled(true);
+    fresh.setVideoLayerEnabled(true, 'lease');
     fresh.setVideoLayerOpacity(1);
     fresh.setVideoLayerFit('cover');
 
