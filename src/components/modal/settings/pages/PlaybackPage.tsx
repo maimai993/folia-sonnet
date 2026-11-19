@@ -10,7 +10,7 @@ import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore'
 import { useAutomixSettingsStore } from '../../../../stores/useAutomixSettingsStore';
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
 import { runsOnWindows } from '../../../../utils/platform';
-import { Button, Chips, Group, Reveal, Row, Segmented, Slider, Status, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
+import { Button, Chips, Group, Reveal, Row, Segmented, Select, Slider, Status, Toggle, option, type SettingsGroupDef, type SettingsOptionDef } from '../kit';
 import AudioOutputDeviceRow from './AudioOutputDeviceRow';
 import HifiSettings, { HIFI_OPTIONS } from './hifi/HifiSettings';
 import { useSettingsPage } from './settingsPageContext';
@@ -27,6 +27,8 @@ const BEHAVIOR: SettingsGroupDef = { id: 'queueSettings', titleKey: 'options.set
 const O = {
     transition: option(TRANSITION, 'transitionEnable', 'options.transitionEnable'),
     mode: option(TRANSITION, 'transitionMode', 'options.transitionMode'),
+    effect: option(TRANSITION, 'transitionEffect', 'options.transitionEffect'),
+    intensity: option(TRANSITION, 'transitionIntensity', 'options.transitionIntensity'),
     crossfadeMax: option(TRANSITION, 'crossfadeMaxSeconds', 'options.crossfadeMaxSeconds'),
     performance: option(TRANSITION, 'transitionPerformance', 'options.transitionPerformance'),
     animation: option(TRANSITION, 'transitionAnimation', 'options.transitionAnimation'),
@@ -44,6 +46,23 @@ const O = {
     preventSleep: option(BEHAVIOR, 'preventDisplaySleepDuringPlayback', 'options.preventDisplaySleepDuringPlayback', { electronOnly: true }),
     voiceInputPause: option(BEHAVIOR, 'voiceInputPause', 'options.voiceInputPause', { electronOnly: true, available: () => runsOnWindows() }),
 };
+
+/** 与原生 EffectId.wire 一一对应（android/.../TransitionStyle.kt）。改名要两边一起改。 */
+const TRANSITION_EFFECTS = [
+    'plainBlend', 'hardCut', 'fadeOutIn', 'plateauBlend',
+    'bassSwap', 'threeBandSeam', 'filterSweepIn', 'vocalRecede',
+    'beatCut', 'barAlignedBlend', 'tempoBend',
+    'tailRide', 'echoThrow', 'reverbCarry',
+    'buildUp', 'riserDrop', 'vinylBrake', 'reverseCrescendo',
+] as const;
+
+/** 强度四档。值是字符串（Segmented 只收 string），提交时再转回数字。 */
+const TRANSITION_INTENSITIES = [
+    { value: '0.25', labelKey: 'options.transitionIntensity_light' },
+    { value: '0.5', labelKey: 'options.transitionIntensity_normal' },
+    { value: '0.75', labelKey: 'options.transitionIntensity_strong' },
+    { value: '1', labelKey: 'options.transitionIntensity_max' },
+] as const;
 
 export const OPTIONS: SettingsOptionDef[] = [...HIFI_OPTIONS, ...Object.values(O)];
 
@@ -67,6 +86,10 @@ const PlaybackPage: React.FC = () => {
         performance: state.transitionPerformance,
         animationRing: state.transitionAnimation,
         animationCard: state.transitionAnimationCard,
+        effect: state.transitionEffect,
+        intensity: state.transitionIntensity,
+        setEffect: state.handleSetTransitionEffect,
+        setIntensity: state.handleSetTransitionIntensity,
         setEnabled: state.handleToggleAutomix,
         setMode: state.handleSetTransitionMode,
         setCrossfadeMaxSec: state.handleSetCrossfadeMaxSec,
@@ -145,17 +168,20 @@ const PlaybackPage: React.FC = () => {
                             onChange={automix.setMode}
                         />
                     </Row>
-                    <Reveal when={!usesAutomix}>
-                        <Row sub option={O.crossfadeMax}>
-                            <Slider
-                                value={automix.crossfadeMaxSec}
-                                min={CROSSFADE_MIN_SEC}
-                                max={CROSSFADE_MAX_SEC}
-                                onChange={automix.setCrossfadeMaxSec}
-                                format={seconds => t('options.crossfadeSecondsValue', { seconds })}
-                            />
-                        </Row>
-                    </Reveal>
+                    {/* 混音时长两个模式都显示：固定淡化是「就接这么久」，智能过渡是「最多这么久」。 */}
+                    <Row
+                        sub
+                        option={O.crossfadeMax}
+                        hint={usesAutomix ? t('options.crossfadeMaxAutomixDesc') : undefined}
+                    >
+                        <Slider
+                            value={automix.crossfadeMaxSec}
+                            min={CROSSFADE_MIN_SEC}
+                            max={CROSSFADE_MAX_SEC}
+                            onChange={automix.setCrossfadeMaxSec}
+                            format={seconds => t('options.crossfadeSecondsValue', { seconds })}
+                        />
+                    </Row>
                     <Reveal when={usesAutomix}>
                         {!analysable && <Row sub notice={t('options.transitionAutomixUnavailable')} />}
                         <Reveal when={analysable && !audio.mediaCache}>
@@ -163,6 +189,29 @@ const PlaybackPage: React.FC = () => {
                                 <Button onClick={() => audio.setMediaCache(true)}>{t('options.transitionAutomixEnableCache')}</Button>
                             </Row>
                         </Reveal>
+                        <Row sub option={O.effect} hint={t('options.transitionEffectDesc')}>
+                            <Select
+                                value={automix.effect ?? 'auto'}
+                                options={[
+                                    { value: 'auto', label: t('options.transitionEffectAuto') },
+                                    ...TRANSITION_EFFECTS.map(effect => ({
+                                        value: effect,
+                                        label: t(`options.transitionEffect_${effect}`),
+                                    })),
+                                ]}
+                                onChange={next => automix.setEffect(next === 'auto' ? null : next)}
+                            />
+                        </Row>
+                        <Row sub option={O.intensity} hint={t('options.transitionIntensityDesc')}>
+                            <Segmented
+                                value={String(automix.intensity)}
+                                options={TRANSITION_INTENSITIES.map(step => ({
+                                    value: step.value,
+                                    label: t(step.labelKey),
+                                }))}
+                                onChange={next => automix.setIntensity(Number(next))}
+                            />
+                        </Row>
                         {/* Kept in view when the app cannot separate a track: the reason is under the label. */}
                         <Row
                             sub

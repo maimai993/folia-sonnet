@@ -4153,6 +4153,7 @@ export default {
         "transitionAutomixDesc": "Analyses both tracks and mixes them automatically.",
         "transitionFellBack": "Using crossfade",
         "crossfadeMaxSeconds": "Maximum transition length",
+        "crossfadeMaxAutomixDesc": "Smart transitions never blend longer than this, whatever the two tracks suggest.",
         "crossfadeSecondsValue": "{{seconds}}s",
         "transitionMaxDesc": "How long the two songs may overlap at most. Each seam has its own range; the shorter of the two wins.",
         "crossfadeCurve": "Level curve",

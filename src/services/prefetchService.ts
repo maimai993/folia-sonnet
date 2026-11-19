@@ -93,6 +93,19 @@ const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined
     //
     // The volume balance (ReplayGain 'auto') reads the profile's loudness too, so it asks for one with
     // blending off - without the beat model, which only a blend reads.
+    /*
+     * 这里不再向原生过渡内核要档案。
+     *
+     * 试过两次都失败：在装源时分析会和播放器同时打开同一个源（起播卡顿、拖进度条报错、
+     * 自动切歌断掉），改到预取阶段、只分析下一首、改用软件解码，仍然会莫名其妙暂停 ——
+     * 原生那套分析要经 LocalAudioServer 取流并解码，和播放器抢的是同一份资源，换时机
+     * 只是把冲突概率降低，去不掉。
+     *
+     * 代价是原生规划器拿不到档案，自动挑选会退回等功率交叉。作为交换，设置页可以手动
+     * 指定 18 种接法之一，那条路不依赖任何分析，效果是确定的。要恢复自动选型，得让
+     * 分析复用播放器已经解出来的数据，而不是另开一路解码 —— 那是另一件事。
+     */
+
     const balancing = usePlaybackStore.getState().replayGainMode === 'auto';
     // The balance's own record is read straight from the cache, not behind the analysis queue.
     if (balancing) void loadBalanceRecord(song);

@@ -78,13 +78,21 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
     }
 
-    /** 当前这首的 songKey。伴奏缓存键、以及「生成完是不是还在听这首」都靠它。 */
-    @Volatile
-    private var currentSongKey: String? = null
-
     companion object {
+        /**
+         * 当前这首的 songKey。伴奏缓存键、以及「生成完是不是还在听这首」都靠它。
+         *
+         * 放 companion 是因为换歌那一刻（静态的 tryTakeover）要读它当「出场曲」：
+         * 过渡规划拿不到出场曲的档案，就只剩进场曲一侧的证据，最常命中的分支会退回
+         * 等功率交叉 —— 听感上就是「智能过渡只有一种效果」。
+         */
+        @Volatile
+        var currentSongKey: String? = null
+            private set
+
         /** 跨插件实例共享：新实例 load() 一旦推进代数，旧实例的任何迟到写入都被挡掉。 */
         private val PLAYER_GENERATIONS = PlayerGeneration()
+
 
         private const val EVENT = "foliaNativePlayer"
 
@@ -677,6 +685,8 @@ class FoliaNativePlayerPlugin : Plugin() {
         val repeatMode = call.getInt("repeatMode")
         val webSongKey = call.getString("songKey")
         val sourceToken = call.getString("sourceToken")
+        // 换歌那一刻的「出场曲」是上一首，必须在改写 currentSongKey 之前取下来。
+        val outgoingSongKey = currentSongKey
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
@@ -688,8 +698,10 @@ class FoliaNativePlayerPlugin : Plugin() {
          * 同一首重装（恢复进度、切画质）必须走普通路径，否则会被当成一次换歌交叉两次。
          */
         if (url != current.currentUrl() &&
-            FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)
+            FoliaTransitionPlugin.tryTakeover(context, url, webSongKey, outgoingSongKey)
         ) {
+            // 接管即代表这首已经接手播放：普通路径末尾那次赋值走不到，这里补上。
+            if (webSongKey != null) currentSongKey = webSongKey
             // 过渡接管时这台播放器不接 Web 的装源，伴奏换源也就无从谈起：
             // 把还在跑的生成任务作废，别让它在半路把歌切走。
             InstrumentalCoordinator.cancel()

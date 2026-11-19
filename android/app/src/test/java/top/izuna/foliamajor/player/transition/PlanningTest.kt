@@ -1,6 +1,7 @@
 package top.izuna.foliamajor.player.transition
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -80,13 +81,16 @@ class PlanningTest {
     }
 
     @Test
-    fun `满电平开头走硬切`() {
+    fun `满电平开头用短重叠压住，不再一律硬切`() {
+        // 满电平开头要的是「别一下子砸进来」，不是「不接」。原来这里断言硬切，于是绝大多数
+        // 流行歌都被判成 40 ms 切口 —— 用户听到的就是「智能过渡只有硬切」。
         val plan = TransitionStrategy.plan(
             ChoiceContext(profile("a"), profile("b", startsHot = true))
         )
-        assertEquals(EffectId.HARD_CUT, plan.style)
-        assertEquals(MusicalTime.BEAT_CUT_MS.toInt(), plan.overlapMs)
-        assertEquals(PlanKind.HARD_CUT, plan.kind)
+        assertNotEquals(EffectId.HARD_CUT, plan.style)
+        assertNotEquals(EffectId.BEAT_CUT, plan.style)
+        assertTrue("重叠时长应长于一次切口", plan.overlapMs > MusicalTime.BEAT_CUT_MS)
+        assertEquals(PlanKind.FADE, plan.kind)
     }
 
     @Test

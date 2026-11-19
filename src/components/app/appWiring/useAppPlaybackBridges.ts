@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { AppFoundation } from './useAppFoundation';
 import type { AppAudioOutput } from './useAppAudioOutput';
 import type { AppThemeAndNavigation } from './useAppThemeAndNavigation';
@@ -18,6 +19,7 @@ import { useTranscodeFallback } from '../../../hooks/useTranscodeFallback';
 import { getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { loadOnlineSongLyrics } from '../../../services/onlinePlayback';
 import { nativePlaybackEngine } from '../../../services/playbackEngine/nativePlaybackEngine';
+import { logTransitionDecisions } from '../../../services/nativeTransitionClient';
 import { useNativePlaybackRuntime } from '../../../services/playbackEngine/useNativePlaybackRuntime';
 import { currentTime } from '../../../stores/motionSignals';
 import { setStatusMessage as setStatusMsg } from '../../../stores/useStatusMessageStore';
@@ -61,6 +63,8 @@ type Input =
     & AppPlaybackQueue;
 
 export const useAppPlaybackBridges = (model: Input) => {
+    // 「这次换歌用了哪种接法、为什么」写进运行日志：智能过渡不生效时，这是第一处要看的证据。
+    useEffect(() => logTransitionDecisions(), []);
     const {
         analyserRef, animationFrameRef, audioContextRef, audioRef, audioSrc, automix, automixEnabled,
         cachePlayedOutRef, cachedCoverUrl, currentSong, currentView, cyclePlayerChromeVisibilityMode,

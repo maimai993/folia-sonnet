@@ -125,6 +125,7 @@ interface FoliaTransitionPlugin {
         durationMs: number;
         headers?: Record<string, string>;
     }): Promise<{ ok: boolean; profile: unknown | null }>;
+    ingest(options: { profiles: unknown[] }): Promise<{ accepted: number }>;
     plan(options: {
         fromKey?: string;
         toKey?: string;
@@ -180,6 +181,14 @@ export const analyseTrack = (
     headers?: Record<string, string>,
 ) => FoliaTransition.analyse({ key, url, durationMs, headers });
 
+/**
+ * 把 Web 侧已经算好的档案送进原生缓存（结构同 TrackProfile.toJson）。
+ *
+ * 原生不再自己解码分析 —— 那会和播放器抢解码器，代价是卡顿与切歌失败。这条路只是写缓存。
+ */
+export const ingestTrackProfiles = (profiles: unknown[]): Promise<{ accepted: number }> =>
+    isNativeTransitionAvailable() ? FoliaTransition.ingest({ profiles }) : Promise.resolve({ accepted: 0 });
+
 /** 换歌前算计划并 arm 引擎。bpmLive 是正在播放那一路自测的速度（没有档案时也是证据）。 */
 export const planTransition = (options: {
     fromKey?: string;
@@ -213,6 +222,21 @@ type CueListener = (cue: TransitionCue) => void;
  * 因此 AutomixTransitionAnimation.tsx 与 useElectronPlaybackBridge.ts 只需改 import，
  * 一行渲染逻辑都不用动。
  */
+/*
+ * 过渡日志：只记「决定了什么」，不记每一帧进度。
+ *
+ * 排查「智能过渡有没有生效」先看这几行：started 那条的 style 就是这次实际用的接法，
+ * reason 是规划器给的依据。一直 plainBlend 就说明规划器没拿到证据。
+ */
+export const logTransitionDecisions = (): (() => void) => subscribeToTransitionCue(cue => {
+    if (cue.preview) return;
+    if (cue.phase === 'started') {
+        console.log(`[Transition] started ${cue.style} ${cue.overlapMs}ms · ${cue.reason}`);
+    } else if (cue.phase === 'finished' || cue.phase === 'cancelled') {
+        console.log(`[Transition] ${cue.phase} ${cue.style} · ${cue.reason}`);
+    }
+});
+
 export const subscribeToTransitionCue = (listener: CueListener): (() => void) => {
     if (!isNativeTransitionAvailable()) return () => {};
     let handle: PluginListenerHandle | undefined;

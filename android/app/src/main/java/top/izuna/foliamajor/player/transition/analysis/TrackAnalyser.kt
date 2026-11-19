@@ -32,8 +32,11 @@ class TrackAnalyser(private val extractor: PcmWindowExtractor) {
         enhancer: EnhancerPack? = null,
     ): TrackProfile? {
         val head = extractor.extract(url, 0L, WINDOW_MS, headers) ?: return null
-        val tailStart = max(0L, durationMs - WINDOW_MS)
-        val tail = if (durationMs > WINDOW_MS + 2_000L) {
+        // 调用方（播放器接管那一刻）通常只有 url，没有时长；没有时长就取不到尾部窗口，
+        // endingShape / tailDb 这一半判据会全空。这里自己问一次，问不到才按「只有头」算。
+        val totalMs = if (durationMs > 0L) durationMs else extractor.durationOf(url, headers)
+        val tailStart = max(0L, totalMs - WINDOW_MS)
+        val tail = if (totalMs > WINDOW_MS + 2_000L) {
             extractor.extract(url, tailStart, WINDOW_MS, headers)
         } else null
         val tailSamples = tail?.samples ?: head.samples

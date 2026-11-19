@@ -11,6 +11,7 @@ import type { PlaybackRepresentation } from '../../types/playbackRecovery';
 import { getPlaybackAnalysisKey, getPlaybackAnalysisTarget } from '../playbackRecovery/representationRegistry';
 import { mayStoreSongAudio, whyNotTheSong, whyNotTheSongPlayed, whyPreviewClip } from '../wholeSongCheck';
 import { analyseTrackOffThread, measureProgramLoudnessOffThread, melSpectrogramOffThread } from './analysisOffThread';
+import { publishProfileToNative } from './nativeProfileBridge';
 import { analyseBeatGrid, canRunBeatThis } from '../analysis/beatThis';
 import { getTrackBeatGrid } from '../analysis/beatGrid';
 import { decodeAtRate, readLocalTrackFile, toMidSide } from '../analysis/trackAudio';
@@ -197,6 +198,8 @@ export const onProgramMeasured = (listener: (measurement: ProgramMeasurement) =>
 const remember = (songKey: string, profile: TrackProfile | null) => {
     profiles.delete(songKey);
     profiles.set(songKey, profile);
+    // 同一份档案也送一份给原生过渡内核：它在换歌那一刻要用，且不能自己再解码一遍。
+    publishProfileToNative(songKey, profile);
     profileListeners.forEach(listener => listener());
     // The answer replaces whatever an earlier request came to; left behind, it would be read back once
     // this profile is evicted, older than the measurement that superseded it.
