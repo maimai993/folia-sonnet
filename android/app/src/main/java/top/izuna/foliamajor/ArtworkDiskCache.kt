@@ -89,8 +89,14 @@ class ArtworkDiskCache internal constructor(
                 runCatching { file.delete() }
                 return null
             }
-            // 更新最近访问时间，淘汰时按 LRU 保留近期常听的封面。
-            runCatching { file.setLastModified(clockMs()) }
+            /*
+             * 更新最近访问时间，淘汰时按 LRU 保留近期常听的封面。
+             *
+             * 必须走 touchTimestamp：直接写 clockMs() 的话，一旦这个钟比盘上的 mtime 小
+             * （服务注入的是 elapsedRealtime，重启后从零开始），「刚读过」的条目反而被推成最旧，
+             * 下一次淘汰第一个删它 —— 正是这条用例钉住的场景。
+             */
+            runCatching { file.setLastModified(touchTimestamp(file)) }
             return bytes
         }
     }
