@@ -10,16 +10,12 @@
 // 所以这里不是「下载完就算」，而是下载 → 设素材 → 切模式，三步都做完才算成功。
 
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
-import { useVisualizerAssetStore } from '../../stores/useVisualizerAssetStore';
-import { useMarketRotationStore, rotationAllows } from '../../stores/useMarketRotationStore';
+import { useMarketRotationStore, rotationAllows, type RotationTarget } from '../../stores/useMarketRotationStore';
 import { getMarketSource } from './index';
 import { applyMarketBackground } from './apply';
 import { fetchMarketPage, resolveMarketMediaUrl, type BackgroundMarketItem } from './index';
 import { isCapacitorAndroid } from '../../platform/runtime';
-import {
-    downloadWallpaperImageFromUrl,
-    downloadWallpaperVideoFromUrl,
-} from '../../platform/foliaWallpaper';
+import type { BackgroundTarget } from '../../components/modal/settings/pages/integration/market/useBackgroundApplyTarget';
 
 /**
  * 各源浅取一页来凑候选池。
@@ -33,39 +29,12 @@ const SOURCE_PAGES = [
     { source: 'bizhihui' as const, category: '' },
 ];
 
-/** 背景模式里能吃自定义图片的那一档。 */
-const CUSTOM_IMAGE_MODE = 'monet';
-
 export interface RotationStepResult {
     ok: boolean;
     /** 这一轮选中的条目，用于界面上显示「刚换成什么」。 */
     item: BackgroundMarketItem | null;
     error: string | null;
 }
-
-/** 把一张背景设进桌面壁纸（原生那层）。 */
-const applyToWallpaper = async (item: BackgroundMarketItem, mediaUrl: string): Promise<boolean> => {
-    if (item.kind === 'video') {
-        /*
-         * 旋转要带上 —— 壁纸站的视频几乎全是横屏。
-         *
-         * 手动应用那条路（apply.ts）会把用户在裁剪界面选的角度传下来；
-         * 轮换没有界面，就沿用设置里已经存着的那个角度（没有则 0）。
-         * 不传的话这个参数默认 0，等价于「永远不转」。
-         */
-        const rotation = useVisualizerSettingsStore.getState().wallpaperVideoRotation ?? 0;
-        const ok = await downloadWallpaperVideoFromUrl(mediaUrl, rotation);
-        if (ok) {
-            useVisualizerSettingsStore.getState().handleSetLyricsWallpaperBackground('video');
-        }
-        return ok;
-    }
-    const ok = await downloadWallpaperImageFromUrl(mediaUrl);
-    if (ok) {
-        useVisualizerSettingsStore.getState().handleSetLyricsWallpaperBackground('image');
-    }
-    return ok;
-};
 
 /**
  * 执行一次轮换。
@@ -103,9 +72,31 @@ export const runRotationStep = async (): Promise<RotationStepResult> => {
     // 2. 按 cursor 推进，避免连着抽到同一张。
     const item = candidates[settings.cursor % candidates.length];
     useMarketRotationStore.getState().advanceCursor();
+    return applyRotationStep(item, settings.targets);
+};
 
-    // 3. 拿真实地址
-    let mediaUrl: string | null = null;
+/**
+ * 把挑中的一条应用到轮换选中的每一处。
+ *
+ * 「App 内」和「桌面壁纸」两个目标都交给 apply.ts 的 applyMarketBackground ——
+ * 它先下载一次，再把同一份素材分发给每一处（#428）。
+ * 以前这里对两个目标各走一条下载：两边都勾时同一个视频/图片下两遍。
+ *
+ * apply.ts 不收 mediaUrl（它自己解析），所以这里在调它之前先确认地址拿得到：
+ * 解析失败就是这一轮失败，不必让它再解析一次同一件事。
+ */
+const applyRotationStep = async (
+    item: BackgroundMarketItem,
+    rotationTargets: readonly RotationTarget[],
+): Promise<RotationStepResult> => {
+    const targets: BackgroundTarget[] = [];
+    if (rotationTargets.includes('visualizer')) targets.push('app');
+    if (rotationTargets.includes('wallpaper')) targets.push('wallpaper');
+    if (targets.length === 0) {
+        return { ok: false, item, error: '没有选中要应用到的地方' };
+    }
+
+    let mediaUrl: string | null;
     try {
         mediaUrl = await resolveMarketMediaUrl(item);
     } catch {
@@ -115,31 +106,15 @@ export const runRotationStep = async (): Promise<RotationStepResult> => {
         return { ok: false, item, error: '拿不到可下载的地址' };
     }
 
-    // 4. 按目标落地
     /*
-     * 「App 内」直接复用 apply.ts 那条路，图片和视频都交给它：
-     * 图片走莫奈自定义图，视频走歌词后方的视频层。
-     *
-     * 以前这里自己写了一套「只挂 customImage」，视频会被跳过 ——
-     * 表现就是「自动轮换选了视频，App 内那边不动」。
+     * 轮换没有界面，壁纸角度沿用设置里已经存着的那个（没有则 0）。
+     * 手动应用那条路会把用户在裁剪界面选的角度传下来，这里没有这一步。
      */
-    const appTargets = settings.targets.includes('visualizer') ? (['app'] as const) : ([] as const);
-    let appApplied = false;
-    if (appTargets.length > 0) {
-        const result = await applyMarketBackground(item, [...appTargets]);
-        appApplied = result.ok;
-    }
-
-    let applied = appApplied;
-    for (const target of settings.targets) {
-        if (target === 'wallpaper') {
-            applied = (await applyToWallpaper(item, mediaUrl)) || applied;
-        }
-    }
-
-    return applied
+    const rotation = useVisualizerSettingsStore.getState().wallpaperVideoRotation;
+    const result = await applyMarketBackground(item, targets, rotation);
+    return result.ok
         ? { ok: true, item, error: null }
-        : { ok: false, item, error: '应用失败' };
+        : { ok: false, item, error: result.error };
 };
 
 /** 一个源显示用（轮换提示里写「来自哪」）。 */
