@@ -6,35 +6,45 @@ import { resolveUiZoomFactor } from '../utils/uiZoom';
 //
 // 桌面版走 preload 的 `webFrame.setZoomFactor`（与上游一致）。
 //
-// 安卓没有 webFrame。两条路都试过，各有一个坑：
-//   · CSS `zoom`：会把 `position: fixed` 的参考系与 `100vh` 一起缩小，播放条 / 设置页底栏
-//     跑到屏幕外或停在中间（实测）。
-//   · viewport `initial-scale`：布局正确，但**只在页面加载时生效**，改挡位后不重排 ——
-//     用户实测「只能放大，缩小没反应」。
+// 安卓没有 webFrame。试过的三条路各有各的坑，记在这里免得再走一遍：
+//   · CSS `zoom`：`position: fixed` 的参考系与 `100vh` 一起被缩，播放条 / 设置页底栏
+//     跑到屏幕外或停在中间，右侧导航也会错位。
+//   · `zoom` + 根元素 width/height 补偿：仍然错位（根变大后 fixed 以更大的画布为参考）。
+//   · viewport `initial-scale`：布局正确，但**只在页面加载时生效**，改挡位后不重排，
+//     表现是「只能放大、缩小没反应」。
 //
-// 所以安卓走第三种：给根元素设 `zoom`，同时把**根元素的高宽按 1/zoom 撑开**。
-// 撑开之后布局视口仍是原来的像素数，fixed 元素照旧贴边，`100vh` 也回到真实高度 ——
-// 两处坑都不再出现。改挡位只是改这两个属性，立刻生效，不需要重新加载。
+// 现在这条同时满足两件事：`transform: scale()` 只影响渲染，**不改变布局计算**；
+// 想让缩小之后不留白，再把宿主按 1/scale 反向放大即可 —— 布局按原尺寸算，画面上铺满。
 
 let installed = false;
 
-/** 安卓 / 网页：zoom + 根元素尺寸补偿。 */
+/** 缩放作用的宿主：优先 #root（应用本体），没有就用 body。 */
+const zoomHost = (): HTMLElement | null => (
+    document.getElementById('root') ?? document.body ?? null
+);
+
 const applyDomZoom = (factor: number) => {
     const root = document.documentElement;
+    const host = zoomHost();
+    if (!host) return;
     if (Math.abs(factor - 1) < 0.001) {
-        root.style.removeProperty('zoom');
-        root.style.removeProperty('width');
-        root.style.removeProperty('height');
+        host.style.removeProperty('transform');
+        host.style.removeProperty('transform-origin');
+        host.style.removeProperty('width');
+        host.style.removeProperty('height');
         root.removeAttribute('data-folia-ui-zoom');
         return;
     }
-    root.style.setProperty('zoom', String(factor));
     /*
-     * 补偿：zoom 0.75 时内容只占 75%，把根撑到 1/0.75 倍，屏幕才被真正铺满，
-     * 而 fixed 元素的定位参考系仍是「撑开后的视口」，所以依旧贴边。
-     * 用 `%`：根元素的百分比相对初始包含块算，不受自身 zoom 影响。
+     * 先按 1/scale 把宿主撑大，再整体 scale 回去：
+     * 布局阶段宿主拿到「撑大后」的宽高，缩小渲染之后正好铺满可视区。
+     * transform 会为 fixed 子元素建立新的包含块，但宿主与视口同尺寸，两边重合，
+     * 所以播放条与设置页底栏仍然贴在屏幕边上。
      */
-    root.style.setProperty('width', `${100 / factor}%`);
+    host.style.transformOrigin = 'top left';
+    host.style.transform = `scale(${factor})`;
+    host.style.width = `${100 / factor}%`;
+    host.style.height = `${100 / factor}%`;
     root.setAttribute('data-folia-ui-zoom', String(factor));
 };
 

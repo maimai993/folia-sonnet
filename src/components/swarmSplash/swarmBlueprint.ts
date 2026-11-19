@@ -30,45 +30,87 @@ const MIN_BLOCK = 24;
 
 /** 从真实 DOM 里量。返回空数组表示量不到，调用方退回默认版式。 */
 export const measureBlueprint = (root?: ParentNode): BlueprintBlock[] => {
-    // 没有 DOM 时（单测、SSR）：直接告诉调用方量不到，让它退回兜底版式。
     if (!root && typeof document === 'undefined') return [];
-    const scope = root ?? document;
-    const nodes = Array.from(scope.querySelectorAll<HTMLElement>(
-        // 只认「有面积的容器」：卡片、海报、面板、按钮块、图片、标题。
-        '[data-folia-build-block], .lattice-poster, .bravais-tile, button, img, h1, h2, h3, [class*="rounded"]',
-    ));
-    const blocks: BlueprintBlock[] = [];
-    const seen = new Set<string>();
-    for (const node of nodes) {
-        if (blocks.length >= MAX_BLOCKS) break;
+    const scope = root ?? document.body;
+    if (!scope) return [];
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const measured: Array<BlueprintBlock & { area: number }> = [];
+
+    /*
+     * 选「看起来是界面主体」的元素：卡片、海报、砖块、面板、按钮、标题。
+     * 不再用 `[class*="rounded"]` —— 那几乎命中每个元素，量出来全是角标和装饰（实测：
+     * 色块被画到屏幕右下角）。这里只认真正参与版面的大块。
+     */
+    const selector = [
+        '[data-folia-build-block]',
+        '.lattice-poster',
+        '.bravais-tile',
+        '[data-grid-card]',
+        'main section',
+        'button',
+        'img',
+        'h1', 'h2', 'h3',
+    ].join(',');
+
+    for (const node of Array.from(scope.querySelectorAll<HTMLElement>(selector))) {
         const rect = node.getBoundingClientRect();
+        /*
+         * 只要「稳稳落在视口里、有实际面积」的块：
+         *   · 太小的（图标、分隔线）不要；
+         *   · 大到几乎盖住整屏的（根容器、遮罩）也不要 —— 它不是「一块」，画出来是个白板；
+         *   · 中心点必须在视口内，否则是滚动到外面去的旧节点。
+         */
         if (rect.width < MIN_BLOCK || rect.height < MIN_BLOCK) continue;
-        // 只取视口里的：覆盖层也只画看得见的那一屏。
-        if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
-        if (rect.right < 0 || rect.left > window.innerWidth) continue;
-        // 同一个位置不要重复建（嵌套元素会量出几乎相同的框）。
-        const key = `${Math.round(rect.left / 12)}:${Math.round(rect.top / 12)}:${Math.round(rect.width / 12)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (rect.width > viewportWidth * 0.92 && rect.height > viewportHeight * 0.92) continue;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        if (centerX < 0 || centerX > viewportWidth || centerY < 0 || centerY > viewportHeight) continue;
+
         const x = Math.max(0, rect.left);
         const y = Math.max(0, rect.top);
-        const width = Math.min(rect.width, window.innerWidth - x);
-        const height = Math.min(rect.height, window.innerHeight - y);
+        const width = Math.min(rect.width, viewportWidth - x);
+        const height = Math.min(rect.height, viewportHeight - y);
         if (width < MIN_BLOCK || height < MIN_BLOCK) continue;
-        // 文字块：元素里有直接文本，就把它打出来 —— 这才是「打字」那一段。
+
+        // 文字块：元素里有直接文本就把它打出来，这才是「打字」那一段。
         const ownText = Array.from(node.childNodes)
             .filter(child => child.nodeType === Node.TEXT_NODE)
             .map(child => child.textContent ?? '')
             .join('')
             .trim();
-        if (ownText) {
-            const fontSize = Number.parseFloat(getComputedStyle(node).fontSize) || 16;
-            blocks.push({ kind: 'text', x, y, width, height, text: ownText, fontSize });
-        } else {
-            blocks.push({ kind: 'rect', x, y, width, height });
-        }
+        const fontSize = ownText ? (Number.parseFloat(getComputedStyle(node).fontSize) || 16) : 0;
+        measured.push({
+            kind: ownText ? 'text' : 'rect',
+            x, y, width, height,
+            ...(ownText ? { text: ownText, fontSize } : {}),
+            area: width * height,
+        });
     }
-    return blocks;
+
+    /*
+     * 按面积从大到小取前 MAX_BLOCKS 个，并丢掉「几乎与已选中的块重合」的那些 ——
+     * 卡片里嵌卡片时，内层那块画出来只是同一位置重叠两次。
+     */
+    measured.sort((a, b) => b.area - a.area);
+    const chosen: BlueprintBlock[] = [];
+    for (const item of measured) {
+        if (chosen.length >= MAX_BLOCKS) break;
+        const overlaps = chosen.some(other => (
+            Math.abs(other.x - item.x) < 12
+            && Math.abs(other.y - item.y) < 12
+            && Math.abs(other.width - item.width) < 12
+            && Math.abs(other.height - item.height) < 12
+        ));
+        if (overlaps) continue;
+        const { area, ...block1 } = item;
+        chosen.push(block1);
+    }
+    /*
+     * 按「从上到下、从左到右」排：动画是一块块建的，顺序跟人的阅读顺序一致才像在画界面。
+     */
+    return chosen.sort((a, b) => (Math.abs(a.y - b.y) > 40 ? a.y - b.y : a.x - b.x));
 };
 
 /**
