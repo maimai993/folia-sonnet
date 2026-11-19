@@ -15,8 +15,9 @@ import type { AudioBands, Theme } from '../../../../types';
 import { PARTICLE_FRAGMENT, PARTICLE_VERTEX, QUAD_VERTEX } from './particlesShaders';
 import { OrbitStage } from '../orbitStage';
 import { FORM_CAMERA_SCALE, FORM_INDEX, type ParticlesConcreteForm } from './forms';
-import { applyCoverDepthToGeometry, buildParticleGrid } from './geometry';
+import { applyCoverDepthToGeometry } from './geometry';
 import { loadCoverTexture, type CoverUniforms } from './coverLoader';
+import { createCoverLayout, type CoverLayout, type CoverUvUniforms } from './coverLayout';
 
 // src/components/visualizer/backgrounds/particles/ParticlesBackground.tsx
 
@@ -194,47 +195,54 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
          */
         let planeWidth = 1.24;
         let planeHeight = 1.24;
+        /*
+         * 封面布局（#435，实现在 coverLayout.ts）：封面按自己的比例居中占多大、
+         * 网格铺在哪、采样系数是多少。以前没有这一层，网格直接按可视区生成、
+         * 片元再用屏幕比例裁一裁取样范围 —— 粒子于是铺满全屏，封面被拉成横条。
+         *
+         * 封面真实比例在解码之后才知道，所以这块是可变的，由 resize / 加载回调一起刷新。
+         */
+        const layoutByCover = form === 'silk';
+        /* 真正建出来是在 uniform 表之后（它要拿两个 uniform 写采样系数）。 */
+        let coverLayout: CoverLayout;
         let points: THREE.Points | null = null;
         /*
-         * ★ 网格按宽高比自适应，横纵格数不再相等。
+         * ★ 网格横纵格数不相等，按网格实际铺的那块区域取比例。
          *
-         * 原来固定 grid×grid。可视区是 16:9，横向 96 格塞进 1067px、
-         * 纵向 96 格塞进 480px —— 横向格距是纵向的 2.2 倍。
-         * 而 gl_PointSize 只有一个值、画出来是正圆，
-         * 结果就是「横向稀、纵向密」，整屏看着是一条条竖纹（实测现象）。
-         *
-         * 改成横纵各自按屏幕比例算格数：纵向固定 grid 格，
-         * 横向 = grid × aspect。这样每格在屏幕上是正方形，
-         * 粒子就是正圆且疏密一致，铺满整屏后拼成一张连续的封面。
+         * 原来固定 grid×grid，而可视区是 16:9：横向格距变成纵向的 2.2 倍，
+         * gl_PointSize 画出来又是正圆，于是「横向稀、纵向密」，整屏成了竖纹（实测现象）。
+         * 现在纵向固定 grid 格、横向按比例取（丝绸按封面比例，其余按屏幕比例），
+         * 格距两边一致、粒子正圆，细节见 coverLayout 的 columns。
          */
-        const colsFor = (aspectRatio: number) => Math.max(8, Math.round(grid * aspectRatio));
+        /* 封面真实宽高比：解码完成前按正方形估。 */
+        let coverAspect = 1;
         let cols = grid;
         const rows = grid;
 
-        const buildGeometry = (nextCols: number, nextRows: number) => (
-            buildParticleGrid(nextCols, nextRows, planeWidth, planeHeight)
-        );
-
-        const initial = buildGeometry(cols, rows);
-        const positionBuffer = initial.pos;
-        const gridBuffer = initial.grid;
-        const randBuffer = initial.rand;
-        const depthBuffer = initial.depth;
-
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute('position', new THREE.BufferAttribute(positionBuffer, 3));
-        geometry.setAttribute('aGrid', new THREE.BufferAttribute(gridBuffer, 2));
-        geometry.setAttribute('aRand', new THREE.BufferAttribute(randBuffer, 1));
-        geometry.setAttribute('aDepth', new THREE.BufferAttribute(depthBuffer, 1));
+        /** 顶点数不变时重写粒子的世界坐标（转屏 / 封面宽高比变化）。 */
+        const relayoutCoverGrid = (target: THREE.BufferGeometry) => {
+            const posAttr = target.getAttribute('position') as THREE.BufferAttribute | undefined;
+            if (!posAttr) return;
+            coverLayout.relayout(posAttr.array as Float32Array, cols, rows);
+            posAttr.needsUpdate = true;
+        };
 
         /**
          * 从封面算景深写进 aDepth（实现与注释见 ./geometry.ts）。
          *
          * 成功才打开 uHasDepth —— 读不到像素时保持平面，
          * 而不是拿一堆 0 去驱动 z 位移。
+         *
+         * 布局用的是 coverLayout 当前的值：封面刚解码出来时它已经按真实比例刷过了
+         * （见 loadCoverTexture 的 onCoverAspect），这里直接取用。
          */
         const applyCoverDepth = (source: CanvasImageSource | undefined, target: THREE.BufferGeometry) => {
-            if (applyCoverDepthToGeometry(source, target)) {
+            if (applyCoverDepthToGeometry(source, target, {
+                planeWidth: coverLayout.span.width,
+                planeHeight: coverLayout.span.height,
+                frame: coverLayout.frame,
+                layoutByCover,
+            })) {
                 uniforms.uHasDepth.value = 1;
             }
         };
@@ -262,9 +270,13 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
             uHasCover: { value: 0 },
             /** 封面景深算好了没有。为 0 时顶点不做 z 位移，画面是平的。 */
             uHasDepth: { value: 0 },
-            // 封面宽高比与屏幕宽高比：着色器按这两个值做「cover 缩放」，别让封面变形。
-            uCoverAspect: { value: 1 },
-            uScreenAspect: { value: 1 },
+            /*
+             * 「网格坐标 → 封面采样坐标」（#435）：coverUv = aGrid * scale + offset。
+             * 由 coverLayout.refresh 按封面框 / 可视区算好，取代了以前那对
+             * uCoverAspect / uScreenAspect —— 它们只裁取样范围，不改粒子摆放。
+             */
+            uCoverUvScale: { value: new THREE.Vector2(1, 1) },
+            uCoverUvOffset: { value: new THREE.Vector2(0, 0) },
             // 调试开关：localStorage 里放 folia_particle_debug=1 就画成不透明纯色。
             uDebug: {
                 value: (() => {
@@ -291,6 +303,23 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
             /** 律动强度倍数，对应 Mineradio 的 K = uIntensity * 1.6。 */
             uIntensity: { value: intensity },
         };
+
+        /*
+         * 封面布局从这里才建得出来（要把上面那两个采样系数 uniform 交出去）。
+         * 初值先按可视区和占位比例算一次，resize 随后会按真实尺寸刷新。
+         */
+        coverLayout = createCoverLayout(
+            planeWidth, planeHeight, layoutByCover, uniforms as unknown as CoverUvUniforms,
+        );
+        coverLayout.refresh(planeWidth, planeHeight, coverAspect);
+
+        /* 几何按封面布局生成：丝绸只铺封面框，其余形态铺满可视区。 */
+        const initial = coverLayout.build(cols, rows);
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(initial.pos, 3));
+        geometry.setAttribute('aGrid', new THREE.BufferAttribute(initial.grid, 2));
+        geometry.setAttribute('aRand', new THREE.BufferAttribute(initial.rand, 1));
+        geometry.setAttribute('aDepth', new THREE.BufferAttribute(initial.depth, 1));
 
         const material = new THREE.ShaderMaterial({
             vertexShader: PARTICLE_VERTEX,
@@ -334,6 +363,14 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
                 url: coverUrl,
                 loader,
                 uniforms: uniforms as unknown as CoverUniforms,
+                onCoverAspect: (aspect) => {
+                    /*
+                     * 封面解码完才知道真实宽高比（#435）：封面框要跟着变，
+                     * 丝绸的粒子也得按新框重排。applyDepth 里会再刷一次同样的事，重复无副作用。
+                     */
+                    coverLayout.refresh(planeWidth, planeHeight, aspect);
+                    if (layoutByCover) relayoutCoverGrid(geometry);
+                },
                 isDisposed: () => disposed,
                 onTexture: (loaded) => { texture = loaded as unknown as THREE.Texture<HTMLImageElement>; },
                 onImage: (image) => { coverImage = image; },
@@ -428,11 +465,6 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
             // 相机距离：深度衰减与点尺寸的基准（见 particlesShaders.ts 的 uCamDist）。
             uniforms.uCamDist.value = camera.position.length();
             /*
-             * 屏幕宽高比给着色器：它要和封面宽高比一起算出「cover 缩放」的裁切系数，
-             * 不然正方形封面会被铺满屏幕的方阵横向拉成 16:9（就是「封面显示不全」）。
-             */
-            uniforms.uScreenAspect.value = camera.aspect;
-            /*
              * 方阵要铺满可视区：高度取可视高（略放宽 2% 防边缘露空），
              * 宽度跟着 aspect 走。这样横屏竖屏都是满的，
              * 不会出现「中间一个小方块」（写死 1.24 时的实测现象）。
@@ -440,13 +472,20 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
             planeHeight = visibleHeight * 1.02;
             planeWidth = visibleWidth * 1.02;
             /*
+             * 可视区变了，封面框和「网格→封面」系数都要重算（#435）。
+             * 必须在生成顶点之前 —— 丝绸的网格直接按封面框排布。
+             * 封面比例在解码后才传进来，这里沿用上一次的（还不知道就是正方形）。
+             */
+            coverLayout.refresh(planeWidth, planeHeight, coverAspect);
+            /*
              * 一格的边长。
              *
-             * 网格现在横纵格数不一样（横向 = grid × aspect），
+             * 网格现在横纵格数不一样（横向 = grid × 比例），
              * 所以两边的格距天然相等，取哪个都行 —— 用纵向的即可。
              * 着色器按它算粒子直径，粒子就是正圆、疏密一致。
+             * 丝绸按封面框排布，格子跟着封面框的高度走。
              */
-            uniforms.uCellSpan.value = planeHeight / Math.max(1, rows - 1);
+            uniforms.uCellSpan.value = coverLayout.span.height / Math.max(1, rows - 1);
             /*
              * 网格要按新的宽高比重建：横纵格数都变了，顶点总数也变了，
              * 只改 position 的数值不够（属性长度对不上）。
@@ -454,11 +493,11 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
              * 重建代价是每个方向变化时才发生一次（转屏、分屏），
              * 不在每帧路径上。
              */
-            const nextCols = colsFor(camera.aspect);
+            const nextCols = coverLayout.columns(grid, camera.aspect);
             const nextRows = rows;
             if (nextCols !== cols || geometry.getAttribute('position')?.count !== nextCols * nextRows) {
                 cols = nextCols;
-                const built = buildGeometry(cols, nextRows);
+                const built = coverLayout.build(cols, nextRows);
                 geometry.setAttribute('position', new THREE.BufferAttribute(built.pos, 3));
                 geometry.setAttribute('aGrid', new THREE.BufferAttribute(built.grid, 2));
                 geometry.setAttribute('aRand', new THREE.BufferAttribute(built.rand, 1));
@@ -472,18 +511,8 @@ const ParticlesBackground: React.FC<ParticlesBackgroundProps> = ({
                     applyCoverDepth(coverImage, geometry);
                 }
             } else {
-                const posAttr = geometry.getAttribute('position') as THREE.BufferAttribute | undefined;
-                if (posAttr) {
-                    const arr = posAttr.array as Float32Array;
-                    for (let i = 0; i < cols * nextRows; i += 1) {
-                        const gx = i % cols;
-                        const gy = Math.floor(i / cols);
-                        arr[i * 3] = ((cols > 1 ? gx / (cols - 1) : 0) - 0.5) * planeWidth;
-                        arr[i * 3 + 1] = ((nextRows > 1 ? gy / (nextRows - 1) : 0) - 0.5) * planeHeight;
-                        arr[i * 3 + 2] = 0;
-                    }
-                    posAttr.needsUpdate = true;
-                }
+                /* 顶点数没变：只改世界坐标。丝绸按新的封面框重排，其余形态仍铺满可视区。 */
+                relayoutCoverGrid(geometry);
             }
             /*
              * 上屏用那张 2D canvas 的尺寸跟着走。它按 CSS 尺寸 × 像素比开，
