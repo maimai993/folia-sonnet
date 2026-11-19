@@ -9,17 +9,21 @@
 // 两个目标各有一套开关，都要显式拨到位：
 //
 //   桌面壁纸  → 原生壁纸层的 background 模式（video / image）
-//   可视化页面 → 图片：切到 monet 模式 **且** 把来源设为自定义图
+//   可视化页面 → 图片：把 monet 的来源设为自定义图，**且** 把背景切到 monet
 //               视频：走「歌词后方视频层」，填地址并自动启用
+//   莫奈 / 漫游 → 各自背景样式的自定义图，并**把可视化背景切到那一档**
+//               （两档互斥，见 applyTargets.ts）
 //
 // 「只切模式、不切来源」是踩过的坑：monet 默认画的是封面派生图，
 // 用户从市场选了图却仍看到封面，只会认为功能无效。
+// 另一个坑是反过来的「只存图、不切样式」：图存好了，画面上还是原来那一档。
 
 import { isCapacitorAndroid } from '../../platform/runtime';
 import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
 import { useVideoLayerSettingsStore } from '../../stores/useVideoLayerSettingsStore';
 import { resolveMarketMediaUrl, type BackgroundMarketItem } from './index';
 import { emitBackgroundProgress } from './progress';
+import { visualizerBackgroundModeForTargets } from './applyTargets';
 import {
     adoptDownloadedVideoAsWallpaperFile,
     downloadWallpaperImageFromUrl,
@@ -29,9 +33,6 @@ import {
 import { uploadMonetBackgroundImage } from '../../components/visualizer/backgrounds/monet/imageUpload';
 import { downloadNativeVideoLayerFile } from '../../platform/foliaNative';
 import type { BackgroundTarget } from '../../components/modal/settings/pages/integration/market/useBackgroundApplyTarget';
-
-/** 可视化页面里能吃自定义图片的那一档背景模式。 */
-const VISUALIZER_IMAGE_MODE = 'monet';
 
 /**
  * 视频背景时选的底层背景。
@@ -98,8 +99,22 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
          */
         emitBackgroundProgress(0.95);
         return new File([blob], `${name}.${extension}`, { type });
-    } catch {
+    } catch (error) {
+        console.warn('[backgroundMarket] 抓图失败', error);
         return null;
+    }
+};
+
+/**
+ * 视频层和背景图是两层叠着画的。
+ *
+ * 它不关的话，用户明明换了图，屏幕上还是被那段视频盖住 —— 看起来像「换图没生效」。
+ * 之前只有设视频时才会碰视频层，设图片时没人管它，于是留下了这个洞。
+ */
+const hideVideoLayerForImage = (): void => {
+    const video = useVideoLayerSettingsStore.getState();
+    if (video.videoLayerEnabled) {
+        video.setVideoLayerEnabled(false);
     }
 };
 
@@ -108,24 +123,24 @@ const fetchAsFile = async (url: string, name: string): Promise<File | null> => {
  *
  * 注意走的不是背景图那一套：莫奈的肖像（`portraitSource` / `handleUploadMonetPortraitImage`）
  * 和它的背景图（`backgroundSource` / `handleUploadMonetBackgroundImage`）是两处独立的存储，
- * 画的位置也不同 —— 市场里选「莫奈」要换的是前面那张肖像。
+ * 画的位置也不同 —— 市场里选「莫奈」要换的**只是**前面那张肖像。
  *
- * 不切 visualizerMode：用户可能正用着别的歌词样式，只是想先把莫奈这张备好。
+ * 切背景样式由 applyMarketBackground 在最后统一做（见那里的 ensureVisualizerBackgroundMode）：
+ * 图片上传这几步自己碰 `visualizerBackgroundMode` 的话，
+ * 用户同时勾了莫奈和漫游时，谁最后跑谁说了算，画面跳来跳去。
+ *
+ * 传进来的 `image` 由调用方取好（`sharedImage ?? 自己下载`），这里只负责肖像那一份。
  */
 const applyImageToMonetPortrait = async (
-    url: string,
-    itemId: string,
-    shared?: File | null,
+    image: File | null,
 ): Promise<string | null> => {
-    // 已经为别的目标下过同一张图就直接用，不再走一次网络（见 applyMarketBackground 里的共用逻辑）。
-    const file = shared ?? await fetchAsFile(url, itemId);
-    if (!file) return '图片下载失败';
+    if (!image) return '图片下载失败';
 
     const uploadPortrait = useVisualizerSettingsStore.getState().handleUploadMonetPortraitImage;
     if (!uploadPortrait) return '当前版本不支持设置莫奈肖像';
 
     // 走莫奈自己那套上传 action（写库 + 更新 store + 提示），这里不另写实现。
-    const uploaded = await uploadPortrait([file]);
+    const uploaded = await uploadPortrait([image]);
     if (!uploaded.ok) return uploaded.error ?? '图片保存失败';
 
     /*
@@ -140,67 +155,67 @@ const applyImageToMonetPortrait = async (
         ...store.monetTuning,
         portraitSource: 'custom',
     });
+    // 肖像换了也得把视频层关掉，理由同 storeImageForVisualizer。
+    hideVideoLayerForImage();
     return null;
 };
 
 /**
- * 把图片设成可视化页面的背景。
+ * 把市场里的这张图存进可视化页面用的那份自定义图（`monetBackgroundImage`）。
  *
- * 两步都必须做：
- *   1. 切到 monet 模式（当前若停在别的背景样式，图存得再好也不会被画出来）
- *   2. 把 monet 的来源设成 uploaded-global（默认是封面派生图）
+ * 莫奈和漫游吃的是同一份（见 useVisualizerBackgroundConfig 的 `customImage`），
+ * 所以只在这里存一次，两边拿同一份：同一张图不再各下一遍、各存一遍。
+ *
+ * 下载回来的 `File` 交回去 —— 莫奈的肖像要把它存进另一处，不必再下一次网络。
  */
-const applyImageToVisualizer = async (
+const storeImageForVisualizer = async (
     url: string,
     itemId: string,
     shared?: File | null,
 ): Promise<{ error: string | null; file: File | null }> => {
-    // 同上：同一张图只下一次。
+    // 同一张图只下一次。
     const file = shared ?? await fetchAsFile(url, itemId);
     if (!file) return { error: '图片下载失败', file: null };
 
     const uploaded = await uploadMonetBackgroundImage([file]);
-    if (!uploaded.ok) return { error: uploaded.error ?? '图片保存失败', file: null };
+    if (!uploaded.ok) return { error: uploaded.error ?? '图片保存失败', file };
 
-    const settings = useVisualizerSettingsStore.getState();
-    settings.handleSetVisualizerBackgroundMode(VISUALIZER_IMAGE_MODE);
     /*
-     * 切完模式再取一次 state：handleSetVisualizerBackgroundMode 会写 store，
-     * 但签名这一份里 backgroundSource 还是旧值，直接展开会把来源带回封面。
+     * 把来源拨到位，否则用户看到的就是「图传了但画面上没变」：
+     *   backgroundSource → uploaded-global，不然画的还是封面派生图。
      */
     const tuning = useVisualizerSettingsStore.getState().monetBackgroundTuning;
     useVisualizerSettingsStore.getState().handleSetMonetBackgroundTuning({
         ...tuning,
         backgroundSource: 'uploaded-global',
     });
-
-    /*
-     * 把视频层关掉。
-     *
-     * 视频层和背景图是两层叠着画的：它不关的话，用户明明选了图片，
-     * 屏幕上还是被那段视频盖住 —— 看起来像「换图没生效」。
-     * 之前只有设视频时才会碰视频层，设图片时没人管它，于是留下了这个洞。
-     */
-    const video = useVideoLayerSettingsStore.getState();
-    if (video.videoLayerEnabled) {
-        video.setVideoLayerEnabled(false);
-    }
-    // 把这份 File 交回去：同一张图还要存进「莫奈肖像」时不必再下一次。
+    hideVideoLayerForImage();
     return { error: null, file };
 };
 
 /**
- * 把视频设成可视化页面的背景。
+ * 把图片设成**歌词样式·漫游的自定义图**。
  *
- * 全程「下载到本地 → 走视频层那条上传路径」，不把网络地址直接塞给 <video>：
- * 视频地址带签名和防盗链，今天能播、过几天就 403 黑屏。
+ * 图已经在 storeImageForVisualizer 里存好（两档共用同一份），这里只把漫游自己拨到位：
+ * `imageSource` 不拨到 `uploaded-global`，它画的还是封面派生图，
+ * 用户看到的就还是「设了没反应」。
  *
- * 设置要一起拨对，否则看起来就是「设了没反应」：
- *   1. 清掉旧的本地视频 —— 它的优先级高于新文件
- *   2. 打开开关 —— 没开就一层都不画
- *   3. 不透明度拉满 —— 之前调低过的话视频淡得几乎看不见
- *   4. 背景切到不抢画面的那一档 —— 否则视频被不透明的背景整个盖住
+ * 切背景样式同样交给 applyMarketBackground 最后统一做（见那里的
+ * ensureVisualizerBackgroundMode），理由同 applyImageToMonetPortrait。
  */
+const applyImageToNomand = (): void => {
+    /*
+     * 现在再取一次 state 再展开：前面可能刚有别的步骤改过 store，
+     * 手里那一份可能是旧值。
+     */
+    const tuning = useVisualizerSettingsStore.getState().nomandBackgroundTuning;
+    useVisualizerSettingsStore.getState().handleSetNomandBackgroundTuning({
+        ...tuning,
+        imageSource: 'uploaded-global',
+    });
+    hideVideoLayerForImage();
+};
+
 /**
  * 把视频设成可视化页面的背景。
  *
@@ -213,6 +228,8 @@ const applyImageToVisualizer = async (
  *   2. 打开开关 —— 没开就一层都不画
  *   3. 不透明度拉满 —— 之前调低过的话视频淡得几乎看不见
  *   4. 背景切到不抢画面的那一档 —— 否则视频被不透明的背景整个盖住
+ *      （这一档不在这里切，由 applyMarketBackground 最后统一切，
+ *      免得和莫奈 / 漫游那两档互相覆盖）
  */
 const applyVideoToVisualizer = async (
     mediaUrl: string,
@@ -288,12 +305,28 @@ const applyVideoToVisualizer = async (
     fresh.setVideoLayerOpacity(1);
     fresh.setVideoLayerFit('cover');
 
-    const settings = useVisualizerSettingsStore.getState();
-    if (settings.visualizerBackgroundMode !== VISUALIZER_VIDEO_FRIENDLY_MODE) {
-        settings.handleSetVisualizerBackgroundMode(VISUALIZER_VIDEO_FRIENDLY_MODE);
-    }
+    /*
+     * 这里不再自己切背景模式：切哪一档由 applyMarketBackground 按勾的目标统一决定
+     * （视频 → 不抢画面的那一档；勾了莫奈 / 漫游 → 那一档）。见 ensureVisualizerBackgroundMode。
+     */
     // 落盘路径带回给调用方：桌面壁纸要用同一份文件，不再下一次。
     return { error: null, path: downloaded.path };
+};
+
+/**
+ * 把可视化背景切到这一档。
+ *
+ * 为什么要单独做在这一步：市场里的素材存好了不代表画面上变了。
+ * 用户点「歌词样式·莫奈」之后如果画面还停在别的一档，
+ * 看起来就是「勾了但什么都没发生」，只会认为功能失效（#434）。
+ *
+ * 一律在最后调，且整次应用只切一次：图片那几段中途切的话，
+ * 同时勾了莫奈和漫游时画面会先跳到一档再跳到另一档。
+ */
+const ensureVisualizerBackgroundMode = (mode: string): void => {
+    const settings = useVisualizerSettingsStore.getState();
+    if (settings.visualizerBackgroundMode === mode) return;
+    settings.handleSetVisualizerBackgroundMode(mode);
 };
 
 /**
@@ -340,11 +373,11 @@ export const applyMarketBackground = async (
     let notice: string | undefined;
 
     /*
-     * 同一张图只下一次，两个目标共用这份 File。
+     * 同一张图只下一次，几个目标共用这份 File。
      *
      * 「App 内」和「莫奈」同时勾选时，以前各走一次 fetchAsFile —— 同一张图下两遍，
-     * 进度条来回跳。但两处存储确实是独立的（一个是莫奈的背景图，一个是它的肖像），
-     * 所以**文件要存两份，网络只需要走一次**。
+     * 进度条来回跳。但两处存储确实是独立的（一个是莫奈 / 漫游共用的自定义图，
+     * 一个是莫奈的肖像），所以**文件要存两份，网络只需要走一次**。
      */
     let sharedImage: File | null = null;
 
@@ -384,7 +417,7 @@ export const applyMarketBackground = async (
                 sharedVideoPath = video.path;
             }
         } else {
-            const result = await applyImageToVisualizer(mediaUrl, item.id, sharedImage);
+            const result = await storeImageForVisualizer(mediaUrl, item.id, sharedImage);
             if (result.error) {
                 problems.push(result.error);
             } else {
@@ -466,18 +499,57 @@ export const applyMarketBackground = async (
     }
 
     // ---- 可视化页面（网页层）----
-    // ---- 歌词样式·莫奈的自定义肖像（只有静图能去）----
+    /*
+     * ---- 歌词样式·莫奈：换它的自定义肖像（与漫游互斥，见 applyTargets.ts）----
+     *
+     * 图要按 `sharedImage ?? 自己下载` 取：前面「App 内」那一段若已经下过同一张图，
+     * 这里直接用它，不再走一次网络。
+     *
+     * 不能复用「App 内」存的那份：那一份是莫奈的**背景图**，这里要的是**肖像**，
+     * 两处独立存储、画的位置也不同，所以这张图在这里必须自己再存一次。
+     */
     if (targets.includes('monet') && item.kind === 'image') {
-        /*
-         * 不能复用「App 内」存的图：那一份是莫奈的**背景图**，这里要的是**肖像**，
-         * 两处独立存储、画的位置也不同，所以这张图在这里必须自己再存一次。
-         */
-        const failure = await applyImageToMonetPortrait(mediaUrl, item.id, sharedImage);
+        const image = sharedImage ?? await fetchAsFile(mediaUrl, item.id);
+        const failure = await applyImageToMonetPortrait(image);
         if (failure) {
             problems.push(failure);
         } else {
             applied = true;
+            sharedImage = image;
         }
+    }
+
+    /*
+     * ---- 歌词样式·漫游的自定义图（只有静图能去）----
+     *
+     * 图就落在莫奈那份 `monetBackgroundImage` 上（两档共用），
+     * 所以这里通常不必再存一次，拿到 File 拨一下漫游的 `imageSource` 即可。
+     * 只有前面一段都没存过（单独勾了漫游）时，才在这里把它存进去。
+     */
+    if (targets.includes('nomand') && item.kind === 'image') {
+        const stored = sharedImage ? { error: null } : await storeImageForVisualizer(mediaUrl, item.id);
+        if (stored.error) {
+            // 存不进去就不能把漫游的来源指过去，否则它画的是上一张图。
+            problems.push(stored.error);
+        } else {
+            applyImageToNomand();
+            applied = true;
+        }
+    }
+
+    /*
+     * ---- 最后统一把可视化背景切到该显示的那一档 ----
+     *
+     * 放在所有素材都到位之后、只切一次：
+     *   · 勾了莫奈 / 漫游 → 切到那一档（#434：不切的话用户勾了但画面没变）
+     *   · 勾了 App 内视频 → 切到不抢画面的那一档，视频层才看得清
+     *
+     * 只在真的应用成功时切。失败还切的话，用户看到的是「换了个背景」而不是「失败了」。
+     */
+    if (applied) {
+        const mode = visualizerBackgroundModeForTargets(targets)
+            ?? (targets.includes('app') && item.kind === 'video' ? VISUALIZER_VIDEO_FRIENDLY_MODE : null);
+        if (mode) ensureVisualizerBackgroundMode(mode);
     }
 
     if (applied) {

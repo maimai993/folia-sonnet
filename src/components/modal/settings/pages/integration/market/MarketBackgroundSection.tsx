@@ -21,6 +21,7 @@ import { useBackgroundMarket } from './useBackgroundMarket';
 import { useMarketFilterStore } from './MarketFilterSlot';
 import { useBackgroundApplyTarget, type BackgroundTarget } from './useBackgroundApplyTarget';
 import { applyMarketBackground } from '../../../../../../services/backgroundMarket/apply';
+import { toggleApplyTarget } from '../../../../../../services/backgroundMarket/applyTargets';
 import { subscribeBackgroundProgress } from '../../../../../../services/backgroundMarket/progress';
 import MarketApplyDialog, { type ApplyTargetChoice } from './MarketApplyDialog';
 import MarketRotationSection from './MarketRotationSection';
@@ -64,6 +65,8 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
      * 莫奈那一层画的是静图（封面派生图 / 上传的图），视频放不进去 ——
      * 视频要去的是「App 内」的视频层。所以这一项在视频上直接不出现，
      * 而不是出现了再禁用（禁用的项用户会一直点）。
+     *
+     * 「漫游」同理，而且和莫奈互斥（见下面 MarketApplyDialog 的 reduceToggle）。
      */
     const choices: ApplyTargetChoice<BackgroundTarget>[] = useMemo(() => {
         const entries: ApplyTargetChoice<BackgroundTarget>[] = [
@@ -75,6 +78,11 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                 id: 'monet',
                 label: t('options.marketTargetBackground_monet'),
                 hint: t('options.marketTargetBackgroundMonetHint'),
+            });
+            entries.push({
+                id: 'nomand',
+                label: t('options.marketTargetBackground_nomand'),
+                hint: t('options.marketTargetBackgroundNomandHint'),
             });
         }
         return entries;
@@ -311,6 +319,7 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
                  * 不该替他一起决定。想两处都换就自己再点一下。
                  */
                 defaults={['wallpaper']}
+                reduceToggle={toggleApplyTarget}
                 progress={progress}
                 progressLabel={progressLabel}
                 error={applyError}

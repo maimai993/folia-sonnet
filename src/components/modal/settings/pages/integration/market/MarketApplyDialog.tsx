@@ -6,6 +6,9 @@
 //   同一个字体能用在歌词、字幕、锁屏壁纸；同一个背景能进桌面壁纸，也能进 App 内的歌词背景。
 //   不问就猜一个，用户多半要再翻设置改一次。
 //
+// 选择规则也在这里：有些目标互相排斥（背景市场的「莫奈」与「漫游」），
+// 勾一个就把另一个取消，见 services/backgroundMarket/applyTargets.ts。
+//
 // 选完之后原地变成下载进度 —— 不再单独开一个进度条，
 // 因为用户刚点完按钮，视线就在这儿。
 
@@ -14,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import ThemedDialog from '../../../../../shared/ThemedDialog';
 import { Button } from '../../../../../../components/ui';
+import { toggleApplyTarget } from '../../../../../../services/backgroundMarket/applyTargets';
 
 export interface ApplyTargetChoice<T extends string> {
     id: T;
@@ -39,6 +43,11 @@ interface MarketApplyDialogProps<T extends string> {
     error: string | null;
     onCancel: () => void;
     onConfirm: (targets: T[]) => void;
+    /**
+     * 减少勾来勾去的铁律：有没有哪个目标被点一下，要顶掉另一个。
+     * 不给就照旧各管各的。
+     */
+    reduceToggle?: (picked: readonly T[], id: T) => T[];
 }
 
 const MarketApplyDialog = <T extends string>({
@@ -53,6 +62,7 @@ const MarketApplyDialog = <T extends string>({
     error,
     onCancel,
     onConfirm,
+    reduceToggle,
 }: MarketApplyDialogProps<T>) => {
     const { t } = useTranslation();
     const [picked, setPicked] = useState<T[]>([]);
@@ -77,7 +87,9 @@ const MarketApplyDialog = <T extends string>({
     const toggle = (id: T) => {
         if (running) return;
         setPicked((current) => (
-            current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]
+            reduceToggle
+                ? reduceToggle(current, id)
+                : (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])
         ));
     };
 
