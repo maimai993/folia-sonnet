@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import * as nativePlugin from '../../../src/services/playbackEngine/nativePlayerPlugin';
+import { useAudioConsoleStore } from '../../../src/stores/useAudioConsoleStore';
 import { COMMAND_PALETTE_COMMANDS, getAvailableCommandPaletteCommands, getCommandPaletteMatches } from '../../../src/components/command-palette/commandRegistry';
 import { getCommandPrimaryTerm } from '../../../src/components/command-palette/search/commandSearchIndex';
 import { PINYIN_BY_PHRASE } from 'virtual:folia-command-pinyin';
@@ -7,7 +9,7 @@ import en from '../../../src/i18n/locales/en';
 import zhCN from '../../../src/i18n/locales/zh-CN';
 import zhTW from 'virtual:folia-locale-zh-TW';
 import id from '../../../src/i18n/locales/in';
-import vi from '../../../src/i18n/locales/vi';
+import vietnamese from '../../../src/i18n/locales/vi';
 import { buildSuiteChromeCommands } from '../../../src/components/command-palette/commands/suiteChromeCommands';
 import { listLibrarySuites } from '../../../src/library/registry';
 import { findKeywordOffenders, findUntranslatedCommands, listStaticCommands } from './commandContractChecks';
@@ -20,7 +22,7 @@ import { findKeywordOffenders, findUntranslatedCommands, listStaticCommands } fr
 // them itself from the registry. No shipped suite declares any yet; the same checks run over a fixture
 // suite in suiteChromeCommands.test.ts.
 
-const LOCALES = { en, 'zh-CN': zhCN, 'zh-TW': zhTW, in: id, vi } as const;
+const LOCALES = { en, 'zh-CN': zhCN, 'zh-TW': zhTW, in: id, vi: vietnamese } as const;
 
 // The chrome commands every available suite declares, built the way the app installs them
 // (library/app/installLibrarySuiteChromeCommands), checked alongside the static list.
@@ -43,6 +45,37 @@ describe('command palette registry contract', () => {
         const opened: unknown[][] = [];
         await command.execute('', { settings: { openSettings: (...args: unknown[]) => opened.push(args) } } as unknown as Parameters<typeof command.execute>[1]);
         expect(opened).toEqual([['options', 'ai', null, 'electronSettings']]);
+    });
+
+    it('registers each new native console switch for Android only', () => {
+        const switches = ['compensation', 'gate', 'deesser', 'deplosive', 'bass', 'exciter', 'transient', 'loudness', 'balance', 'normalize', 'headroom', 'declick', 'hum', 'denoise', 'dynamic-eq', 'compare', 'stereo'];
+        for (const id of switches) {
+            const command = COMMAND_PALETTE_COMMANDS.find(item => item.id === `audio-console-${id}`);
+            expect(command?.platform, id).toEqual(['capacitor-android']);
+        }
+    });
+
+    it('executes and reverses each switch, refuses to write on unsupported routes', async () => {
+        const available = vi.spyOn(nativePlugin, 'isNativePlayerAvailable');
+        const store = useAudioConsoleStore.getState();
+        try {
+            useAudioConsoleStore.getState().setNormalize({ enabled: true });
+            for (const command of COMMAND_PALETTE_COMMANDS.filter(c => c.id.startsWith('audio-console-'))) {
+                const before = useAudioConsoleStore.getState().settings;
+                const execute = () => command.execute('', {} as Parameters<typeof command.execute>[1]);
+                available.mockReturnValue(false);
+                expect(await execute()).toBe(false);
+                expect(useAudioConsoleStore.getState().settings).toBe(before);
+                available.mockReturnValue(true);
+                expect(await execute()).toBe(true);
+                expect(useAudioConsoleStore.getState().settings).not.toEqual(before);
+                expect(await execute()).toBe(true);
+                expect(useAudioConsoleStore.getState().settings).toEqual(before);
+            }
+        } finally {
+            store.replaceSettings(store.settings);
+            available.mockRestore();
+        }
     });
 
     it('keeps command ids unique', () => {

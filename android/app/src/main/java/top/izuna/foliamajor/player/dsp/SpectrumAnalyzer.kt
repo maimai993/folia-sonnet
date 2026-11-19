@@ -33,8 +33,8 @@ const val SPECTRUM_BAND_COUNT = 32
 private const val SPECTRUM_MIN_HZ = 20.0
 private const val SPECTRUM_MAX_HZ = 20000.0
 
-/** 每多少块算一次。128 帧 @48 kHz ≈ 2.67 ms，18 块 ≈ 48 ms。 */
-private const val BLOCKS_PER_FRAME = 18
+/** 每隔多少毫秒的音频算一次（与 48 kHz 下原来的 18 块 × 128 帧一致）。 */
+private const val SPECTRUM_FRAME_MS = 48f
 
 /** 底噪：低于这个电平当作静音，频谱图不画。 */
 private const val FLOOR_DB = -90f
@@ -57,7 +57,8 @@ class SpectrumAnalyzer {
     private val ring = FloatArray(FFT_SIZE)
     private var ringIndex = 0
     private var written = 0
-    private var blocksSinceFrame = 0
+    private var framesSinceAnalysis = 0
+    private var hopFrames = 1
 
     private val bandStart = IntArray(SPECTRUM_BAND_COUNT)
     private val bandEnd = IntArray(SPECTRUM_BAND_COUNT)
@@ -80,9 +81,10 @@ class SpectrumAnalyzer {
 
     fun configure(sampleRate: Int) {
         this.sampleRate = sampleRate
+        hopFrames = (SPECTRUM_FRAME_MS / 1000f * sampleRate).toInt().coerceAtLeast(1)
         ringIndex = 0
         written = 0
-        blocksSinceFrame = 0
+        framesSinceAnalysis = 0
         smoothed.fill(0f)
         bands = FloatArray(SPECTRUM_BAND_COUNT)
         buildBandEdges()
@@ -92,7 +94,7 @@ class SpectrumAnalyzer {
         ring.fill(0f)
         ringIndex = 0
         written = 0
-        blocksSinceFrame = 0
+        framesSinceAnalysis = 0
         smoothed.fill(0f)
         bands = FloatArray(SPECTRUM_BAND_COUNT)
     }
@@ -105,6 +107,7 @@ class SpectrumAnalyzer {
     fun push(buffer: FloatArray, offset: Int, frames: Int, channels: Int): Boolean {
         if (sampleRate <= 0 || frames <= 0) return false
         var index = offset
+        var produced = false
         for (frame in 0 until frames) {
             var sum = 0f
             for (channel in 0 until channels) {
@@ -115,15 +118,20 @@ class SpectrumAnalyzer {
             if (ringIndex >= FFT_SIZE) ringIndex = 0
             if (written < FFT_SIZE) written += 1
             index += channels
-        }
 
-        blocksSinceFrame += 1
-        if (blocksSinceFrame < BLOCKS_PER_FRAME) return false
-        blocksSinceFrame = 0
-        // 一窗都没填满时算出来全是零，白跑一次 FFT。
-        if (written < FFT_SIZE) return false
-        analyse()
-        return true
+            // 按送进来的样本数计时，不按调用次数：同一段音频不管一次给 128 帧还是几千帧，
+            // 每 SPECTRUM_FRAME_MS 毫秒出一帧（干声直通与湿声链的 push 粒度不同，按次数数会让刷新率随之漂移）。
+            framesSinceAnalysis += 1
+            if (framesSinceAnalysis >= hopFrames) {
+                framesSinceAnalysis = 0
+                // 一窗都没填满时算出来全是零，白跑一次 FFT。
+                if (written >= FFT_SIZE) {
+                    analyse()
+                    produced = true
+                }
+            }
+        }
+        return produced
     }
 
     private fun analyse() {
