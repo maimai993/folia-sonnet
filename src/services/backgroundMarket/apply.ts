@@ -438,7 +438,7 @@ export const applyMarketBackground = async (
         } else {
             /*
              * 取景框已经拿掉：整张图都收（0,0,1,1），只把旋转带过去。
-             * 原生那边默认会按 90° 摆好，所以多数竖屏场景不用额外处理。
+             * 市场素材默认逆时针 90°（调用方传 270），因为壁纸站的图多是横屏拍摄。
              */
             const downloaded = await downloadWallpaperImageFromUrl(mediaUrl, {
                 crop: { left: 0, top: 0, right: 1, bottom: 1 },
