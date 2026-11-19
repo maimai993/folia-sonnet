@@ -98,16 +98,55 @@ function wordChars(word, fallbackStart, wordColors) {
     return out;
 }
 
-/** ctx.lines (FoliumLine[]) → LIZI's { t, dur, text, chars } rows. */
-function linesToLizi(lines, wordColors) {
-    const rows = [];
+/*
+ * 间奏行：歌词流水线（parserCore 的 attachInterludes）在两句间隔超过 3 秒时，会把空白
+ * 单独插成一行，fullText 固定是 INTERLUDE_FULL_TEXT（'......'）。它是给别处判断「这里
+ * 没有词」用的标记，不是给人看的歌词。舞台页都按 t 二分找当前行，不加处理就会把这行
+ * 当成一句正常歌词演出来 —— 画面上就是一行点，用户看到的就是「间奏变成另一句」。
+ * 这里把它并回上一句真正的歌词：上一句的 dur 一直延到间奏结束，间奏期间舞台保持
+ * 最后一句继续显示与演出，既不出现点，也不落到「暂无歌词」的空态。
+ */
+function interludeMarker(lines) {
+    for (const line of lines) {
+        const text = String((line && line.fullText) || '').trim();
+        // 只认整行是一个以上的 '.'：正常歌词不会整句都是点。
+        if (text && /^\.+$/.test(text)) return text;
+    }
+    return null;
+}
+
+/**
+ * ctx.lines (FoliumLine[]) → LIZI's { t, dur, text, chars } rows.
+ * 间奏行不单独成行，时间并入上一句，见 interludeMarker 的说明。
+ * 导出只给单测用，运行时入口是 mountLiziStage。
+ */
+export function linesToLizi(lines, wordColors) {
     const list = lines || [];
+    const marker = interludeMarker(list);
+    const isInterlude = (line) => Boolean(marker) && String((line && line.fullText) || '').trim() === marker;
+
+    /* 下一句真正的歌词（跳过间奏行），给算 dur 用。 */
+    const nextSongLine = (from) => {
+        for (let j = from + 1; j < list.length; j++) {
+            if (!isInterlude(list[j])) return list[j];
+        }
+        return null;
+    };
+
+    const rows = [];
     for (let i = 0; i < list.length; i++) {
         const line = list[i] || {};
-        const next = list[i + 1];
+        if (isInterlude(line)) continue;
         const t = Number.isFinite(line.startTime) ? line.startTime : 0;
+        const next = nextSongLine(i);
         let end = Number.isFinite(line.endTime) ? line.endTime : 0;
         if (!(end > t)) end = next && Number.isFinite(next.startTime) ? next.startTime : t + 6;
+        // 下一句是间奏行时，把这一句一直撑到间奏结束（下一句真正的歌词开始），
+        // 间奏期间就停在这一句上。中间有间奏时下一句的开始时间就是它自己的 startTime。
+        const after = list[i + 1];
+        if (after && isInterlude(after) && next && Number.isFinite(next.startTime)) {
+            end = Math.max(end, next.startTime);
+        }
         const dur = Math.max(0.4, end - t);
         const words = line.words || [];
         let chars = [];
