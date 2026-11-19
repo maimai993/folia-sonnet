@@ -263,8 +263,18 @@ describe('culling a tilted wall: wiring', () => {
         const fieldRef = { current: document.createElement('div') };
         const seen: Bounds[] = [];
         const handle: { camera: ReturnType<typeof useBravaisCamera> | null } = { camera: null };
+        /*
+         * renderFrame 必须是**稳定引用**（#416）。
+         *
+         * 写成内联 `() => undefined` 时，Probe 每次重渲染都换一个新函数，而它在
+         * `useBravaisCamera → moveTo → updateCamera` 的依赖链上 —— useWallPointerPan 挂
+         * pointerup / keydown / blur 的 effect 随之重建，清理函数先跑 `cancel()` 把
+         * `pointerRef.current` 清成 null，拖动就不再推进（实测 200 次 pointermove 有 153 次
+         * 被这个 null 提前返回），拖动重裁用例于是在 CI 上间歇失败。
+         */
+        const renderFrame = () => undefined;
         const Probe = () => {
-            const camera = useBravaisCamera({ frameRef, renderFrame: () => undefined, fieldRef, reducedMotion: false });
+            const camera = useBravaisCamera({ frameRef, renderFrame, fieldRef, reducedMotion: false });
             handle.camera = camera;
             if (camera.bounds && seen[seen.length - 1] !== camera.bounds) seen.push(camera.bounds);
             return null;
