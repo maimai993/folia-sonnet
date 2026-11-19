@@ -6,28 +6,36 @@ import { resolveUiZoomFactor } from '../utils/uiZoom';
 //
 // 桌面版走 preload 的 `webFrame.setZoomFactor`（与上游一致）。
 //
-// ★ 安卓没有 webFrame。这里用 **viewport meta 的 initial-scale**，而不是 CSS `zoom`：
-//   CSS zoom 会把视口单位与 `position: fixed` 的参考系一起改掉，于是固定定位的播放条、
-//   设置页底栏会跑到屏幕外或停在中间（实测反馈：「播放条、设置页面有一些 UI 不见了」
-//   「底部没铺满」「切换条在中下位置挡住内容」）。
-//   initial-scale 是浏览器自己的缩放：布局视口按 1/scale 变宽，页面正常重排，
-//   固定定位仍贴在可视区边上，不需要任何补偿。
+// 安卓没有 webFrame。两条路都试过，各有一个坑：
+//   · CSS `zoom`：会把 `position: fixed` 的参考系与 `100vh` 一起缩小，播放条 / 设置页底栏
+//     跑到屏幕外或停在中间（实测）。
+//   · viewport `initial-scale`：布局正确，但**只在页面加载时生效**，改挡位后不重排 ——
+//     用户实测「只能放大，缩小没反应」。
+//
+// 所以安卓走第三种：给根元素设 `zoom`，同时把**根元素的高宽按 1/zoom 撑开**。
+// 撑开之后布局视口仍是原来的像素数，fixed 元素照旧贴边，`100vh` 也回到真实高度 ——
+// 两处坑都不再出现。改挡位只是改这两个属性，立刻生效，不需要重新加载。
 
 let installed = false;
 
-/** 安卓 / 网页：改写 viewport meta 的 initial-scale。 */
-const applyViewportScale = (factor: number) => {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (!meta) return;
-    /*
-     * 保留 `viewport-fit=cover`（安全区要用）与其余字段，只换 initial-scale。
-     * 缩放变小时要放宽布局视口：否则内容仍按原宽度排版，右侧留白。
-     */
-    const width = factor < 1 ? `${100 / factor}%` : 'device-width';
-    meta.setAttribute('content', `width=${width}, initial-scale=${factor}, viewport-fit=cover`);
+/** 安卓 / 网页：zoom + 根元素尺寸补偿。 */
+const applyDomZoom = (factor: number) => {
     const root = document.documentElement;
-    if (Math.abs(factor - 1) < 0.001) root.removeAttribute('data-folia-ui-zoom');
-    else root.setAttribute('data-folia-ui-zoom', String(factor));
+    if (Math.abs(factor - 1) < 0.001) {
+        root.style.removeProperty('zoom');
+        root.style.removeProperty('width');
+        root.style.removeProperty('height');
+        root.removeAttribute('data-folia-ui-zoom');
+        return;
+    }
+    root.style.setProperty('zoom', String(factor));
+    /*
+     * 补偿：zoom 0.75 时内容只占 75%，把根撑到 1/0.75 倍，屏幕才被真正铺满，
+     * 而 fixed 元素的定位参考系仍是「撑开后的视口」，所以依旧贴边。
+     * 用 `%`：根元素的百分比相对初始包含块算，不受自身 zoom 影响。
+     */
+    root.style.setProperty('width', `${100 / factor}%`);
+    root.setAttribute('data-folia-ui-zoom', String(factor));
 };
 
 /** 按当前设置缩放这个窗口，并在开关或挡位改动时跟着改。 */
@@ -43,7 +51,7 @@ export const installUiZoom = () => {
             if (Math.abs(current - factor) < 0.001) return;
             electron.setPageZoomFactor(factor);
         } else if (typeof document !== 'undefined') {
-            applyViewportScale(factor);
+            applyDomZoom(factor);
         }
         console.info(`[UiZoom] page zoom ${Math.round(factor * 100)}%`);
     };

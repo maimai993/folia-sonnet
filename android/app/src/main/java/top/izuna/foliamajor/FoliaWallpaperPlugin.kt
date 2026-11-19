@@ -278,24 +278,18 @@ class FoliaWallpaperPlugin : Plugin() {
         // 这两个模式是互斥的两层：跟随样式走 WebView 叠层，精简走原生小悬浮窗。
         // 用户在设置里切样式的那一刻就要生效，所以这里顺手催一次，不等 600ms 巡检。
         val overlay = top.izuna.foliamajor.wallpaper.FloatingLyricsOverlay.shared(context)
-        /*
-         * ★ 关掉「在所有应用上叠加」时，歌词该由**系统壁纸服务**画在图标下面（#424）。
-         *
-         * 以前这里无条件 start()：没把我们的壁纸设成动态壁纸、又关掉了「所有应用上叠加」时，
-         * 悬浮窗仍然会挂上去 —— 它是系统悬浮窗，压在桌面图标**上面**，用户的原话是
-         * 「图标都看不见了」。这种情况下正确的路径是壁纸服务：内容位于图标之下，
-         * 不会被图标压住，也不会压住图标。
-         *
-         * 判据两条同时成立才启动悬浮窗：
-         *   · 用户明确要「在所有应用上叠加」（那是悬浮窗唯一能做的事，壁纸做不到）；
-         *   · 或者我们的壁纸没被设上（那种情况下悬浮窗是唯一还能显示的路径）。
-         */
         val overlayAllAppsFlag: Float? = WallpaperLyricsState.tuning()?.get("wp.overlayAllApps")
         val overlayAllApps = (overlayAllAppsFlag ?: 0f) >= 0.5f
-        val wallpaperActive = top.izuna.foliamajor.wallpaper.WallpaperOverlay
-                .shared(context)
-                .isOurWallpaperActive()
-        if (overlayAllApps || !wallpaperActive) {
+        /*
+         * 只在用户**明确要**「在所有应用上叠加」时挂悬浮窗（#424）。
+         *
+         * 悬浮窗是系统级窗口，压在桌面图标**上面** —— 没被要求时挂着它，用户看到的就是
+         * 「图标都看不见了」（反馈原话）。壁纸服务那边画的内容在图标**下面**，才是可接受的默认路径。
+         *
+         * 以前这里是 `overlayAllApps || !wallpaperActive`：第二个条件写反了 —— 壁纸没设上时
+         * 它恒真，于是永远启动悬浮窗。现在只认开关本身。
+         */
+        if (overlayAllApps) {
             overlay.start()
             /*
              * 叠加模式下「左右 / 宽度」是设置里的滑条管的，而位置只在挂窗口和转屏时才算 ——

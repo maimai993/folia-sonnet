@@ -45,6 +45,8 @@ const O = {
     tabExplore: option(HOME, 'showHomeTabExplore', 'options.showHomeTabExplore'),
     tabAlbums: option(HOME, 'showHomeTabAlbums', 'options.showHomeTabAlbums'),
     tabLocal: option(HOME, 'showHomeTabLocal', 'options.showHomeTabLocal'),
+    // AI 主题（云端）入口：store 与胶囊早就支持，只是设置页一直没给这一行（用户报「没有 AI 主题入口」）。
+    tabCloud: option(HOME, 'showHomeTabCloud', 'options.showHomeTabCloud'),
     cardStyle: option(HOME, 'grid3dCardStyle', 'options.grid3dCardStyle', GRID_ONLY),
     rememberPosition: option(HOME, 'rememberHomeCardPosition', 'options.rememberHomeCardPosition', GRID_ONLY),
     fullBleedCover: option(GRID, 'gridViewFullBleedCover', 'options.gridViewFullBleedCover'),
@@ -69,6 +71,7 @@ const HomePage: React.FC = () => {
         tabRadio: state.showHomeTabRadio,
         tabAlbums: state.showHomeTabAlbums,
         tabLocal: state.showHomeTabLocal,
+        tabCloud: state.showHomeTabCloud,
         tabExplore: state.showHomeTabExplore,
         cardStyle: state.grid3dCardStyle,
         rememberPosition: state.rememberHomeCardPosition,
@@ -76,6 +79,7 @@ const HomePage: React.FC = () => {
         setTabRadio: state.handleToggleHomeTabRadio,
         setTabAlbums: state.handleToggleHomeTabAlbums,
         setTabLocal: state.handleToggleHomeTabLocal,
+        setTabCloud: state.handleToggleHomeTabCloud,
         setTabExplore: state.handleToggleHomeTabExplore,
         setCardStyle: state.handleSetGrid3dCardStyle,
         setRememberPosition: state.handleToggleRememberHomeCardPosition,
@@ -128,6 +132,7 @@ const HomePage: React.FC = () => {
                             { id: O.tabExplore.id, label: t('home.explore'), checked: home.tabExplore, onChange: home.setTabExplore, disabled: !hasExplore },
                             { id: O.tabAlbums.id, label: t('home.albums'), checked: home.tabAlbums, onChange: home.setTabAlbums },
                             { id: O.tabLocal.id, label: t('localMusic.folder'), checked: home.tabLocal, onChange: home.setTabLocal },
+                    { id: O.tabCloud.id, label: t('home.cloud'), checked: home.tabCloud, onChange: home.setTabCloud },
                         ]}
                     />
                 </Row>
