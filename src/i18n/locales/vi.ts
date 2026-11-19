@@ -4153,6 +4153,7 @@ export default {
         "transitionAutomixDesc": "Phân tích và tự động hòa âm giữa hai bài hát.",
         "transitionFellBack": "Dùng crossfade",
         "crossfadeMaxSeconds": "Thời lượng chuyển tiếp tối đa",
+        "crossfadeMaxAutomixDesc": "Chuyển tiếp thông minh sẽ không dài hơn mức này, dù hai bài đo ra sao.",
         "crossfadeSecondsValue": "{{seconds}}s",
         "transitionMaxDesc": "How long the two songs may overlap at most. Each seam has its own range; the shorter of the two wins.",
         "crossfadeCurve": "Level curve",

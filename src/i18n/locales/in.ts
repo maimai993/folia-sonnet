@@ -4150,6 +4150,7 @@ export default {
         "transitionAutomixDesc": "Menganalisis kedua trek dan mencampurnya secara otomatis.",
         "transitionFellBack": "Memakai crossfade",
         "crossfadeMaxSeconds": "Durasi transisi maksimum",
+        "crossfadeMaxAutomixDesc": "Transisi pintar tidak akan lebih lama dari ini, berapa pun hasil pengukuran lagunya.",
         "crossfadeSecondsValue": "{{seconds}}d",
         "crossfadeCurve": "Kurva level",
         "crossfadeCurveDesc": "Cara kedua level bersilangan. Equal power menjaga bagian tengah tidak melemah.",

@@ -4,6 +4,7 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
+import android.media.MediaMetadataRetriever
 import android.media.MediaFormat
 import android.net.Uri
 import java.nio.ByteBuffer
@@ -37,6 +38,28 @@ class PcmWindowExtractor(private val context: Context) {
         private const val TIMEOUT_US = 10_000L
         const val DEFAULT_WINDOW_MS = 20_000L
         const val TARGET_RATE = SignalMath.ANALYSIS_RATE
+    }
+
+    /**
+     * 只问「这首歌多长」。分析要取尾部窗口，但换歌接管那一刻调用方手上只有 url ——
+     * 拿不到时长就测不到结尾形状，规划层会少掉整整一半判据。
+     */
+    fun durationOf(url: String, headers: Map<String, String>? = null): Long {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            if (headers.isNullOrEmpty()) {
+                retriever.setDataSource(url)
+            } else {
+                retriever.setDataSource(url, headers)
+            }
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+        } catch (error: Throwable) {
+            android.util.Log.w("FoliaTransition", "读取时长失败 $url", error)
+            0L
+        } finally {
+            runCatching { retriever.release() }
+        }
     }
 
     fun extract(
@@ -78,6 +101,9 @@ class PcmWindowExtractor(private val context: Context) {
                 extractor.seekTo(fromUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
             }
 
+            // 用系统默认解码器（通常是硬解）。试过优先软解来避让播放器的硬解实例，结果
+            // 软解慢数倍，后台分析时整机明显卡顿 —— 那是更糟的代价。真正要守的是
+            // 「只分析还没在播的那首」（见 prefetchService），别让两套解码器打开同一个源。
             codec = MediaCodec.createDecoderByType(mime)
             codec.configure(mediaFormat, null, null, 0)
             codec.start()

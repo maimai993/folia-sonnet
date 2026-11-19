@@ -4229,6 +4229,7 @@ export default {
         "transitionAutomixDesc": "分析歌曲并自动混音。",
         "transitionFellBack": "已退回淡化",
         "crossfadeMaxSeconds": "过渡最长时长",
+        "crossfadeMaxAutomixDesc": "智能过渡不论测出多长，都不会超过这个时长。",
         "crossfadeSecondsValue": "{{seconds}} 秒",
         "transitionMaxDesc": "两首歌最多重叠多久。每种接法自己有区间，实际取两者中较短的那个。",
         "crossfadeCurve": "音量交叉曲线",

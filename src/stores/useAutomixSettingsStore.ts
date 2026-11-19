@@ -15,7 +15,27 @@ import {
 } from '../services/automix/crossfadePlanner';
 import { DEFAULT_TRANSITION_SETTINGS, type TransitionMode } from '../services/automix/transitionStrategy';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
-import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
+import { isNativePlayerAvailable } from '../services/playbackEngine/nativePlayerPlugin';
+
+/** storagePrimitives 只提供带缺省的读；这里补「有没有存过」与「null 才有意义」的两个薄封装。 */
+const localStorageHas = (key: string): boolean => {
+    try {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem(key) !== null;
+    } catch {
+        return false;
+    }
+};
+
+const readStoredStringOrNull = (key: string): string | null => {
+    try {
+        if (typeof window === 'undefined') return null;
+        return window.localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+};
 
 const AUTOMIX_ENABLED_KEY = 'folia_automix_enabled';
 
@@ -27,6 +47,24 @@ const TRANSITION_PERFORMANCE_KEY = 'folia_transition_performance';
 
 /** 原生过渡内核的档位。与下面那个只读的 transitionMode 不是一回事，见 state 里的说明。 */
 const NATIVE_TRANSITION_MODE_KEY = 'folia_native_transition_mode';
+
+/** 用户选的接法。全平台一份：桌面由 Web Audio 规划，安卓交给原生内核执行。 */
+const TRANSITION_MODE_KEY = 'folia_transition_mode';
+
+/**
+ * The mode the listener chose. One switch on every platform: on the native shell the kernel
+ * (ExoPlayer) does the handover, so the same choice is pushed to it as `transition.mode`
+ * (see handleSetTransitionMode); on the desktop the Web Audio decks plan it themselves.
+ *
+ * Never stored yet: inherit whatever the native kernel was already set to, so an update does not
+ * move a listener who had smart transitions on onto plain crossfades.
+ */
+const readStoredTransitionMode = (): TransitionMode => {
+    if (typeof window === 'undefined') return DEFAULT_TRANSITION_SETTINGS.mode;
+    const saved = getStoredString(TRANSITION_MODE_KEY, '');
+    if (saved === 'automix' || saved === 'crossfade') return saved;
+    return getStoredString(NATIVE_TRANSITION_MODE_KEY, '') === 'crossfade' ? 'crossfade' : 'automix';
+};
 
 /** 手动指定的接法；空串 = 由内核按测量证据自动挑。 */
 const TRANSITION_EFFECT_KEY = 'folia_transition_effect';
@@ -56,7 +94,7 @@ const readTransitionAnimationCard = (): boolean => {
         return false;
     }
 
-    if (localStorage.getItem(TRANSITION_ANIMATION_CARD_KEY) !== null) {
+    if (localStorageHas(TRANSITION_ANIMATION_CARD_KEY)) {
         return getStoredBoolean(TRANSITION_ANIMATION_CARD_KEY, false);
     }
 
@@ -67,14 +105,14 @@ const readTransitionAnimationCard = (): boolean => {
 
 const readStoredCrossfadeMaxSec = (): number => {
     if (typeof window === 'undefined') return CROSSFADE_DEFAULT_SEC;
-    const saved = localStorage.getItem(CROSSFADE_MAX_SEC_KEY);
+    const saved = readStoredStringOrNull(CROSSFADE_MAX_SEC_KEY);
     return saved === null ? CROSSFADE_DEFAULT_SEC : clampCrossfadeSeconds(Number(saved));
 };
 
 const readStoredCrossfadeCurve = (): CrossfadeCurve => (
     typeof window === 'undefined'
         ? CROSSFADE_DEFAULT_CURVE
-        : readCrossfadeCurve(localStorage.getItem(CROSSFADE_CURVE_KEY))
+        : readCrossfadeCurve(readStoredStringOrNull(CROSSFADE_CURVE_KEY))
 );
 
 /**
@@ -85,20 +123,20 @@ const readStoredCrossfadeCurve = (): CrossfadeCurve => (
  * 所以这一档在陌生设备上不会变成硬切。
  */
 const readNativeTransitionMode = (): NativeTransitionMode => (
-    typeof window === 'undefined' ? 'smart' : (localStorage.getItem(NATIVE_TRANSITION_MODE_KEY) === 'crossfade' ? 'crossfade' : 'smart')
+    typeof window === 'undefined' ? 'smart' : (getStoredString(NATIVE_TRANSITION_MODE_KEY, '') === 'crossfade' ? 'crossfade' : 'smart')
 );
 
 /** 手动指定的接法。空串与没存过都当「自动」—— 与原生 `EffectId.fromWire("")` 的语义一致。 */
 const readStoredTransitionEffect = (): string | null => {
     if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem(TRANSITION_EFFECT_KEY);
+    const saved = readStoredStringOrNull(TRANSITION_EFFECT_KEY);
     return saved ? saved : null;
 };
 
 /** 0.25 / 0.5 / 0.75 / 1 四档；越界值夹回去而不是丢掉，免得界面出现不存在的档位。 */
 const readStoredTransitionIntensity = (): number => {
     if (typeof window === 'undefined') return 0.75;
-    const saved = localStorage.getItem(TRANSITION_INTENSITY_KEY);
+    const saved = readStoredStringOrNull(TRANSITION_INTENSITY_KEY);
     if (saved === null) return 0.75;
     const value = Number(saved);
     if (!Number.isFinite(value)) return 0.75;
@@ -116,15 +154,14 @@ const toNativeTransitionMode = (mode: NativeTransitionMode): 'crossfade' | 'auto
 export type AutomixSettingsState = {
     automixEnabled: boolean;
     /**
-     * 恒为 `'crossfade'`。
+     * 「换歌怎么接」的用户选择，全平台一份。
      *
-     * 原来这里是「用哪套策略规划换歌」的用户选择（crossfade / automix），AutoMix 那一档连同
-     * 它的性能档与过渡动画已经删掉了：出声交给原生 ExoPlayer 之后，AutoMix 那条链全在 Web
-     * Audio 图上，开了也只是空跑。字段留着是因为还有几处 `transitionMode === 'automix'` 的
-     * 判断（浮层、命令面板、上报），它们现在恒为假 —— 删引擎是另一件事，不在这次范围里。
+     * 桌面由 Web Audio 双 deck 自己规划（transitionPlanner / crossfadePlanner）；安卓壳里出声
+     * 的是原生 ExoPlayer，所以同一份选择会被 handleSetTransitionMode 推成内核的
+     * `transition.mode`。两边都要写：只改这个字段，安卓上点 Automix 就是「点了没反应」。
      *
-     * 安卓上的「换歌怎么接」由下面的 nativeTransitionMode 决定，别把两者合并：这一档还牵着
-     * 过渡环 / 卡片边框那几条 Web 侧判断，改成真值会让它们去找一份 Android 上不存在的 cue。
+     * 浮层（过渡环 / 卡片边框）、命令面板和上报都读这一档；原生播放期间没有 Web 侧 cue，
+     * 那些判断自然不画，不会出错。
      */
     transitionMode: TransitionMode;
     /**
@@ -177,8 +214,9 @@ export type AutomixSettingsState = {
 
 export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) => ({
     automixEnabled: getStoredBoolean(AUTOMIX_ENABLED_KEY, false),
-    // 锁在 crossfade：`folia_transition_mode` 里存着的旧值（可能还是 'automix'）不再读。
-    transitionMode: 'crossfade',
+    // 全平台共用同一个选择：桌面由 Web Audio 双 deck 规划，安卓交给原生内核执行
+    // （handleSetTransitionMode 会把它推成 transition.mode）。
+    transitionMode: readStoredTransitionMode(),
     crossfadeMaxSec: readStoredCrossfadeMaxSec(),
     crossfadeCurve: readStoredCrossfadeCurve(),
     nativeTransitionMode: readNativeTransitionMode(),
@@ -195,34 +233,40 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleToggleAutomix: (enable) => {
         setStoredBoolean(AUTOMIX_ENABLED_KEY, enable);
         // 换歌的交叉淡化现在由原生做（两台播放器互相淡入淡出），开关得推过去。
-        // 顺手把档位一起推：原生读不到 transition.mode 时会按「老用户」推断（开着且有时长
-        // 就按 crossfade 走），而这里明明有用户的明确选择，没必要让原生猜。
+        // 档位也从同一份用户选择推：内核读不到 transition.mode 时会按「老用户」推断
+        // （开着且有时长就按 crossfade 走），而这里明明有明确的选择，没必要让原生猜。
         void writeNativeSettings({
             crossfadeEnabled: enable,
-            'transition.mode': toNativeTransitionMode(get().nativeTransitionMode),
+            'transition.mode': get().transitionMode === 'automix' ? 'automix' : 'crossfade',
         });
         // The models ship with the app, so there is nothing to prompt for (the "download the
         // models" reminder that opened here is gone with the downloads).
         set({ automixEnabled: enable });
     },
-    // 模式锁在 crossfade：命令面板那条「切到 crossfade」保留形状，但不再有另一档可切。
-    handleSetTransitionMode: () => {
-        set({ transitionMode: 'crossfade' });
+    // 选档就是选「换歌怎么接」，两个平台都要落到实际出声的那条路上：桌面记下来给
+    // Web Audio 的规划器用；安卓壳里出声的是原生内核，档位必须一起推过去 ——
+    // 只改这里的字段，用户在安卓上点 Automix 会「点了没反应」。
+    handleSetTransitionMode: (mode) => {
+        setStoredString(TRANSITION_MODE_KEY, mode);
+        set({ transitionMode: mode });
+        if (isNativePlayerAvailable()) {
+            // 顺带对齐内核档位，免得两个字段各自记着不同的选择。
+            set({ nativeTransitionMode: mode === 'automix' ? 'smart' : 'crossfade' });
+            void writeNativeSettings({ 'transition.mode': mode === 'automix' ? 'automix' : 'crossfade' });
+        }
     },
     /*
      * 原生内核档位。写两个键：transition.mode 决定规划走哪条路，
      * crossfadeEnabled 保持为总开关 —— 内核里两者是「开没开」和「怎么接」两件事。
      */
     handleSetNativeTransitionMode: (mode) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(NATIVE_TRANSITION_MODE_KEY, mode);
-        }
+        setStoredString(NATIVE_TRANSITION_MODE_KEY, mode);
         set({ nativeTransitionMode: mode });
         void writeNativeSettings({ 'transition.mode': toNativeTransitionMode(mode) });
     },
     handleSetTransitionEffect: (effect) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem(TRANSITION_EFFECT_KEY, effect ?? '');
+            setStoredString(TRANSITION_EFFECT_KEY, effect ?? '');
         }
         set({ transitionEffect: effect });
         // 原生侧空串 = 自动挑选（EffectId.fromWire("") 返回 null）。
@@ -231,7 +275,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetTransitionIntensity: (intensity) => {
         const next = Math.min(1, Math.max(0.25, intensity));
         if (typeof window !== 'undefined') {
-            localStorage.setItem(TRANSITION_INTENSITY_KEY, String(next));
+            setStoredString(TRANSITION_INTENSITY_KEY, String(next));
         }
         set({ transitionIntensity: next });
         void writeNativeSettings({ 'transition.intensity': next });
@@ -244,7 +288,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetCrossfadeMaxSec: (seconds) => {
         const next = clampCrossfadeSeconds(seconds);
         if (typeof window !== 'undefined') {
-            localStorage.setItem(CROSSFADE_MAX_SEC_KEY, String(next));
+            setStoredString(CROSSFADE_MAX_SEC_KEY, String(next));
         }
         set({ crossfadeMaxSec: next });
         /*
@@ -258,7 +302,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetCrossfadeCurve: (curve) => {
         const next = readCrossfadeCurve(curve);
         if (typeof window !== 'undefined') {
-            localStorage.setItem(CROSSFADE_CURVE_KEY, next);
+            setStoredString(CROSSFADE_CURVE_KEY, next);
         }
         set({ crossfadeCurve: next });
         // 原生的音量斜坡按名字取曲线，字符串直接过去，不在这边换算成编号。

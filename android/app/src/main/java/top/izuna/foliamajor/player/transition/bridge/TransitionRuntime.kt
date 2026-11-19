@@ -2,6 +2,7 @@ package top.izuna.foliamajor.player.transition.bridge
 
 import android.content.Context
 import org.json.JSONObject
+import top.izuna.foliamajor.player.transition.EffectId
 import top.izuna.foliamajor.player.transition.TrackProfile
 import top.izuna.foliamajor.player.transition.TransitionPlan
 import top.izuna.foliamajor.player.transition.TransitionSettings
@@ -38,6 +39,13 @@ object TransitionRuntime {
     @Volatile var fromProfile: TrackProfile? = null
     @Volatile var toProfile: TrackProfile? = null
     @Volatile var lastPlan: TransitionPlan? = null
+        private set
+
+    /**
+     * 上一次真正执行过的接法。喂给 StyleChooser 只为避开「连着两首听同一种」，
+     * 不做任何统计学习 —— 它只影响从一组都合格的候选里挑哪个。
+     */
+    @Volatile var lastEffect: EffectId? = null
         private set
 
     private val worker = Executors.newSingleThreadExecutor { runnable ->
@@ -119,6 +127,18 @@ object TransitionRuntime {
         }
     }
 
+    /**
+     * 接收 Web 侧算好的档案，写进规划器读的那份缓存。
+     *
+     * 为什么不是原生自己分析：原生分析要经 LocalAudioServer 取流再解码，和播放器抢同一份
+     * 资源，试过各种时机都会让播放卡顿 / 拖进度条报错 / 自动切歌断掉。Web 侧本来就为
+     * ReplayGain 和画面分析每一首歌，那份结果直接复用，一个字节都不用多解。
+     */
+    fun ingest(profiles: List<TrackProfile>) {
+        val cache = cacheRef ?: return
+        profiles.forEach { cache.put(it) }
+    }
+
     /** 注入可选的增强包（按需下载完成后）。 */
     fun bindEnhancer(pack: EnhancerPack?) {
         OptionalModelEnhancer.bind(pack)
@@ -177,9 +197,11 @@ object TransitionRuntime {
             fromLyricLines = fromLyricLines,
             settings = settings,
             capabilities = capabilities(context),
+            previousEffect = lastEffect,
         )
         val result = TransitionStrategy.plan(ctx)
         lastPlan = result
+        lastEffect = result.style
         engineRef?.arm(result, from, to)
         return result
     }

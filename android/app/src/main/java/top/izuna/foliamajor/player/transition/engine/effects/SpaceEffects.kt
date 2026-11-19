@@ -30,8 +30,8 @@ class EchoThrowEffect : BaseTransitionEffect(EffectId.ECHO_THROW) {
         val b = base(frame)
         val p = frame.progress.coerceIn(0f, 1f)
         return b.copy(
-            echoMix = 0.55f * frame.plan.intensity * bell(p),
-            reverbTail = 0.2f * bell(p),
+            echoMix = 0.72f * frame.plan.intensity * bell(p),
+            reverbTail = 0.32f * frame.plan.intensity * bell(p),
         )
     }
 }
@@ -44,6 +44,6 @@ class ReverbCarryEffect : BaseTransitionEffect(EffectId.REVERB_CARRY) {
     override fun apply(frame: EffectFrame): EffectOutput {
         val b = base(frame)
         val p = frame.progress.coerceIn(0f, 1f)
-        return b.copy(reverbTail = 0.65f * frame.plan.intensity * bell(p))
+        return b.copy(reverbTail = 0.82f * frame.plan.intensity * bell(p))
     }
 }

@@ -257,6 +257,7 @@ export const STORAGE_KEYS = [
     'web:folia_transition_effect',
     'web:folia_transition_enhancer',
     'web:folia_transition_intensity',
+    'web:folia_transition_mode',
     'web:folia_transition_performance',
     'web:folia_ui_scale',
     'web:folia_vocal_cancel',

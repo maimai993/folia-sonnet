@@ -15,7 +15,13 @@ class BassSwapEffect : BaseTransitionEffect(EffectId.BASS_SWAP) {
         val b = base(frame)
         val p = frame.progress.coerceIn(0f, 1f)
         // 换手窗口压在平台中段，两侧留出过渡带，避免低频「咔」一下跳过去。
-        val inLow = lerp(0f, 1f, (p - 0.40f) / 0.20f)
+        //
+        // 窗口宽度随强度收窄：弱档留宽过渡带（听感接近普通交叉），强档几乎是一记干净的
+        // 低频交接。原来固定 0.40→0.60，任何强度下都只有 20% 的换手时间，听起来和等功率
+        // 交叉差别很小 —— 效果「一般」多半来自这里。
+        val width = lerp(0.30f, 0.08f, frame.plan.intensity.coerceIn(0f, 1f))
+        val mid = 0.5f
+        val inLow = lerp(0f, 1f, (p - (mid - width / 2f)) / width)
         return b.copy(
             bandIn = BandGains(low = inLow, mid = 1f, high = 1f),
             bandOut = BandGains(low = 1f - inLow, mid = 1f, high = 1f),
@@ -50,7 +56,9 @@ class FilterSweepInEffect : BaseTransitionEffect(EffectId.FILTER_SWEEP_IN) {
     override fun apply(frame: EffectFrame): EffectOutput {
         val b = base(frame)
         val p = frame.progress.coerceIn(0f, 1f)
-        val inHz = 320f * Math.pow(20_000.0 / 320.0, p.toDouble()).toFloat()
+        // 起点从 320 Hz 压到 180 Hz：低通更闷，扫上来才有「从水下浮出来」的对比。
+        val floorHz = lerp(320f, 160f, frame.plan.intensity.coerceIn(0f, 1f))
+        val inHz = floorHz * Math.pow(20_000.0 / floorHz, p.toDouble()).toFloat()
         val outHz = 20_000f * Math.pow(600.0 / 20_000.0, p.toDouble()).toFloat()
         return b.copy(
             lowPassInHz = inHz.coerceIn(320f, 20_000f),
@@ -68,7 +76,7 @@ class VocalRecedeEffect : BaseTransitionEffect(EffectId.VOCAL_RECEDE) {
     override fun apply(frame: EffectFrame): EffectOutput {
         val b = base(frame)
         val p = frame.progress.coerceIn(0f, 1f)
-        val notch = 1f - 0.55f * frame.plan.intensity * bell((p / 0.7f).coerceAtMost(1f))
+        val notch = 1f - 0.72f * frame.plan.intensity * bell((p / 0.7f).coerceAtMost(1f))
         return b.copy(
             bandOut = BandGains(low = 1f, mid = notch, high = 1f),
             bandIn = BandGains(low = 1f, mid = lerp(0.7f, 1f, p), high = 1f),

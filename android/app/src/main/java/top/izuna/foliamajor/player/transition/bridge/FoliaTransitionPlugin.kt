@@ -58,13 +58,15 @@ class FoliaTransitionPlugin : Plugin() {
             context: android.content.Context,
             url: String,
             mediaId: String?,
+            fromMediaId: String? = null,
         ): Boolean {
             val engine = TransitionRuntime.engine() ?: return false
             val deck = TransitionRuntime.deckControl() ?: return false
             if (!TransitionRuntime.settings.enabled) return false
             if (!deck.canHandover()) return false
             // 计划先算好再交接：引擎的 arm 与 start 都投递到播放器线程，FIFO 保证顺序。
-            runCatching { TransitionRuntime.plan(context, null, mediaId, null, 0) }
+            // fromMediaId 必须传，否则出场曲的档案读不到，规划层只剩一侧证据。
+            runCatching { TransitionRuntime.plan(context, fromMediaId, mediaId, null, 0) }
             return engine.start(url, mediaId)
         }
     }
@@ -162,6 +164,28 @@ class FoliaTransitionPlugin : Plugin() {
                 call.resolve(result)
             }
         }
+    }
+
+    /**
+     * Web 侧把已经算好的档案送进来（TrackProfile.toJson 的结构）。
+     *
+     * 只写缓存，不做任何分析：这是「有证据」和「不影响播放」之间唯一一条不冲突的路。
+     */
+    @PluginMethod
+    fun ingest(call: PluginCall) {
+        val array = call.getArray("profiles") ?: run { call.reject("缺少 profiles"); return }
+        val parsed = ArrayList<top.izuna.foliamajor.player.transition.TrackProfile>()
+        for (i in 0 until array.length()) {
+            val o = array.optJSONObject(i) ?: continue
+            runCatching { top.izuna.foliamajor.player.transition.TrackProfile.fromJson(o) }
+                .getOrNull()
+                ?.takeIf { it.key.isNotEmpty() }
+                ?.let { parsed.add(it) }
+        }
+        TransitionRuntime.ingest(parsed)
+        val result = JSObject()
+        result.put("accepted", parsed.size)
+        call.resolve(result)
     }
 
     /** 换歌前：算计划并 arm。返回 Web 侧原 TransitionPlan 的同名字段，UI 不用改数据结构。 */

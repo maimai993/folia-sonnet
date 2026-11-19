@@ -33,7 +33,11 @@ object TransitionPlanner {
             spec.id == EffectId.HARD_CUT || spec.id == EffectId.BEAT_CUT -> MusicalTime.BEAT_CUT_MS.toInt()
             settings.mode == TransitionMode.CROSSFADE -> settings.crossfadeMaxMs
             else -> evidenceDrivenMs(spec.minOverlapMs, spec.maxOverlapMs, from, to, choice.tempo, gridBpm)
-        }.coerceIn(spec.minOverlapMs, spec.maxOverlapMs)
+        }
+            // 「混音时长」是用户手里的上限，automix 也得守：原来它只在固定淡化模式下被读，
+            // 智能过渡自己算多长，于是设置页那个滑杆在 automix 下等于没有 —— 用户调了没反应。
+            .coerceAtMost(settings.crossfadeMaxMs.coerceAtLeast(1))
+            .coerceIn(spec.minOverlapMs, spec.maxOverlapMs)
 
         // ---- 2) 出场曲落点 ----
         // 优先落在人声唱完的地方（歌词时间轴），否则落在「尾部减去斜坡」。
@@ -61,7 +65,16 @@ object TransitionPlanner {
 
         // ---- 5) 曲线与强度 ----
         val curve = settings.curveOverride ?: spec.defaultCurve
-        val together = (spec.defaultTogether * settings.intensity).coerceIn(0f, 0.8f)
+        // 中段两曲同时保持多高，决定听感是「两段叠在一起混音」还是「此消彼长的淡入淡出」。
+        //
+        // 大多数效果的 defaultTogether 是 0，于是中段就是 sin/cos 此消彼长 —— 两条曲线虽然
+        // 同时有声，但一条升一条降，听起来完全是普通交叉淡化，用户的原话是「没有两段音频
+        // 重叠」。所以这里给一个基线平台：除了真正的切口（硬切 / 拍点切），一律保证中段有
+        // 一段两曲都在 0.707 的重叠区。0.707 正是 cos=sin 那一点，合成功率不变，不会爆音。
+        val cut = spec.id == EffectId.HARD_CUT || spec.id == EffectId.BEAT_CUT
+        val baseline = if (cut) 0f else 0.45f
+        val together = (maxOf(spec.defaultTogether, baseline) * (0.7f + 0.6f * settings.intensity))
+            .coerceIn(0f, 0.85f)
         val expansion = if (settings.performance && settings.mode == TransitionMode.AUTOMIX) {
             StyleChooser.expansionIntensity(from, to)
         } else null
