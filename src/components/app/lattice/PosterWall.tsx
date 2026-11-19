@@ -61,6 +61,8 @@ type PosterWallProps = {
 const CELL_SIZE = 128;
 const GAP = 8;
 const OVERSCAN = 500;
+// 离已裁剪范围的边缘还剩这么多（世界单位）就重新裁剪（原 useWallPointerPan 的内置值，挪到这里由调用方给，#427）。
+const CULL_EDGE_MARGIN = 180;
 // How much of the flight path may stay rendered while the camera travels, in viewports.
 const MAX_RESERVED_VIEWPORTS = 3;
 // Metro tile landing: the wave starts at the top-left of the viewport and runs down the diagonal.
@@ -312,6 +314,7 @@ export default function PosterWall({
         containerRef,
         reducedMotion,
         overscan: OVERSCAN,
+        cullEdgeMargin: CULL_EDGE_MARGIN,
         bounds,
         cameraRef,
         getWorldBounds,

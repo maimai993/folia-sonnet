@@ -19,6 +19,7 @@ import HifiBypassNotice from '../hifi/HifiBypassNotice';
 import ExternalPlayerNotice, { useIsExternalPlayerRoute } from './ExternalPlayerNotice';
 import { useIsHifiRoute } from '../hifi/useHifiSignalPath';
 import ModCurveNotice from './equalizer/ModCurveNotice';
+import { useNativeConsoleAvailable } from '../../services/playbackEngine/nativeConsoleAvailability';
 import ConsoleTabs from './console/ConsoleTabs';
 import ProfileBar from './console/ProfileBar';
 import EqualizerPane from './console/EqualizerPane';
@@ -26,6 +27,10 @@ import CompressorPane from './console/CompressorPane';
 import ReverbPane from './console/ReverbPane';
 import PostEqPane from './console/PostEqPane';
 import SaturationPane from './console/SaturationPane';
+import SpatialPane from './console/SpatialPane';
+import MasteringPane from './console/MasteringPane';
+import StudioPane from './console/StudioPane';
+import RepairPane from './console/RepairPane';
 import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { useAudioProfilesStore } from '../../stores/useAudioProfilesStore';
 
@@ -47,9 +52,18 @@ type AudioEqualizerDialogProps = {
     isDaylight: boolean;
 };
 
-type ConsoleTabId = 'equalizer' | 'compressor' | 'reverb' | 'postEq' | 'saturation';
+type ConsoleTabId = 'equalizer' | 'repair' | 'compressor' | 'reverb' | 'saturation' | 'mastering' | 'postEq' | 'studio' | 'spatial';
 
 const PRESET_IDS: AudioEqualizerModeId[] = [...AUDIO_SOUND_PRESET_IDS, ...AUDIO_EQUALIZER_CUSTOM_SLOT_IDS];
+
+// 两级导航的大类划分。一级是大类，二级是大类下的页签；顺序按信号处理流程排。
+// t() 在组件里调用，所以这里只放 id 与页签归属，label 在渲染处拼。
+const CONSOLE_GROUP_DEFS: ReadonlyArray<{ id: string; tabs: ConsoleTabId[]; labelKey: string }> = [
+    { id: 'base', tabs: ['equalizer', 'repair', 'compressor'], labelKey: 'ui.consoleGroupBase' },
+    { id: 'color', tabs: ['reverb', 'saturation', 'spatial'], labelKey: 'ui.consoleGroupColor' },
+    { id: 'master', tabs: ['mastering', 'postEq'], labelKey: 'ui.consoleGroupMaster' },
+    { id: 'smart', tabs: ['studio'], labelKey: 'ui.consoleGroupSmart' },
+];
 
 const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight }) => {
     const { t } = useTranslation();
@@ -72,7 +86,9 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
     // A platform's own player sounds the song on the external route: nothing here reaches it either.
     const isExternalRoute = useIsExternalPlayerRoute();
     const readOnly = curveHeard || isHifiRoute || isExternalRoute;
-    const [tab, setTab] = useState<ConsoleTabId>('equalizer');
+    const nativeConsole = useNativeConsoleAvailable();
+    const [chosenTab, setTab] = useState<ConsoleTabId>('equalizer');
+    const tab = nativeConsole ? chosenTab : 'equalizer';
     const [draft, setDraft] = useState<AudioEqualizerSettings>(settings);
     const draftRef = useRef(draft);
     const mountedRef = useRef(false);
@@ -209,14 +225,14 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
             isDaylight={isDaylight}
             size="l"
             title={t('ui.consoleTitle')}
-            subtitle={t('ui.consoleDescription')}
+            subtitle={t(nativeConsole ? 'ui.consoleDescription' : 'ui.consoleNativeOnly')}
             headerActions={(
                 // The switch takes its name from the label it sits in. A narrow window has no room for the words: they stay for a screen reader.
                 <label className="flex cursor-pointer items-center gap-3">
                     <span className="whitespace-nowrap text-xs text-[color:var(--st-t2)] max-sm:sr-only">
                         {t(draft.enabled ? 'ui.equalizerEnabled' : 'ui.equalizerDisabled')}
                     </span>
-                    <Toggle checked={draft.enabled} onChange={setEnabled} disabled={isHifiRoute} />
+                    <Toggle checked={draft.enabled} onChange={setEnabled} disabled={isHifiRoute || isExternalRoute} />
                 </label>
             )}
         >
@@ -233,17 +249,26 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                 <ExternalPlayerNotice />
                 <div className="flex flex-col gap-2 pb-1 pt-2">
                     <ProfileBar isDaylight={isDaylight} />
-                    <ConsoleTabs
+                    {nativeConsole && <ConsoleTabs
                         tab={tab}
+                        groups={CONSOLE_GROUP_DEFS.map(group => ({
+                            id: group.id,
+                            label: t(group.labelKey),
+                            tabs: group.tabs,
+                        }))}
                         options={[
                             { value: 'equalizer', label: t('ui.consoleTabEqualizer') },
+                            { value: 'repair', label: t('ui.consoleTabRepair') },
                             { value: 'compressor', label: t('ui.consoleTabCompressor') },
                             { value: 'reverb', label: t('ui.consoleTabReverb') },
-                            { value: 'postEq', label: t('ui.consoleTabPostEq') },
                             { value: 'saturation', label: t('ui.consoleTabSaturation') },
+                            { value: 'spatial', label: t('ui.consoleTabSpatial') },
+                            { value: 'mastering', label: t('ui.consoleTabMastering') },
+                            { value: 'postEq', label: t('ui.consoleTabPostEq') },
+                            { value: 'studio', label: t('ui.consoleTabStudio') },
                         ]}
                         onTabChange={value => setTab(value as typeof tab)}
-                    />
+                    />}
                 </div>
 
                 {tab === 'equalizer' && <ModCurveNotice />}
@@ -254,11 +279,12 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                     HiFi 时整块让路（inert 加压暗）：那一刻的编辑写的是听不到的声音。
                     压暗的判断跟原来一致 —— 总开关关掉、或者曲线在接管时，正文都淡下去。 */}
                 <div
-                    inert={isHifiRoute}
+                    inert={isHifiRoute || isExternalRoute}
                     className={`flex flex-1 flex-col${draft.enabled && !readOnly ? '' : ' opacity-40'}`}
                 >
                     {tab === 'equalizer' && (
                         <EqualizerPane
+                            nativeConsole={nativeConsole}
                             draft={draft}
                             curveHeard={curveHeard}
                             presetIds={PRESET_IDS}
@@ -270,10 +296,14 @@ const AudioEqualizerDialog: React.FC<AudioEqualizerDialogProps> = ({ isDaylight 
                             onCommit={commitDraft}
                         />
                     )}
+                    {tab === 'repair' && <RepairPane />}
                     {tab === 'compressor' && <CompressorPane />}
                     {tab === 'reverb' && <ReverbPane />}
-                    {tab === 'postEq' && <PostEqPane />}
                     {tab === 'saturation' && <SaturationPane />}
+                    {tab === 'spatial' && <SpatialPane />}
+                    {tab === 'mastering' && <MasteringPane />}
+                    {tab === 'postEq' && <PostEqPane />}
+                    {tab === 'studio' && <StudioPane />}
                 </div>
             </div>
         </Sheet>

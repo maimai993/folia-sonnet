@@ -29,7 +29,8 @@ class LookaheadLimiter {
 
     private var sampleRate = 0
     private var channels = 0
-    private var delayFrames = 0
+    var delayFrames = 0
+        private set
     private var ring = FloatArray(0)
     private var writeIndex = 0
     private var gain = 1f
@@ -43,7 +44,7 @@ class LookaheadLimiter {
      */
     var ceiling = 0.97f
         set(value) {
-            field = value.coerceIn(0.5f, 1f)
+            field = (if (value.isFinite()) value else 0.97f).coerceIn(0.5f, 1f)
         }
 
     /**
@@ -55,7 +56,7 @@ class LookaheadLimiter {
      */
     var releaseSeconds = DEFAULT_RELEASE_SECONDS
         set(value) {
-            field = value.coerceIn(0.04f, 0.5f)
+            field = (if (value.isFinite()) value else DEFAULT_RELEASE_SECONDS).coerceIn(0.04f, 0.5f)
         }
 
     fun configure(sampleRate: Int, channels: Int, lookaheadMs: Float = 5f) {
@@ -98,8 +99,11 @@ class LookaheadLimiter {
     private fun processChunk(buffer: FloatArray, offset: Int, frames: Int) {
         val channels = this.channels
 
-        // ① 峰值：延迟线里攒着的最近 5 ms（其中包含马上要输出的这部分）+ 当前块（未来）。
+        // ① 峰值：先清理非有限输入（NaN/Inf 归零），再看延迟线与当前块的峰值。
         val blockCount = frames * channels
+        for (i in offset until offset + blockCount) {
+            if (!buffer[i].isFinite()) buffer[i] = 0f
+        }
         val peak = maxOf(peakOf(ring, 0, ring.size), peakOf(buffer, offset, blockCount))
         val desired = if (peak > ceiling) ceiling / peak else 1f
 
@@ -130,7 +134,9 @@ class LookaheadLimiter {
                 val delayed = ring[ringBase + channel]
                 ring[ringBase + channel] = incoming
                 var out = delayed * frameGain
-                if (out > ABSOLUTE_CEILING) {
+                if (!out.isFinite()) {
+                    out = 0f
+                } else if (out > ABSOLUTE_CEILING) {
                     out = ABSOLUTE_CEILING
                 } else if (out < -ABSOLUTE_CEILING) {
                     out = -ABSOLUTE_CEILING

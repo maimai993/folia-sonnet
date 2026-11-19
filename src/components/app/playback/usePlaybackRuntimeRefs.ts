@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { SongResult } from '../../../types';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
+import { createResumeTimeRef } from '../../../stores/usePendingResumeStore';
 import { askedSongKeyRef } from './currentSong';
 import type { OnlineRecovery } from './restore/createOnlineRecoveryController';
 
@@ -37,7 +38,7 @@ export const usePlaybackRuntimeRefs = () => {
     const playbackAutoSkipCountRef = useRef(0);
     const volumePreviewFrameRef = useRef<number | null>(null);
     const pendingVolumePreviewRef = useRef<number | null>(null);
-    const pendingResumeTimeRef = useRef<number | null>(null);
+    const pendingResumeTimeRef = useMemo(createResumeTimeRef, []);
     // The recoveries of an online song's address in flight, one per start of a song (its key and
     // `startOfAskedSong`), so one for a start never answers for another (createOnlineRecoveryController.ts).
     const onlinePlaybackRecoveryRef = useRef<Map<string, Promise<OnlineRecovery>>>(new Map());

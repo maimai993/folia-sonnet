@@ -63,6 +63,13 @@ class BiquadFilter {
         return output
     }
 
+    /** RBJ constant-peak bandpass: unity at center, rejects DC and Nyquist. */
+    fun setBandPass(sampleRate: Int, frequency: Float, q: Float) {
+        val w = omega(sampleRate, frequency)
+        val alpha = sin(w) / (2f * q.coerceAtLeast(0.1f))
+        normalize(alpha, 0f, -alpha, 1f + alpha, -2f * cos(w), 1f - alpha)
+    }
+
     fun setPeaking(sampleRate: Int, frequency: Float, q: Float, gainDb: Float) {
         if (abs(gainDb) < 0.01f) {
             bypass()

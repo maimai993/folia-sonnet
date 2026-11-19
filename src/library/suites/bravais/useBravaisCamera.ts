@@ -257,6 +257,8 @@ export const useBravaisCamera = ({
         containerRef: fieldRef,
         reducedMotion,
         overscan: BRAVAIS_OVERSCAN,
+        // 与 needsRecull 用同一个边距，拖动这边才和宿主判「要不要重裁」时按同一个数走（#427）。
+        cullEdgeMargin: BRAVAIS_CULL_EDGE_MARGIN,
         bounds: bounds ?? { left: 0, right: 0, top: 0, bottom: 0 },
         cameraRef,
         getWorldBounds,

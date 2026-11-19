@@ -1,6 +1,7 @@
 import React from 'react';
 import { useRowAria } from './Row';
 import { useSettingsKitTheme } from './kitTheme';
+import { Toggle as UiToggle } from '../../../ui';
 
 // src/components/modal/settings/kit/Toggle.tsx
 // 设置里唯一的开关。样子照「AI 云缓存」那一颗（也是最老的一颗、用户点名要的那颗）：
@@ -9,8 +10,8 @@ import { useSettingsKitTheme } from './kitTheme';
 // 以前这里是另一套（40×24、拇指和跑道都跟主题走色），跟云缓存那颗、GridView /
 // Lattice / Lab 那些手写的一颗颗并存，同一个设置里能看到两三种开关 —— 现在只有这一种。
 //
-// 关着时的跑道要分明暗：亮色界面上是黑 15%、暗色界面上是白 15%（云缓存那颗就是这么写的），
-// 所以这里读 kit 主题，不再由调用方传底色。
+// 控件本身在 components/ui/Toggle（全仓唯一的开关实现）；这里只补设置页才有的两样：
+// 用所在的 Row 的 label 命名，以及按 kit 主题给关着时的跑道分明暗。
 
 type ToggleProps = {
     checked: boolean;
@@ -24,25 +25,18 @@ type ToggleProps = {
 
 export const Toggle: React.FC<ToggleProps> = ({ checked, onChange, disabled, label, labelledBy }) => {
     const { isDaylight } = useSettingsKitTheme();
+    const row = useRowAria();
 
     return (
-        <button
-            type="button"
-            role="switch"
-            aria-checked={checked}
-            aria-label={label}
-            {...useRowAria()}
-            {...(labelledBy ? { 'aria-labelledby': labelledBy } : {})}
+        <UiToggle
+            checked={checked}
+            onChange={onChange}
             disabled={disabled}
-            onClick={() => onChange(!checked)}
-            className={`st-t-move shrink-0 w-12 h-6 rounded-full p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${checked
-                ? 'bg-[rgba(114,119,134,1)]'
-                : isDaylight ? 'bg-black/15' : 'bg-white/15'}`}
-        >
-            <span
-                className={`st-t-move block w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${checked ? 'translate-x-6' : 'translate-x-0'}`}
-            />
-        </button>
+            label={label}
+            labelledBy={labelledBy ?? row['aria-labelledby']}
+            describedBy={row['aria-describedby']}
+            isDaylight={isDaylight}
+        />
     );
 };
 

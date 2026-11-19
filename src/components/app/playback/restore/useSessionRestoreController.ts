@@ -13,14 +13,20 @@ import type { LyricData, SongResult, StatusMessage } from '../../../../types';
 import type { AudioQualityPreference, MediaId } from '../../../../types/onlineMusic';
 import { setStatusMessage as setStatusMsg } from '../../../../stores/useStatusMessageStore';
 import { setPlayQueue, usePlaybackStore } from '../../../../stores/usePlaybackStore';
-import { askedSongKeyRef, keepSongsOfProvidersStanding, makeSongCurrent, providerDropsSoFar, startRestore } from '../currentSong';
+import { askedSongKeyRef, keepSongsOfProvidersStanding, makeSongCurrent, playRequestsSoFar, providerDropsSoFar, startRestore } from '../currentSong';
 import { useAudioSettingsStore } from '../../../../stores/useAudioSettingsStore';
 import { isRestoredSongPlayable } from '../playableSong';
+import { queueStartsSoFar } from '../start/queueStarts';
 import { releaseUnclaimedHifiTrack } from '../../../../services/hifi/hifiPlayback';
 import { readNativeQueueState } from '../../../../services/nativeQueueBridge';
 import { adoptNativePlaybackState } from './adoptNativePlaybackState';
+import { pickResumePosition } from './pickResumePosition';
+import { mergeDiskQueueIntoClaim, settleMirrorQueueClaim, standingMirrorQueueClaim } from './mirrorQueueClaim';
 import { getPositionWriteProbe, readPlaybackPositionForSong, savePlaybackPosition } from '../playbackPositionCache';
 import { orderQueueLikeMirror, songFromMirrorEntry } from '../../../../utils/queueMirrorEntry';
+import { type createResumeTimeRef, publishNativeResume, resumeIntentAtStart } from '../../../../stores/usePendingResumeStore';
+import { nativePlaybackEngine, NATIVE_PLAYBACK_ENABLED } from '../../../../services/playbackEngine/nativePlaybackEngine';
+import { isNativePlayerAvailable } from '../../../../services/playbackEngine/nativePlayerPlugin';
 
 // src/components/app/playback/restore/useSessionRestoreController.ts
 
@@ -48,10 +54,9 @@ type UseSessionRestoreControllerParams = {
     /**
      * 上次听到哪儿：恢复出来的这一首从那个位置起播。
      *
-     * 走 `<audio>` 与原生两条路的约定不同（前者由 `onLoadedMetadata` 消费、后者在 `setSource`
-     * 时带走），但两边读的是同一个 ref，所以这里只管把秒数放进去。
+     * 只有交给 `<audio>` 的地址才写这个 ref，由 `onLoadedMetadata` 消费；原生走带身份的一次性请求。
      */
-    pendingResumeTimeRef: MutableRefObject<number | null>;
+    pendingResumeTimeRef: ReturnType<typeof createResumeTimeRef>;
     /**
      * The autoplay intent the audio bridge spends when a source lands. Restore normally leaves it
      * alone so the session comes back paused; the lab switch below is the only thing that arms it.
@@ -88,6 +93,7 @@ export function useSessionRestoreController({
     // replaceQueue (useFoliumHostActions). Not read when the restore starts: on the desktop that waits for
     // the window handoff check, and a mod's replacement meanwhile would then be written over.
     const queueWritesAtMountRef = useRef(wholeQueueWritesSoFar());
+    const queueStartsAtMountRef = useRef(queueStartsSoFar());
 
     useEffect(() => {
         if (hasLoadedLocalLibraryRef.current) {
@@ -111,12 +117,19 @@ export function useSessionRestoreController({
 
         // 一次就够：恢复没落地时只补跑一次，免得在这儿转圈。
         let retriedOnce = false;
+        const intent = resumeIntentAtStart();
+        const requests = playRequestsSoFar();
+        const seekAtStart = nativePlaybackEngine.manualSeekGeneration();
+        const noNewPlay = () => intent === resumeIntentAtStart() && requests === playRequestsSoFar();
+        const noSongAsked = () => askedSongKeyRef.current === null;
         const restoreSession = async () => {
             // A mod may replace the whole queue while the session is read (from its `activate`): its queue
             // then stands over the remembered one, and is what gets saved and fetched around. The song
             // itself is restored all the same.
             const writesAtStart = queueWritesAtMountRef.current;
             const rewritten = () => wholeQueueWritesSoFar() !== writesAtStart;
+            const startsAtMount = queueStartsAtMountRef.current;
+            const liveQueueSuperseded = () => rewritten() || queueStartsSoFar() !== startsAtMount;
             /*
              * 恢复过程的自检留痕。
              *
@@ -134,14 +147,14 @@ export function useSessionRestoreController({
                 report.push(native
                     ? `原生:${native.fromDisk ? '盘' : '活'} hasSong=${native.hasSong} n=${native.entries?.length ?? 0} idx=${native.index} pos=${Math.round((native.positionMs || 0) / 1000)}`
                     : '原生:null');
-                const nativeStillPlaying = Boolean(
-                    native
-                    && !native.fromDisk
-                    && native.hasSong
-                    && native.nativeMedia?.songKey === native.songKey
-                    && native.nativeMedia?.url,
-                );
-                if (nativeStillPlaying && askedSongKeyRef.current === null) {
+                const nativeStillPlaying = native && !native.fromDisk && native.hasSong
+                    && native.nativeMedia?.songKey === native.songKey && native.nativeMedia.url;
+                /*
+                 * 挂载时的独立认领可能已经先于（或在读盘期间）接管了同一首仍在播的歌：askedSongKeyRef 因此
+                 * 不再是 null，但那不是用户点歌。认领登记了它放进 store 的镜像壳队列，这里只把磁盘上的完整
+                 * 条目补进那份壳，不重拉音源；用户发起新播放或换了整条队列，认领就不再有效，恢复照旧让位。
+                 */
+                if (nativeStillPlaying && (askedSongKeyRef.current === null || standingMirrorQueueClaim(native.songKey))) {
                     /*
                      * 认领之前先把**盘上那份完整队列**摆好。
                      *
@@ -153,7 +166,15 @@ export function useSessionRestoreController({
                      * 内容用磁盘那份，顺序与当前曲用原生那份：adopt 已经负责了后者。
                      */
                     const cachedQueue = await getFromCache<SongResult[]>('last_queue');
-                    const adopted = adoptNativePlaybackState(native!);
+                    if (!noNewPlay() || liveQueueSuperseded()) return;
+                    if (standingMirrorQueueClaim(native.songKey)) {
+                        if (cachedQueue && cachedQueue.length > 0) mergeDiskQueueIntoClaim(native.songKey, cachedQueue.map(normalizePlaybackSongSource));
+                        shouldAutoPlayRef.current = false;
+                        reportStage = '补全已认领队列';
+                        return;
+                    }
+                    if (askedSongKeyRef.current !== null) return;
+                    const adopted = adoptNativePlaybackState(native);
                     if (adopted) {
                         if (cachedQueue && cachedQueue.length > 0) {
                             /*
@@ -161,9 +182,9 @@ export function useSessionRestoreController({
                              * 都是原生先知道，磁盘那份可能还停在旧顺序。
                              */
                             const normalized = cachedQueue.map(normalizePlaybackSongSource);
-                            const ordered = orderQueueLikeMirror(normalized, native!.entries).queue;
+                            const ordered = orderQueueLikeMirror(normalized, native.entries).queue;
                             setPlayQueue(ordered);
-                            makeSongCurrent(ordered.find(song => getPlaybackSongKey(song) === native!.songKey) ?? normalized[0]);
+                            makeSongCurrent(ordered.find(song => getPlaybackSongKey(song) === native.songKey) ?? normalized[0]);
                         }
                         shouldAutoPlayRef.current = false;
                         reportStage = '认领原生';
@@ -197,7 +218,7 @@ export function useSessionRestoreController({
                     if (!lastSong) {
                         const index = Math.min(Math.max(native!.index, 0), lastQueue.length - 1);
                         lastSong = lastQueue[index] || lastQueue[0];
-                        songFromNative = true;
+                        songFromNative = queueFromNative;
                         report.push(`当前曲按游标补(${index})`);
                     }
                 }
@@ -259,7 +280,7 @@ export function useSessionRestoreController({
                  */
                 if (native?.fromDisk && native.hasSong && lastSong) {
                     const nativeKey = native.songKey || native.entries?.[native.index]?.songKey || '';
-                    const sameSong = songFromNative || !nativeKey || nativeKey === getPlaybackSongKey(lastSong);
+                    const sameSong = nativeKey ? nativeKey === getPlaybackSongKey(lastSong) : songFromNative;
                     if (sameSong) {
                         nativeResumeSec = Math.max(0, (native.positionMs || 0) / 1000);
                         nativeResumeDurationSec = Math.max(0, (native.durationMs || 0) / 1000);
@@ -288,6 +309,7 @@ export function useSessionRestoreController({
                         return;
                     }
                     lastSong = fallback;
+                    nativeResumeSec = nativeResumeDurationSec = 0;
                 }
                 lastQueue = lastQueue?.filter(song => isRestoredSongPlayable(song)) ?? null;
 
@@ -301,6 +323,10 @@ export function useSessionRestoreController({
                         getLocalSongs(),
                         getLocalLibraryCatalogSnapshot(),
                     ]);
+                    if (!noNewPlay() || askedSongKeyRef.current !== null) {
+                        reportStage = '读本地曲库时被打断';
+                        return;
+                    }
                     const songsById = new Map(localSongs.map(song => [song.id, song]));
                     const rebuild = (cached: SongResult): SongResult | null => {
                         const songId = (cached as any).localRef?.songId || (cached as any).localData?.id;
@@ -330,7 +356,7 @@ export function useSessionRestoreController({
                 lastQueue = lastQueue && keepSongsOfProvidersStanding(lastQueue, providerDropsAtStart);
 
                 // A song asked for while the remembered one was being read stands: the restore gives up.
-                if (askedSongKeyRef.current !== null) {
+                if (!noNewPlay() || askedSongKeyRef.current !== null) {
                     reportStage = '被别的点歌打断';
                     return;
                 }
@@ -350,7 +376,7 @@ export function useSessionRestoreController({
                 const probe = getPositionWriteProbe();
                 report.push(`位置:${savedPosition ? Math.round(savedPosition.positionSec) : '无'}`);
                 report.push(`上次写:${probe ? `${Math.round(probe.positionSec)}秒@${probe.name.slice(0, 8)}` : '无'}`);
-                if (askedSongKeyRef.current !== null) {
+                if (!noNewPlay() || !noSongAsked()) {
                     reportStage = '读位置时被打断';
                     return;
                 }
@@ -360,17 +386,16 @@ export function useSessionRestoreController({
                  * WebView 那份十秒一存、更细；原生那份是心跳顺手落的盘，进程被杀的最后一刻
                  * 它反而更近。都是「同一首歌上次听到哪儿」，取大不会把用户往前拽。
                  */
-                const resumeSec = Math.max(savedPosition?.positionSec ?? 0, nativeResumeSec);
-                const resumeDurationSec = Math.max(savedPosition?.durationSec ?? 0, nativeResumeDurationSec);
+                const { positionSec: resumeSec, durationSec: resumeDurationSec } = pickResumePosition(
+                    savedPosition,
+                    nativeResumeSec > 0 ? { positionSec: nativeResumeSec, durationSec: nativeResumeDurationSec, savedAt: native?.positionSavedAtMs } : null,
+                );
                 // 已经听到尾巴了：那一点不算「听到过」。从 0 重新来，否则一进来就切下一首。
                 const nearEnd = resumeDurationSec > 0 && resumeSec > resumeDurationSec - 5;
-                if (!nearEnd && resumeSec > 3) {
-                    pendingResumeTimeRef.current = resumeSec;
-                    // 这份位置可能是从原生快照捡回来的：立刻在 WebView 这边也落一条，
-                    // 下次 WebView 自己就有数据，不必每次都从原生补。
-                    if (!savedPosition) {
-                        void savePlaybackPosition(lastSong, resumeSec, resumeDurationSec).catch(() => undefined);
-                    }
+                const positionSongKey = getPlaybackSongKey(lastSong);
+                const resumePosition = !nearEnd && Number.isFinite(resumeSec) && resumeSec > 3 ? resumeSec : null;
+                if (resumePosition !== null && !savedPosition) {
+                    void savePlaybackPosition(lastSong, resumePosition, resumeDurationSec).catch(() => undefined);
                 }
 
                 if (lastSong.sourceRef?.kind === 'online' && lastSong.sourceRef.providerId) {
@@ -381,7 +406,8 @@ export function useSessionRestoreController({
                     }
                 }
                 makeSongCurrent(lastSong);
-                const stillWanted = startRestore();
+                const restoreStands = startRestore();
+                const stillWanted = () => restoreStands() && noNewPlay();
                 const rememberedQueue = lastQueue && lastQueue.length > 0 ? lastQueue : [lastSong];
                 if (rewritten()) {
                     // Saved again now that a song is current: the replacement's own save found none, so it kept nothing.
@@ -423,6 +449,18 @@ export function useSessionRestoreController({
                         persistLastPlaybackCache,
                         queue: lastQueue || [lastSong],
                         stillWanted,
+                        // mpv 经私有 ref 取值；失败或外部路不把位置留在共享 ref 上。
+                        pendingResumeTimeRef: { current: resumePosition },
+                        onRestoredSource: (url, songKey) => {
+                            if (resumePosition === null || !stillWanted() || songKey !== positionSongKey) return;
+                            if (usePlaybackStore.getState().audioSrc !== url) return;
+                            if (NATIVE_PLAYBACK_ENABLED && isNativePlayerAvailable() && nativePlaybackEngine.supports(url)) {
+                                const positionWanted = () => stillWanted() && nativePlaybackEngine.manualSeekGeneration() === seekAtStart;
+                                if (positionWanted()) publishNativeResume({ url, songKey, seconds: resumePosition, stillWanted: positionWanted });
+                            } else {
+                                pendingResumeTimeRef.setSessionPosition(resumePosition, () => stillWanted() && usePlaybackStore.getState().audioSrc === url);
+                            }
+                        },
                         queueWritesAtStart: writesAtStart,
                     });
                 } catch (error) {
@@ -458,6 +496,8 @@ export function useSessionRestoreController({
                 // 没东西可恢复（没记住歌 / 已被别的点歌打断 / 本地文件没了 / Stage 会话）：
                 // 上一个窗口留在 mpv 里的那首现在没人认领，放掉它。
                 if (!handedToSourceRestore) releaseUnclaimedHifiTrack('nothing to restore');
+                // 恢复收尾：没补上的壳也不再拦持久化（磁盘没有完整队列可保护了）。
+                settleMirrorQueueClaim();
                 /*
                  * 一秒半之后再看一眼 store：恢复「做完了又被别人覆盖」和「压根没做」在日志里
                  * 长得一样，而在界面上不一样 —— 这一条能区分。

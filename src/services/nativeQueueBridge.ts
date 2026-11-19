@@ -48,13 +48,16 @@ export type NativeQueueState = {
     album: string;
     durationMs: number;
     positionMs: number;
+    /** 盘上那份位置的写入时间（epoch 毫秒）；旧包或没有位置记录时缺失。仅 fromDisk 有意义。 */
+    positionSavedAtMs?: number;
     playing: boolean;
     liked: boolean;
     canLike: boolean;
     providerId: string;
     serverSongId: string;
     artworkUrl: string;
-    nativeMedia?: NativePlaybackSnapshot & { url: string; speed?: number };
+    /** `url` 是原生实际加载的轨（伴奏/清唱时是 file://）；`baseUrl` 是对外的原始地址，旧包没有。 */
+    nativeMedia?: NativePlaybackSnapshot & { url: string; baseUrl?: string; speed?: number };
     lyrics?: { songKey: string; lrc: string; translated: string };
     /**
      * 这份队列是从**盘上的会话快照**答上来的，不是原生此刻正在放的东西。
