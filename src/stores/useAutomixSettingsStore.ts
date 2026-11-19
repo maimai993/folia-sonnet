@@ -15,8 +15,27 @@ import {
 } from '../services/automix/crossfadePlanner';
 import { DEFAULT_TRANSITION_SETTINGS, type TransitionMode } from '../services/automix/transitionStrategy';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
-import { getStoredBoolean, setStoredBoolean } from './storagePrimitives';
+import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 import { isNativePlayerAvailable } from '../services/playbackEngine/nativePlayerPlugin';
+
+/** storagePrimitives 只提供带缺省的读；这里补「有没有存过」与「null 才有意义」的两个薄封装。 */
+const localStorageHas = (key: string): boolean => {
+    try {
+        if (typeof window === 'undefined') return false;
+        return window.localStorage.getItem(key) !== null;
+    } catch {
+        return false;
+    }
+};
+
+const readStoredStringOrNull = (key: string): string | null => {
+    try {
+        if (typeof window === 'undefined') return null;
+        return window.localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+};
 
 const AUTOMIX_ENABLED_KEY = 'folia_automix_enabled';
 
@@ -42,9 +61,9 @@ const TRANSITION_MODE_KEY = 'folia_transition_mode';
  */
 const readStoredTransitionMode = (): TransitionMode => {
     if (typeof window === 'undefined') return DEFAULT_TRANSITION_SETTINGS.mode;
-    const saved = localStorage.getItem(TRANSITION_MODE_KEY);
+    const saved = getStoredString(TRANSITION_MODE_KEY, '');
     if (saved === 'automix' || saved === 'crossfade') return saved;
-    return localStorage.getItem(NATIVE_TRANSITION_MODE_KEY) === 'crossfade' ? 'crossfade' : 'automix';
+    return getStoredString(NATIVE_TRANSITION_MODE_KEY, '') === 'crossfade' ? 'crossfade' : 'automix';
 };
 
 /** 手动指定的接法；空串 = 由内核按测量证据自动挑。 */
@@ -75,7 +94,7 @@ const readTransitionAnimationCard = (): boolean => {
         return false;
     }
 
-    if (localStorage.getItem(TRANSITION_ANIMATION_CARD_KEY) !== null) {
+    if (localStorageHas(TRANSITION_ANIMATION_CARD_KEY)) {
         return getStoredBoolean(TRANSITION_ANIMATION_CARD_KEY, false);
     }
 
@@ -86,14 +105,14 @@ const readTransitionAnimationCard = (): boolean => {
 
 const readStoredCrossfadeMaxSec = (): number => {
     if (typeof window === 'undefined') return CROSSFADE_DEFAULT_SEC;
-    const saved = localStorage.getItem(CROSSFADE_MAX_SEC_KEY);
+    const saved = readStoredStringOrNull(CROSSFADE_MAX_SEC_KEY);
     return saved === null ? CROSSFADE_DEFAULT_SEC : clampCrossfadeSeconds(Number(saved));
 };
 
 const readStoredCrossfadeCurve = (): CrossfadeCurve => (
     typeof window === 'undefined'
         ? CROSSFADE_DEFAULT_CURVE
-        : readCrossfadeCurve(localStorage.getItem(CROSSFADE_CURVE_KEY))
+        : readCrossfadeCurve(readStoredStringOrNull(CROSSFADE_CURVE_KEY))
 );
 
 /**
@@ -104,20 +123,20 @@ const readStoredCrossfadeCurve = (): CrossfadeCurve => (
  * 所以这一档在陌生设备上不会变成硬切。
  */
 const readNativeTransitionMode = (): NativeTransitionMode => (
-    typeof window === 'undefined' ? 'smart' : (localStorage.getItem(NATIVE_TRANSITION_MODE_KEY) === 'crossfade' ? 'crossfade' : 'smart')
+    typeof window === 'undefined' ? 'smart' : (getStoredString(NATIVE_TRANSITION_MODE_KEY, '') === 'crossfade' ? 'crossfade' : 'smart')
 );
 
 /** 手动指定的接法。空串与没存过都当「自动」—— 与原生 `EffectId.fromWire("")` 的语义一致。 */
 const readStoredTransitionEffect = (): string | null => {
     if (typeof window === 'undefined') return null;
-    const saved = localStorage.getItem(TRANSITION_EFFECT_KEY);
+    const saved = readStoredStringOrNull(TRANSITION_EFFECT_KEY);
     return saved ? saved : null;
 };
 
 /** 0.25 / 0.5 / 0.75 / 1 四档；越界值夹回去而不是丢掉，免得界面出现不存在的档位。 */
 const readStoredTransitionIntensity = (): number => {
     if (typeof window === 'undefined') return 0.75;
-    const saved = localStorage.getItem(TRANSITION_INTENSITY_KEY);
+    const saved = readStoredStringOrNull(TRANSITION_INTENSITY_KEY);
     if (saved === null) return 0.75;
     const value = Number(saved);
     if (!Number.isFinite(value)) return 0.75;
@@ -228,9 +247,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     // Web Audio 的规划器用；安卓壳里出声的是原生内核，档位必须一起推过去 ——
     // 只改这里的字段，用户在安卓上点 Automix 会「点了没反应」。
     handleSetTransitionMode: (mode) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(TRANSITION_MODE_KEY, mode);
-        }
+        setStoredString(TRANSITION_MODE_KEY, mode);
         set({ transitionMode: mode });
         if (isNativePlayerAvailable()) {
             // 顺带对齐内核档位，免得两个字段各自记着不同的选择。
@@ -243,15 +260,13 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
      * crossfadeEnabled 保持为总开关 —— 内核里两者是「开没开」和「怎么接」两件事。
      */
     handleSetNativeTransitionMode: (mode) => {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(NATIVE_TRANSITION_MODE_KEY, mode);
-        }
+        setStoredString(NATIVE_TRANSITION_MODE_KEY, mode);
         set({ nativeTransitionMode: mode });
         void writeNativeSettings({ 'transition.mode': toNativeTransitionMode(mode) });
     },
     handleSetTransitionEffect: (effect) => {
         if (typeof window !== 'undefined') {
-            localStorage.setItem(TRANSITION_EFFECT_KEY, effect ?? '');
+            setStoredString(TRANSITION_EFFECT_KEY, effect ?? '');
         }
         set({ transitionEffect: effect });
         // 原生侧空串 = 自动挑选（EffectId.fromWire("") 返回 null）。
@@ -260,7 +275,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetTransitionIntensity: (intensity) => {
         const next = Math.min(1, Math.max(0.25, intensity));
         if (typeof window !== 'undefined') {
-            localStorage.setItem(TRANSITION_INTENSITY_KEY, String(next));
+            setStoredString(TRANSITION_INTENSITY_KEY, String(next));
         }
         set({ transitionIntensity: next });
         void writeNativeSettings({ 'transition.intensity': next });
@@ -273,7 +288,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetCrossfadeMaxSec: (seconds) => {
         const next = clampCrossfadeSeconds(seconds);
         if (typeof window !== 'undefined') {
-            localStorage.setItem(CROSSFADE_MAX_SEC_KEY, String(next));
+            setStoredString(CROSSFADE_MAX_SEC_KEY, String(next));
         }
         set({ crossfadeMaxSec: next });
         /*
@@ -287,7 +302,7 @@ export const useAutomixSettingsStore = create<AutomixSettingsState>((set, get) =
     handleSetCrossfadeCurve: (curve) => {
         const next = readCrossfadeCurve(curve);
         if (typeof window !== 'undefined') {
-            localStorage.setItem(CROSSFADE_CURVE_KEY, next);
+            setStoredString(CROSSFADE_CURVE_KEY, next);
         }
         set({ crossfadeCurve: next });
         // 原生的音量斜坡按名字取曲线，字符串直接过去，不在这边换算成编号。
