@@ -189,7 +189,8 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     gpuPreference: readGpuPreference(getStoredString(GPU_PREFERENCE_STORAGE_KEY, 'auto')) ?? 'auto',
     backgroundThrottling: getStoredBoolean(BACKGROUND_THROTTLING_STORAGE_KEY, false),
-    uiZoomEnabled: getStoredBoolean(UI_ZOOM_ENABLED_STORAGE_KEY, false),
+    // 默认打开、默认 75%（用户要求）：整页小一档在手机上更好用。
+    uiZoomEnabled: getStoredBoolean(UI_ZOOM_ENABLED_STORAGE_KEY, true),
     uiZoomStep: readUiZoomStep(getStoredString(UI_ZOOM_STEP_STORAGE_KEY, '')) ?? DEFAULT_UI_ZOOM_STEP,
     windowAlwaysOnTopSupported: true,
     setDesktopPreferenceSnapshot: (settings) => {
