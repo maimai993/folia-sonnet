@@ -26,9 +26,21 @@ export type SwarmRuntime = {
 };
 
 /** 一群光标先聚多久（毫秒）。太短看不出「群体」，太长显得慢。 */
-const GATHER_MS = 900;
-/** 一块本身要多久画完（毫秒）。 */
-const BLOCK_DRAW_MS = 520;
+/** 一群光标先聚多久（毫秒）。太短看不出「群体」，太长显得慢。 */
+const GATHER_MIN_MS = 700;
+/**
+ * 量不到足够多的块时，最多再等这么久。
+ *
+ * 启动那一刻首页常常还没渲染完（在读库、在恢复会话），只等 0.9 秒往往只量到三五个元素，
+ * 画出来不像「在画界面」。这个窗口用来等真正的版面出现。
+ */
+const GATHER_MAX_MS = 2400;
+/** 量到这么多块就可以开始建了。 */
+const TARGET_BLOCKS = 6;
+/** 建块总预算（毫秒）：块多了每块就短一点，整体不会拖长。 */
+const BUILD_BUDGET_MS = 3600;
+/** 一块最少画这么久，再快就只是闪一下。 */
+const BLOCK_DRAW_MIN_MS = 200;
 /** 撤离最长给多久，超时直接结束。 */
 const LEAVE_MAX_MS = 700;
 /** 一帧最多推进多少秒：页面切回来时 rAF 的 dt 会是好几秒，钳住才不会一帧跳飞。 */
@@ -37,7 +49,7 @@ const MAX_DT_S = 0.05;
 /**
  * 创建运行时。canvas 尺寸在这里按 devicePixelRatio 设好，之后每帧不再改尺寸。
  */
-export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: SwarmRuntimeOptions): SwarmRuntime => {
+export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 6200 }: SwarmRuntimeOptions): SwarmRuntime => {
     const context = canvas.getContext('2d');
     if (!context) {
         // 拿不到 2d 上下文（极老的内核）：立刻交回控制权，启动流程不能因为它卡住。
@@ -66,6 +78,8 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
     void document.body.offsetHeight;
     let blocks = measureBlueprint();
     let usingFallback = blocks.length < 3;
+    /** 每块画多久：块多就快一点，整体控制在 BUILD_BUDGET_MS 里。 */
+    const blockDrawMs = (): number => Math.max(BLOCK_DRAW_MIN_MS, Math.min(520, BUILD_BUDGET_MS / Math.max(1, blocks.length)));
     if (usingFallback) blocks = buildFallbackBlueprint({ width, height });
     // 移动端少一些光标：每只都要画形状，36 只在低端机上会掉帧。
     const count = width * height > 900 * 1600 ? 32 : 20;
@@ -126,7 +140,7 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
         }
         // 正在建的那一块。
         if (blockIndex >= 0 && !finished.has(blockIndex)) {
-            const progress = Math.min(1, blockElapsed / BLOCK_DRAW_MS);
+            const progress = Math.min(1, blockElapsed / blockDrawMs());
             drawBlock(blocks[blockIndex], progress, blockIndex);
         }
         // 光标最后画，压在内容上面 —— 真实的协作光标也在最上层。
@@ -148,7 +162,7 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
 
         if (phase === 'gather') {
             // 还在用兜底版式：每帧再量一次真实界面，量到就换（此时还没开始建，换掉不会有错位）。
-            if (usingFallback && elapsedMs < GATHER_MS) {
+            if (usingFallback && elapsedMs < GATHER_MAX_MS) {
                 const measured = measureBlueprint();
                 if (measured.length >= 3) {
                     blocks = measured;
@@ -156,14 +170,19 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
                     console.info(`[SwarmSplash] 量到真实界面 ${measured.length} 块`);
                 }
             }
-            if (elapsedMs >= GATHER_MS || elapsedMs >= maxDurationMs) {
+            /*
+             * 量到足够多块就开始建；一直量不到就等到上限再开始（用当时量到的那几块）。
+             */
+            const enough = !usingFallback && blocks.length >= TARGET_BLOCKS;
+            const timedOut = elapsedMs >= GATHER_MAX_MS;
+            if ((enough && elapsedMs >= GATHER_MIN_MS) || timedOut || elapsedMs >= maxDurationMs) {
                 phase = 'build';
                 blockIndex = 0;
                 blockElapsed = 0;
             }
         } else if (phase === 'build') {
             blockElapsed += dtMs;
-            if (blockElapsed >= BLOCK_DRAW_MS) {
+            if (blockElapsed >= blockDrawMs()) {
                 finished.add(blockIndex);
                 blockElapsed = 0;
                 blockIndex += 1;
