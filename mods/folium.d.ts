@@ -157,6 +157,12 @@ export interface FoliumLine {
     songPart?: string;
     /** Index of the song part this line belongs to. */
     blockIndex?: number;
+    /**
+     * The host inserted this line as an interlude placeholder (a gap with no words), not a lyric the
+     * source carried. Its text is `'......'`; read this flag rather than the text, because a real line
+     * can read the same. Kept when the line is passed back unchanged.
+     */
+    isInterlude?: boolean;
     /** The line is part of a chorus. */
     isChorus?: boolean;
     /** The chorus effect builtin modes draw for it. */

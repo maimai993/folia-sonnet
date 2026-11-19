@@ -2037,6 +2037,7 @@ seconds on the lyric clock.
 | `agentId?` | `string` | The singer, when the source names one. |
 | `songPart?` | `string` | Song part name from the source, e.g. `Chorus`. |
 | `blockIndex?` | `number` | Index of the song part this line belongs to. |
+| `isInterlude?` | `boolean` | The host inserted this line as an interlude placeholder (a gap with no words), not a lyric the source carried. Its text is `'......'`; read this flag rather than the text, because a real line can read the same. Kept when the line is passed back unchanged. |
 | `isChorus?` | `boolean` | The line is part of a chorus. |
 | `chorusEffect?` | `'bars' \| 'circles' \| 'beams'` | The chorus effect builtin modes draw for it. |
 | `backgroundVocals?` | `FoliumBackgroundVocal[]` | Background vocals. |
