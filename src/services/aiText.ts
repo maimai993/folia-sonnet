@@ -89,9 +89,12 @@ export const generateThemeFromLyrics = async (
    * 两份同名实现是上游合并留下的（它把 useThemeController 的 import 改到了这里，
    * 主题链路于是绕开云缓存 —— 那就是「云缓存失效」）。别再用它做主链路。
    */
+  // 诊断（#353）：记下「走到哪一步失败的」，冷启动失败时这一行能直接定位阶段。
+  let stage = 'enter';
   try {
     // Check if running in Electron environment
     if ((window as any).electron && typeof (window as any).electron.generateTheme === 'function') {
+      stage = 'electron-bridge';
       const dualTheme = await (window as any).electron.generateTheme(lyricsText, options);
       return sanitizeDualTheme(dualTheme);
     }
@@ -101,12 +104,15 @@ export const generateThemeFromLyrics = async (
     // "Unexpected token '<', "<!DOCTYPE " ..."。看着像 AI 挂了，其实请求压根没出去。
     // App 里走第三条路：用户填的 Key，经原生 OkHttp 桥直连服务商（services/aiThemeClient.ts）。
     if (isCapacitorAndroid()) {
+      stage = 'android-native';
       // 还没填 Key 就别发一次注定 403 的请求：抛一个 isMissingAiApiKeyError 认得出的错，
       // 界面才能提示「去设置里填 Key」，而不是报一个看不懂的 HTTP 403。
       if (!isLocalAiThemeAvailable()) throw new Error(WEB_ROUTE_WITHOUT_KEY);
+      stage = 'android-missing-key';
       return generateThemeWithConfiguredAi(lyricsText, options);
     }
 
+    stage = 'web-route-fetch';
     const response = await fetch(themeRoute(getWebAiProvider()), {
       method: 'POST',
       headers: {
@@ -123,7 +129,7 @@ export const generateThemeFromLyrics = async (
     const dualTheme = await response.json();
     return applyStoredAnimationIntensityToDualTheme(sanitizeDualTheme(dualTheme as DualTheme));
   } catch (error) {
-    console.error("Failed to generate theme via API:", error);
+    console.error(`Failed to generate theme via API (stage=${stage}):`, error);
     throw error;
   }
 };
