@@ -2,17 +2,20 @@
 //
 // 背景「用在哪」的选择与持久化。
 //
-// 三个去处：
+// 四个去处：
 //   · wallpaper  桌面/锁屏的系统壁纸（原生渲染层）
 //   · app        App 内的歌词可视化背景（网页层）
-//   · monet      歌词样式里莫奈背景的自定义图片来源（只有静图能去，见 apply.ts）
+//   · monet      歌词样式里莫奈背景的自定义图片（只有静图能去，见 apply.ts）
+//   · nomand     歌词样式里漫游背景的自定义图片（同样只有静图）
+//
+// monet 与 nomand 互斥，规则在 services/backgroundMarket/applyTargets.ts。
 //
 // 和字体那边一样，应用范围要能事后改，所以整体存在一处。
 
 import { useCallback, useEffect, useState } from 'react';
 import type { BackgroundMarketKind } from '../../../../../../services/backgroundMarket';
 
-export type BackgroundTarget = 'wallpaper' | 'app' | 'monet';
+export type BackgroundTarget = 'wallpaper' | 'app' | 'monet' | 'nomand';
 
 export interface AppliedMarketBackground {
     kind: BackgroundMarketKind;
