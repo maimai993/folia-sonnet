@@ -10,6 +10,7 @@ import { isInjectedVideoUrl, useVideoLayerSettingsStore, withInjectPrefix } from
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import { isBilibiliAvailable } from '../../services/bilibili/transport';
 import { registerMvRequirementSink } from '../../services/mvRequirement';
+import { acquireVideoLayerEnabled } from '../../services/videoLayerEnabledLease';
 import { useLyricSettingsStore } from '../../stores/useLyricSettingsStore';
 import { isBilibiliSongId } from '../../services/bilibili/bilibiliProvider';
 
@@ -175,6 +176,11 @@ const BilibiliMvLayer: React.FC = () => {
      * 切换时**先清空、下一帧再写新的**。直接换的话，`<video>` 上还挂着上一条的
      * src，两个源抢同一个元素，表现就是画面裂开 / 放不出来。先清空让元素回到
      * 「没有源」的状态，再把新的写进去，它才会重新走一次加载。
+     *
+     * 「要不要把这一层露出来」另外借一份（见 services/videoLayerEnabledLease），
+     * 而且只在真的有画面时借：以前是在 setInjectedUrl 里硬开并落盘，背景预览里看一眼
+     * 「MV」就把这一层永久打开了（issue #432）。租约记下开关的原值，这一条撤掉、或者
+     * 切到别的背景以后才回滚，且只回滚它自己开的那一次。
      */
     React.useEffect(() => {
         const store = useVideoLayerSettingsStore.getState();
@@ -198,6 +204,7 @@ const BilibiliMvLayer: React.FC = () => {
                 if (current.injectedUrl && isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
             };
         }
+        const release = acquireVideoLayerEnabled();
         // 一帧之后再写：让 <video> 先把上一条彻底卸掉。写的这一条带上前缀，
         // 之后才分得清「这条是注入的」和「用户自己选的」。
         const frame = requestAnimationFrame(() => {
@@ -211,6 +218,7 @@ const BilibiliMvLayer: React.FC = () => {
             const current = useVideoLayerSettingsStore.getState();
             // 只清自己写进去的那条；用户自己选的视频层永远不碰。
             if (current.injectedUrl && isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
+            release();
         };
     }, [videoUrl]);
 

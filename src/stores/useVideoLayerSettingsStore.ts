@@ -177,10 +177,18 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
         // 运行时注入的那条：不读盘，所以重启一定是 null。
         injectedUrl: null,
         setInjectedUrl: (url) => {
+            /*
+             * 这里**不碰 videoLayerEnabled**。
+             *
+             * 以前注入就顺手把开关打开并落盘（「注入了就把它露出来」）。问题是注入方不止
+             * 「用户点了看这个视频」一处：播放页的 MV 层在背景预览里也会注入，于是只看一眼
+             * 「MV」背景，这一层就被永久打开了，之后收起面板、换别的背景都关不回去
+             * （issue #432）。要不要露出来是注入方的事，见 services/videoLayerEnabledLease：
+             * 它借的时候记下原值，还的时候只回滚自己开的那一次。
+             */
             set({ injectedUrl: url });
-            // 注入了就把它露出来：用户点了「看这个视频」，看不到才是怪事。
-            if (url) set({ videoLayerEnabled: true });
-        },        setVideoLayerEnabled: (enabled) => {
+        },
+        setVideoLayerEnabled: (enabled) => {
             set({ videoLayerEnabled: enabled });
             setStoredBoolean(VIDEO_LAYER_ENABLED_KEY, enabled);
         },

@@ -16,6 +16,7 @@ import {
     useVideoLayerSettingsStore,
     withInjectPrefix,
 } from '../../stores/useVideoLayerSettingsStore';
+import { acquireVideoLayerEnabled } from '../../services/videoLayerEnabledLease';
 
 // src/components/bilibili/BilibiliVideoStage.tsx
 // 正在放的这首歌**本身就是一条投稿**时，把它的画面铺到播放页。
@@ -109,6 +110,9 @@ const BilibiliVideoStage: React.FC = () => {
      * 2. 切换时先清空、下一帧再写新的 —— 直接换的话 `<video>` 上还挂着上一条的
      *    src，两个源抢同一个元素，画面会裂开或放不出来；
      * 3. 清理时只清带前缀的那条，用户自己的视频层永远不碰。
+     *
+     * 「这一层要不要露出来」另外借一份，和 BilibiliMvLayer 同一个计数
+     * （见 services/videoLayerEnabledLease）：画面的开关归租约管，不归注入管。
      */
     React.useEffect(() => {
         const store = useVideoLayerSettingsStore.getState();
@@ -130,6 +134,7 @@ const BilibiliVideoStage: React.FC = () => {
             };
         }
 
+        const release = acquireVideoLayerEnabled();
         const frame = requestAnimationFrame(() => {
             const current = useVideoLayerSettingsStore.getState();
             const next = withInjectPrefix(videoUrl);
@@ -139,6 +144,7 @@ const BilibiliVideoStage: React.FC = () => {
             cancelAnimationFrame(frame);
             const current = useVideoLayerSettingsStore.getState();
             if (isInjectedVideoUrl(current.injectedUrl)) current.setInjectedUrl(null);
+            release();
         };
     }, [videoUrl]);
 
