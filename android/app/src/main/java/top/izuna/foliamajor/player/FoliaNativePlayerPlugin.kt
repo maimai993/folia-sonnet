@@ -7,16 +7,19 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 
 import top.izuna.foliamajor.automix.AutomixLoad
+import top.izuna.foliamajor.automix.ScnetRunner
 import top.izuna.foliamajor.player.dsp.AudioPipelineTelemetry
 import top.izuna.foliamajor.player.dsp.EqSettings
 import top.izuna.foliamajor.player.dsp.InstrumentalCoordinator
 import top.izuna.foliamajor.player.dsp.InstrumentalStore
 import top.izuna.foliamajor.player.dsp.NativeEqualizerState
+import top.izuna.foliamajor.player.dsp.StemKind
+import top.izuna.foliamajor.player.dsp.StemMixState
+import top.izuna.foliamajor.player.dsp.StemSongState
 import top.izuna.foliamajor.player.dsp.VocalTrackMode
 import top.izuna.foliamajor.player.dsp.vocalTrackModeOf
 import top.izuna.foliamajor.player.dsp.shouldSwapVocalTrack
@@ -25,6 +28,7 @@ import top.izuna.foliamajor.wallpaper.WallpaperLyricsState
 import top.izuna.foliamajor.player.transition.bridge.TransitionDeckHost
 import top.izuna.foliamajor.player.transition.bridge.TransitionRuntime
 import top.izuna.foliamajor.player.transition.bridge.FoliaTransitionPlugin
+import java.io.File
 
 /**
  * 原生播放内核的桥（P1）。
@@ -192,6 +196,8 @@ class FoliaNativePlayerPlugin : Plugin() {
             val player = current?.player
             if (current == null || player == null || !player.hasMedia()) return
             player.seek(Math.max(0L, positionMs))
+            // 四轨解码器的时间轴跟着一起挪：不写的话它们还在按旧位置往前喂（见 StemMixState）。
+            StemMixState.requestSeek(Math.max(0L, positionMs) * ScnetRunner.SAMPLE_RATE / 1000L)
         }
 
         /**
@@ -238,6 +244,7 @@ class FoliaNativePlayerPlugin : Plugin() {
             val player = current?.player
             if (current == null || player == null || url == null || url.isEmpty()) return false
             current.prepareClearingStall(player, url, -1L, mediaId)
+            current.publishStemState(url, mediaId)
             return true
         }
 
@@ -307,7 +314,10 @@ class FoliaNativePlayerPlugin : Plugin() {
         fun crossfadeFromSystem(url: String, mediaId: String?, durationMs: Int): Boolean {
             val current = instance ?: return false
             val player = current.player ?: return false
-            return player.crossfadeTo(url, mediaId, durationMs)
+            val started = player.crossfadeTo(url, mediaId, durationMs)
+            // 新那台马上成为主：四轨状态也要跟着换成新这一首，否则混的还是上一首的轨。
+            if (started) current.publishStemState(url, mediaId)
+            return started
         }
 
         /**
@@ -391,6 +401,19 @@ class FoliaNativePlayerPlugin : Plugin() {
             event.put("songKey", songKey)
             event.put("reason", reason)
             MAIN.post { notifyListeners("sourceReload", event) }
+        }
+        /*
+         * 四轨生成完就通知音频线程。
+         *
+         * 「接管」有两个条件，缺一不可：确实是**此刻在放的这首**（预拆队列里排在后面的
+         * 歌不算），而且是**用户拨着开关在等这一趟**。不满足时成果只留在缓存里 ——
+         * 下一次装源 publishStemState 自然取用；不校验的话，预拆完成会把正在播的原曲
+         * 无脑换成「四轨混音版」，或者更糟：把别的歌的四轨挂到这首上。
+         */
+        InstrumentalCoordinator.onStemsReady = { url, songKey, userInitiated ->
+            if (userInitiated && isCurrentSong(url, songKey)) {
+                publishStemState(url, songKey)
+            }
         }
         val appContext = context.applicationContext
         Thread { InstrumentalCoordinator.sweep(appContext) }.apply {
@@ -660,9 +683,38 @@ class FoliaNativePlayerPlugin : Plugin() {
     override fun handleOnDestroy() {
         // 先使排队中的旧播放器事件失效，再异步释放播放器线程；清理只在代数仍是当前时生效。
         releasePlayerAndClearStall()
+        // 音频线程不能再拿着这首歌的四轨：插件没了，也就没人再随装源发布新状态了。
+        StemMixState.publishSong(null)
         // 旧实例迟到销毁时不能把新实例的入口一并清掉。
         if (instance === this) instance = null
         super.handleOnDestroy()
+    }
+
+    /**
+     * 装源 / 交叉淡化 / 四轨生成完成之后，把「这一首的四轨」发布给音频线程。
+     *
+     * 音频线程（StemMixProcessor）只看这份状态决定这一块混什么：四轨齐了才有得混，
+     * 缺一个文件就整首原样直通（见 StemMixProcessor.resolve）。判定「齐了没有」用
+     * InstrumentalStore.allStemsReady —— 只看文件在不在，不刷新 mtime。
+     */
+    private fun publishStemState(url: String?, songKey: String?) {
+        if (url.isNullOrBlank()) {
+            StemMixState.publishSong(null)
+            return
+        }
+        val key = InstrumentalStore.keyFor(url, songKey)
+        val ready = InstrumentalStore.allStemsReady(context, key)
+        val stems = if (ready) InstrumentalStore.allStems(context, key) else arrayOfNulls<File?>(StemKind.ALL.size)
+        StemMixState.publishSong(StemSongState(key, stems, ready))
+    }
+
+    /** [songKey]/[url] 描述的是不是此刻装着的那一首。生成完成的那一刻用它挡掉预拆的别的歌。 */
+    private fun isCurrentSong(url: String?, songKey: String?): Boolean {
+        val current = player ?: return false
+        if (!songKey.isNullOrBlank() && !currentSongKey.isNullOrBlank()) {
+            return songKey == currentSongKey
+        }
+        return !url.isNullOrBlank() && url == current.baseUrl()
     }
 
     @PluginMethod
@@ -690,9 +742,24 @@ class FoliaNativePlayerPlugin : Plugin() {
         if (url != current.currentUrl() &&
             FoliaTransitionPlugin.tryTakeover(context, url, webSongKey)
         ) {
-            // 过渡接管时这台播放器不接 Web 的装源，伴奏换源也就无从谈起：
-            // 把还在跑的生成任务作废，别让它在半路把歌切走。
+            /*
+             * 过渡接管：原生自己接下了这次换歌，Web 的那一下装源不落地。
+             *
+             * 但「不落地」只是指不走 prepareClearingStall —— 状态照样要跟上：
+             *   · 还在为**上一首**跑的生成任务作废（否则它半路把歌切回去）；
+             *   · 记下这首的身份（currentSongKey），并把它交给协调器 reconcile：
+             *     拔着「伴奏 / 清唱」时新歌该显示「已就绪 / 正在拆分」，而不是被
+             *     cancel 成 IDLE、界面显示成「未拆分」；
+             *   · 把四轨状态发布给音频线程，混音跟着换到这一首。
+             */
             InstrumentalCoordinator.cancel()
+            currentSongKey = webSongKey
+            InstrumentalCoordinator.noteSourcePrepared()
+            publishStemState(url, webSongKey)
+            InstrumentalCoordinator.reconcile(context, current, url, webSongKey)
+            if (FoliaSettingsStore.get(context).getBoolean(PREBUILD_TRACKS_KEY, false)) {
+                InstrumentalCoordinator.prebuild(context, url, webSongKey)
+            }
             MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
             val handled = JSObject()
             handled.put("ok", true)
@@ -703,28 +770,17 @@ class FoliaNativePlayerPlugin : Plugin() {
         // 撤销条件：Web 亲自装源 = 手动换歌，进行中的过渡必须让位并恢复播放器状态。
         FoliaTransitionPlugin.interrupt("Web 亲自装源")
         /*
-         * 「关闭人声」开着、而且这首已经生成过伴奏：一次就装伴奏。
+         * 永远只装原曲。
          *
-         * 不先装原曲再切 —— 那会多一次解码器初始化，启播时听得出一下顿。
-         * 装伴奏时 MediaItem 的 mediaId 仍然是这首歌的 songKey，
-         * 通知栏 / 桌面歌词 / 镜像兜底都以为没换过东西。
+         * 清唱 = 人声轨、伴奏 = 其余三轨，都由 StemMixProcessor 在音频链最前实时混音，
+         * 播放器本身不需要换到任何派生文件上 —— 原曲那条流就是四个解码器的时钟。
+         * 旧的「已生成过伴奏就一次装伴奏 / 清唱」那条路取消之后，少一次解码器初始化，
+         * 也不会再出现「切下一首用了上一首的派生文件」。
+         *
+         * 旧媒体的缓冲豁免不能跨媒体继承：清理排到播放器线程、与旧事件同序，
+         * 换源前旧事件无法再写回。
          */
-        val activeMode = NativeEqualizerState.activeMode()
-        val cachedTrack = activeMode?.let { mode ->
-            InstrumentalStore.find(context, InstrumentalStore.keyFor(url, webSongKey), mode)
-        }
-        if (cachedTrack != null) {
-            current.prepareInstrumental(
-                url,
-                Uri.fromFile(cachedTrack).toString(),
-                if (startPositionMs != null) startPositionMs.toLong() else -1L,
-                webSongKey,
-                sourceToken,
-            )
-        } else {
-            // 旧媒体的缓冲豁免不能跨媒体继承：清理排到播放器线程、与旧事件同序，换源前旧事件无法再写回。
-            prepareClearingStall(current, url, if (startPositionMs != null) startPositionMs.toLong() else -1L, webSongKey, sourceToken)
-        }
+        prepareClearingStall(current, url, if (startPositionMs != null) startPositionMs.toLong() else -1L, webSongKey, sourceToken)
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
         currentSongKey = webSongKey
@@ -734,25 +790,59 @@ class FoliaNativePlayerPlugin : Plugin() {
          * currentSongKey 一起写，两者才会描述同一首歌。
          */
         InstrumentalCoordinator.noteSourcePrepared()
+        // 四轨状态跟着换到这一首：齐了的话，下次开「关闭人声 / 只留人声」立刻生效。
+        publishStemState(url, webSongKey)
         /*
-         * 开关开着的话：这首歌要是有现成的那一轨就直接换过去，没有就开始生成。
+         * 开关开着的话：这首歌要是已有四轨就直接亮成 ready，没有就开始生成。
          * reconcile 内部会先把旧任务作废（generation +1），不会串到上一首。
          */
         InstrumentalCoordinator.reconcile(context, current, url, webSongKey)
         /*
-         * 提前拆音轨由「设置 → 存储」里的总开关说了算。
+         * 让 Web 的预取认识这首：原生侧自己的排队由 prepareQueuePreparse 负责。
          *
-         * 关着（默认）：只正常给智能动感提供数据，不预先跑 SCNet 拆两轨 ——
+         * 提前拆音轨由「设置 → 存储」里的总开关说了算：
+         * 关着（默认）：只正常给智能动感提供数据，不预先跑 SCNet 拆四轨 ——
          * 那是几十秒的推理，用户没点头就别占着播放的核。等他真拨了「伴奏 /
          * 清唱」，reconcile 会自己现拆。
-         * 开着：装完源就把这首歌的两轨备好，拨开关秒切；下一首由 Web 的
-         * 预取队列提前备（songAssetPrecompute.ts）。
+         * 开着：装完源就把这首歌的四轨备好，拨开关秒切；下一首由 Web 的
+         * 预取队列提前备（songAssetPrecompute.ts），或者 Web 主动把队列交过来
+         * （prepareQueuePreparse）。
          */
         if (FoliaSettingsStore.get(context).getBoolean(PREBUILD_TRACKS_KEY, false)) {
             InstrumentalCoordinator.prebuild(context, url, webSongKey)
         }
         val result = JSObject()
         result.put("ok", true)
+        call.resolve(result)
+    }
+
+    /**
+     * 「整队预拆」：Web 把接下来要放的几首交过来，原生按顺序逐首拆四轨。
+     *
+     * 参数：`urls`（原曲地址数组）、`songKeys`（一一对应的身份，可缺）。正在播的那首
+     * 由播放器自己记的原曲地址算出来、不排它。总开关关着时什么也不做 —— 与装源时的
+     * prebuild 同一个开关，用户没点头就别跑几十秒的推理。
+     *
+     * 排队规则都在 InstrumentalCoordinator.preparseQueue：已经在拆 / 已经拆好的
+     * 不重复排，同一首只排一次；真的推理仍走同一条 worker，不会和「拨开关现拆」抢。
+     */
+    @PluginMethod
+    fun prepareQueuePreparse(call: PluginCall) {
+        val result = JSObject()
+        if (!FoliaSettingsStore.get(context).getBoolean(PREBUILD_TRACKS_KEY, false)) {
+            result.put("queued", 0)
+            call.resolve(result)
+            return
+        }
+        val urls = call.getArray("urls")?.toList<String>()?.filterNotNull() ?: emptyList()
+        // songKeys 与 urls 一一对应，缺的项按 null 处理（键会退回按地址算）。
+        val songKeys = call.getArray("songKeys")?.toList<String>() ?: emptyList()
+        val playingSongKey = currentSongKey
+        val currentKey = player?.baseUrl()?.let {
+            InstrumentalStore.keyFor(it, playingSongKey)
+        }
+        InstrumentalCoordinator.preparseQueue(context, urls, songKeys, currentKey)
+        result.put("queued", urls.size)
         call.resolve(result)
     }
 
@@ -801,6 +891,8 @@ class FoliaNativePlayerPlugin : Plugin() {
             return
         }
         current.seek(positionMs.toLong())
+        // 四轨解码器的时间轴跟着一起挪，否则切回来听到的还是拖之前的几秒。
+        StemMixState.requestSeek(positionMs.toLong() * ScnetRunner.SAMPLE_RATE / 1000L)
         call.resolve()
     }
 
@@ -980,7 +1072,7 @@ class FoliaNativePlayerPlugin : Plugin() {
     /**
      * 「设置 → 存储」里「删除人声分离缓存」。
      *
-     * 清的是原生 cacheDir/instrumental 下那两轨 m4a 文件，不是 Web 侧 IndexedDB 的
+     * 清的是原生 cacheDir/instrumental 下四轨的 m4a 文件，不是 Web 侧 IndexedDB 的
      * 分析曲线。删完把新的用量一起回给界面，省得再问一次 getInstrumentalState。
      */
     @PluginMethod
@@ -1002,6 +1094,9 @@ class FoliaNativePlayerPlugin : Plugin() {
             current.swapSource(base, instrumental = false)
         }
         InstrumentalCoordinator.clear(context.applicationContext)
+        // 四轨文件刚被删掉：音频线程那份也该重发布一次（否则它还按「四轨齐了」混，
+        // 读到的全是已经被抽走的文件）。
+        publishStemState(base, currentSongKey)
         val (usedBytes, usedCount, limitBytes) = InstrumentalStore.usage()
         val result = JSObject()
         result.put("ok", true)
@@ -1063,13 +1158,13 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         val mode = NativeEqualizerState.activeMode()
         /*
-         * 这首歌的两轨是不是已经在盘上。
+         * 这首歌的四轨是不是已经在盘上。
          *
          * 「分离过的歌重放还显示正在分析」多半不是真在重跑模型，而是 Coordinator
          * 的状态在关开关 / 切歌时被归零了：缓存明明齐了，界面却从 0% 起。
          * 直接问一次盘，齐了就诚实报 ready（正在生成中的那趟仍以它自己的进度为准）。
          */
-        val cachedReady = currentKey != null && InstrumentalStore.bothReady(context, currentKey)
+        val cachedReady = currentKey != null && InstrumentalStore.allStemsReady(context, currentKey)
         val stateForUi = if (cachedReady && mode != null && state != InstrumentalCoordinator.STATE_BUILDING)
             InstrumentalCoordinator.STATE_READY else state
         val result = JSObject()
@@ -1095,24 +1190,23 @@ class FoliaNativePlayerPlugin : Plugin() {
             null -> "off"
         })
         /*
-         * 播放器此刻**真的**装的是哪一轨：original / instrumental / vocal / none。
+         * 播放器此刻**真的**在放的是哪一路：original / instrumental / vocal / none。
          *
-         * mode 只表示用户的意图（开关），换源是异步的，两者短时间可能不一致。
-         * 把它回给界面，用来把「看起来切了其实没切」的选中态纠正过来，
-         * 也是排查「错位」时最该看的一个数。
+         * 换源那条路退场之后，播放器永远装着原曲，真正决定「现在放的是哪一轨」的是
+         * 音频链最前的 StemMixProcessor：四轨混音在跑时听的是分离出来的轨，否则是原曲。
+         * mode 只表示用户的意图（开关），混音起来是异步的（要等解码器预热几百毫秒），
+         * 两者短时间可能不一致。把它回给界面，用来把「看起来切了其实没切」的选中态
+         * 纠正过来，也是排查「错位」时最该看的一个数。
          */
         val currentUrl = current?.currentUrl()
-        val instrumentalUrl = currentKey?.let {
-            Uri.fromFile(InstrumentalStore.targetFor(context, it, VocalTrackMode.INSTRUMENTAL)).toString()
-        }
-        val vocalUrl = currentKey?.let {
-            Uri.fromFile(InstrumentalStore.targetFor(context, it, VocalTrackMode.VOCAL)).toString()
-        }
+        val mixing = NativeEqualizerState.stemMixActive &&
+            NativeEqualizerState.activeMode() != null &&
+            !currentUrl.isNullOrEmpty()
         result.put("currentTrack", when {
             currentUrl == null -> "none"
-            currentUrl == instrumentalUrl -> "instrumental"
-            currentUrl == vocalUrl -> "vocal"
-            else -> "original"
+            !mixing -> "original"
+            mode == VocalTrackMode.VOCAL -> "vocal"
+            else -> "instrumental"
         })
         call.resolve(result)
     }
