@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { installUiZoom } from './services/uiZoomRuntime';
 import './i18n/config';
 import './index.css';
 import App from './App';
@@ -139,6 +140,7 @@ const renderOnce = () => {
     hasRendered = true;
     renderApp();
 };
+installUiZoom();
 const bootFallbackTimer = setTimeout(renderOnce, BOOT_RENDER_FALLBACK_MS);
 
 void Promise.allSettled([bootFolium(), bootNavidrome()])

@@ -78,12 +78,14 @@ const PlaybackPage: React.FC = () => {
     const audio = useAudioSettingsStore(useShallow(state => ({
         mediaCache: state.enableMediaCache,
         fade: state.playbackFadeEnabled,
+        mixWithOtherAudio: state.mixWithOtherAudio,
         transcode: state.enableTranscodeFallback,
         queueBehavior: state.queueAddBehavior,
         autoSkipUnplayable: state.autoSkipUnplayable,
         shuffleRoundNoRepeat: state.shuffleRoundNoRepeat,
         setMediaCache: state.handleToggleMediaCache,
         setFade: state.handleTogglePlaybackFade,
+        setMixWithOtherAudio: state.handleToggleMixWithOtherAudio,
         setTranscode: state.handleToggleTranscodeFallback,
         setQueueBehavior: state.handleSetQueueAddBehavior,
         setAutoSkipUnplayable: state.handleToggleAutoSkipUnplayable,
@@ -212,6 +214,14 @@ const PlaybackPage: React.FC = () => {
                 </Row>
                 <Row option={O.fade} hint={t('options.playbackFadeDesc')}>
                     <Toggle checked={audio.fade} onChange={audio.setFade} />
+                </Row>
+                {/*
+                 * 「与其他音源同时播放」：后台被别的应用抢走音频焦点时继续放，并自动接回来。
+                 * ★ 必须有这一行：选项进了 OPTIONS 就进了搜索索引，只声明不渲染会让搜索结果
+                 *   点过来是一片空气（#419 反馈）。
+                 */}
+                <Row option={O.mixWithOtherAudio} hint={t('options.mixWithOtherAudioDesc')}>
+                    <Toggle checked={audio.mixWithOtherAudio} onChange={audio.setMixWithOtherAudio} />
                 </Row>
                 {window.electron?.requestTranscodeFallback && (
                     <Row option={O.transcode} hint={t('options.transcodeFallbackDesc')}>

@@ -179,6 +179,8 @@ export const STORAGE_KEYS = [
     'web:foliaMachineCode',
     'web:foliaMarketRotation',
     'web:folia_analysis_models_asked',
+    'web:ui_zoom_enabled',
+    'web:ui_zoom_step',
     'web:folia_swarm_splash_enabled',
     'web:folia_ai_inference_disabled',
     'web:folia_ai_low_memory_gate',

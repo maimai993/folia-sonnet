@@ -10,6 +10,7 @@ import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } 
 import { setStatusMessage } from './useStatusMessageStore';
 import i18n from '../i18n/config';
 import type { RemoteLyricLayout } from '../types/remoteControl';
+import { DEFAULT_UI_ZOOM_STEP, readUiZoomStep, stepUiZoom, type UiZoomStep } from '../utils/uiZoom';
 import { DEFAULT_REMOTE_LYRIC_LAYOUT, parseRemoteLyricLayout, serializeRemoteLyricLayout } from '../utils/remoteLyricLayout';
 
 export const MINIMIZE_TO_TRAY_STORAGE_KEY = 'minimize_to_tray';
@@ -57,6 +58,10 @@ export const GPU_PREFERENCE_STORAGE_KEY = 'gpu_preference';
 // Mirrored from the main process's BACKGROUND_THROTTLING (electron/backgroundThrottling.cjs), which
 // applies it to the main window. Off by default: some streamers capture the window while it is covered.
 export const BACKGROUND_THROTTLING_STORAGE_KEY = 'background_throttling';
+
+// 界面缩放（#1264）：整页缩放的开关与挡位（百分比，见 utils/uiZoom.ts）。
+export const UI_ZOOM_ENABLED_STORAGE_KEY = 'ui_zoom_enabled';
+export const UI_ZOOM_STEP_STORAGE_KEY = 'ui_zoom_step';
 
 /** Which GPU Chromium renders on: its own choice, the high-performance one, or the power-saving one. */
 export type GpuPreference = 'auto' | 'high-performance' | 'low-power';
@@ -108,6 +113,12 @@ export type DesktopSettingsState = {
      * even out of sight (wallpaper, video export, OBS browser source).
      */
     backgroundThrottling: boolean;
+    /** 界面缩放（#1264，移植自上游）：整页按固定挡位缩放，关掉就是 100%。 */
+    uiZoomEnabled: boolean;
+    uiZoomStep: UiZoomStep;
+    handleToggleUiZoom: (enable: boolean) => void;
+    handleSetUiZoomStep: (step: UiZoomStep) => void;
+    handleStepUiZoom: (direction: 1 | -1) => boolean;
     /** Transient (never persisted), from the main process: false on native Wayland, where always-on-top is silently ignored. */
     windowAlwaysOnTopSupported: boolean;
     setDesktopPreferenceSnapshot: (settings: { MINIMIZE_TO_TRAY?: unknown; CLOSE_TO_TRAY?: unknown; HIDE_TASKBAR_ICON?: unknown; REMOTE_CONTROL_SKIP_TASKBAR?: unknown; REMOTE_CONTROL_HIDE_TITLEBAR?: unknown; REMOTE_CONTROL_CLICK_THROUGH?: unknown; REMOTE_CONTROL_EXPAND_COVER?: unknown; REMOTE_CONTROL_TEXT_SHADE?: unknown; VOICE_INPUT_PAUSE_ENABLED?: unknown; PREVENT_DISPLAY_SLEEP_DURING_PLAYBACK?: unknown; MOD_SYSTEM_ENABLED?: unknown; GPU_PREFERENCE?: unknown; BACKGROUND_THROTTLING?: unknown; wallpaper_mode?: unknown; wallpaper_entry_confirmed?: unknown; wallpaper_mac_autohide_dock?: unknown; window_always_on_top_supported?: unknown; }) => void;
@@ -139,6 +150,22 @@ export type DesktopSettingsState = {
     handleToggleBackgroundThrottling: (enable: boolean) => void;
 };
 
+/** 存下开关与挡位，并给一条 toast。真正的缩放动作由 services/uiZoomRuntime 订阅 store 完成。 */
+function applyUiZoomState(
+    set: (patch: Partial<DesktopSettingsState>) => void,
+    enabled: boolean,
+    step: UiZoomStep,
+) {
+    setStoredBoolean(UI_ZOOM_ENABLED_STORAGE_KEY, enabled);
+    setStoredString(UI_ZOOM_STEP_STORAGE_KEY, String(step));
+    set({ uiZoomEnabled: enabled, uiZoomStep: step });
+    setStatusMessage({
+        type: 'info',
+        text: enabled
+            ? i18n.t('notifications.uiZoomChanged', { percent: step })
+            : i18n.t('notifications.uiZoomOff'),
+    });
+}
 export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) => ({
     minimizeToTray: getStoredBoolean(MINIMIZE_TO_TRAY_STORAGE_KEY, false),
     closeToTray: getStoredBoolean(CLOSE_TO_TRAY_STORAGE_KEY, false),
@@ -162,6 +189,8 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
     openPlayerOnLaunch: getStoredBoolean(OPEN_PLAYER_ON_LAUNCH_STORAGE_KEY, false),
     gpuPreference: readGpuPreference(getStoredString(GPU_PREFERENCE_STORAGE_KEY, 'auto')) ?? 'auto',
     backgroundThrottling: getStoredBoolean(BACKGROUND_THROTTLING_STORAGE_KEY, false),
+    uiZoomEnabled: getStoredBoolean(UI_ZOOM_ENABLED_STORAGE_KEY, false),
+    uiZoomStep: readUiZoomStep(getStoredString(UI_ZOOM_STEP_STORAGE_KEY, '')) ?? DEFAULT_UI_ZOOM_STEP,
     windowAlwaysOnTopSupported: true,
     setDesktopPreferenceSnapshot: (settings) => {
         const patch: Partial<DesktopSettingsState> = {};
@@ -434,6 +463,22 @@ export const useDesktopSettingsStore = create<DesktopSettingsState>((set, get) =
             type: 'info',
             text: i18n.t('notifications.' + (enable ? 'backgroundThrottlingOn' : 'backgroundThrottlingOff')),
         });
+    },
+    /*
+     * 界面缩放（#1264，移植自上游）。只写 store —— 真正套到窗口上的是 services/uiZoomRuntime，
+     * 它订阅这个 store。安卓没有 preload，那一层会退到 CSS zoom（见该文件）。
+     */
+    handleToggleUiZoom: (enable) => {
+        applyUiZoomState(set, enable, get().uiZoomStep);
+    },
+    handleSetUiZoomStep: (step) => {
+        applyUiZoomState(set, true, step);
+    },
+    handleStepUiZoom: (direction) => {
+        const next = stepUiZoom(get().uiZoomEnabled, get().uiZoomStep, direction);
+        if (!next) return false;
+        applyUiZoomState(set, next.enabled, next.step);
+        return true;
     },
 }));
 

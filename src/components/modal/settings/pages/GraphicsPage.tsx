@@ -6,6 +6,7 @@ import { MOTION_SURFACE_IDS, useMotionSettingsStore, type MotionSurfaceId } from
 import { useDesktopSettingsStore } from '../../../../stores/useDesktopSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../../stores/usePlayerChromeSettingsStore';
 import { useSwarmSplashStore } from '../../../../stores/useSwarmSplashStore';
+import { UI_ZOOM_STEPS, type UiZoomStep } from '../../../../utils/uiZoom';
 import { useAiInferenceSettingsStore } from '../../../../stores/useAiInferenceSettingsStore';
 import { useThemeSettingsStore } from '../../../../stores/useThemeSettingsStore';
 import { useVisualizerSettingsStore } from '../../../../stores/useVisualizerSettingsStore';
@@ -58,6 +59,9 @@ const O = {
     followSystem: option(MOTION, 'reduceMotionFollowSystem', 'options.reduceMotionFollowSystem'),
     // 启动时播放群体光标建造动画（默认打开）。
     swarmSplash: option(PERFORMANCE, 'swarmSplashEnabled', 'options.swarmSplashEnabled'),
+    // 界面缩放（#1264，移植自上游）：整页按固定挡位缩放。
+    uiZoom: option(PERFORMANCE, 'uiZoomEnabled', 'options.uiZoomEnabled'),
+    uiZoomStep: option(PERFORMANCE, 'uiZoomStep', 'options.uiZoomStep'),
 };
 
 /** One row per part of the interface whose motion can be reduced, in the store's order. */
@@ -98,6 +102,10 @@ const GraphicsPage: React.FC = () => {
     const setNativeBlur = usePlayerChromeSettingsStore(state => state.handleTogglePlayerPageNativeBlur);
     const swarmSplashEnabled = useSwarmSplashStore(state => state.swarmSplashEnabled);
     const setSwarmSplashEnabled = useSwarmSplashStore(state => state.setSwarmSplashEnabled);
+    const uiZoomEnabled = useDesktopSettingsStore(state => state.uiZoomEnabled);
+    const uiZoomStep = useDesktopSettingsStore(state => state.uiZoomStep);
+    const toggleUiZoom = useDesktopSettingsStore(state => state.handleToggleUiZoom);
+    const setUiZoomStep = useDesktopSettingsStore(state => state.handleSetUiZoomStep);
     const backgroundThrottling = useDesktopSettingsStore(state => state.backgroundThrottling);
     const setBackgroundThrottling = useDesktopSettingsStore(state => state.handleToggleBackgroundThrottling);
     const visualizer = useVisualizerSettingsStore(useShallow(state => ({
@@ -143,6 +151,18 @@ const GraphicsPage: React.FC = () => {
                         <Toggle checked={nativeBlur} onChange={enabled => (enabled ? setNativeBlurAsking(true) : setNativeBlur(false))} />
                     </Row>
                 )}
+                <Row option={O.uiZoom} hint={t('options.uiZoomEnabledDesc')}>
+                    <Toggle checked={uiZoomEnabled} onChange={toggleUiZoom} />
+                </Row>
+                <Reveal when={uiZoomEnabled}>
+                    <Row sub option={O.uiZoomStep} hint={t('options.uiZoomStepDesc')}>
+                        <Segmented
+                            value={String(uiZoomStep)}
+                            options={UI_ZOOM_STEPS.map(step => ({ value: String(step), label: String(step) + '%' }))}
+                            onChange={step => setUiZoomStep(Number(step) as UiZoomStep)}
+                        />
+                    </Row>
+                </Reveal>
                 <Row option={O.swarmSplash} hint={t('options.swarmSplashEnabledDesc')}>
                     <Toggle checked={swarmSplashEnabled} onChange={setSwarmSplashEnabled} />
                 </Row>

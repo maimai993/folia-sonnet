@@ -121,6 +121,14 @@ class WallpaperOverlay(private val context: Context) {
     private var ourWallpaperCheckedAtMs = 0L
     private var ourWallpaperCached = false
 
+    /**
+     * 我们的动态壁纸现在是不是真的设在系统上（供插件层判断「该不该退回悬浮窗」）。
+     *
+     * #424 反馈：关掉「在所有应用上叠加」时，歌词该由**系统壁纸服务**画在图标下面，
+     * 而不是继续用悬浮窗压在图标上面（那样图标会被盖住看不清）。所以插件那边需要问一次。
+     */
+    fun isOurWallpaperActive(): Boolean = isOurWallpaperSet()
+
     private fun isOurWallpaperSet(): Boolean {
         val now = SystemClock.elapsedRealtime()
         if (now - ourWallpaperCheckedAtMs < 3000L) {

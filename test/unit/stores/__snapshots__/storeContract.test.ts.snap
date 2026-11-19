@@ -260,6 +260,8 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "tempera_tuning",
   "tilt_tuning",
   "ui.consoleProfileDefault",
+  "ui_zoom_enabled",
+  "ui_zoom_step",
   "url_background_list",
   "url_background_selected_id",
   "video_layer_enabled",
