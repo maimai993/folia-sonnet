@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { MACHI_CAMERA_LIMITS, MachiCamera } from '@/components/visualizer/machi/engine/camera';
-import { MACHI_GYRO_MAX_STEP } from '@/components/visualizer/machi/gyro';
 
 // test/unit/visualizer/machi/cameraGyro.test.ts
-// 町景相机上的陀螺仪偏移：关着时收不到读数、开着时一帧一帧追过去（单帧不过 MAX_STEP）、
-// 关掉后慢慢回零而不是瞬跳、俯仰叠加后仍夹在拖拽的范围里。
+// 町景相机上的陀螺仪偏移：关着时收不到读数、开着时读数这一帧就贴上去（相机不再自己追一遍）、
+// 关掉后缓回零而不是瞬跳、俯仰叠加后仍夹在拖拽的范围里。
 
 const DEG = Math.PI / 180;
 const HOME = { azimuth: 30 * DEG, elevation: 31 * DEG, zoom: 1.5 };
@@ -37,29 +36,31 @@ describe('MachiCamera gyro', () => {
         expect(camera.offset().elevation).toBeCloseTo(0, 6);
     });
 
-    it('follows the reading frame by frame, never faster than the step cap', () => {
+    it('puts a reading on screen in the very frame it arrives', () => {
+        /*
+         * ★ 相机这一侧不再有「往里追」的第二段平滑：读数已经过死区与一阶低通
+         * （backgrounds/gyroTilt.ts）。再追一遍就是两条指数串起来，倾斜手机时画面
+         * 会慢半拍 —— 那是 issue #429 的「迟滞」。
+         */
         const camera = create();
         camera.setGyro(true);
         const target = 8 * DEG;
         camera.setGyroOffsets({ azimuth: target, elevation: 0 });
-        const path = run(camera, 90);
-        // 每帧的增量不超过单帧上限，说明手机放下时不会抖。
-        for (let index = 1; index < path.length; index += 1) {
-            expect(Math.abs(path[index]! - path[index - 1]!)).toBeLessThanOrEqual(MACHI_GYRO_MAX_STEP / DEG + 1e-6);
-        }
-        // 追到了目标（度数与喂进去的弧度一致）。
-        expect(path[path.length - 1]!).toBeCloseTo(target / DEG, 1);
-        // 第一帧就到目标的话说明没有收敛过程，那是「瞬跳」。
-        expect(path[0]!).toBeLessThan(target / DEG);
+        const [first] = run(camera, 1);
+        expect(first!).toBeCloseTo(target / DEG, 3);
+        // 之后一直停在那儿，不漂。
+        run(camera, 30);
+        expect(camera.offset().azimuth).toBeCloseTo(target / DEG, 3);
     });
 
     it('eases back to the resting view when the toggle goes off', () => {
         const camera = create();
         camera.setGyro(true);
         camera.setGyroOffsets({ azimuth: 9 * DEG, elevation: 0 });
-        run(camera, 90);
+        // 淡入淡出那 0.35 秒按 1/30 秒一帧算约 11 帧，先让它贴到位再关。
+        run(camera, 15);
         const settled = camera.offset().azimuth;
-        expect(settled).toBeGreaterThan(1);
+        expect(settled).toBeCloseTo(9, 3);
         camera.setGyro(false);
         // 第一帧还在回去的路上，不是一下子归零。
         const [first] = run(camera, 1);
@@ -88,9 +89,9 @@ describe('MachiCamera gyro', () => {
         run(camera, 10);
         const before = camera.offset().azimuth;
         camera.setGyroOffsets({ azimuth: 6 * DEG, elevation: 0 });
-        run(camera, 120);
+        run(camera, 2);
         // 自定义视角还在，陀螺仪的 6° 也叠了上去。
-        expect(camera.offset().azimuth).toBeCloseTo(before + 6, 1);
+        expect(camera.offset().azimuth).toBeCloseTo(before + 6, 2);
         // 偏移归零后回到自定义视角本身。
         camera.setGyroOffsets({ azimuth: 0, elevation: 0 });
         run(camera, 120);

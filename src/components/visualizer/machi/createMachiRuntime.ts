@@ -27,7 +27,7 @@ import {
     type MachiBeatFrame,
 } from './engine/beatFx';
 import { MachiCamera } from './engine/camera';
-import { readGyroTiltEnabledForMode, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
+import { readGyroTiltEnabled, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
 import { subscribeGyroTilt } from '../backgrounds/gyroTilt';
 import { MachiClock } from './engine/clock';
 import {
@@ -382,14 +382,15 @@ export class MachiRuntime {
      */
     private attachGyro() {
         const apply = () => {
-            // 全局开关 + 町景自己的开关，两个都开才吃读数。
-            const enabled = readGyroTiltEnabledForMode('machi');
+            // 只看全局那一个开关：所有画面都吃读数，不再按背景分开开关。
+            const enabled = readGyroTiltEnabled();
             this.camera.setGyro(enabled);
             if (!enabled) {
                 this.unsubscribeGyro?.();
                 this.unsubscribeGyro = null;
                 return;
             }
+            // 读数已经过死区与一阶低通（backgrounds/gyroTilt.ts），相机那侧直接贴，不再追一遍。
             this.unsubscribeGyro ??= subscribeGyroTilt(offsets => this.camera.setGyroOffsets(offsets));
         };
         apply();
