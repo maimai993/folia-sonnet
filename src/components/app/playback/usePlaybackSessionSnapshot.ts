@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { persistPlaybackCache } from './persistPlaybackCache';
+import { holdsUnmergedMirrorQueue } from './restore/mirrorQueueClaim';
 
 // src/components/app/playback/usePlaybackSessionSnapshot.ts
 //
@@ -30,6 +31,8 @@ export const usePlaybackSessionSnapshot = (): void => {
             // 没有歌时不动：清空队列有自己的入口（`forgetPlaybackCache`），
             // 这里跟着写一条空的会把「刚清空」和「还没开始听」搅在一起。
             if (!currentSong) return;
+            // 启动认领放进来的镜像壳还没被磁盘上的完整条目补全：写下去会覆盖掉完整队列。
+            if (holdsUnmergedMirrorQueue()) return;
             void persistPlaybackCache(currentSong, playQueue);
         };
 

@@ -11,7 +11,9 @@ const h = vi.hoisted(() => ({
 }));
 vi.mock('@/services/playbackEngine/nativePlaybackEngine', () => ({ nativePlaybackEngine: { adoptSnapshot: h.adoptSnapshot } }));
 vi.mock('@/stores/motionSignals', () => ({ currentTime: { set: h.setTime } }));
-vi.mock('@/components/app/playback/currentSong', () => ({ dropPlaysInFlight: h.drop, makeSongCurrent: h.makeCurrent }));
+vi.mock(import('@/components/app/playback/currentSong'), async original => ({
+    ...await original(), dropPlaysInFlight: h.drop, makeSongCurrent: h.makeCurrent,
+}));
 const { usePlaybackStore } = await import('@/stores/usePlaybackStore');
 const { adoptNativePlaybackState } = await import('@/components/app/playback/restore/adoptNativePlaybackState');
 const song = (id: string): SongResult => ({ id, name: id, artists: [], album: { id: 0, name: '' }, durationMs: 90000, sourceRef: { kind: 'online', providerId: 'netease', mediaId: id } } as SongResult);

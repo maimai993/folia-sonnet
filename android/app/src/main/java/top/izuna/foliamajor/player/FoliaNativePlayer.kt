@@ -166,6 +166,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      */
     @Volatile
     private var lastMediaId: String? = null
+    @Volatile private var resumeSourceToken: String? = null
+    fun currentResumeSourceToken(): String? = resumeSourceToken
 
     /**
      * 这一首的**原地址**（不是伴奏）。
@@ -294,6 +296,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             if (current.isPlaying) cachedBuffering = false
             cachedDurationMs = if (duration > 0) duration else 0L
             if (wrapped) {
+                current.currentMediaItem?.resumeTicket()?.cancel()
                 // 下一圈还要能再报一次「快到尾巴」，进度也要从 0 重新算。
                 nearEndFired = false
                 emit("seeked", position, cachedDurationMs, null)
@@ -335,9 +338,10 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         url: String,
         startPositionMs: Long,
         mediaId: String? = null,
+        sourceToken: String? = null,
         onPlayerThreadBeforePrepare: (() -> Unit)? = null,
     ) {
-        prepareInternal(url, baseUrl = url, instrumental = false, startPositionMs, mediaId, onPlayerThreadBeforePrepare)
+        prepareInternal(url, baseUrl = url, instrumental = false, startPositionMs, mediaId, sourceToken, onPlayerThreadBeforePrepare)
     }
 
     /**
@@ -347,8 +351,8 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
      * 中间会多一次解码器初始化与一次 ready 事件，听感上是启播时的一下顿。
      * 一次装对，播放器只会认为自己装了这首歌的一个版本。
      */
-    fun prepareInstrumental(baseUrl: String, path: String, startPositionMs: Long, mediaId: String?) {
-        prepareInternal(path, baseUrl = baseUrl, instrumental = true, startPositionMs, mediaId, null)
+    fun prepareInstrumental(baseUrl: String, path: String, startPositionMs: Long, mediaId: String?, sourceToken: String? = null) {
+        prepareInternal(path, baseUrl = baseUrl, instrumental = true, startPositionMs, mediaId, sourceToken, null)
     }
 
     private fun prepareInternal(
@@ -357,6 +361,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         instrumental: Boolean,
         startPositionMs: Long,
         mediaId: String?,
+        sourceToken: String?,
         onPlayerThreadBeforePrepare: (() -> Unit)?,
     ) {
         // 换源时旧缓冲状态不属于新媒体；首个新源事件到达前也必须按暂停语义处理。
@@ -397,7 +402,7 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
             // 有些源要附带请求头（飞牛的音频流认 Cookie: music-token）：
             // 每次换源都按地址重问一遍，没有就清空，别把上一首的头带给下一首。
             applySourceHeaders(url)
-            current.setMediaItem(mediaItemFor(url, mediaId))
+            current.setMediaItem(mediaItemFor(url, mediaId, sourceToken))
             current.setRepeatMode(requestedRepeatMode)
             current.setVolume(requestedVolume)
             current.setPlaybackParameters(PlaybackParameters(requestedSpeed))
@@ -692,19 +697,36 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
         cachedPositionMs = target
         runOnPlayer {
             val current = player ?: return@runOnPlayer
-            var clamped = target
-            val duration = current.duration
-            // C.TIME_UNSET（负数）表示还不知道多长，这时候别去夹。
-            if (duration > 0) {
-                clamped = Math.min(clamped, duration)
-            }
-            current.seekTo(clamped)
-            cachedPositionMs = clamped
-            /*
-             * 上膛/退膛跟着这次 seek 走：拖回窗口之外要能再报一次，拖进窗口里则当场报 ——
-             * 否则「手动拖进交叉淡化那一段」就什么都不会发生（进度条也就一直停在末尾）。
-             */
-            /*
+            current.currentMediaItem?.resumeTicket()?.cancel()
+            seekOnPlayer(current, target)
+        }
+    }
+
+    /** 检查与 seekTo 同在播放器线程；换歌、同曲回绕或手动拖动后，不改位置也不打断过渡。 */
+    fun seekForResume(target: Long, songKey: String, token: String, complete: (Result<Boolean>) -> Unit) {
+        if (!handler.post {
+            complete(runCatching {
+                val current = player ?: return@runCatching false
+                val item = current.currentMediaItem ?: return@runCatching false
+                if (released || current.playerError != null || item.resumeTicket()?.take(item.mediaId, songKey, token) != true) return@runCatching false
+                seekOnPlayer(current, target.coerceAtLeast(0L))
+                true
+            })
+        }) complete(Result.success(false))
+    }
+
+    private fun seekOnPlayer(current: ExoPlayer, target: Long) {
+        var clamped = target
+        val duration = current.duration
+        // C.TIME_UNSET（负数）表示还不知道多长，这时候别去夹。
+        if (duration > 0) clamped = Math.min(clamped, duration)
+        current.seekTo(clamped)
+        cachedPositionMs = clamped
+        /*
+         * 上膛/退膛跟着这次 seek 走：拖回窗口之外要能再报一次，拖进窗口里则当场报 ——
+         * 否则「手动拖进交叉淡化那一段」就什么都不会发生（进度条也就一直停在末尾）。
+         */
+        /*
          * 拖进窗口**不当场换歌**，先松开手让它自然放一会儿。
          *
          * 用户把进度条拖到最后一小段，想听的是那几秒 —— 落地就起交叉等于把那几秒掐掉。
@@ -712,13 +734,12 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          * 走过这段之后，才轮到刻度里的判定（那里要求「剩余 ≤ 窗口」且「位置已过门槛」）。
          * 拖到只剩不到这道门槛就什么都不会报，这首歌照常放完，由 ended 收尾。
          */
-            nearEndFired = false
-            nearEndFloorMs = clamped + NEAR_END_SEEK_GRACE_MS
-            // 回绕判定以这次 seek 为基准，别把拖动当成「单曲循环转了一圈」。
-            lastTickPositionMs = clamped
-            cachedBuffering = current.playWhenReady && !current.isPlaying
-            emit("seeked", current.currentPosition, if (duration > 0) duration else 0L, null)
-        }
+        nearEndFired = false
+        nearEndFloorMs = clamped + NEAR_END_SEEK_GRACE_MS
+        // 回绕判定以这次 seek 为基准，别把拖动当成「单曲循环转了一圈」。
+        lastTickPositionMs = clamped
+        cachedBuffering = current.playWhenReady && !current.isPlaying
+        emit("seeked", current.currentPosition, if (duration > 0) duration else 0L, null)
     }
 
     fun setVolume(volume: Float) {
@@ -856,13 +877,15 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
     fun lastEventMediaId(): String = eventMediaId
 
     /** 装源用的 MediaItem：带身份才认得出「引擎现在装的是谁」。 */
-    private fun mediaItemFor(url: String, mediaId: String?): MediaItem {
-        return if (mediaId.isNullOrEmpty()) {
-            MediaItem.fromUri(url)
-        } else {
-            MediaItem.Builder().setUri(url).setMediaId(mediaId).build()
-        }
+    private fun mediaItemFor(url: String, mediaId: String?, sourceToken: String? = null): MediaItem {
+        resumeSourceToken = sourceToken
+        return MediaItem.Builder().setUri(url).apply {
+            if (!mediaId.isNullOrEmpty()) setMediaId(mediaId)
+            if (!sourceToken.isNullOrEmpty()) setTag(SessionResumeTicket(sourceToken))
+        }.build()
     }
+
+    private fun MediaItem.resumeTicket() = localConfiguration?.tag as? SessionResumeTicket
 
     /** 缓存值：调用方可能在插件线程上，这里绝不去碰播放器。 */
     fun getPositionMs(): Long {
@@ -1374,6 +1397,10 @@ class FoliaNativePlayer(context: Context, listener: Listener) {
          * Web 侧的时钟靠墙钟往前推 —— 所以「单曲循环回到 0」这种**允许往回走**的
          * 跳变必须单独报一次，否则 Web 那边会一直停在 duration 上。
          */
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) mediaItem?.resumeTicket()?.cancel()
+        }
+
         override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
             val current = player ?: return
             var position = if (newPosition == null) current.currentPosition else newPosition.positionMs

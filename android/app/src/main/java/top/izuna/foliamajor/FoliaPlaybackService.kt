@@ -2793,6 +2793,7 @@ class FoliaPlaybackService : android.app.Service() {
                 var songKey = service.cachedSongKey ?: ""
                 var positionMs = service.resolvePlaybackPositionMs()
                 var fromDisk = false
+                var positionSavedAtMs = 0L
                 /*
                  * 服务起来了但队列是空的（通知栏那颗播放键把服务拉起来、还没有歌）：
                  * 同样回落到盘上那份，否则前台以为「原生什么都没有」而丢掉一段能恢复的会话。
@@ -2804,6 +2805,7 @@ class FoliaPlaybackService : android.app.Service() {
                         index = disk.optInt("index", index)
                         songKey = disk.optString("songKey", songKey)
                         positionMs = disk.optLong("positionMs", positionMs)
+                        positionSavedAtMs = disk.optLong("positionSavedAtMs", 0L)
                         fromDisk = true
                     }
                 }
@@ -2826,7 +2828,10 @@ class FoliaPlaybackService : android.app.Service() {
                 out.put("providerId", service.cachedProviderId)
                 out.put("serverSongId", service.cachedServerSongId)
                 out.put("artworkUrl", service.pendingArtworkUrl ?: "")
-                if (fromDisk) out.put("fromDisk", true)
+                if (fromDisk) {
+                    out.put("fromDisk", true)
+                    out.put("positionSavedAtMs", positionSavedAtMs)
+                }
                 // nativeMedia / lyrics 只在真有值时才带（歌词拉完才给，空串也算拉完）。
                 NativeLyricPresentation.attach(out, service.nativeLyrics, service.cachedSongKey)
             }
@@ -2869,6 +2874,7 @@ class FoliaPlaybackService : android.app.Service() {
                 put("album", current?.optString("album", "") ?: "")
                 put("durationMs", current?.optLong("durationMs", 0L) ?: 0L)
                 put("positionMs", snapshot.positionMs)
+                put("positionSavedAtMs", snapshot.positionSavedAtMs)
                 put("playing", false)
                 put("liked", current?.optBoolean("liked", false) ?: false)
                 put("canLike", current?.optBoolean("canLike", false) ?: false)
