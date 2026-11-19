@@ -96,7 +96,14 @@ const MarketBackgroundSection: React.FC<{ part?: 'all' | 'filters' | 'content' }
         setProgress(0);
         setProgressLabel(t('options.marketBackgroundProgress'));
         try {
-            const result = await applyMarketBackground(pending, targets);
+            /*
+             * 市场素材默认**逆时针 90°**（= 270°）再装到桌面壁纸（#424 反馈）。
+             *
+             * 壁纸站的图/视频基本都是横屏拍摄，直接铺到竖屏桌面上是「躺着」的；
+             * 以前这里不传角度（默认 0），原生也就没存，用户看到的就是「竖着的、不旋转」。
+             * 270 是把横屏画面立起来的方向 —— 顺时针 90 会上下颠倒。
+             */
+            const result = await applyMarketBackground(pending, targets, 270);
             if (!result.ok) {
                 setApplyError(result.error ?? t('options.marketRetry'));
                 setProgress(null);

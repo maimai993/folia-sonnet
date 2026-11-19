@@ -13,7 +13,6 @@ export const SETTINGS_ANCHOR_DEFINITIONS = {
     lyricsRenderer: { section: 'appearance' },
     // 姝岃瘝鍔ㄦ€佸绾搁偅涓€鑺傦紙fork 鐙湁锛屽彧鏈夊畨鍗撶敾锛涜 LyricsWallpaperSettingsSection锛夈€?    lyricsWallpaper: { section: 'appearance' },
     // 鏄剧ず閭ｅ嚑椤癸紙fork 鐙湁锛涜澶囩被鍨嬩笌妯珫灞忓彧鏈夊畨鍗撶敾锛岃繍琛屾椂鍒ゆ柇鍦ㄩ偅涓や釜缁勪欢閲岋級銆?    // 娑叉€佺幓鐠冪殑寮€鍏充笌鍙傛暟鎼幓浜嗐€屾€ц兘涓庡姩鏁堛€嶉〉閭ｄ竴缁勶紙瀹冨悓鏃舵槸鎬ц兘璁剧疆锛夛紝閿氱偣瑙佽〃閲?graphics 閭ｄ竴娈点€?    lyricFlat: { section: 'appearance' },
-    deviceType: { section: 'appearance' },
     // 鍘熸潵杩欓噷杩樻湁涓€鏉?`phoneFit`锛堛€屾墜鏈洪€傞厤銆嶆€诲紑鍏筹級銆傞偅涓€琛屾寜鐢ㄦ埛瑕佹眰鍒犳帀浜?鈥斺€?    // 鎵撳紑涔熶笉鐢熸晥锛岃€屽畠闂ㄧ潃鐨勩€屾í绔栧睆鍏煎銆嶄篃涓€骞舵崲鎴愪簡涓婇潰 `deviceType` 涓?    // `forceLandscape` 涓よ锛堣 AndroidForceLandscapeSetting锛夈€傞敋鐐硅窡鐫€鍒狅紝
     // 鐣欑潃灏辨槸涓€鏉℃寚鍚戠┖澶勭殑娣遍摼锛氭寚浠ょ収鏍疯兘璺戯紝鍙槸钀戒笉鍒颁换浣曚竴琛屼笂銆?    // 浜戠紦瀛橀偅涓ら」锛坒ork 鐙湁锛孉iProviderSettings 閭ｅ潡閲岀殑锛涘彧鏈夐潪妗岄潰鎵嶇敾锛夈€?    cloudCache: { section: 'appearance' },
     cloudCacheBaseUrl: { section: 'appearance' },
