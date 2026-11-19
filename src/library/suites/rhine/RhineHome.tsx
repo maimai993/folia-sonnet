@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { LibraryHomeSurfaceProps } from '../../core/suite/suite.contract';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { getPhoneInsets, subscribePhoneInsets } from '../../../services/phoneInsets';
 import { openLoginWindow } from '../../../components/login/loginWindowStore';
@@ -31,7 +30,14 @@ import { buildRhineFrameSrc, buildRhineHostConfig } from './rhineHostConfig';
  */
 const assetsPackageAvailable = (): boolean => false;
 
-const RhineHome = (props: LibraryHomeSurfaceProps): React.ReactElement => {
+/**
+ * 首页组件。
+ *
+ * 这一版不读宿主的任何输入：曲面契约要求的 props（`isInteractive`、播放回调……）都还用不上，
+ * 曲库转成主题的格式要等视图真的接上来（见 `res/rhine-theme/THEME-LAYERING.md` 第 3 层）。
+ * 不写形参就是「有意不用」的信号，也免得声明一个永远不读的 `props`。
+ */
+const RhineHome = (): React.ReactElement => {
     const { t, i18n } = useTranslation();
     const frameRef = useRef<HTMLIFrameElement | null>(null);
     const [ready, setReady] = useState(false);
