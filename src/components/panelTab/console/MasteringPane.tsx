@@ -64,7 +64,7 @@ const MasteringPane: React.FC = () => {
                             label={t('ui.consoleMasteringCompEnabled')}
                         />
                     </div>
-                    <div inert={!mastering.compensation.enabled} className={mastering.compensation.enabled ? '' : 'opacity-40'}>
+                    <div inert={!mastering.compensation.enabled} className={`space-y-3.5 ${mastering.compensation.enabled ? '' : 'opacity-40'}`}>
                         <ConsoleSlider
                             label={t('ui.consoleMasteringCompAmount')}
                             valueText={percentage(mastering.compensation.amount)}
@@ -120,7 +120,7 @@ const MasteringPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringBass')}</span>
                             <Toggle checked={mastering.bassBoost.enabled} onChange={enabled => setBassBoost({ enabled })} label={t('ui.consoleMasteringBass')} />
                         </div>
-                        <div inert={!mastering.bassBoost.enabled} className={mastering.bassBoost.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.bassBoost.enabled} className={`space-y-3.5 ${mastering.bassBoost.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringGain')} valueText={formatDb(mastering.bassBoost.gainDb, 1)} value={mastering.bassBoost.gainDb} min={AUDIO_CONSOLE_BASS_GAIN_MIN} max={AUDIO_CONSOLE_BASS_GAIN_MAX} decimals={1} onChange={gainDb => setBassBoost({ gainDb })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleMasteringFreq')} valueText={formatHz(mastering.bassBoost.frequencyHz)} value={mastering.bassBoost.frequencyHz} min={AUDIO_CONSOLE_BASS_FREQ_MIN} max={AUDIO_CONSOLE_BASS_FREQ_MAX} log decimals={0} onChange={frequencyHz => setBassBoost({ frequencyHz })} onCommit={() => undefined} />
                         </div>
@@ -131,7 +131,7 @@ const MasteringPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringExciter')}</span>
                             <Toggle checked={mastering.exciter.enabled} onChange={enabled => setExciter({ enabled })} label={t('ui.consoleMasteringExciter')} />
                         </div>
-                        <div inert={!mastering.exciter.enabled} className={mastering.exciter.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.exciter.enabled} className={`space-y-3.5 ${mastering.exciter.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringAmount')} valueText={percentage(mastering.exciter.amount)} value={mastering.exciter.amount} min={AUDIO_CONSOLE_EXCITER_AMOUNT_MIN} max={AUDIO_CONSOLE_EXCITER_AMOUNT_MAX} onChange={amount => setExciter({ amount })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleSaturationMix')} valueText={formatPercent(mastering.exciter.mix)} value={mastering.exciter.mix} min={0} max={1} onChange={mix => setExciter({ mix })} onCommit={() => undefined} />
                         </div>
@@ -142,7 +142,7 @@ const MasteringPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringTransient')}</span>
                             <Toggle checked={mastering.transient.enabled} onChange={enabled => setTransient({ enabled })} label={t('ui.consoleMasteringTransient')} />
                         </div>
-                        <div inert={!mastering.transient.enabled} className={mastering.transient.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.transient.enabled} className={`space-y-3.5 ${mastering.transient.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringTransientAmount')} valueText={mastering.transient.amount === 0 ? '0' : `${mastering.transient.amount > 0 ? '+' : ''}${percentage(mastering.transient.amount)}`} value={mastering.transient.amount} min={AUDIO_CONSOLE_TRANSIENT_MIN} max={AUDIO_CONSOLE_TRANSIENT_MAX} onChange={amount => setTransient({ amount })} onCommit={() => undefined} />
                             <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringTransientHint')}</p>
                         </div>
@@ -153,7 +153,7 @@ const MasteringPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringLoudness')}</span>
                             <Toggle checked={mastering.loudness.enabled} onChange={enabled => setLoudness({ enabled })} label={t('ui.consoleMasteringLoudness')} />
                         </div>
-                        <div inert={!mastering.loudness.enabled} className={mastering.loudness.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.loudness.enabled} className={`space-y-3.5 ${mastering.loudness.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringAmount')} valueText={percentage(mastering.loudness.amount)} value={mastering.loudness.amount} min={AUDIO_CONSOLE_LOUDNESS_MIN} max={AUDIO_CONSOLE_LOUDNESS_MAX} onChange={amount => setLoudness({ amount })} onCommit={() => undefined} />
                             <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringLoudnessHint')}</p>
                         </div>
@@ -168,7 +168,7 @@ const MasteringPane: React.FC = () => {
                         <span className="text-[13px] leading-5">{t('ui.consoleMasteringBalance')}</span>
                         <Toggle checked={mastering.balance.enabled} onChange={enabled => setBalance({ enabled })} label={t('ui.consoleMasteringBalance')} />
                     </div>
-                    <div inert={!mastering.balance.enabled} className={mastering.balance.enabled ? '' : 'opacity-40'}>
+                    <div inert={!mastering.balance.enabled} className={`space-y-3.5 ${mastering.balance.enabled ? '' : 'opacity-40'}`}>
                         <ConsoleSlider
                             label={t('ui.consoleMasteringBalance')}
                             valueText={mastering.balance.value === 0 ? t('ui.consoleMasteringCenter') : `${mastering.balance.value < 0 ? t('ui.consoleMasteringLeft') : t('ui.consoleMasteringRight')} ${percentage(Math.abs(mastering.balance.value))}`}

@@ -290,6 +290,9 @@ class MasteringStage {
             gateReleaseCoef = coefFromMs(s.noiseGate.releaseMs)
             gateFloorGain = dbToLinear(s.noiseGate.reductionDb)
             gateThreshold = dbToLinear(s.noiseGate.thresholdDb)
+        } else {
+            gateEnv.fill(0f)
+            gateGain.fill(1f)
         }
 
         // ② 去喷麦：检测带、各时间常数都按毫秒/赫兹给出，随采样率换算；衰减量来自 reductionDb
@@ -301,7 +304,10 @@ class MasteringStage {
             plosiveFastRelCoef = coefFromMs(30f)
             plosiveSlowCoef = coefFromMs(400f)
             plosiveFloorGain = dbToLinear(s.dePlosive.reductionDb)
-        } else { plosiveLow.bypass(); plosiveHigh.bypass() }
+        } else {
+            plosiveLow.bypass(); plosiveHigh.bypass()
+            plosiveEnv.fill(0f); plosiveDetect.fill(0f); plosiveGain.fill(1f)
+        }
 
         // ③ 去齿音：检测用高通，中心频率就是用户调的那个 frequencyHz
         if (s.deEsser.enabled) {
@@ -312,6 +318,7 @@ class MasteringStage {
             deessSlope = s.deEsser.ratio.coerceAtLeast(1f)
         } else {
             deEsserBand.bypass()
+            deEssEnv.fill(0f)
         }
 
         // ④ 低频增强
@@ -327,7 +334,10 @@ class MasteringStage {
             transientFastRelCoef = coefFromMs(40f)
             transientGainAtkCoef = coefFromMs(0.1f)
             transientRelCoef = coefFromMs(60f)
-        } else transientAmount = 0f
+        } else {
+            transientAmount = 0f
+            transientEnv.fill(0f); transientPrev.fill(0f); transientGain.fill(1f)
+        }
 
         // ⑥ 音色塑造：四个固定中心频率，参数是各自的 dB
         val t = s.tone

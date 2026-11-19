@@ -60,7 +60,7 @@ const StudioPane: React.FC = () => {
                         <span className="text-[13px] leading-5">{t('ui.consoleStudioNormalizeEnabled')}</span>
                         <Toggle checked={studio.normalize.enabled} onChange={enabled => setNormalize({ enabled })} label={t('ui.consoleStudioNormalizeEnabled')} />
                     </div>
-                    <div inert={!studio.normalize.enabled} className={studio.normalize.enabled ? '' : 'opacity-40'}>
+                    <div inert={!studio.normalize.enabled} className={`space-y-3.5 ${studio.normalize.enabled ? '' : 'opacity-40'}`}>
                         <ConsoleSlider
                             label={t('ui.consoleStudioTarget')}
                             valueText={rmsDb(studio.normalize.targetLufs)}
@@ -89,7 +89,7 @@ const StudioPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleStudioDynEq')}</span>
                             <Toggle checked={studio.advanced.dynamicEq} onChange={dynamicEq => setAdvanced({ dynamicEq })} label={t('ui.consoleStudioDynEq')} />
                         </div>
-                        <div inert={!studio.advanced.dynamicEq} className={studio.advanced.dynamicEq ? '' : 'opacity-40'}>
+                        <div inert={!studio.advanced.dynamicEq} className={`space-y-3.5 ${studio.advanced.dynamicEq ? '' : 'opacity-40'}`}>
                             <ConsoleSlider
                                 label={t('ui.consoleStudioDynEqFreq')}
                                 valueText={formatHz(studio.advanced.dynamicEqFreq)}

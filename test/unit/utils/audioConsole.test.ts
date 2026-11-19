@@ -28,4 +28,24 @@ describe('调音台的可选 DSP 扩展', () => {
         expect(settings.mastering.studio.normalize).toEqual({ enabled: true, targetLufs: -9, truePeak: true });
         expect(normalizeAudioConsoleSettings(JSON.parse(JSON.stringify(settings)))).toEqual(settings);
     });
+
+    it('数值字段收到 null、空串或布尔值时回退默认值，不静默转成 0 或 1', () => {
+        const settings = normalizeAudioConsoleSettings({
+            stereo: { enabled: true, width: null, crossfeed: true, rotation: '' },
+            reverb: { enabled: true, rt60: null, mix: false },
+            mastering: {
+                studio: {
+                    normalize: { enabled: true, targetLufs: null, truePeak: true },
+                },
+            },
+        });
+        expect(settings.stereo.width).toBe(DEFAULT_AUDIO_CONSOLE_SETTINGS.stereo.width);
+        expect(settings.stereo.crossfeed).toBe(DEFAULT_AUDIO_CONSOLE_SETTINGS.stereo.crossfeed);
+        expect(settings.stereo.rotation).toBe(DEFAULT_AUDIO_CONSOLE_SETTINGS.stereo.rotation);
+        expect(settings.reverb.rt60).toBe(DEFAULT_AUDIO_CONSOLE_SETTINGS.reverb.rt60);
+        expect(settings.reverb.mix).toBe(DEFAULT_AUDIO_CONSOLE_SETTINGS.reverb.mix);
+        expect(settings.mastering.studio.normalize.targetLufs).toBe(
+            DEFAULT_AUDIO_CONSOLE_SETTINGS.mastering.studio.normalize.targetLufs,
+        );
+    });
 });

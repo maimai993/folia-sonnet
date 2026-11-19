@@ -34,6 +34,9 @@ class StereoStage {
     /** 交叉馈送的对侧低通，左右各一条。 */
     private val crossLow = Array(2) { BiquadFilter() }
 
+    /** 交叉馈送的本侧低通补偿，保持中置低频总电平不变、高频不发闷。 */
+    private val directLow = Array(2) { BiquadFilter() }
+
     private var sampleRate = 0
     private var appliedBassHz = 0f
     private var appliedCrossfeed = 0f
@@ -50,6 +53,7 @@ class StereoStage {
         crossBuf = Array(2) { FloatArray(delaySamples) }
         crossIdx = 0
         crossLow.forEach { it.setLowPass(sampleRate, CROSSFEED_LOWPASS_HZ, BUTTERWORTH_Q) }
+        directLow.forEach { it.setLowPass(sampleRate, CROSSFEED_LOWPASS_HZ, BUTTERWORTH_Q) }
         reset()
     }
 
@@ -57,6 +61,7 @@ class StereoStage {
     fun reset() {
         bassHigh.forEach { it.reset() }
         crossLow.forEach { it.reset() }
+        directLow.forEach { it.reset() }
         crossBuf.forEach { it.fill(0f) }
         crossIdx = 0
     }
@@ -79,17 +84,20 @@ class StereoStage {
         if (crossfeed > 0.001f && appliedCrossfeed <= 0.001f) {
             crossBuf.forEach { it.fill(0f) }
             crossLow.forEach { it.reset() }
+            directLow.forEach { it.reset() }
             crossIdx = 0
         }
         appliedCrossfeed = crossfeed
         if (monoBass) applyBass(bassHz)
         // 宽度恰好 1、没开低频单声道、交叉馈送与声像平移都为 0 时是恒等变换，别白跑一遍。
         if (!monoBass && abs(width - 1f) < 0.001f
-            && crossfeed < 0.001f && abs(rotation) < 0.001f) return
+            && crossfeed <= 0.001f && abs(rotation) < 0.001f) return
 
         val pan = rotation / 180f
         val crossGain = crossfeed * 0.8f
+        val crossMix = crossGain / (1f + crossGain)
         val crossN = crossBuf[0].size
+        val crossActive = crossfeed > 0.001f && crossN > 0
 
         // Media3 supplies channel count, not a layout mask. Only FL/FR are safe to pair.
         for (frame in 0 until frames) {
@@ -102,16 +110,21 @@ class StereoStage {
             var left = l - transfer
             var right = r + transfer
 
-            // ② 交叉馈送：对侧的低频（延时 + 低通）混一点进本侧。
-            if (crossGain > 0f) {
+            // ② 交叉馈送：低频段按 (1 - m)·LP(本侧) + m·LP(对侧延时) 交叉，高频段原样保留，
+            //    避免单声道低频叠加膨胀（原未补偿时最高 +5.1 dB）同时不压暗高频。
+            if (crossActive) {
                 val leftChannel = 0
                 val rightChannel = leftChannel + 1
                 val delayedL = crossBuf[leftChannel][crossIdx]
                 val delayedR = crossBuf[rightChannel][crossIdx]
                 crossBuf[leftChannel][crossIdx] = left
                 crossBuf[rightChannel][crossIdx] = right
-                left += crossLow[leftChannel].process(delayedR, 0) * crossGain
-                right += crossLow[rightChannel].process(delayedL, 0) * crossGain
+                val crossL = crossLow[leftChannel].process(delayedR, 0)
+                val crossR = crossLow[rightChannel].process(delayedL, 0)
+                val directL = directLow[leftChannel].process(left, 0)
+                val directR = directLow[rightChannel].process(right, 0)
+                left += (crossL - directL) * crossMix
+                right += (crossR - directR) * crossMix
             }
 
             // ③ M/S 宽度与低频单声道。
@@ -125,7 +138,7 @@ class StereoStage {
             side *= width
             buffer[base] = mid + side
             buffer[base + 1] = mid - side
-            if (crossGain > 0f) {
+            if (crossActive) {
                 crossIdx += 1
                 if (crossIdx >= crossN) crossIdx = 0
             }

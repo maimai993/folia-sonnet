@@ -211,10 +211,20 @@ class StudioStage {
         val a = s.advanced
         val sc = s.scene
 
-        // 降噪：门限固定在 -52dB 附近的线性值，attack 快、release 慢
-        noiseAtkCoef = coef(10f, sr)
-        noiseRelCoef = coef(180f, sr)
-        noiseFloorGain = 1f - 0.6f * r.amount
+        // 降噪与去咔嗒：门限固定在 -52dB 附近的线性值，attack 快、release 慢；单独关闭时清历史状态。
+        if (r.denoise) {
+            noiseAtkCoef = coef(10f, sr)
+            noiseRelCoef = coef(180f, sr)
+            noiseFloorGain = 1f - 0.6f * r.amount
+        } else {
+            noiseEnv.fill(0f)
+            noiseGate.fill(1f)
+        }
+        if (!r.declick) {
+            clickPrev.fill(0f)
+            clickHistory.fill(0f)
+            clickHead.fill(0)
+        }
 
         // 去嗡声：50/60 Hz 及二次谐波陷波，深度随 amount
         val humDepth = if (r.hum) -18f * r.amount else 0f
@@ -264,13 +274,16 @@ class StudioStage {
         if (hLow != 0f) hpCalib.setLowShelf(sr, 250f, hLow * strength) else hpCalib.bypass()
         if (hHigh != 0f) lpCalib.setHighShelf(sr, 5000f, hHigh * strength) else lpCalib.bypass()
 
-        // 响度标准化：目标 dBFS RMS → 线性电平。
+        // 响度标准化：目标 dBFS RMS → 线性电平；单独关闭时归零功率与增益，避免重开沿用旧值。
         if (s.normalize.enabled) {
             // Legacy wire keys targetLufs/truePeak represent RMS dBFS and a target offset, not BS.1770.
             val targetDb = s.normalize.targetLufs - if (s.normalize.truePeak) 1f else 0f
             normTargetRms = 10f.pow(targetDb / 20f)
             normFollowCoef = coef(1500f, sr) // 慢速功率跟随（~1.5s）
             normRampCoef = coef(600f, sr)    // 更慢的增益斜坡，避免抽吸
+        } else {
+            normPower = 0f
+            normGain = 1f
         }
     }
 

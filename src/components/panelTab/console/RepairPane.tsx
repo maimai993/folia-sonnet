@@ -54,7 +54,7 @@ const RepairPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringGate')}</span>
                             <Toggle checked={mastering.noiseGate.enabled} onChange={enabled => setNoiseGate({ enabled })} label={t('ui.consoleMasteringGate')} />
                         </div>
-                        <div inert={!mastering.noiseGate.enabled} className={mastering.noiseGate.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.noiseGate.enabled} className={`space-y-3.5 ${mastering.noiseGate.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleThreshold')} valueText={formatDb(mastering.noiseGate.thresholdDb, 1)} value={mastering.noiseGate.thresholdDb} min={AUDIO_CONSOLE_GATE_THRESHOLD_MIN} max={AUDIO_CONSOLE_GATE_THRESHOLD_MAX} decimals={1} onChange={thresholdDb => setNoiseGate({ thresholdDb })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleAttack')} valueText={formatMs(mastering.noiseGate.attackMs)} value={mastering.noiseGate.attackMs} min={AUDIO_CONSOLE_GATE_ATTACK_MIN} max={AUDIO_CONSOLE_GATE_ATTACK_MAX} log decimals={1} onChange={attackMs => setNoiseGate({ attackMs })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleRelease')} valueText={formatMs(mastering.noiseGate.releaseMs)} value={mastering.noiseGate.releaseMs} min={AUDIO_CONSOLE_GATE_RELEASE_MIN} max={AUDIO_CONSOLE_GATE_RELEASE_MAX} log decimals={0} onChange={releaseMs => setNoiseGate({ releaseMs })} onCommit={() => undefined} />
@@ -67,7 +67,7 @@ const RepairPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringDeEsser')}</span>
                             <Toggle checked={mastering.deEsser.enabled} onChange={enabled => setDeEsser({ enabled })} label={t('ui.consoleMasteringDeEsser')} />
                         </div>
-                        <div inert={!mastering.deEsser.enabled} className={mastering.deEsser.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.deEsser.enabled} className={`space-y-3.5 ${mastering.deEsser.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringFreq')} valueText={formatHz(mastering.deEsser.frequencyHz)} value={mastering.deEsser.frequencyHz} min={AUDIO_CONSOLE_DEESS_FREQ_MIN} max={AUDIO_CONSOLE_DEESS_FREQ_MAX} log decimals={0} onChange={frequencyHz => setDeEsser({ frequencyHz })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleThreshold')} valueText={formatDb(mastering.deEsser.thresholdDb, 1)} value={mastering.deEsser.thresholdDb} min={AUDIO_CONSOLE_DEESS_THRESHOLD_MIN} max={AUDIO_CONSOLE_DEESS_THRESHOLD_MAX} decimals={1} onChange={thresholdDb => setDeEsser({ thresholdDb })} onCommit={() => undefined} />
                             <ConsoleSlider label={t('ui.consoleRatio')} valueText={formatRatio(mastering.deEsser.ratio)} value={mastering.deEsser.ratio} min={AUDIO_CONSOLE_DEESS_RATIO_MIN} max={AUDIO_CONSOLE_DEESS_RATIO_MAX} decimals={1} onChange={ratio => setDeEsser({ ratio })} onCommit={() => undefined} />
@@ -79,7 +79,7 @@ const RepairPane: React.FC = () => {
                             <span className="text-[13px] leading-5">{t('ui.consoleMasteringDePlosive')}</span>
                             <Toggle checked={mastering.dePlosive.enabled} onChange={enabled => setDePlosive({ enabled })} label={t('ui.consoleMasteringDePlosive')} />
                         </div>
-                        <div inert={!mastering.dePlosive.enabled} className={mastering.dePlosive.enabled ? '' : 'opacity-40'}>
+                        <div inert={!mastering.dePlosive.enabled} className={`space-y-3.5 ${mastering.dePlosive.enabled ? '' : 'opacity-40'}`}>
                             <ConsoleSlider label={t('ui.consoleMasteringReduction')} valueText={formatDb(mastering.dePlosive.reductionDb, 1)} value={mastering.dePlosive.reductionDb} min={AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MIN} max={AUDIO_CONSOLE_DEPLOSIVE_REDUCTION_MAX} decimals={1} onChange={reductionDb => setDePlosive({ reductionDb })} onCommit={() => undefined} />
                             <p className="-mt-2.5 text-[11px] leading-4 text-[color:var(--st-t3)]">{t('ui.consoleMasteringDePlosiveHint')}</p>
                         </div>

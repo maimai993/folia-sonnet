@@ -19,6 +19,15 @@ describe('console panes use the shared ui controls', () => {
         expect(source).toMatch(/import\s*\{[^}]*\bToggle\b[^}]*\}\s*from\s*'\.\.\/\.\.\/ui'/);
     });
 
+    it.each(['MasteringPane', 'RepairPane', 'StudioPane'])('%s inert wrappers declare vertical spacing for sliders and negative-margin hints', (pane) => {
+        const source = readFileSync(`src/components/panelTab/console/${pane}.tsx`, 'utf8');
+        const inertDivs = [...source.matchAll(/<div[^>]*\binert=\{[^}]+\}[^>]*>/g)].map(m => m[0]);
+        expect(inertDivs.length).toBeGreaterThan(0);
+        for (const tag of inertDivs) {
+            expect(tag).toMatch(/\bspace-y-3(?:\.5)?\b/);
+        }
+    });
+
     it('ui Toggle is a named switch that reports the flipped value and honours disabled', () => {
         (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
         const place = document.body.appendChild(document.createElement('div'));

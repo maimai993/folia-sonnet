@@ -485,11 +485,12 @@ class EqSettings(
          * 读一个夹紧到 [min, max] 的数值字段。
          *
          * 用可空 receiver 是为了让调用点不写 `?:`：字段所在的段整个缺席（老版本 WebView
-         * 推上来的包）时直接用默认值。值非有限时原样交给 `coerceIn` —— 这里不额外兜底，
-         * 免得把「上游发了个 NaN」变成「上游发了个 0.85」而没人发现。
+         * 推上来的包）或收到非有限数（NaN / Infinity）时回退到夹紧后的默认值，避免 NaN 逃逸进
+         * 滤波器系数或导致 toJson() 抛 JSONException。
          */
         private fun JSONObject?.number(key: String, fallback: Double, min: Float, max: Float): Float {
-            val value = this?.optDouble(key, fallback) ?: fallback
+            val raw = this?.optDouble(key, fallback) ?: fallback
+            val value = if (raw.isFinite()) raw else fallback
             return value.coerceIn(min.toDouble(), max.toDouble()).toFloat()
         }
 

@@ -116,6 +116,8 @@ const asRecord = (value: unknown): Record<string, unknown> => (
 );
 
 const clamp = (value: unknown, min: number, max: number, fallback: number): number => {
+    if (value === null || value === undefined || typeof value === 'boolean') return fallback;
+    if (typeof value === 'string' && value.trim() === '') return fallback;
     const parsed = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.min(max, Math.max(min, parsed));
