@@ -41,7 +41,8 @@ class ArtworkDiskCacheTest {
         val dir = tempFolder.newFolder("art")
         val cache = ArtworkDiskCache(dir)
         cache.put("oversized", byteArrayOf(1))
-        val file = dir.listFiles()!!.single()
+        // 目录里还有内部用的 .seq（#441 的单调序号），这里只关心条目文件本身。
+        val file = dir.listFiles()!!.single { it.name.endsWith(".img") }
         java.io.RandomAccessFile(file, "rw").use {
             it.setLength(20L * 1024L * 1024L)
         }
@@ -126,7 +127,8 @@ class ArtworkDiskCacheTest {
         cache.put("oom", byteArrayOf(1, 2))
 
         assertEquals(listOf(failure), reported)
-        assertEquals(0, dir.listFiles()!!.size)
+        // 只数条目与临时文件；.seq 是内部序号（#441），不算缓存内容。
+        assertEquals(0, dir.listFiles()!!.count { !it.name.startsWith(".") })
     }
 
     @Test
