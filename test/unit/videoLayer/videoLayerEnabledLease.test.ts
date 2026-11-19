@@ -38,11 +38,10 @@ describe('video layer enabled lease', () => {
 
         const release = lease.acquireVideoLayerEnabled();
         expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
-        expect(lease.isVideoLayerEnabledByLease()).toBe(true);
 
         release();
         expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
-        expect(lease.isVideoLayerEnabledByLease()).toBe(false);
+        expect(storage.get('video_layer_enabled')).toBe('false');
     });
 
     it('leaves a layer the user switched on themselves alone', async () => {
@@ -96,6 +95,36 @@ describe('video layer enabled lease', () => {
         expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
     });
 
+    it('gives up the rollback once the user switches it off and on again mid-preview', async () => {
+        const { store, lease } = await loadModules();
+        const release = lease.acquireVideoLayerEnabled();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+
+        // 用户先关掉，再自己打开 —— 他认为是自己开的。
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(false);
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
+
+        release();
+        // 租约已经没有回滚资格：不能替他关，也不能把「关」写进盘里。
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+        expect(storage.get('video_layer_enabled')).toBe('true');
+    });
+
+    it('gives up the rollback when the user merely toggles it inside a long preview', async () => {
+        const { store, lease } = await loadModules();
+        const first = lease.acquireVideoLayerEnabled();
+        const second = lease.acquireVideoLayerEnabled();
+
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(false);
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
+
+        // 用户动过一次以后，后面谁还都关不掉它，直到下一次重新借。
+        first();
+        second();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+        expect(storage.get('video_layer_enabled')).toBe('true');
+    });
+
     it('does not turn the layer back on when the user switched it off mid-preview', async () => {
         const { store, lease } = await loadModules();
         const release = lease.acquireVideoLayerEnabled();
@@ -118,6 +147,66 @@ describe('video layer enabled lease', () => {
         store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
         lease.acquireVideoLayerEnabled()();
         expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+    });
+
+    it('settles back to zero and leaves the layer on across a StrictMode replay', async () => {
+        const { store, lease } = await loadModules();
+
+        // StrictMode 对同一个 effect 跑的是「装 → 卸 → 装」（见 src/bootstrap.tsx 外面那层包法）。
+        const first = lease.acquireVideoLayerEnabled();
+        first();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
+
+        // 重放的第二段：装上了就不该再关，计数要能回到 0 才说明没有漏还的份数。
+        const second = lease.acquireVideoLayerEnabled();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+        second();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
+
+        // 真回到 0 了：再借一次还是从「原本关着」开始，行为没有被上一次搞坏。
+        lease.acquireVideoLayerEnabled()();
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
+        expect(storage.get('video_layer_enabled')).toBe('false');
+    });
+
+    it('leaves the layer on when a StrictMode replay happens while it is already on', async () => {
+        const { store, lease } = await loadModules();
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
+
+        const first = lease.acquireVideoLayerEnabled();
+        first();
+        const second = lease.acquireVideoLayerEnabled();
+        second();
+
+        // 用户开着的层，重放几次都不该被顺手关掉，也不该多写一次盘。
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+        expect(storage.get('video_layer_enabled')).toBe('true');
+    });
+
+    it('keeps a layer the user switched on from rolled back by a stale file pick', async () => {
+        const { store, lease } = await loadModules();
+
+        // 选文件那条路调的是不带来源的 setVideoLayerEnabled，算用户写的。
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
+        const release = lease.acquireVideoLayerEnabled();
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(false);
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true);
+        release();
+
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(true);
+        expect(storage.get('video_layer_enabled')).toBe('true');
+    });
+
+    it('lets a service-side write take the rollback away as well', async () => {
+        const { store, lease } = await loadModules();
+        const release = lease.acquireVideoLayerEnabled();
+
+        // 市场背景是服务层的自动写入，来源记成 lease：它不能替用户认领这次开关。
+        store.useVideoLayerSettingsStore.getState().setVideoLayerEnabled(true, 'lease');
+        release();
+
+        expect(store.useVideoLayerSettingsStore.getState().videoLayerEnabled).toBe(false);
+        expect(storage.get('video_layer_enabled')).toBe('false');
     });
 });
 

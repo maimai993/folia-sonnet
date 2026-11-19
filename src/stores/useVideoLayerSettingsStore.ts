@@ -71,8 +71,25 @@ const persistString = (key: string, value: string) => {
     if (typeof window !== 'undefined') localStorage.setItem(key, value);
 };
 
+/**
+ * 视频层开关上一次是被谁写的。
+ *
+ * 只有「这一段的开关该不该由我们关回去」用得上它：`setVideoLayerEnabled` 不带来源时算用户写的，
+ * 用户写一次，租约就放弃回滚资格（见 services/videoLayerEnabledLease）。只活在内存里，
+ * 不落盘 —— 重启之后没有任何租约欠着，上个进程是谁写的都没有意义。
+ */
+export type VideoLayerEnabledWriter = 'user' | 'lease';
+
 export type VideoLayerSettingsState = {
     videoLayerEnabled: boolean;
+    /**
+     * 开关上一次写入的来源。**只由 setVideoLayerEnabled 写**，别处不要直接 set 它。
+     *
+     * 初值记成 `'user'`：开关的初值来自 `getStoredBoolean(..., false)`，盘上的值分不清
+     * 「上一轮租约写的 false」和「用户自己关的」；而这个进程里还没有过任何租约，
+     * 没东西欠着回滚，把初值算成用户的就是唯一不会误关的答案。
+     */
+    lastSetBy: VideoLayerEnabledWriter;
     videoLayerUrl: string;
     videoLayerOpacity: number;
     videoLayerFit: VideoLayerFit;
@@ -90,7 +107,12 @@ export type VideoLayerSettingsState = {
      */
     injectedUrl: string | null;
     setInjectedUrl: (url: string | null) => void;
-    setVideoLayerEnabled: (enabled: boolean) => void;
+    /**
+     * 写开关并落盘。不带 `by` 就是用户自己动的（设置页的开关、命令面板的切换、用户选本地文件）；
+     * 服务层的自动写入（市场背景、视频层开关租约）要带上自己的来源，租约只回滚来源仍是
+     * `'lease'` 的那一次。
+     */
+    setVideoLayerEnabled: (enabled: boolean, by?: VideoLayerEnabledWriter) => void;
     setVideoLayerUrl: (url: string) => void;
     setVideoLayerOpacity: (opacity: number) => void;
     setVideoLayerFit: (fit: VideoLayerFit) => void;
@@ -167,6 +189,8 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
 
     return {
         videoLayerEnabled: getStoredBoolean(VIDEO_LAYER_ENABLED_KEY, false),
+        // 初值一律算用户写的，理由见 lastSetBy 的类型注释。
+        lastSetBy: 'user',
         videoLayerUrl: getStoredString(VIDEO_LAYER_URL_KEY, ''),
         videoLayerOpacity: clampVideoLayerOpacity(Number(getStoredString(VIDEO_LAYER_OPACITY_KEY, String(VIDEO_LAYER_OPACITY_DEFAULT)))),
         videoLayerFit: getStoredString(VIDEO_LAYER_FIT_KEY, 'cover') === 'contain' ? 'contain' : 'cover',
@@ -184,12 +208,12 @@ export const useVideoLayerSettingsStore = create<VideoLayerSettingsState>((set, 
              * 「用户点了看这个视频」一处：播放页的 MV 层在背景预览里也会注入，于是只看一眼
              * 「MV」背景，这一层就被永久打开了，之后收起面板、换别的背景都关不回去
              * （issue #432）。要不要露出来是注入方的事，见 services/videoLayerEnabledLease：
-             * 它借的时候记下原值，还的时候只回滚自己开的那一次。
+             * 借的时候把开关打开并记成来源 `'lease'`，还的时候只回滚来源还是 `'lease'` 的那一次。
              */
             set({ injectedUrl: url });
         },
-        setVideoLayerEnabled: (enabled) => {
-            set({ videoLayerEnabled: enabled });
+        setVideoLayerEnabled: (enabled, by = 'user') => {
+            set({ videoLayerEnabled: enabled, lastSetBy: by });
             setStoredBoolean(VIDEO_LAYER_ENABLED_KEY, enabled);
         },
         setVideoLayerUrl: (url) => {
