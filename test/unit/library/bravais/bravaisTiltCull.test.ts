@@ -263,8 +263,19 @@ describe('culling a tilted wall: wiring', () => {
         const fieldRef = { current: document.createElement('div') };
         const seen: Bounds[] = [];
         const handle: { camera: ReturnType<typeof useBravaisCamera> | null } = { camera: null };
+        /*
+         * renderFrame 必须是稳定的引用，不能写成内联的 `() => undefined`（这条用例在 CI 上的间歇失败就出在这，dev 与 #415 / #417 都红过）。
+         * 它处在 useBravaisCamera → moveTo → updateCamera 的依赖链上；useWallPointerPan 那个挂 pointerup /
+         * keydown / blur 监听的 effect 又依赖 updateCamera，于是 renderFrame 每重渲染换一次身份，这个 effect
+         * 就重建一次，而它的清理函数先跑：`cancel()` 把 pointerRef.current 清成 null，拖动从那一刻起不再推进
+         * （实测 200 次 pointermove 里有 153 次因此提前返回，相机中心冻结在 9247.37 不再变）。
+         * 拖动推不动，重裁次数就只能靠剩下那一两次「恰好落地」凑到 2，裕度为零 —— 拖动距离差 20px
+         * （620 与 600）就能在 1 和 2 之间跳，CI 上于是间歇失败。给它一个稳定的身份之后，拖动整段都有效，
+         * 同样的拖动里 seen 实测从 2 涨到 5，下面那条下界才不是靠巧合成立。
+         */
+        const renderFrame = () => undefined;
         const Probe = () => {
-            const camera = useBravaisCamera({ frameRef, renderFrame: () => undefined, fieldRef, reducedMotion: false });
+            const camera = useBravaisCamera({ frameRef, renderFrame, fieldRef, reducedMotion: false });
             handle.camera = camera;
             if (camera.bounds && seen[seen.length - 1] !== camera.bounds) seen.push(camera.bounds);
             return null;
