@@ -71,7 +71,7 @@ class VocalCancelProcessor(
         val size = end - start
         if (size <= 0) return
 
-        core.setEnabled(state.vocalCancelEnabled && !state.instrumentalActive)
+        core.setEnabled(state.vocalCancelEnabled && !state.instrumentalActive && !state.stemMixActive)
         val out = replaceOutputBuffer(size)
 
         /*

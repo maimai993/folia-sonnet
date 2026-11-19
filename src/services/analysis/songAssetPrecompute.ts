@@ -51,6 +51,50 @@ export const queueSongAssetPrecompute = (song: SongResult): void => {
     void drain();
 };
 
+/**
+ * 队列头部窗口多大：只备「当前这首 + 下一首」。
+ *
+ * 原实现（PR #400 里的整队预拆）把整条队列逐首排进去 —— 一百首就是一百次地址解析、
+ * 一百次完整下载加几十秒推理，流量、电量、发热都不可控，而且预拆完成的还不一定是
+ * 接下来会听的歌（用户随时跳过）。窗口封顶两首，浪费有上界，拨开关秒切的体验不变。
+ */
+const QUEUE_PREBUILD_WINDOW = 2;
+
+/**
+ * 把播放队列头部窗口交给原生做「整队预拆」。
+ *
+ * 与 [queueSongAssetPrecompute] 的分工：那个逐首排「整曲曲线 + 这首的四轨」，
+ * 这个只负责把「接下来要放哪几首」告诉原生 —— 队列一换（切歌、拖队列）就重排一遍，
+ * 去重 / 跳过正在播的和已经拆好的都在原生侧（InstrumentalCoordinator.preparseQueue）。
+ *
+ * 总开关关着时什么也不做：不排 SCNet，也不做地址解析。
+ */
+export const queuePlaybackQueuePreparse = (queue: SongResult[]): void => {
+    if (!isCapacitorAndroid() || !isNativePlayerAvailable()) return;
+    if (!useAudioSettingsStore.getState().prebuildTracksEnabled) return;
+    const window = queue.slice(0, QUEUE_PREBUILD_WINDOW);
+    if (window.length === 0) return;
+    void (async () => {
+        try {
+            // 与 drain 里同一个解析器：预取到的 `audioUrl` 可能是哨兵，直接给原生解不出来。
+            const { resolveNativeAudioUrl } = await import('../beatFx/beatFxSource');
+            const urls: string[] = [];
+            const songKeys: Array<string | null> = [];
+            for (const song of window) {
+                const url = await resolveNativeAudioUrl(song);
+                if (!url) continue;
+                urls.push(url);
+                songKeys.push(getPlaybackSongKey(song));
+            }
+            if (urls.length === 0) return;
+            await nativePlayer.prepareQueuePreparse(urls, songKeys);
+        } catch (error) {
+            // 旧原生包没有这个方法、或者地址没解析出来：预拆排不上不影响播放，记一行就够。
+            console.warn('[SongAssets] queue preparse skipped', error);
+        }
+    })();
+};
+
 const drain = async (): Promise<void> => {
     if (running) return;
     running = true;

@@ -358,12 +358,20 @@ interface FoliaNativePlayerPlugin {
      */
     clearSeparationCache(): Promise<{ ok: boolean; mode: 'off'; usedCount: number; usedBytes: number; limitBytes: number }>;
     /**
-     * 提前把这首歌的两轨分离结果备好，不换源。
+     * 提前把这首歌的四轨分离结果备好，不换源。
      *
      * 返回只表示「任务已排上」，真正生成在原生后台跑几十秒；
      * 已经备过或正在生成的歌会直接返回。
      */
     prepareSongTracks(options: { url: string; songKey: string | null }): Promise<{ ok: boolean }>;
+    /**
+     * 「整队预拆」：把接下来要放的几首交给原生，按顺序逐首拆四轨。
+     *
+     * 排的是「下一首」那一小段队列（不整队），原生侧会去重、跳过正在播的和已经拆好的；
+     * 总开关关着时原生直接返回 queued=0。返回的 queued 是这一次交过去的条目数，
+     * 不表示排上了几首。原生方法缺席（旧包）时它 reject，调用方按「没排上」处理。
+     */
+    prepareQueuePreparse(options: { urls: string[]; songKeys: Array<string | null> }): Promise<{ queued: number }>;
     /** 「设置 → 存储」里的总开关：预先拆分音轨。原生存一份，通知栏起播也能读到。 */
     setPrebuildTracksEnabled(options: { enabled: boolean }): Promise<void>;
     /**
@@ -445,6 +453,8 @@ export const nativePlayer = {
     clearSeparationCache: () => FoliaNativePlayer.clearSeparationCache(),
     prepareSongTracks: (url: string, songKey: string | null) =>
         FoliaNativePlayer.prepareSongTracks({ url, songKey }),
+    prepareQueuePreparse: (urls: string[], songKeys: Array<string | null>) =>
+        FoliaNativePlayer.prepareQueuePreparse({ urls, songKeys }),
     setPrebuildTracksEnabled: (enabled: boolean) => FoliaNativePlayer.setPrebuildTracksEnabled({ enabled }),
     getInstrumentalState: () => FoliaNativePlayer.getInstrumentalState(),
     getSpectrum: () => FoliaNativePlayer.getSpectrum(),

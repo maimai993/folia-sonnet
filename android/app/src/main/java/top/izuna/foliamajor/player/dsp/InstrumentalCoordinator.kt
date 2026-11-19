@@ -1,7 +1,6 @@
 package top.izuna.foliamajor.player.dsp
 
 import android.content.Context
-import android.net.Uri
 import android.util.Log
 import top.izuna.foliamajor.player.FoliaNativePlayer
 import top.izuna.foliamajor.settings.FoliaSettingsStore
@@ -64,6 +63,41 @@ internal object InstrumentalCoordinator {
      * 拿到新地址后按正常装源换过去 —— 与播放页自己恢复音源走的是同一条路。
      */
     var requestFreshSource: ((songKey: String?, reason: String) -> Unit)? = null
+
+    /**
+     * 四轨生成完成后通知插件「这首歌的四轨就绪了」。插件据此决定要不要交给音频线程
+     * （见 FoliaNativePlayerPlugin.publishStemState）。
+     *
+     * [userInitiated] 表示「用户拨着开关在等这一趟」：只有它为 true、且确实是当前
+     * 正在放的那首，插件才把四轨发布出去接管输出。预拆（整队队列 / 提前分析）完成的
+     * 歌哪怕恰好是正在放的这首，也不该无脑接管；缓存留着，下一次装源自然生效。
+     */
+    var onStemsReady: ((url: String?, songKey: String?, userInitiated: Boolean) -> Unit)? = null
+
+    /** 事件归属判断用：此刻正在为哪首歌跑（building 时的 key；其余状态为 activeKey 残留）。 */
+    fun activeKeyOrNull(): String? = activeKey
+
+    /**
+     * 把一批歌排进「整队预拆」：去重之后按顺序逐首 [prebuild]。
+     *
+     * 只负责排队规则（同一首不重复排、不排正在播的那首、已经拆好的不排），真的推理
+     * 仍然走同一条 worker —— 所以预拆与「拨开关现拆」不会两条线程一起抢模型。
+     *
+     * @param urls       Web 侧给的播放队列（前几首），每项是原曲地址。
+     * @param songKeys   与 [urls] 一一对应的身份；Web 没给时用 null（键退回按地址算）。
+     * @param currentKey 正在播那一首的缓存键（见 [InstrumentalStore.keyFor]），不排它。
+     */
+    fun preparseQueue(context: Context, urls: List<String>, songKeys: List<String?>, currentKey: String?) {
+        val requests = urls.mapIndexed { index, url ->
+            StemPreparse.Request(url, songKeys.getOrNull(index), InstrumentalStore.keyFor(url, songKeys.getOrNull(index)))
+        }
+        val accepted = StemPreparse.plan(
+            requests,
+            skip = currentKey?.let { setOf(it) } ?: emptySet(),
+            ready = { InstrumentalStore.allStemsReady(context, it) },
+        )
+        for (request in accepted) prebuild(context, request.url, request.songKey)
+    }
 
     /**
      * 一条地址**多久之后就可能已经过期**。
@@ -206,43 +240,35 @@ internal object InstrumentalCoordinator {
             return
         }
         activeKey = key
-        val cached = InstrumentalStore.find(context, key, mode)
-        if (cached != null) {
+        /*
+         * 四轨齐了就直接读缓存：清唱 / 伴奏都由 StemMixProcessor 按模式实时混音。
+         *
+         * 这里不再换源 —— 播放器始终装着原曲（它是四轨解码器的时钟）。旧的
+         * 「一下装伴奏 / 一下装清唱」那条路退场了：两个派生文件不再写，也就不会有
+         * 「切下一首歌却用了上一首的派生文件」。切回原曲仍然走下面 mode == null 那条路
+         * （老版本升级上来时播放器可能还装着派生文件）。
+         */
+        if (InstrumentalStore.allStemsReady(context, key)) {
             percent = 100
             state = STATE_READY
             notify?.invoke(state, percent)
-            /*
-             * 换源判据必须是「此刻播的是不是这一轨」，不能是「在不在分离轨」。
-             *
-             * isOnInstrumental() 只是个布尔：伴奏和清唱都算 true。于是从「只留人声」
-             * 切到「关闭人声」时，`!isOnInstrumental()` 为 false，换源被短路 —— 播放器
-             * 还停在清唱轨上，状态和界面却已经是伴奏，听起来就是「切过去没声音」。
-             * currentUrl() 是上一次 prepare/swapSource 真正装进去的地址，天然区分
-             * 原曲 / 伴奏 / 清唱三轨：跟目标文件不一样就切，一样就不动（避免轮询
-             * 每次 reconcile 都重新 prepare 一遍）。
-             */
-            val target = Uri.fromFile(cached).toString()
-            if (shouldSwapVocalTrack(player.currentUrl(), target)) {
-                player.swapSource(target, instrumental = true)
-            }
             return
         }
         startBuild(context, player, url, key, songKey, wantSwitch = true)
     }
 
     /**
-     * 提前分析：把这首歌的两轨伴奏都备好，**不换源**。
+     * 提前分析（「整队预拆」的每一首）：把这首歌的四轨备好，**不换源**。
      *
      * 这是「下次拨开关秒开」的关键 —— 用户还在听原曲时后台就把活干完了。
-     * 与 [reconcile] 共用同一条 worker 与 generation：正在为拨开关跑的任务
-     * 本来就会同时产出两轨，没必要再开一遍；反过来，预生成跑到一半用户拨了开关，
+     * 与 [reconcile] 共用同一条 worker 与 generation：预生成跑到一半用户拨了开关，
      * generation 会让旧任务作废、新任务接手（同一首歌，进度从头开始但只跑一遍模型）。
      */
     fun prebuild(context: Context, url: String?, songKey: String?) {
         if (url.isNullOrBlank()) return
         val key = InstrumentalStore.keyFor(url, songKey)
         if (state == STATE_BUILDING) return
-        if (InstrumentalStore.bothReady(context, key)) return
+        if (InstrumentalStore.allStemsReady(context, key)) return
         startBuild(context, null, url, key, songKey, wantSwitch = false)
     }
 
@@ -337,51 +363,22 @@ internal object InstrumentalCoordinator {
             state = STATE_READY
             percent = 100
             activeKey = key
-            // 两份成品都是刚写的，清理时都别删。
-            InstrumentalStore.trim(appContext, keep = tracks.instrumental)
+            // 刚写的四轨 mtime 最新，trim 不会动它们；旧版本留下的两轨派生文件自然被 LRU 清掉。
+            InstrumentalStore.trim(appContext)
             notify?.invoke(state, percent)
             /*
-             * ★ 生成完了要不要切过去，看的是**用户此刻开着分离**，不是当初那一趟有没有说要切。
-             *
-             * 以前这里只认 switchOnDone（发起时 wantSwitch 的快照），于是：用户先拨到「只留人声」，
-             * 这一拨立刻起了一趟生成；几十秒里又切歌 / 重进播放页，那趟被 cancel 或换成了
-             * prebuild(false)；等模型真正跑完，switchOnDone 早已是 false —— 文件写好了，
-             * 播放器却还装着原曲。用户看到的就是「分离生成完毕了，但它不自动替换正在播的音频，
-             * 要我再手动拨一次才生效」。
-             *
-             * 意图（mode）本来就一直在原生这边：mode 非空就说明用户要分离结果，
-             * 该不该动播放器由下面那段严格身份校验（stillThisSong + shouldSwapVocalTrack）兜底。
+             * 「用户拨着开关在等这一趟」的意图只在本行读取一次：置回 false 之前
+             * 先截下来传给回调 —— 这样预拆结果就不会接管正在播的歌。
              */
+            val userRequested = switchOnDone
             switchOnDone = false
             /*
-             * 生成完就地换源：用户此刻可能已经切歌 / 关了开关 ——
-             * 由播放器此刻真正装着的身份再确认一次，不满足就不动。
+             * 四轨就绪：交给插件发布给音频线程（StemMixState）。清唱 / 伴奏现在都由
+             * StemMixProcessor 实时混音，**不换源** —— 也就不存在「拆完把上一首的派生
+             * 文件换到下一首」那条错源路径。身份由 generation 兜底：能走到这里说明
+             * 生成期间没有换过歌；要不要接管由插件按 userInitiated 再判一次。
              */
-            val mode = NativeEqualizerState.activeMode() ?: return@execute
-            /*
-             * 严格身份校验（「切下一首歌却用了上一首的数据」的修复）。
-             *
-             * 旧写法 `stillThisSong = keyFor(player.baseUrl(), songKey)` 是恒真的：
-             * keyFor 在 songKey 非空时只看 songKey、不看 url，而 songKey 又是这一趟
-             * 生成时闭包里那一首的 —— 用户切到下一首之后算出来的 key 仍旧等于生成
-             * 时的 key，后台一拆完就把上一首的伴奏 / 清唱换源到了新歌上。
-             * 现在同时比原曲地址与 MediaItem 里的 songKey，少一个都不换。
-             */
-            val stillThisSong = player != null && stillPlayingGeneratedTrack(
-                player.baseUrl(), player.currentMediaId(), url, songKey,
-            )
-            /*
-             * 与 reconcile 的 cached 分支同一个道理：换源判据必须是「此刻播的是不是
-             * 这一轨」，不能是「在不在分离轨」。分离跑完的这几十秒里，用户可能从
-             * 「只留人声」切到了「关闭人声」—— isOnInstrumental() 对伴奏和清唱都为
-             * true，旧的 `!isOnInstrumental()` 会短路，播放器停在清唱轨上切不过去。
-             * currentUrl() 天然区分原曲 / 伴奏 / 清唱：跟目标文件不一样就切。
-             */
-            val wanted = if (mode == VocalTrackMode.VOCAL) tracks.vocal else tracks.instrumental
-            val wantedUrl = Uri.fromFile(wanted).toString()
-            if (player != null && stillThisSong && shouldSwapVocalTrack(player.currentUrl(), wantedUrl)) {
-                player.swapSource(wantedUrl, instrumental = true)
-            }
+            onStemsReady?.invoke(url, songKey, userRequested)
         }
     }
 
@@ -391,7 +388,7 @@ internal object InstrumentalCoordinator {
     }
 
     /**
-     * 「删除人声分离缓存」：作废在跑的生成、把状态归零、删掉两轨文件、重算用量。
+     * 「删除人声分离缓存」：作废在跑的生成、把状态归零、删掉四轨文件、重算用量。
      *
      * 必须先 cancel()：不清掉 generation，正在跑的那趟几十秒后会把刚删掉的
      * 文件重新写回来，界面上就是「删了又自己长出来」。

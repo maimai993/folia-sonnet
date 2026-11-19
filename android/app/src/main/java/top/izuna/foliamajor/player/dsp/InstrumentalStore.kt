@@ -24,6 +24,9 @@ internal object InstrumentalStore {
 
     private const val DIR_NAME = "instrumental"
 
+    /** [keyFor] 生成的缓存键长度（SHA-1 前 32 个 hex）。 */
+    private const val KEY_LENGTH = 32
+
     private const val TAG = "Instrumental"
 
     /**
@@ -102,9 +105,10 @@ internal object InstrumentalStore {
         val files = dir.listFiles()?.filter { it.isFile && !it.name.endsWith(TEMP_SUFFIX) }.orEmpty()
         val total = files.sumOf { it.length() }
         usedBytes = total
-        usedCount = files.size
+        // 一首歌现在是 4 个文件（四轨各一份），按键前缀去重算首数。
+        usedCount = files.map { it.name.take(KEY_LENGTH) }.toSet().size
         limitBytes = limit
-        return total to files.size
+        return total to usedCount
     }
 
     /**
@@ -182,35 +186,65 @@ internal object InstrumentalStore {
     }
 
     /**
-     * 两轨都齐了没有：预分析用它判断这首歌还要不要重跑。
+     * 四轨都齐了没有：装源与预拆分用它判断这首歌还要不要重跑。
      *
-     * 刻意不走 [find] —— 那会刷新 mtime，等于「只是查一下」就把两首歌顶到 LRU 最新，
-     * 真正的老文件反而被留下来了。
+     * 和 [find] 一样**不刷新 mtime** —— 那等于「只是查一下」就把这首歌顶到 LRU 最新，
+     * 真正该清掉的老文件反而留下来了。[allStems] 才是「要播了」的那一条。
      */
-    fun bothReady(context: Context, key: String): Boolean =
-        VocalTrackMode.entries.all {
-            val file = targetFor(context, key, it)
+    fun allStemsReady(context: Context, key: String): Boolean =
+        StemKind.ALL.all {
+            val file = stemTargetFor(context, key, it)
             file.isFile && file.length() > 0L
         }
+
+    /** 四轨里某一轨的正式文件；没有则 null。 */
+    fun stemTargetFor(context: Context, key: String, kind: StemKind): File =
+        File(directory(context), "$key${kind.suffix}")
+
+    fun stemTempFor(context: Context, key: String, kind: StemKind): File =
+        File(directory(context), "$key${kind.suffix}$TEMP_SUFFIX")
+
+    /**
+     * 四轨文件，下标与 [StemKind.ordinal] 对齐；缺的轨为 null。
+     *
+     * 取用（要播了）顺便刷新 mtime，让 LRU 知道这首歌正在用。
+     */
+    fun allStems(context: Context, key: String): Array<File?> {
+        val now = System.currentTimeMillis()
+        return Array(StemKind.ALL.size) { index ->
+            val file = stemTargetFor(context, key, StemKind.ALL[index])
+            if (!file.isFile || file.length() <= 0L) {
+                null
+            } else {
+                file.setLastModified(now)
+                file
+            }
+        }
+    }
+
+    /**
+     * 删掉这个键下的四轨成品（含临时文件）。
+     *
+     * 用在拆分失败之后（#408）：同一身份上留着的旧结果会让「这一次失败」看起来像成功 ——
+     * 界面报失败，下一次装源却直接命中旧四轨。旧版本留下的两轨派生文件也一起清掉，
+     * 它们不会再被任何播放路径用到。
+     */
+    fun drop(context: Context, key: String) {
+        for (mode in VocalTrackMode.entries) {
+            runCatching { targetFor(context, key, mode).delete() }
+            runCatching { tempFor(context, key, mode).delete() }
+        }
+        for (kind in StemKind.ALL) {
+            runCatching { stemTargetFor(context, key, kind).delete() }
+            runCatching { stemTempFor(context, key, kind).delete() }
+        }
+    }
 
     fun tempFor(context: Context, key: String, mode: VocalTrackMode = VocalTrackMode.INSTRUMENTAL): File =
         File(directory(context), "$key${mode.suffix}$TEMP_SUFFIX")
 
     fun targetFor(context: Context, key: String, mode: VocalTrackMode = VocalTrackMode.INSTRUMENTAL): File =
         File(directory(context), "$key${mode.suffix}")
-
-    /**
-     * 删掉这个键下的两份成品（含临时文件）。
-     *
-     * 用在分离失败之后（#408）：同一身份上留着的旧结果会让「这一次失败」看起来像成功 ——
-     * 界面报失败，下一次 reconcile 却直接命中旧音频装进播放器。
-     */
-    fun drop(context: Context, key: String) {
-        for (mode in listOf(VocalTrackMode.INSTRUMENTAL, VocalTrackMode.VOCAL)) {
-            runCatching { targetFor(context, key, mode).delete() }
-            runCatching { tempFor(context, key, mode).delete() }
-        }
-    }
 
     /**
      * 把临时文件转正。
@@ -224,7 +258,7 @@ internal object InstrumentalStore {
     }
 
     /**
-     * 「设置 → 存储 → 删除人声分离缓存」：把两轨正式文件与半成品一起删掉，重算用量。
+     * 「设置 → 存储 → 删除人声分离缓存」：把四轨正式文件与半成品一起删掉，重算用量。
      *
      * 只清这个目录，不碰 IndexedDB 里的分析曲线 —— 那是另一类缓存，由存储页的
      * analysis 分类自己管。删完必须 measure 一次，否则界面还显示旧的「N 首 · XX MB」。

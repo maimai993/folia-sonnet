@@ -95,6 +95,16 @@ object NativeEqualizerState {
     var instrumentalActive: Boolean = false
 
     /**
+     * 四轨混音此刻是不是接管了输出。
+     *
+     * StemMixProcessor 每块更新；VocalCancelProcessor 读它 —— 混音出来的是
+     * 「已经分层处理过」的成品，不能再做中置相消，否则会把居中的贝斯 / 底鼓
+     * 一起减掉。
+     */
+    @Volatile
+    var stemMixActive: Boolean = false
+
+    /**
      * 改开关并落盘。
      *
      * 落盘是为了「冷启动 / 后台被系统拉起来时也是用户上次的选择」：

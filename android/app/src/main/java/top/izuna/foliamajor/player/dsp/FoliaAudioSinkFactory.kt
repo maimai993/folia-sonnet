@@ -63,22 +63,27 @@ class FoliaAudioSinkFactory(
         enableAudioTrackPlaybackParams: Boolean,
     ): AudioSink {
         /*
-         * 顺序：EQ → 关闭人声 → 过渡。
+         * 顺序：四轨混音 → EQ → 关闭人声 → 过渡。
          *
          * 过渡处理器排在 EQ 之后：EQ 先定音色，过渡链再做换手 / 扫频 / 回声，
          * 否则换手时两路的 EQ 状态会互相干扰。
          *
-         * 关闭人声夹在两者中间：它要作用在「一首歌的最终混音」上（减的是左右声道
+         * 关闭人声排在 EQ 之后：它要作用在「一首歌的最终混音」上（减的是左右声道
          * 共有的中置分量，必须在两首歌被过渡链混到一起之前做），又不该影响
          * EQ 定下来的音色。
          *
-         * ⚠️ 它 2026-11-10 曾经被摘出过链外（连续两版「开不开都滋滋滋」）。
+         * 四轨混音排在整条链最前：它决定「这首歌的声源是原曲，还是分离出来的
+         * 某几轨」，后面的 EQ / 关闭人声 / 过渡都作用在它交出来的那一路 PCM 上。
+         * 它自己内部有兜底：四轨没就绪、或者没开「关闭人声 / 只留人声」时原样直通。
+         *
+         * ⚠️ 关闭人声 2026-11-10 曾经被摘出过链外（连续两版「开不开都滋滋滋」）。
          * 恢复的前提是 VocalCancelTest 那组单测：关闭时逐字节一致、打开时
          * 居中内容被压下、侧向内容不削波。改这里之前先跑那组测试。
          *
          * 显式写出元素类型：toTypedArray 出来的是 Array<AudioProcessor>。
          */
-        val chain = ArrayList<AudioProcessor>(3)
+        val chain = ArrayList<AudioProcessor>(4)
+        chain.add(StemMixProcessor(state))
         chain.add(EqAudioProcessor(state))
         chain.add(VocalCancelProcessor(state))
         if (transitionRoleProvider != null) {

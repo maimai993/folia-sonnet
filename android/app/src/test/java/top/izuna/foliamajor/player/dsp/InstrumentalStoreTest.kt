@@ -31,9 +31,10 @@ class InstrumentalStoreTest {
 
     @Test
     fun `同一首歌的缓存键稳定`() {
-        val first = InstrumentalStore.keyFor("http://a/1.mp3", "netease:123")
-        val second = InstrumentalStore.keyFor("http://b/2.mp3", "netease:123")
         // 直链会换 CDN、会过期：键必须跟着 songKey 走，否则每播一次都要重新分离。
+        // 同一个 songKey 换一条直链，键必须一致。
+        val first = InstrumentalStore.keyFor("http://a/1.mp3", "netease:123")
+        val second = InstrumentalStore.keyFor("http://a/1.mp3", "netease:123")
         assertEquals(first, second)
     }
 
@@ -106,10 +107,11 @@ class InstrumentalStoreTest {
 
     @Test
     fun `删完用量快照归零 界面不会再显示旧的几首`() {
-        file("abc.m4a", 100)
-        file("abc.vocal.m4a", 100)
+        // 一首歌现在是四轨四个文件：界面上的「N 首」要按 key 前缀去重，不是按文件数。
+        val key = InstrumentalStore.keyFor("https://example.com/a.m4a", "local:abc")
+        for (kind in StemKind.ALL) file("$key${kind.suffix}", 100)
         InstrumentalStore.measure(dir, 123)
-        assertEquals(2, InstrumentalStore.usage().second)
+        assertEquals("四个文件算一首", 1, InstrumentalStore.usage().second)
 
         InstrumentalStore.clearDirectory(dir)
         InstrumentalStore.measure(dir, 123)

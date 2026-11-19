@@ -151,6 +151,40 @@ internal object TrackPcmDecoder {
     }
 
     /**
+     * 只读容器头的音频时长（秒），不解码。分块拆分用它在开跑前算进度。
+     * 读不到时返回 0，调用方按「解码到哪算哪」处理。
+     */
+    fun durationSec(pathOrUrl: String): Double {
+        if (pathOrUrl.isBlank()) return 0.0
+        var extractor: MediaExtractor? = null
+        try {
+            extractor = MediaExtractor()
+            if (pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")) {
+                extractor.setDataSource(pathOrUrl, emptyMap())
+            } else {
+                extractor.setDataSource(pathOrUrl)
+            }
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+                if (mime.startsWith("audio/")) {
+                    val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) {
+                        format.getLong(MediaFormat.KEY_DURATION)
+                    } else {
+                        0L
+                    }
+                    return durationUs / 1_000_000.0
+                }
+            }
+        } catch (error: Throwable) {
+            Log.w(TAG, "读时长失败: $pathOrUrl", error)
+        } finally {
+            try { extractor?.release() } catch (_: Throwable) {}
+        }
+        return 0.0
+    }
+
+    /**
      * 只解 [fromSec] 起的 [seconds] 秒，44.1k 双声道。
      *
      * 分离鼓轨是按 30 秒一段跑的：整曲常驻 170MB、推理峰值再 500MB，手机上很容易被推进

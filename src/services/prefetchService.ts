@@ -22,7 +22,7 @@ import { getSongCacheWithLegacyMigration, hasCachedSongAudio } from './onlineMus
 import { toPlayableAudioUrl, toSafePlaybackUrl } from '../utils/appPlaybackHelpers';
 import { getProviderSongMetadata } from './onlineMusic/songMetadata';
 import { ensureTrackProfile, setAnalysisScope } from './automix/profileService';
-import { queueSongAssetPrecompute } from './analysis/songAssetPrecompute';
+import { queueSongAssetPrecompute, queuePlaybackQueuePreparse } from './analysis/songAssetPrecompute';
 import { loadBalanceRecord } from './volumeBalance/balanceRecords';
 import { getNavidromeConfig, navidromeApi } from './navidromeService';
 import { onPlaybackRepresentationRegistered } from './playbackRecovery/representationRegistry';
@@ -669,6 +669,15 @@ export const prefetchNearbySongs = async (
     if (nextSong) {
         queueSongAssetPrecompute(nextSong);
     }
+    /*
+     * 「整队预拆」：把队列头部那几首（当前 + 下一首）交给原生按顺序拆四轨。
+     *
+     * 与上面那一行分工不同 —— 它只排「整曲曲线」和当前这一首的四轨；这里告诉原生
+     * 「接下来还会放哪几首」，队列一换（切歌、拖队列）就重排一遍，去重与跳过
+     * 已经拆好的都在原生侧（InstrumentalCoordinator.preparseQueue）。总开关关着时
+     * 这个函数自己会直接返回，不解析地址、不跑 SCNet。
+     */
+    queuePlaybackQueuePreparse(queue);
 
     if (currentIndex === -1) {
         console.log('[Prefetch] Current song not in queue, skipping prefetch');
