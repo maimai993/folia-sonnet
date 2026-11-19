@@ -6,32 +6,11 @@ import { resolveUiZoomFactor } from '../utils/uiZoom';
 //
 // 上游走 preload 的 `webFrame.setZoomFactor`；这里**两路都支持**：
 //   桌面版有 preload，行为与上游完全一致；
-//   安卓没有 preload，退到 CSS。
-//
-// ★ 安卓这边不能只写 `html { zoom: 0.75 }`：CSS zoom 会把**视口单位**也一起缩，
-//   100vh / 100dvh 变成「缩小后的那一份」，于是固定定位的底栏、整高面板会停在中间偏上的位置，
-//   底下露出空白或者被挡住（#424 的实测反馈：设置页底部没铺满、切换条浮在中下位置挡内容）。
-//   所以缩放的同时要把根元素的高宽按 1/zoom 撑回去，让视口单位与实际屏幕重新对齐。
+//   安卓没有 preload，退到 CSS —— 给 <html> 设 `zoom`。WebView 对 zoom 的支持是完整的
+//   （Tailwind 的 px 值、vh/vw、canvas 尺寸都会跟着变），这正是「整页缩放」想要的效果。
+//   不用 font-size：项目里 `--folia-ui-scale-*` 已经在管字号，两套叠在一起会把文字缩两次。
 
 let installed = false;
-
-/** 安卓 / 网页的缩放：`zoom` 负责把内容缩小，根元素尺寸补偿负责让视口单位别跟着缩。 */
-const applyCssZoom = (factor: number) => {
-    const root = document.documentElement;
-    if (Math.abs(factor - 1) < 0.001) {
-        root.style.removeProperty('zoom');
-        root.style.removeProperty('width');
-        root.style.removeProperty('height');
-        return;
-    }
-    root.style.setProperty('zoom', String(factor));
-    /*
-     * 补偿：zoom 0.75 时内容只占 75%，把根撑到 1/0.75 倍，屏幕才被真正铺满。
-     * 用 `%` 而不是 `vh`：根元素的百分比相对视口算，而 vh 自己也会被 zoom 影响，套两层就错了。
-     */
-    root.style.setProperty('width', `${100 / factor}%`);
-    root.style.setProperty('height', `${100 / factor}%`);
-};
 
 /** 按当前设置缩放这个窗口，并在开关或挡位改动时跟着改。 */
 export const installUiZoom = () => {
@@ -46,7 +25,10 @@ export const installUiZoom = () => {
             if (Math.abs(current - factor) < 0.001) return;
             electron.setPageZoomFactor(factor);
         } else if (typeof document !== 'undefined') {
-            applyCssZoom(factor);
+            // 安卓 / 网页：整页 zoom。100% 时把属性摘掉，别留一个 "1" 影响布局计算。
+            const root = document.documentElement;
+            if (Math.abs(factor - 1) < 0.001) root.style.removeProperty('zoom');
+            else root.style.setProperty('zoom', String(factor));
         }
         console.info(`[UiZoom] page zoom ${Math.round(factor * 100)}%`);
     };

@@ -7,7 +7,7 @@ export const UI_ZOOM_STEPS = [50, 67, 75, 80, 90, 110, 125, 150] as const;
 export type UiZoomStep = typeof UI_ZOOM_STEPS[number];
 
 /** 第一次打开开关时用的挡位：系统缩放调得大、界面显得挤，多半是想缩小一点。 */
-export const DEFAULT_UI_ZOOM_STEP: UiZoomStep = 75;
+export const DEFAULT_UI_ZOOM_STEP: UiZoomStep = 80;
 
 /** 存着的值读成一个挡位；不是挡位（旧值、手改的值）时为 null。 */
 export const readUiZoomStep = (value: unknown): UiZoomStep | null => {
