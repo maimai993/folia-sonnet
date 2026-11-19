@@ -118,6 +118,11 @@ const syncNativeInferenceSwitch = async (): Promise<void> => {
 const sample = async (): Promise<void> => {
     if (!isCapacitorAndroid()) return;
     try {
+        /*
+         * `getDeviceMetrics` 不在 window.electron.mods 的类型声明里（它由 androidModsBridge 在安卓上装），
+         * 所以这里必须自己断言一次形状 —— lint 的 no-unnecessary-type-assertion 认不出这个缺口。
+         */
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion -- 见上：声明里没有这个方法
         const mods = (window as typeof window & {
             electron?: { mods?: { getDeviceMetrics?: () => Promise<{ metrics?: Record<string, unknown> | null }> } };
         }).electron?.mods;
