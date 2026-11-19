@@ -53,25 +53,36 @@ class StemWarmPendingTest {
     fun `没开开关时走原曲`() {
         assertEquals(
             StemMixProcessor.PASSTHROUGH_ORIGINAL,
-            StemMixProcessor.resolve(mode = null, sampleRate = 44_100, channels = 2),
+            StemMixProcessor.resolve(
+                mode = null,
+                settings = StemMixSettings.NEUTRAL,
+                sampleRate = 44_100,
+                channels = 2,
+            ),
         )
     }
 
     @Test
     fun `开了开关且格式对得上才混音`() {
-        assertEquals(StemMixProcessor.MIX, StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, 44_100, 2))
-        assertEquals(StemMixProcessor.MIX, StemMixProcessor.resolve(VocalTrackMode.VOCAL, 44_100, 2))
+        assertEquals(
+            StemMixProcessor.MIX,
+            StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, StemMixSettings.NEUTRAL, 44_100, 2),
+        )
+        assertEquals(
+            StemMixProcessor.MIX,
+            StemMixProcessor.resolve(VocalTrackMode.VOCAL, StemMixSettings.NEUTRAL, 44_100, 2),
+        )
     }
 
     @Test
     fun `采样率或声道数对不上就直通`() {
         assertEquals(
             StemMixProcessor.PASSTHROUGH_RATE,
-            StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, 48_000, 2),
+            StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, StemMixSettings.NEUTRAL, 48_000, 2),
         )
         assertEquals(
             StemMixProcessor.PASSTHROUGH_CHANNELS,
-            StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, 44_100, 1),
+            StemMixProcessor.resolve(VocalTrackMode.INSTRUMENTAL, StemMixSettings.NEUTRAL, 44_100, 1),
         )
     }
 

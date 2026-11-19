@@ -29,7 +29,9 @@ import java.util.concurrent.atomic.AtomicLong
 // 数据流（音频渲染线程，逐块）：
 //   queueInput 进来的是原曲的 N 帧 16bit PCM（时钟）→ 若这一块不该走四轨混音，原样直通；
 //   否则四个 StemDecoder 各吐出 N 帧 → SpatialStage 摆位 → 四轨相加 → 编码成 16bit 输出。
-//   频谱与后面的调音链照常工作。哪些情况直通由 [resolve] 决定（纯函数，单测直接锁它）。
+//   频谱与后面的调音链照常工作。哪些情况直通由 [resolve] 决定（纯函数，单测直接锁它），
+//   「要不要混」由 [StemMixActivation.reason] 的三级判据决定：清唱/伴奏模式，或者
+//   调音台真的在动某一轨 —— 其余情况走原曲，不额外耗电。
 //
 // 时钟与同步：
 //   [masterFrames] 累计 queueInput 进来的帧数 —— 直通期间也累加，因为原曲 PCM 流
@@ -178,7 +180,8 @@ class StemMixProcessor(
         }
 
         val session = StemMixState.snapshot()
-        if (session == null || resolve(state.activeMode(), sampleRate, channels) != MIX) {
+        val placement = StemMixState.settings()
+        if (session == null || resolve(state.activeMode(), placement, sampleRate, channels) != MIX) {
             // 直通也要推时钟：原曲 PCM 流就是 ExoPlayer 时间轴（时钟基准）。
             masterFrames += incoming / (2L * channels)
             passthrough(inputBuffer, incoming)
@@ -237,20 +240,20 @@ class StemMixProcessor(
         }
 
         val mode = state.activeMode()
-        val settings = StemMixState.settings()
         for (index in 0 until mix.size) mix[index] = 0f
         var audible = 0
         // 播放模式决定哪些音轨参与：伴奏 = 鼓/贝斯/其他；清唱 = 人声。
+        // 没有模式（只有调音台在摆位）时四轨全参与 —— 那一支混的是「原曲的四轨版本」，
+        // 逐轨摆位才有意义；少这一支的话四轨全被过滤掉，输出是静音。
         // 在此基础上再叠加用户对每轨的 audible 开关。
         for (kind in StemKind.ALL) {
             val wantedByMode = when (mode) {
                 VocalTrackMode.INSTRUMENTAL -> kind != StemKind.VOCALS
                 VocalTrackMode.VOCAL -> kind == StemKind.VOCALS
-                // 上面已用 resolve() 挡掉「没有模式」，这里只是让 when 穷尽。
-                null -> false
+                null -> true
             }
             if (!wantedByMode) continue
-            val stem = settings.resolve(kind)
+            val stem = placement.resolve(kind)
             if (!stem.audible) continue
             val decoder = decoders[kind.ordinal] ?: continue
             /*
@@ -458,7 +461,7 @@ class StemMixProcessor(
         /** 时钟不是双声道：四轨都是立体声，摆位没有意义。 */
         const val PASSTHROUGH_CHANNELS = 3
 
-        /** 没有显式模式（既没开「关闭人声」也没开「只留人声」）：原曲就是四轨的和。 */
+        /** 不需要分轨：没开「关闭人声 / 只留人声」，调音台也没动任何一轨。 */
         const val PASSTHROUGH_ORIGINAL = 4
 
         /**
@@ -466,16 +469,19 @@ class StemMixProcessor(
          *
          * 纯函数，原因用常量返回：单测直接锁判据，不需要造 MediaCodec。
          *
-         * 「全部」走原曲而不是四轨相加，是刻意的：原曲自己就是四轨的和，再混一遍
-         * 只是拿四份 AAC 转码后的近似值去替换一条原始流 —— 白开四个解码器、多耗
-         * 一份 CPU，音质还更差。四轨只在需要「少一轨 / 只留一轨」时才有意义。
+         * 「要不要混」由 [StemMixActivation.reason] 三级判据决定（清唱/伴奏模式，
+         * 或调音台真的在摆位）。都不成立时走原曲，是刻意的：原曲自己就是四轨的和，
+         * 再混一遍只是拿四份 AAC 转码后的近似值去替换一条原始流 —— 白开四个解码器、
+         * 多耗一份 CPU，音质还更差。默认（什么都不开）不混，不额外耗电。
          */
         fun resolve(
             mode: VocalTrackMode?,
+            settings: StemMixSettings,
             sampleRate: Int,
             channels: Int,
         ): Int = when {
-            mode == null -> PASSTHROUGH_ORIGINAL
+            // 先问「要不要分轨」：不需要时连格式都不用对，直接原曲。
+            StemMixActivation.reason(mode, settings) == StemMixReason.NONE -> PASSTHROUGH_ORIGINAL
             sampleRate != ScnetRunner.SAMPLE_RATE -> PASSTHROUGH_RATE
             channels != 2 -> PASSTHROUGH_CHANNELS
             else -> MIX

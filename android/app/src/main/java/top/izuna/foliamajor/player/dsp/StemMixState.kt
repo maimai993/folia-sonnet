@@ -41,8 +41,9 @@ object StemMixState {
     /**
      * 这一块该拿出去混的会话；null 表示「这首歌没有可用的四轨」。
      *
-     * 只要求四轨齐了 —— 具体「要不要混」由 [StemMixProcessor.resolve] 按播放模式
-     * 判断（没开「关闭人声 / 只留人声」时走原曲）。
+     * 只要求四轨齐了 —— 具体「要不要混」由 [StemMixProcessor.resolve] 经
+     * [StemMixActivation.reason] 的三级判据决定（清唱/伴奏模式、调音台真的在摆位，
+     * 否则走原曲）。
      */
     fun snapshot(): StemMixSession? {
         val current = song ?: return null
