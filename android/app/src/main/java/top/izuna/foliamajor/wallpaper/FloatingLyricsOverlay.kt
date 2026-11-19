@@ -544,15 +544,19 @@ class FloatingLyricsOverlay private constructor(context: Context) {
         if (!WallpaperLyricsState.heartbeatAlive()) return false
 
         /*
-         * 「在所有应用上叠加」：关掉时只在能**确认**「用户在桌面」的时候挂。
+         * 只有用户**明确勾选**「在所有应用上叠加」时才挂这一层（#424）。
          *
-         * 这一层原先压根不读这个开关 —— 精简样式于是在任何应用上都压着，
-         * 用户报的「关掉不生效」有一半是它。判据与 WebView 叠层共用一份
-         * （WallpaperOverlay.desktopConfirmed：只有我们自己的壁纸正在画才叫"确认"），
-         * 免得两层各判一套、一个关得掉一个关不掉。
+         * 它是一个系统级悬浮窗（TYPE_APPLICATION_OVERLAY），层级在桌面图标**之上** ——
+         * 没被要求时挂着它，用户看到的就是「图标都看不见了」。
+         *
+         * 以前这里是 `!allApps && !desktopConfirmed()`：`desktopConfirmed()` 指的是
+         * 「我们自己的动态壁纸正在画」。于是**壁纸设上的时候反而会同时挂悬浮窗** ——
+         * 壁纸那层本来就在画歌词（而且在图标之下，是对的），悬浮窗又在上面画一遍。
+         *
+         * 现在的规则简单到不用判桌面：不勾「在所有应用上叠加」，这一层就完全不挂，
+         * 桌面上的歌词由壁纸服务负责。
          */
-        if (!tuningFlag("wp.overlayAllApps", false)
-                && !WallpaperOverlay.shared(context).desktopConfirmed()) return false
+        if (!tuningFlag("wp.overlayAllApps", false)) return false
 
         // 这两条跟随叠层那两个开关：用户在设置里关了「暂停时隐藏 / 唱完隐藏」，
         // 那小窗就该跟着留着 —— 它是同一套桌面歌词，不该自己另立一套规则。
