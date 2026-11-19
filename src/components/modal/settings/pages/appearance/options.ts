@@ -111,15 +111,6 @@ export const O = {
     lyricFlat: option(VIEW, 'lyricFlat', 'options.lyricFlat', { noteKey: 'options.lyricFlatDesc' }),
     // MV 字幕来源：配 MV 时歌词用原平台的还是这条投稿的。
     mvLyricSource: option(VIEW, 'mvLyricSource', 'options.mvLyricSource', { noteKey: 'options.mvLyricSourceDesc' }),
-    deviceType: option(VIEW, 'deviceType', 'options.deviceType', {
-        noteKey: 'options.deviceTypeDesc',
-        available: isCapacitorAndroid,
-    }),
-    // 界面缩放：设备类型底下的另一根滑条，自己占一行（滑条铺满整行宽）。
-    uiScale: option(VIEW, 'uiScale', 'uiScale.title', {
-        noteKey: 'uiScale.desc',
-        available: isCapacitorAndroid,
-    }),
     forceLandscape: option(VIEW, 'forceLandscape', 'options.forceLandscape', {
         noteKey: 'options.forceLandscapeDesc',
         available: isCapacitorAndroid,
