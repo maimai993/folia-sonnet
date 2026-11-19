@@ -1,0 +1,1907 @@
+﻿"use strict";
+// 01 · ARCHIVE, drawn by the stage panel (stage.js includes this file).
+//
+//   left   the archive array: rendered specimen cases standing on shelves, shelves receding up-left. Every shelf has
+//          the same number of slots: the groups (genre, decade, artist initial or none) follow one another along
+//          the shelves, a small group sharing a shelf with the next, a large one continuing on
+//          the next shelf. Each shelf keeps its own selection and lifts a
+//          wave around it; the selected case decrypts frost → clear and gets corner marks and a leader to its ARC
+//          number. Below: ALBUM / SELECT numeral, album index (navigation), shelf switcher. Click the selected case
+//          (or Enter) to inspect it: the case is lifted straight up out of its row, then turns square-on in front
+//          (and goes back the same way).
+//   right  the album file, two pages (the two dots at the bottom, or L):
+//            FILE    eyebrow, bracketed album number, format chip, title plate, artist, profile table, first tracks,
+//                    PLAY ALBUM / OPEN ALBUM, ghost row name
+//            TRACKS  every track of the album with its rating (click the marks; lib/rating.js), scrolled with the
+//                    wheel; a click on a row plays the album from it, so nothing has to be opened in a playlist
+// Each case is one pre-rendered sprite (frost and clear) with the cover mapped into its window underneath
+// (case.json: quads and axes); inactive rows use tinted copies of the sprite made once per tint level and mode.
+
+const AR_ST = {
+    eyebrow: { size: 9, weight: 500, track: .14 },
+    eyebrowB: { size: 9, weight: 700, track: .14 },
+    head: { size: 13, weight: 600, track: .12 },
+    artist: { size: 13, weight: 500, track: .06 },
+    meta: { size: 10, weight: 500, track: .12 },
+    key: { size: 8.5, weight: 500, track: .12 },
+    btn: { size: 11, weight: 600, track: .1 },
+    sel: { size: 9, weight: 500, track: .14 },
+    group: { size: 13, weight: 700, track: .14 },
+    plate: { size: 9, weight: 600, track: .06 },
+    insp: { size: 10, weight: 600, track: .12 },
+    inspM: { size: 9, weight: 500, track: .12 },
+    more: { size: 10, weight: 500, track: .12 },
+};
+const AS = .54;                    // array sprite px → dp (the renders are 2× for sharpness)
+const PITCH = 1.0, ROWP = 4.7;     // case spacing along a row and between rows, in case.json axis units
+const CLOSE = [.45, -.62, .64];    // "towards the viewer", for back-to-front sorting
+const ARCHIVE_PLAYLIST = "Archive · Album";
+const LIFT_OUT = 2.2;              // how far the inspected case rises out of its row, in case.json axis units
+const INSP_LIFT = .32, INSP_TURN = .72, INSPECT_ZOOM = 2.05;   // stage durations (s); size at the end of the turn
+
+const HOVER_MODES = ["outline", "label", "none"];
+const AR = {
+    group: 0,
+    rows: new Map(),               // row index -> { sel, scroll, pos, cases: Map(i -> { lift, clear, gap }) }
+    selKey: new Map(),             // row name -> the album selected on it
+    selAlbum: "",                  // key of the selected album (survives re-indexing, regrouping and the layout switch)
+    wantKey: "",                   // a selection waiting for its item to be listed (see placeSelection)
+    hover: -1, hoverTick: -1, hits: [], from: [0, 0], infoHover: -1,
+    rulerDrag: false,              // the album index held down: the album under the mouse is named, a release selects it
+    insp: 0, inspOn: false,        // inspection timeline: 0 in the row · 1 lifted out · 2 square-on in front
+    selRoll: Roll("01"), groupRoll: Roll("01"), noRoll: Roll("0000"),
+    title: null, tracks: { key: "", rows: [], total: 0 },
+    page: ["tracks", "artist"].includes(getSetting("archiveInfoPage", "file")) ? getSetting("archiveInfoPage", "file") : "file",   // the album file's page
+    list: null, listVer: 0, listScroll: 0, listMax: 0, listKey: "",   // the TRACKS page: its rows, their scroll
+    rateHover: null, mouseX: 0, mouseY: 0,   // { i, n }: the rating under the mouse (previewed); the mouse (wheel over the file)
+    rulerStart: Spring(0, 14), ticks: new Map(),
+    dirtyInfo: true, info: null,
+    topTitles: getSetting("caseTopTitles", true) !== false,
+    frontShelves: getSetting("archiveFrontShelves", false) === true,   // the shelves in front stay in view (the context menu)
+    frost: getSetting("caseFrost", true) !== false,   // the cases not selected behind frosted glass, their covers blurred (the context menu, 05 STYLE)
+    skipInst: getSetting("skipInstrumentals", false) === true,   // play albums without their instrumentals (lib/playlists.js)   // the titles on the cases' top edges (the context menu)
+    hoverMode: HOVER_MODES.includes(getSetting("caseHover", "outline")) ? getSetting("caseHover", "outline") : "outline",   // the case under the mouse: outlined, titled or left as is (the context menu)
+    hoverPlate: null,   // the case to label this frame (hoverMode "label"): drawn after the shelf, over its neighbours
+    hoverRow: -1,       // the shelf (row index) of the case under the mouse (AR.hover): the selected one or any other
+    selPlate: null,     // the selected case's plate to draw this frame: after every shelf, over the ones in front
+};
+let ARCHIVE_ON = false;
+const PICK = { steps: null, t: 0, after: false };   // RANDOM PICK's run (see randomPick)
+try { AR.selAlbum = String(JSON.parse(getSetting("archiveSel", "{}")).key || ""); } catch (e) { /* none */ }
+
+// ------------------------------------------------------------------------------------------------------ shelves
+// The array's rows are shelves of SHELF_MIN to SHELF_MAX cases. The groups follow one another along them: a group
+// that fits beside the ones before it (SHELF_MAX in all) joins their shelf (the shelf's name below the array and the
+// file panel say which group a case belongs to). A larger one starts a shelf of its own, after topping up a shelf left
+// short of SHELF_MIN, and is shared out evenly over as few shelves as hold the rest (45: 23 + 22, rather than 20 + 20
+// + 5, which leaves a few cases alone on the last shelf). A shelf's rail is as long as its cases, SHELF_MIN slots at
+// least.
+// shelf: { name, albums, slot (each album's slot), slots, segs: [{ gi, name, from, n, slot, part, parts, total }] }
+// The grid's sections are the plain groups; both layouts share the selected album.
+const SHELF_MIN = 10, SHELF_MAX = 30;
+let SHELVES = [], SHELF_SPAN = SHELF_MIN;   // SHELF_SPAN: the longest shelf's slots (the ultrawide array's spacing)
+function buildShelves() {
+    const out = [], parts = new Map();
+    let cur = null;
+    const open = () => { cur = { albums: [], slot: [], slots: 0, segs: [], used: 0 }; out.push(cur); };
+    // n cases of group g, from its case `from` on, onto the current shelf
+    const put = (g, gi, from, n) => {
+        const seg = { gi, name: g.name, from: cur.albums.length, n, slot: cur.used, total: g.albums.length };
+        for (let k = 0; k < n; k++) { cur.albums.push(g.albums[from + k]); cur.slot.push(seg.slot + k); }
+        cur.used += n;
+        cur.segs.push(seg);
+        if (!parts.has(gi)) parts.set(gi, []);
+        parts.get(gi).push(seg);
+    };
+    LIB.groups.forEach((g, gi) => {
+        const N = g.albums.length;
+        let i = 0;
+        if (cur) {
+            if (cur.used + N <= SHELF_MAX) { put(g, gi, 0, N); return; }   // beside the groups before it
+            // a short shelf is topped up (the rest is then more than SHELF_MIN: N > SHELF_MAX - used)
+            if (cur.used < SHELF_MIN) { i = SHELF_MIN - cur.used; put(g, gi, 0, i); }
+        }
+        // the rest on shelves of its own, shared out evenly
+        const left = N - i, k = Math.ceil(left / SHELF_MAX);
+        for (let s = 0; s < k; s++) { const n = Math.floor(left / k) + (s < left % k ? 1 : 0); open(); put(g, gi, i, n); i += n; }
+    });
+    for (const list of parts.values()) list.forEach((s, k) => { s.part = k + 1; s.parts = list.length; });
+    out.forEach(s => {
+        s.slots = Math.max(SHELF_MIN, s.used);
+        const one = s.segs[0];
+        s.name = s.segs.length > 1 ? s.segs.map(g => g.name).join("  ·  ") : one ? one.name + (one.parts > 1 ? `  ${one.part} / ${one.parts}` : "") : "";
+    });
+    SHELVES = out;
+    SHELF_SPAN = Math.max(SHELF_MIN, ...out.map(s => s.slots));
+}
+// the rows of the layout in use: shelves (array) or groups (grid)
+const arRows = () => AR.layout === "grid" ? LIB.groups : SHELVES;
+const slotOf = (row, i) => row.slot ? row.slot[i] : i;
+const slotCount = row => row.slots || row.albums.length;
+
+const curGroup = () => arRows()[AR.group] || null;
+const curAlbum = () => { const g = curGroup(), r = AR.rows.get(AR.group); return g && r ? g.albums[r.sel] || null : null; };
+
+// ------------------------------------------------------------------------------------------------------- data
+let coverPaint = 0;
+LIB_LISTENERS.push(kind => {
+    if (kind === "catalog") placeSelection(AR.selAlbum);
+    if (!ARCHIVE_ON) return;
+    if (kind === "catalog") { requestVisibleThumbs(); clock.wake(); window.Repaint(); return; }
+    // covers arrive in bursts (a screen of the grid at once): one repaint of the array area for all of them; with the
+    // artist's albums shown (the ARTIST page, the artist file: artist.js), those cached layers are drawn again too
+    if (!coverPaint) coverPaint = window.SetTimeout(() => {
+        coverPaint = 0;
+        if ((AR.page === "artist" || AF.open) && artistCoversNew()) { AR.dirtyInfo = true; AF.dirty = true; window.Repaint(); }
+        else window.RepaintRect(0, 0, arrayW(), H);
+    }, 16);
+});
+// rows rebuilt (catalog, grouping, layout): select `key` again where it now is, else stay near the same row
+function placeSelection(key) {
+    pickStop();   // the rows are rebuilt: a run's places no longer hold
+    if (AR.layout !== "grid") buildShelves();
+    const R = arRows();
+    // An album or track not listed yet (a track before the worker has listed them, an album still indexing) is kept as
+    // wanted and looked for again with the next catalog, until something else is selected by hand.
+    const want = AR.wantKey || key;
+    // across ALBUMS / TRACKS / FOLDERS the selection moves to what holds the item's first track (or to that track)
+    const was = !want ? null : want.startsWith("t|") ? LIB.items.find(t => t.key === want) : want.startsWith(FOLDER_KEY) ? LIB.folderMap.get(want) : LIB.albumMap.get(want);
+    const alt = was && was.idx && libHandles && LIB.live ? itemKeyOf(libHandles[was.idx[0]]) : "";
+    let at = null;
+    for (const k of [want, alt, key]) if (k) for (let gi = 0; gi < R.length && !at; gi++) { const i = R[gi].albums.findIndex(a => a.key === k); if (i >= 0) at = [gi, i]; }
+    AR.wantKey = at || !LIB.live ? (at ? "" : want) : "";
+    AR.group = at ? at[0] : clamp(AR.group, 0, Math.max(0, R.length - 1));
+    AR.rows.clear(); AR.ticks.clear(); AR.selKey.clear();
+    AR.tracks.key = "";
+    if (R.length) {
+        const r = rowState(AR.group);
+        if (at) { r.sel = at[1]; r.scroll.x = r.scroll.to = scrollTarget(r.sel, R[AR.group]); }
+    }
+    selectionChanged(false);
+    // the rows and their cases at once: a paint before the next step would find the array empty (a blink)
+    if (ARCHIVE_ON && AR.layout !== "grid" && R.length && W > 0) archiveUpdate(0);
+}
+
+function selIndexOf(gi) {
+    const g = arRows()[gi], key = g && AR.selKey.get(g.name);
+    const i = key ? g.albums.findIndex(a => a.key === key) : -1;
+    return Math.max(0, i);
+}
+function rowState(gi) {
+    let r = AR.rows.get(gi);
+    if (!r) {
+        const sel = selIndexOf(gi);
+        // a row and a slot are large on screen: they stop much nearer their end than other springs, so the last step is
+        // not seen as a jump
+        r = { sel, scroll: Spring(scrollTarget(sel, arRows()[gi]), 9, .002), pos: Spring(gi - arrayStart(), 9, .0005), cases: new Map() };
+        // The rows move as one strip: a new row joins it where the strip is now, one row on from its nearest
+        // neighbour (and at its speed), so it slides in with the others rather than standing at its place while they
+        // are still on their way there (a RANDOM PICK crosses several shelves at a time).
+        let near = null;
+        for (const [g, o] of AR.rows) if (!near || Math.abs(g - gi) < Math.abs(near[0] - gi)) near = [g, o];
+        if (near) { r.pos.x = near[1].pos.x + (gi - near[0]); r.pos.v = near[1].pos.v; }
+        AR.rows.set(gi, r);
+    }
+    return r;
+}
+// the row scrolls (in slots) only when it is longer than the array shows; the selected case then sits a few places
+// from the front
+const scrollTarget = (sel, row) => roomOn() ? roomScroll(sel, row) : clamp(slotOf(row, sel) - 4, 0, Math.max(0, slotCount(row) - slotsInView()));
+let SLOTS_IN_VIEW = { key: "", n: 0 };
+function slotsInView() {
+    const key = `${W}|${H}|${CASE_DIR}|${STATE.arrayScale}`;
+    if (SLOTS_IN_VIEW.key === key) return SLOTS_IN_VIEW.n;
+    const k = arK(), ax = CASE_META.axes, m = CASE_META.array, S = CASE_META.array_res[0] * k, [Ox, Oy] = origin(), aw = arrayW();
+    let n = 0;
+    while (n < 400) {
+        const ox = Ox + n * ax.y[0] * k - m.origin[0] * k, oy = Oy + n * ax.y[1] * k - m.origin[1] * k;
+        if (ox + S * .7 > aw || oy < dp(84) - S * .05) break;   // a lifted case's top stays under the two-row bar
+        n++;
+    }
+    SLOTS_IN_VIEW = { key, n: Math.max(6, n) };
+    return SLOTS_IN_VIEW.n;
+}
+
+function selectionChanged(animate = true) {
+    const g = curGroup(), a = curAlbum();
+    if (animate) AR.wantKey = "";   // chosen by hand
+    AR.groupName = g ? g.name : "";
+    if (g && a) { AR.selKey.set(g.name, a.key); AR.selAlbum = a.key; }
+    AF.dirty = true;   // an open artist file follows the selection (artist.js)
+    setSetting("archiveSel", JSON.stringify({ key: AR.selAlbum }));
+    const r = AR.rows.get(AR.group), n = g ? g.albums.length : 0, w = Math.max(2, String(n).length);
+    const sel = pad(r ? r.sel + 1 : 0, w), gno = pad(AR.group + 1, 2), no = pad(a ? a.no : 0, 4);
+    // during a RANDOM PICK run the file panel stays as it is (redrawing it on every hop and every frame of its rolling
+    // number cost 20 - 35 ms a frame); it shows the pick once it lands
+    const run = !!PICK.steps;
+    if (animate) { setRoll(AR.selRoll, sel); setRoll(AR.groupRoll, gno); if (!run) setRoll(AR.noRoll, no); }
+    else { AR.selRoll = Roll(sel); AR.groupRoll = Roll(gno); AR.noRoll = Roll(no); }
+    if (!run) { AR.title = a && animate ? Scramble(a.title || tr("UNTITLED")) : null; AR.dirtyInfo = true; }
+    if (AR.layout === "grid") GRID.reveal = true;   // the grid scrolls to a selection made elsewhere (keys, catalog)
+    if (ARCHIVE_ON) { requestVisibleThumbs(); clock.wake(); }
+}
+
+function moveAlbum(d) {
+    const g = curGroup();
+    if (!g || AR.inspOn || AR.insp > 0) return;
+    const r = rowState(AR.group), sel = clamp(r.sel + d, 0, g.albums.length - 1);
+    if (sel === r.sel) return;
+    r.sel = sel;
+    r.scroll.to = scrollTarget(sel, g);
+    selectionChanged();
+}
+// the frosted glass on the cases not selected (their covers blurred), or clear glass on every case
+function setFrost(on) { AR.frost = !!on; setSetting("caseFrost", AR.frost); clock.wake(); window.Repaint(); }
+// a case clicked on another shelf: that shelf becomes the selected one, with the case selected on it
+function selectCase(gi, i) {
+    const g = arRows()[gi];
+    if (!g || !g.albums[i] || AR.inspOn || AR.insp > 0) return;
+    AR.group = gi;
+    AR.ticks.clear();
+    const r = rowState(gi);
+    r.sel = i;
+    r.scroll.to = scrollTarget(i, g);
+    selectionChanged();
+}
+function moveGroup(d) {
+    const gi = clamp(AR.group + d, 0, arRows().length - 1);
+    if (gi === AR.group || AR.inspOn || AR.insp > 0) return;
+    AR.group = gi;
+    AR.ticks.clear();
+    rowState(gi);
+    selectionChanged();
+}
+
+// RANDOM PICK (R, or the button top left): the selection runs through the shelves to a random item, one shelf at a
+// time, then along the shelf, slowing down as it nears it; the case is lifted out and turned to the viewer (the
+// inspection) and its album plays. In the grid the run is the same and the album plays. Any other input stops the run.
+// PICK.steps: [{ t (s from the start), gi, i (none: the shelf's own selection), done }] (PICK is declared at the top)
+function randomPick() {
+    if (PICK.steps) return;
+    if (AR.inspOn || AR.insp > 0) { AR.inspOn = false; PICK.after = true; clock.wake(); return; }   // once the case is back
+    const R = arRows(), total = R.reduce((n, g) => n + g.albums.length, 0), r0 = AR.rows.get(AR.group);
+    if (!total) return;
+    // any item but the selected one
+    let cur = r0 ? r0.sel : 0;
+    for (let gi = 0; gi < AR.group; gi++) cur += R[gi].albums.length;
+    let n = Math.floor(Math.random() * (total > 1 ? total - 1 : 1));
+    if (total > 1 && n >= cur) n++;
+    let g1 = 0;
+    while (n >= R[g1].albums.length) n -= R[g1++].albums.length;
+    const steps = [], g0 = AR.group, dg = g1 - g0, hops = Math.min(Math.abs(dg), 8);
+    let t = 0;
+    if (REDUCE_MOTION) steps.push({ t, gi: g1, i: n });
+    else {
+        for (let h = 1; h <= hops; h++) steps.push({ t: t += .11, gi: g0 + Math.round(dg * h / hops) });
+        const r = AR.rows.get(g1), s = r ? r.sel : selIndexOf(g1), N = Math.min(Math.abs(n - s), 12);
+        let last = s;
+        for (let j = 1; j <= N; j++) {
+            const i = s + Math.round((n - s) * (1 - Math.pow(1 - j / N, 2)));   // eased out: the last steps are short
+            if (i === last) continue;
+            steps.push({ t: t += .06 + .24 * Math.pow(j / N, 2), gi: g1, i });
+            last = i;
+        }
+        if (last !== n || !steps.length) steps.push({ t: t += .1, gi: g1, i: n });
+    }
+    steps.push({ t: t + (REDUCE_MOTION ? 0 : .45), done: true });
+    PICK.steps = steps; PICK.t = 0;
+    clock.wake(); window.Repaint();
+}
+function pickStep(s) {
+    if (s.done) {
+        PICK.steps = null;
+        if (!curAlbum()) return;
+        selectionChanged();   // the file panel catches up
+        if (AR.layout !== "grid") { AR.inspOn = true; inspectImages(); }
+        playAlbum();
+        clock.wake(); window.Repaint();
+        return;
+    }
+    if (AR.layout === "grid") { gridSelect(s.gi, s.i == null ? rowState(s.gi).sel : s.i); return; }
+    if (s.gi !== AR.group) { AR.group = s.gi; AR.ticks.clear(); }
+    const r = rowState(s.gi);
+    if (s.i != null) { r.sel = s.i; r.scroll.to = scrollTarget(s.i, arRows()[s.gi]); }
+    selectionChanged();
+}
+function pickUpdate(dt) {
+    if (PICK.after && AR.insp === 0 && !AR.inspOn) { PICK.after = false; randomPick(); }
+    if (!PICK.steps) return PICK.after;
+    PICK.t += dt;
+    while (PICK.steps && PICK.steps[0].t <= PICK.t) pickStep(PICK.steps.shift());
+    return true;
+}
+function pickStop() { const on = !!PICK.steps || PICK.after; PICK.steps = null; PICK.after = false; if (on) window.Repaint(); }
+
+// the tracks of the selected item's album for the file panel, as many as fit (`max`), in disc / track order; each row
+// knows its place in the album (a click plays the album from there) and whether it is the selected track item
+const TF_AR_TRACK = fb.TitleFormat("[%tracknumber%]\u0001%title%\u0001[%length_seconds%]");
+const sameTrack = (h, k) => !!(h && k && h.RawPath === k.RawPath && h.SubSong === k.SubSong);
+function albumTracks(a, max) {
+    const key = `${a.key}|${LIB.live}|${max}`;
+    if (AR.tracks.key === key) return AR.tracks;
+    const list = albumHandles(a), np = fb.GetNowPlaying(), own = itemTrack(a), fold = !!(albumOf(a) || a).folder;   // a folder: numbered in order
+    let rows = [], first = 0;
+    if (list) {
+        // a track item further down its album: start the window so it is in view
+        const at = own ? [...Array(list.Count).keys()].find(i => sameTrack(list[i], own)) : -1;
+        first = at > max - 2 ? Math.max(0, Math.min(at - 1, list.Count - max)) : 0;
+        const n = Math.min(max, list.Count - first), sub = fb.CreateHandleList();
+        for (let i = 0; i < n; i++) sub.Add(list[first + i]);
+        const inst = instrumentalFlags(sub);
+        rows = TF_AR_TRACK.EvalWithMetadbs(sub).map((s, k) => {
+            const [no, title, len] = s.split("\u0001"), i = first + k, h = list[i];
+            return { i, no: no && !fold ? pad(parseInt(no) || 0, 2) : pad(i + 1, 2), title, len: +len || 0, playing: sameTrack(h, np), own: sameTrack(h, own), inst: inst[k] };
+        });
+    }
+    AR.tracks = { key, rows, first, total: list ? list.Count : (albumOf(a) || a).tracks };
+    return AR.tracks;
+}
+
+// every track of the selected item's album for the TRACKS page: disc, number, title, length, rating; AR.listVer goes up
+// when a track changes (a rating, tags) or another one plays
+const TF_AR_LIST = fb.TitleFormat("[%discnumber%]\u0001[%tracknumber%]\u0001%title%\u0001[%length_seconds%]");
+function albumTrackList(a) {
+    const key = `${a.key}|${LIB.live}|${AR.listVer}|${ratingStore()}`;
+    if (AR.list && AR.list.key === key) return AR.list;
+    const list = albumHandles(a), np = fb.GetNowPlaying(), own = itemTrack(a), fold = !!(albumOf(a) || a).folder;   // a folder: no discs
+    let rows = [];
+    if (list && list.Count) {
+        const R = getRatings(list), inst = instrumentalFlags(list), F = favFlags(list);
+        rows = TF_AR_LIST.EvalWithMetadbs(list).map((v, i) => {
+            const [disc, no, title, len] = v.split("\u0001"), h = list[i];
+            return { i, disc: fold ? "" : disc || "", no: no && !fold ? pad(parseInt(no) || 0, 2) : pad(i + 1, 2), title, len: +len || 0, rating: R[i] || 0,
+                     playing: sameTrack(h, np), own: sameTrack(h, own), inst: inst[i], fav: F[i] };
+        });
+    }
+    const rated = rows.filter(r => r.rating);
+    AR.list = { key, rows, handles: list, discs: new Set(rows.map(r => r.disc)).size, total: rows.reduce((n, r) => n + r.len, 0),
+                rated: rated.length, avg: rated.length ? rated.reduce((n, r) => n + r.rating, 0) / rated.length : 0 };
+    return AR.list;
+}
+function setInfoPage(page) {
+    if (page === AR.page) return;
+    AR.page = page;
+    setSetting("archiveInfoPage", page);
+    AR.rateHover = null; AR.dirtyInfo = true;
+    window.Repaint();
+}
+
+// short: without the codec's bracketed note ("PCM (FLOATING-POINT)" → "PCM"), for a narrow header
+function fmtChip(a, short = false) {
+    let codec = (a.codec || "—").toUpperCase();
+    if (short) codec = codec.replace(/\s*\(.*?\)/g, "") || codec;
+    if (a.lossless && a.bits && a.rate) return `${codec} ${a.bits}/${+(a.rate / 1000).toFixed(1)}`;
+    return a.kbps ? `${codec} ${a.kbps}` : codec;
+}
+
+// ------------------------------------------------------------------------------------------------------ motion
+function archiveUpdate(dt) {
+    const G = arRows();
+    if (!G.length) return false;
+    let more = stepInspection(dt);
+    more = stepSwap(dt) || more;
+    more = pickUpdate(dt) || more;
+    // Keep a full viewport near the end of the library, plus a row at each edge for animation.
+    const start = arrayStart(), count = arrayGeom().count, F = frontRows();
+    for (let gi = start - 1 - F; gi <= start + count; gi++) if (gi >= 0 && gi < G.length) rowState(gi).pos.to = gi - start;
+    // a row out of that range goes on with the strip and is let go once it has left the view (not while it is still
+    // on its way out, where it would vanish)
+    for (const [gi, r] of [...AR.rows]) {
+        if (gi >= start - 1 - F && gi <= start + count) continue;
+        r.pos.to = gi - start;
+        if (r.pos.x <= -1 - F || r.pos.x >= count) AR.rows.delete(gi);
+    }
+    for (const [gi, r] of AR.rows) {
+        more = stepSpring(r.pos, dt) || more;
+        more = stepSpring(r.scroll, dt) || more;
+        const active = gi === AR.group, [i0, i1] = caseWindow(r, G[gi]);
+        for (const i of [...r.cases.keys()]) if (i < i0 || i > i1) r.cases.delete(i);
+        for (let i = i0; i <= i1; i++) {
+            const t = caseTargets(i, r, active, G[gi], gi === AR.hoverRow ? AR.hover : -1);
+            let c = r.cases.get(i);
+            if (!c) { c = { lift: Spring(t.lift, 13), clear: Spring(t.clear, 8), gap: Spring(t.gap, 11), hov: Spring(t.hov, 14) }; r.cases.set(i, c); }
+            c.lift.to = t.lift; c.lift.w = active ? 13 : 7; c.clear.to = t.clear; c.gap.to = t.gap; c.hov.to = t.hov;
+            const m1 = stepSpring(c.lift, dt), m2 = stepSpring(c.clear, dt), m3 = stepSpring(c.gap, dt), m4 = stepSpring(c.hov, dt);
+            more = more || m1 || m2 || m3 || m4;
+        }
+    }
+    // album index marks
+    const r = AR.rows.get(AR.group);
+    if (r) {
+        const M = rulerCount(), n = G[AR.group].albums.length;
+        AR.rulerStart.to = clamp(r.sel - Math.floor(M / 2), 0, Math.max(0, n - M));
+        more = stepSpring(AR.rulerStart, dt) || more;
+        const s0 = Math.floor(AR.rulerStart.x);
+        for (const i of [...AR.ticks.keys()]) if (i < s0 - 1 || i > s0 + M + 1) AR.ticks.delete(i);
+        for (let i = Math.max(0, s0 - 1); i <= Math.min(n - 1, s0 + M + 1); i++) {
+            const hd = AR.hoverTick >= 0 ? i - AR.hoverTick : 99;
+            const to = i === r.sel ? 30 : Math.max(10, 10 + 12 * Math.exp(-hd * hd / 1.5));
+            let s = AR.ticks.get(i);
+            if (!s) { s = Spring(to, 18); AR.ticks.set(i, s); }
+            s.to = to;
+            more = stepSpring(s, dt) || more;
+        }
+    }
+    if (AR.title && !scrambleDone(AR.title)) { more = true; AR.dirtyInfo = true; }
+    if (!rollDone(AR.noRoll)) { more = true; AR.dirtyInfo = true; }
+    if (!rollDone(AR.selRoll) || !rollDone(AR.groupRoll)) more = true;
+    return more;
+}
+// the cases of a row that can be on screen (with room for lift and gap): cases enter and leave out of sight, behind
+// the edges and fades, instead of popping in or out where they stand when the row scrolls
+function caseWindow(r, row, pos = r.pos.x, scroll = r.scroll.x) {
+    if (roomOn()) return roomCaseWindow(r, row, scroll);
+    const n = row ? row.albums.length : 0;
+    if (!n || W <= 0) return [0, -1];
+    const k = arK(), ax = CASE_META.axes, m = CASE_META.array, S = CASE_META.array_res[0] * k, [Ox, Oy] = origin();
+    const aw = arrayW(), margin = dp(160), x = -pos * ROWP, g = arrayGeom();
+    let i0 = -1, i1 = -1;
+    for (let i = 0; i < n; i++) {
+        const y = slotOf(row, i) - scroll;
+        if (y < -30 || y > 60) continue;
+        const ox = Ox + (x * ax.x[0] * g.sx + y * ax.y[0]) * k - m.origin[0] * k, oy = Oy + (x * ax.x[1] * g.sy + y * ax.y[1]) * k - m.origin[1] * k;
+        if (ox < aw + margin && ox + S > -margin && oy < H + margin && oy + S > -margin * 2) { if (i0 < 0) i0 = i; i1 = i; }
+    }
+    return i0 < 0 ? [0, -1] : [i0, i1];
+}
+
+// The inspection runs in two stages with an ease at both ends of each, so the case first rises out of its row, stops,
+// then turns towards the viewer; going back it turns away above its place and then sinks into the row. The turn waits
+// until the inspection frames have loaded.
+const inspLift = () => easeInOut(clamp(AR.insp, 0, 1));
+const inspTurn = () => easeInOut(clamp(AR.insp - 1, 0, 1));
+const ROOM_INSP_FADE = .22;   // the room's inspection fades in and out over this (s)
+function stepInspection(dt) {
+    const target = AR.inspOn ? (ARIMG.inspect ? 2 : 1) : 0;
+    if (AR.insp === target) return AR.inspOn && !ARIMG.inspect;
+    if (REDUCE_MOTION) { AR.insp = target; return false; }
+    if (roomOn()) {
+        // (no lift: straight to 1 going in, straight to 0 once faded out)
+        if (target >= 1 && AR.insp < 1) AR.insp = 1;
+        if (target === 0 && AR.insp <= 1) { AR.insp = 0; return false; }
+        const dir = Math.sign(Math.max(1, target) - AR.insp);
+        AR.insp = clamp(AR.insp + dir * dt / ROOM_INSP_FADE, 1, 2);
+        return true;
+    }
+    const dir = Math.sign(target - AR.insp), lifting = dir > 0 ? AR.insp < 1 : AR.insp <= 1;
+    const next = AR.insp + dir * dt / (lifting ? INSP_LIFT : INSP_TURN);
+    AR.insp = dir > 0 ? Math.min(next, target) : Math.max(next, target);
+    return true;
+}
+// The inspection follows the playing track: when another album (or, showing TRACKS, another track) starts playing while
+// the case inspected is the one that was playing, that case slides out to the left, the selection moves to the playing
+// one (on its shelf, behind the veil) and its case slides in from the right; the inspection stays open. A case
+// inspected that was not playing is left alone.
+const SWAP = { phase: "", t: 0, key: "" };
+let NP_H = fb.GetNowPlaying();   // the track that was playing (its item is worked out as the shelves list them now)
+const npItemKey = itemKeyOf;
+function inspectFollow() {
+    const h = fb.GetNowPlaying(), was = npItemKey(NP_H), now = npItemKey(h);
+    NP_H = h;
+    const a = curAlbum();
+    if (!now || now === was || !AR.inspOn || AF.open || AR.layout === "grid" || !a || a.key !== was || PICK.steps) return;
+    if (!arRows().some(g => g.albums.some(x => x.key === now))) return;   // not on the shelves (a search hides it)
+    if (REDUCE_MOTION) { selectKey(now); return; }
+    Object.assign(SWAP, { phase: "out", t: 0, key: now });
+    clock.wake();
+}
+function stepSwap(dt) {
+    if (!SWAP.phase) return false;
+    SWAP.t += dt / (SWAP.phase === "out" ? .2 : .3);
+    if (SWAP.t < 1) return true;
+    if (SWAP.phase === "out") { selectKey(SWAP.key); Object.assign(SWAP, { phase: "in", t: 0 }); return true; }
+    Object.assign(SWAP, { phase: "", t: 0, key: "" });
+    window.Repaint();
+    return false;
+}
+// the inspected case's shift (px) and opacity (0 - 1) during a swap
+function swapState() {
+    if (!SWAP.phase) return { dx: 0, a: 1 };
+    const e = easeInOut(clamp(SWAP.t, 0, 1)), d = dp(90);
+    return SWAP.phase === "out" ? { dx: -d * e, a: 1 - e } : { dx: d * (1 - e), a: e };
+}
+// selects the item with this key wherever it is on the shelves (the shelves follow; the inspection is not left)
+function selectKey(key) {
+    const R = arRows();
+    for (let gi = 0; gi < R.length; gi++) {
+        const i = R[gi].albums.findIndex(x => x.key === key);
+        if (i < 0) continue;
+        AR.group = gi;
+        AR.ticks.clear();
+        const r = rowState(gi);
+        r.sel = i;
+        r.scroll.x = r.scroll.to = scrollTarget(i, R[gi]);
+        selectionChanged();
+        AR.dirtyInfo = true;
+        clock.wake();
+        return true;
+    }
+    return false;
+}
+
+// hover: the case under the mouse, which lifts its neighbours a little (-1: none, as for the cases' resting places)
+function caseTargets(i, r, active, row, hover = -1) {
+    if (roomOn()) return roomTargets(i, r, active, row, hover);   // room.js: the room's swell
+    const d = slotOf(row, i) - slotOf(row, r.sel), bell = Math.exp(-d * d / 4.5) - .32 * Math.exp(-d * d / 18), hd = i - hover;
+    const hov = hover >= 0 ? Math.exp(-hd * hd / 2.2) : 0, isSel = active && i === r.sel;
+    return {
+        lift: (active ? 1.1 : .65) * bell + .5 * hov + (isSel ? 1.35 : 0),
+        clear: isSel ? 1 : 0,
+        gap: active ? (i > r.sel ? .55 : i < r.sel ? -.25 : 0) : 0,
+        // how near the mouse the case is (1 under it, its neighbours less), for its title on a shelf that hides them
+        hov,
+    };
+}
+
+// ------------------------------------------------------------------------------------------------------ layout
+// the album file's width (lib/bus.js side "file"; w: a width to try), narrower when the array would keep less than 444 dp
+const fileW = (w = side("file")) => Math.round(Math.min(dp(w), Math.max(dp(SIDES_RANGE.file[0]), W - dp(24 + 444))));
+const infoX = () => W - dp(24) - fileW();
+const arrayW = () => Math.max(dp(300), infoX() - dp(24));
+// Preserve case size on ultrawide views; fit additional shelves across the available width.
+let ARRAY_GEOM = null;
+function arrayGeom() {
+    const aw = arrayW(), total = arRows().length;
+    const key = [W, H, CASE_DIR, STATE.arrayScale, total, SHELF_SPAN, AR.layout].join("|");
+    if (ARRAY_GEOM && ARRAY_GEOM.key === key) return ARRAY_GEOM;
+    const g = { key, wide: aw > H * 2, count: 4, x: Math.round(aw * .37), y: H - dp(87), sx: 1, sy: 1 };
+    if (roomOn()) { g.wide = false; g.count = ROOM_BEHIND; return (ARRAY_GEOM = g); }   // room.js: the shelves behind
+    if (g.wide) {
+        const k = arK(), ax = CASE_META.axes, meta = CASE_META.array, sz = CASE_META.array_res[0];
+        const pad = dp(48), along = (SHELF_SPAN - 1) * PITCH;
+        const span = (along * ax.y[0] + sz) * k, pitch = ROWP * ax.x[0] * k;
+        const capacity = clamp(Math.floor((aw - pad * 2 - span) / pitch) + 1, 4, 24);
+        g.count = Math.max(1, Math.min(total || 1, capacity));
+        const used = Math.min(aw - pad * 2, span + (g.count - 1) * pitch);
+        const fill = total >= capacity, width = fill ? aw - pad * 2 : used;
+        const dx = g.count > 1 ? (width - span) / (g.count - 1) : pitch;
+        g.x = Math.round((aw + width) / 2 - (along * ax.y[0] + sz - meta.origin[0]) * k);
+        g.sx = Math.max(.1, dx / pitch);
+        // Extra shelves run across the panorama instead of disappearing above its short edge.
+        // Keep the actual case/rail sprites unchanged; only their row-to-row offset changes.
+        const top = Math.min(...meta.cover.map(p => p[1]));
+        const rise = (-along * ax.y[1] + meta.origin[1] - top + 2.6 * Math.abs(ax.z[1])) * k;
+        const room = Math.max(0, g.y - dp(92) - rise);
+        const dy = Math.min(ROWP * ax.x[1] * k, room / Math.max(1, g.count - 1));
+        g.sy = dy / (ROWP * ax.x[1] * k);
+    }
+    ARRAY_GEOM = g;
+    return g;
+}
+const arrayStart = () => arrayGeom().wide ? Math.min(AR.group, Math.max(0, arRows().length - arrayGeom().count)) : AR.group;
+const origin = () => { const g = arrayGeom(); return [g.x, g.y]; };
+function archiveResize() {
+    ARRAY_GEOM = null;
+    if (AR.layout === "grid" || !arRows().length) return;
+    const start = arrayStart();
+    for (const [gi, r] of AR.rows) {
+        r.pos.x = r.pos.to = gi - start;
+        r.scroll.x = r.scroll.to = scrollTarget(r.sel, arRows()[gi]);
+    }
+    if (ARCHIVE_ON) { requestVisibleThumbs(); clock.wake(); }
+}
+// the array grows with the view: 1 at the design's 1440 × 900 window (array 936 × 731 dp), up to 1.6 on large screens,
+// so a maximised window on a big display is filled instead of showing the same small cases in a sea of black
+const AR_REF = [936, 731];
+// × the Array scale chosen in MENU › Audio Archive or the Style view
+const arZoom = () => clamp(Math.min(arrayW() / dp(AR_REF[0]), H / dp(AR_REF[1])), 1, 1.6) * (STATE.arrayScale || 1);
+const arK = () => AS * SCALE * arZoom();   // array sprite px → screen px
+// the album index fits between ALBUM / SELECT and the row switcher
+const RULER_STEP = 7;
+const rulerX0 = () => Math.round(arrayW() * .34);
+const rulerCount = () => Math.max(8, Math.floor((Math.round(arrayW() * .774) - dp(150) - rulerX0() - dp(40)) / dp(RULER_STEP)));
+
+// ------------------------------------------------------------------------------------------------------ images
+const ARIMG = { clear: null, frost: null, faded: new Map(), inspect: null, inspectLoading: false, gen: 0, rail: null };
+// the guide rail under each row: sprites made with the cases' camera, one per slot plus the row's
+// front and back ends; they belong to the archive, not to a case skin
+const RAIL_DIR = THEME_ROOT + "assets\\render\\rail\\";
+const RAIL_META = utils.IsFile(RAIL_DIR + "rail.json") ? JSON.parse(utils.ReadTextFile(RAIL_DIR + "rail.json", 65001)) : null;
+function railImages() {
+    if (!ARIMG.rail && RAIL_META) {
+        ARIMG.rail = {};
+        for (const k of ["mid", "front", "back"]) {
+            ARIMG.rail[k] = d2d.Image(floorOwn(`rail${BS}rail-${k}.png`) || RAIL_DIR + `rail-${k}.png`);
+            if (RAIL_META.lip) ARIMG.rail["lip-" + k] = d2d.Image(RAIL_DIR + `lip-${k}.png`);
+        }
+    }
+    return ARIMG.rail;
+}
+CASE_LISTENERS.push(() => {   // another case skin
+    ARIMG.clear = ARIMG.frost = ARIMG.inspect = null; ARIMG.faded.clear(); ARIMG.inspectLoading = false; ARIMG.gen++;
+    AR.inspOn = false; AR.insp = 0; AR.dirtyInfo = true;
+    if (ARCHIVE_ON) { clock.wake(); window.Repaint(); }
+});
+// the floor under the array (STATE.floor, the Style view's FLOOR): assets\render\floor\<id>-<mode>\, made with the
+// cases' camera (art/build_floor.py): plate.jpg, the floor itself, still and anchored at the world origin (the front
+// row's first slot); shade-/glow-<piece>.png, the shadow and the light a rail piece (mid, front, back) and the cases on
+// it throw onto the floor, so the shelves stand on it. "-far" pieces are the floor in front of a row, which the next
+// row covers except in front of the front one.
+// A floor may also bring the cases and rails rendered in its own light (REAL STYLE: case\<skin>\array-*.png, rail\),
+// set the colour rows behind fade into ("fade") and how much they fade ("tint", 1 = as on the plain page), and have
+// one set for both modes (the other mode's folder is used when this one's is missing).
+const FLOOR = { key: null, meta: null, img: null };   // key: the folder loaded ("" plain); null: look again
+const BS = "\\";
+function floorDir() {
+    if (!STATE.floor || STATE.floor === "plain") return "";
+    const at = m => THEME_ROOT + `assets${BS}render${BS}floor${BS}${STATE.floor}-${m}${BS}`;
+    const own = at(MODE), other = at(MODE === "dark" ? "light" : "dark");
+    return utils.IsFile(own + "floor.json") || !utils.IsFile(other + "floor.json") ? own : other;
+}
+// a file the floor brings for itself, else ""
+const floorOwn = f => FLOOR.key && utils.IsFile(FLOOR.key + f) ? FLOOR.key + f : "";
+// (the room, room.js: its own fog's colour, that its far cases fade into)
+const fadeBg = () => roomOn() && ROOM.meta.fade ? argb(ROOM.meta.fade) : FLOOR.meta && FLOOR.meta.fade ? argb(FLOOR.meta.fade) : C.bg;
+function floorImages() {
+    const dir = floorDir();
+    if (FLOOR.key !== dir) {
+        FLOOR.key = dir; FLOOR.img = null;
+        FLOOR.meta = dir && utils.IsFile(dir + "floor.json") ? JSON.parse(utils.ReadTextFile(dir + "floor.json", 65001)) : null;
+        // the case and rail sprites may come from the floor now (or no longer)
+        ARIMG.clear = ARIMG.frost = ARIMG.rail = null; ARIMG.faded.clear();
+    }
+    if (FLOOR.meta && !FLOOR.img) {
+        FLOOR.img = { plate: d2d.Image(dir + "plate.jpg") };
+        for (const k of ["mid", "front", "back"]) for (const part of ["", "-far"]) {
+            FLOOR.img[`shade-${k}${part}`] = halfImage(d2d.Image(dir + `shade-${k}${part}.png`));
+            if (FLOOR.meta.glow !== false) FLOOR.img[`glow-${k}${part}`] = halfImage(d2d.Image(dir + `glow-${k}${part}.png`));
+        }
+    }
+    // an image that could not be read leaves the floor plain (rather than failing the whole paint)
+    return FLOOR.meta && Object.values(FLOOR.img).every(Boolean) ? FLOOR : null;
+}
+TOKEN_LISTENERS.push(() => { FLOOR.key = null; });
+// The shade and glow sprites are soft: kept at half their size, a quarter of the pixels to draw for every row (an
+// ultrawide array draws a dozen rows); drawn at their full size, their source rect is the image's own.
+function halfImage(src) {
+    if (!src) return src;
+    const w = Math.ceil(src.Width / 2), h = Math.ceil(src.Height / 2), img = d2d.CreateImage(w, h), g = img.GetGraphics();
+    g.DrawImage(src, 0, 0, w, h, 0, 0, src.Width, src.Height);
+    img.ReleaseGraphics(g);
+    return img;
+}
+// the floor, then every row's shade and glow; false when the floor is plain
+function drawFloor(gr, rows, G, Ox, Oy, k, toScreen) {
+    const F = floorImages();
+    if (!F) return false;
+    const pm = F.meta.plate, sm = F.meta.shade, [rw, rh] = sm.res, [so0, so1] = sm.origin;
+    gr.DrawImage(F.img.plate, Ox - pm.origin[0] * k, Oy - pm.origin[1] * k, pm.res[0] * k, pm.res[1] * k, 0, 0, pm.res[0], pm.res[1]);
+    // the mid piece holds one slot of a full row's shade, the same all along the row: it is stretched along the row
+    // over all its slots (one image, no seams between slots); the ends are drawn as they are
+    const ax = CASE_META.axes.x, ay = CASE_META.axes.y, az = CASE_META.axes.z, fz = -F.meta.floor_z, det = ax[0] * ay[1] - ay[0] * ax[1];
+    const zx = fz * az[0], zy = fz * az[1];   // the floor lies fz below the sprites' origin plane
+    // "glow": false in floor.json: shade only (no reflections of the cases and strips in the floor)
+    for (const layer of F.meta.glow === false ? ["shade-"] : ["shade-", "glow-"]) for (const [gi, r] of rows) for (const part of ["", "-far"]) {
+        const row = G[gi], pos = r.pos.x, x = -pos * ROWP, n = slotCount(row);
+        // the floor in front of a row shows as far as no row stands there: as the row in front fades out, it appears
+        const far = gi > 0 ? 1 - rowAlpha(pos - 1) / 255 : 1;
+        const alpha = Math.round(rowAlpha(pos) * (1 - rowTint(pos)) * (part ? far : 1));
+        if (alpha <= 0) continue;
+        for (const end of ["front", "back"]) {
+            const [sx, sy] = toScreen({ x, y: ((end === "front" ? -1 : n) - r.scroll.x) * PITCH, z: 0 });
+            const img = F.img[layer + end + part];
+            gr.DrawImage(img, sx - so0 * k, sy - so1 * k, rw * k, rh * k, 0, 0, img.Width, img.Height, 0, alpha);
+        }
+        if (n < 1) continue;
+        // A = B diag(1, n) B^-1, B = [ax ay]: n times longer along the row, unchanged across it
+        const s = (n - 1) / det, A = [1 - s * ay[0] * ax[1], s * ay[0] * ax[0], -s * ay[1] * ax[1], 1 + s * ay[1] * ax[0]];
+        const [ox, oy] = toScreen({ x, y: ((n - 1) / 2 - r.scroll.x) * PITCH, z: 0 }), ux = zx - so0, uy = zy - so1;
+        QM[0] = k * A[0]; QM[1] = k * A[2]; QM[2] = k * A[1]; QM[3] = k * A[3];
+        QM[4] = ox + k * (A[0] * ux + A[1] * uy - zx); QM[5] = oy + k * (A[2] * ux + A[3] * uy - zy);
+        gr.SetTransform(QM);
+        const mid = F.img[layer + "mid" + part];
+        gr.DrawImage(mid, 0, 0, rw, rh, 0, 0, mid.Width, mid.Height, 0, alpha);
+        gr.ResetTransform();
+    }
+    return true;
+}
+
+function arrayImages() {
+    floorImages();   // a new floor may bring its own case sprites
+    if (!ARIMG.clear) for (const k of ["clear", "frost"]) ARIMG[k] = d2d.Image(floorOwn(`case${BS}${CASE_SKIN}${BS}array-${k}.png`) || CASE_DIR + `array-${k}.png`);
+    return ARIMG;
+}
+// the frost sprite tinted towards the background by f (0.1 steps), alpha kept: Direct2D colour matrix, made once
+// src tinted towards the background by f, drawn at (x, y, w, h): src as it is, then its silhouette in the background
+// colour (tinted once, at 1) over it at f, so the tint follows f smoothly as a row moves. Opaque parts come out exactly
+// as src tinted by f; half-clear ones (the frosted glass) a touch denser, by the same amount at every f. (A tinted copy
+// for each f would be an image for every step of it: in 0.1 steps the rows' tint jumped as they moved.)
+function drawTinted(gr, src, name, f, x, y, w, h, alpha) {
+    gr.DrawImage(src, x, y, w, h, 0, 0, src.Width, src.Height, 0, alpha);
+    const a = Math.round(alpha * f);
+    if (a > 0) { const t = tinted(src, 1, name); gr.DrawImage(t, x, y, w, h, 0, 0, t.Width, t.Height, 0, a); }
+}
+function tinted(src, f, name) {
+    const key = MODE + f + name;
+    let img = ARIMG.faded.get(key);
+    if (img) return img;
+    const fx = d2d.Effect("{921F03D6-641C-47DF-852D-B4BB6153AE11}");
+    const bg = fadeBg(), r = ((bg >>> 16) & 255) / 255, g = ((bg >>> 8) & 255) / 255, b = (bg & 255) / 255, k = 1 - f;
+    fx.SetInput(0, src);
+    fx.SetValue(0, new Float32Array([k, 0, 0, 0, 0, k, 0, 0, 0, 0, k, 0, 0, 0, 0, 1, r * f, g * f, b * f, 0]));
+    img = d2d.CreateImage(src.Width, src.Height);
+    const gr = img.GetGraphics();
+    gr.DrawEffect(fx, 0, 0, 0, 0, src.Width, src.Height);
+    img.ReleaseGraphics(gr);
+    ARIMG.faded.set(key, img);
+    return img;
+}
+TOKEN_LISTENERS.push(() => { ARIMG.faded.clear(); AR.dirtyInfo = true; });
+
+// The case that turns in the inspection: the case skin's. The room shows its own case square-on (no turn): rendered in
+// the same room as the set in use (its material, its light, its mode: assets/render/room/<set>/<mode>/inspect-00.png +
+// inspect.json, .dev/pvlayout/render_room_front.sh), so that it opens as the case it stood as; a set without one
+// borrows the skin its material was made from. Its json is read once.
+const ROOM_INSPECT_SKIN = { cream: "frost", glass: "glass", white: "white", blackout: "blackout", rhine: "frost" };
+const INSP_SKINS = new Map();
+function inspSkin() {
+    if (!roomOn()) return { id: CASE_SKIN, dir: CASE_DIR, meta: CASE_META };
+    roomAssets();
+    const key = "room:" + ROOM.dir;
+    let S = INSP_SKINS.get(key);
+    if (S === undefined) {
+        const read = (id, dir, file) => { try { return utils.IsFile(dir + file) ? { id, dir, meta: JSON.parse(utils.ReadTextFile(dir + file, 65001)) } : null; } catch (e) { return null; } };
+        const f = findSkin(ROOM_INSPECT_SKIN[STATE.roomMat] || CASE_SKIN);
+        S = read(key, ROOM.dir, "inspect.json") || (f && read(f.id, f.dir, "case.json")) || null;
+        INSP_SKINS.set(key, S);
+    }
+    return S || { id: CASE_SKIN, dir: CASE_DIR, meta: CASE_META };
+}
+function inspectImages() {
+    const S = inspSkin(), last = roomOn(), key = S.id + S.dir + (last ? "|last" : "");
+    if (ARIMG.inspectSkin !== key) { ARIMG.inspect = null; ARIMG.inspectLoading = false; ARIMG.gen++; ARIMG.inspectSkin = key; }
+    if (ARIMG.inspect || ARIMG.inspectLoading) return ARIMG.inspect;
+    ARIMG.inspectLoading = true;
+    const L = S.meta.inspect;
+    if (last) {
+        // the room: the square-on frame alone, twice (drawInspection blends two)
+        const gen = ARIMG.gen, fail = () => { if (gen !== ARIMG.gen) return; ARIMG.gen++; ARIMG.inspectLoading = false; AR.inspOn = false; clock.wake(); };
+        d2d.LoadImageAsyncV2(0, S.dir + `inspect-${pad(L.length - 1, 2)}.png`).then(img => {
+            if (gen !== ARIMG.gen) return;
+            if (!img) { fail(); return; }
+            ARIMG.inspect = [img, img]; ARIMG.inspectMeta = [L[L.length - 1], L[L.length - 1]]; ARIMG.inspectLoading = false; clock.wake(); window.Repaint();
+        }, fail);
+        return null;
+    }
+    const n = L.length, imgs = new Array(n), gen = ARIMG.gen;
+    let left = n;
+    // a frame that cannot be read sends the case back into its row (rather than waiting, and ticking, forever)
+    const fail = () => { if (gen !== ARIMG.gen) return; ARIMG.gen++; ARIMG.inspectLoading = false; AR.inspOn = false; clock.wake(); };
+    for (let i = 0; i < n; i++) d2d.LoadImageAsyncV2(0, S.dir + `inspect-${pad(i, 2)}.png`).then(img => {
+        if (gen !== ARIMG.gen) return;
+        if (!img) { fail(); return; }
+        imgs[i] = img;
+        if (--left === 0) { ARIMG.inspect = imgs; ARIMG.inspectMeta = L; ARIMG.inspectLoading = false; clock.wake(); window.Repaint(); }
+    }, fail);
+    return null;
+}
+// the archive's big images are kept only while it is shown
+function archiveHidden() { pickStop(); AF.layer = null; AF.img = {}; TOP_IMG.clear(); AR.inspOn = false; AR.insp = 0; ARIMG.inspect = null; ARIMG.gen++; ARIMG.inspectLoading = false; ARIMG.faded.clear(); ARIMG.clear = ARIMG.frost = ARIMG.rail = null; AR.info = null; FLOOR.key = null; FLOOR.img = null; }
+
+// covers of what is on screen, nearest first: the current row around the selection, then the rows behind
+function requestVisibleThumbs() {
+    if (AR.layout === "grid") { gridThumbs(); return; }
+    if (roomOn()) { roomThumbs(); return; }
+    const G = arRows(), list = [];
+    const start = arrayStart(), count = arrayGeom().count;
+    const first = Math.max(0, start - frontRows()), order = Array.from({ length: Math.min(count, G.length - start) + start - first }, (_, i) => first + i);
+    order.sort((a, b) => Math.abs(a - AR.group) - Math.abs(b - AR.group));
+    for (const gi of order) {
+        const r = rowState(gi), albums = G[gi].albums, [i0, i1] = caseWindow(r, G[gi], gi - start, r.scroll.to);
+        const idx = [];
+        for (let i = i0; i <= i1; i++) idx.push(i);
+        idx.sort((p, q) => Math.abs(p - r.sel) - Math.abs(q - r.sel));
+        idx.forEach(i => list.push(albums[i]));
+    }
+    // the albums of the artist the album file or the artist file shows, first (artist.js)
+    if (AR.page === "artist" || AF.open) { const A = curArtist(); if (A && A.lib) list.unshift(...artistAlbums(A.lib).slice(0, 24)); }
+    setThumbBudget(Math.max(160, list.length));
+    requestThumbs(list, Math.max(48, list.length));
+}
+
+// ------------------------------------------------------------------------------------------------------ drawing
+const QM = new Float32Array(6);
+// image into the parallelogram q (sprite px; q[0] top-left, q[1] top-right, q[3] bottom-left) placed at (ox, oy) × k
+function quadImage(gr, img, q, ox, oy, k, alpha = 255) {
+    const w = img.Width, h = img.Height;
+    QM[0] = (q[1][0] - q[0][0]) * k / w; QM[1] = (q[1][1] - q[0][1]) * k / w;
+    QM[2] = (q[3][0] - q[0][0]) * k / h; QM[3] = (q[3][1] - q[0][1]) * k / h;
+    QM[4] = ox + q[0][0] * k; QM[5] = oy + q[0][1] * k;
+    gr.SetTransform(QM);
+    gr.DrawImage(img, 0, 0, w, h, 0, 0, w, h, 0, alpha);
+    gr.ResetTransform();
+}
+const quadPts = (q, ox, oy, k) => q.flatMap(([x, y]) => [ox + x * k, oy + y * k]);
+// A cover in quad q tinted towards the background by f: the background colour laid first, then the cover over it at
+// 1 - f (blur: the blurred cover under the sharp one, the sharp one at cl). Not the cover and then the background over
+// it: the two edges, antialiased alike, let the cover through along the edge (a pixel half covered keeps 1 - f/2 of it,
+// not 1 - f), a thin bright line on a darkened cover that came and went with the subpixel position as a shelf moved.
+// This way an edge pixel only gets more of the background. No cover: the well colour tinted.
+function tintedCover(gr, q, ox, oy, k, alpha, f, sharp, blur = null, cl = 1) {
+    if (alpha <= 0) return;
+    if (!sharp && !blur) { gr.FillPolygon(withAlpha(mix(C.well, fadeBg(), f), alpha / 255), 0, quadPts(q, ox, oy, k)); return; }
+    if (f > 0) gr.FillPolygon(withAlpha(fadeBg(), alpha / 255), 0, quadPts(q, ox, oy, k));
+    // over the background: the blur at a1, the sharp at a2, so that they show at (1 - f)(1 - cl) and (1 - f) cl
+    const a2 = (1 - f) * (sharp ? cl : 0), a1 = blur ? (1 - f) * (1 - (sharp ? cl : 0)) / Math.max(1e-6, 1 - a2) : 0;
+    if (blur && a1 > .004) quadImage(gr, blur, q, ox, oy, k, Math.round(alpha * a1));
+    if (sharp && a2 > .004) quadImage(gr, sharp, q, ox, oy, k, Math.round(alpha * a2));
+}
+// one rail sprite at screen point (sx, sy) of its slot; rows behind are tinted like their cases
+function drawRailSlot(gr, it, sx, sy, k, aw) {
+    const img = accentShift(ARIMG.rail[it.rail]), [rw, rh] = RAIL_META.res, ox = sx - RAIL_META.origin[0] * k, oy = sy - RAIL_META.origin[1] * k;
+    if (ox > aw || ox + rw * k < 0 || oy > H || oy + rh * k < 0) return;
+    const alpha = rowAlpha(it.pos), f = rowTint(it.pos);
+    drawTinted(gr, img, "rail-" + it.rail, f, ox, oy, rw * k, rh * k, alpha);
+    // the row's number on the front end's label plate, fading out as the row is tinted past readable
+    const la = Math.round(alpha * readable(f));
+    if (it.rail === "front" && la > 0) {
+        const q = RAIL_META.label;
+        QM[0] = (q[1][0] - q[0][0]) * k / 100; QM[1] = (q[1][1] - q[0][1]) * k / 100;
+        QM[2] = (q[3][0] - q[0][0]) * k / 20; QM[3] = (q[3][1] - q[0][1]) * k / 20;
+        QM[4] = ox + q[0][0] * k; QM[5] = oy + q[0][1] * k;
+        if (!LABEL_FONTS.row) LABEL_FONTS.row = d2d.Font("Geist Mono SemiBold", 12, 0);
+        gr.SetTransform(QM);
+        gr.DrawText(`ROW ${pad(it.gi + 1, 2)}`, LABEL_FONTS.row, withAlpha(0xFF1B1C18, la / 255), 6, 1, 94, 18, DT_SINGLE);
+        gr.ResetTransform();
+    }
+}
+
+// "ARC / 0269" printed on the spine label (a 100 × 60 box mapped onto the label quad)
+const LABEL_FONTS = { a: null, b: null };
+// a skin may print its labels in its own colours (case.json "skin": labelInk, topPaper, topInk), as a black case does
+const skinInk = (key, def) => CASE_META.skin && CASE_META.skin[key] ? argb(CASE_META.skin[key]) : def;
+function drawSpineLabel(gr, q, ox, oy, k, no, alpha = 255) {
+    if (!LABEL_FONTS.a) { LABEL_FONTS.a = d2d.Font("Geist Mono SemiBold", 15, 0); LABEL_FONTS.b = d2d.Font("Geist Mono", 22, 1); }
+    QM[0] = (q[1][0] - q[0][0]) * k / 100; QM[1] = (q[1][1] - q[0][1]) * k / 100;
+    QM[2] = (q[3][0] - q[0][0]) * k / 60; QM[3] = (q[3][1] - q[0][1]) * k / 60;
+    QM[4] = ox + q[0][0] * k; QM[5] = oy + q[0][1] * k;
+    gr.SetTransform(QM);
+    const ink = withAlpha(skinInk("labelInk", 0xFF1B1C18), alpha / 255);
+    gr.DrawText("ARC", LABEL_FONTS.a, ink, 8, 6, 90, 20, DT_SINGLE);
+    gr.DrawText(pad(no, 4), LABEL_FONTS.b, ink, 8, 28, 92, 28, DT_SINGLE);
+    gr.ResetTransform();
+}
+
+// The item's title on a paper strip along the case's top edge, so the cases can be read from above like records in a
+// crate (the covers of the cases behind are hidden by the ones in front, their tops are not). The strip runs from the
+// case's left end to the index tab (case model units: x along the case, y across it, the top at z); it is mapped
+// like the spine label, 100 units per model unit, the text's top towards the back of the case.
+const TOP_STRIP = { x0: -1.80, x1: 1.10, y: .15, z: 3.5 }, TOP_PAPER = 0xFFE9E6DD, TOP_INK = 0xFF1B1C18;
+function drawTopTitle(gr, a, ox, oy, k, alpha, f) {
+    const m = CASE_META.array.origin, ax = CASE_META.axes, T = TOP_STRIP;
+    const at = (x, y) => [ox + (m[0] + x * ax.x[0] + y * ax.y[0] + T.z * ax.z[0]) * k, oy + (m[1] + x * ax.x[1] + y * ax.y[1] + T.z * ax.z[1]) * k];
+    const o = at(T.x0, T.y), u = at(T.x0 + 1, T.y), v = at(T.x0, T.y - 1);
+    if (Math.hypot(v[0] - o[0], v[1] - o[1]) * T.y * 2 < 5) return;   // too small to read
+    QM[0] = (u[0] - o[0]) / 100; QM[1] = (u[1] - o[1]) / 100; QM[2] = (v[0] - o[0]) / 100; QM[3] = (v[1] - o[1]) / 100; QM[4] = o[0]; QM[5] = o[1];
+    const img = topStrip((a.title || tr("UNTITLED")).toUpperCase(), skinInk("topPaper", TOP_PAPER), skinInk("topInk", TOP_INK)), w = (T.x1 - T.x0) * 100, h = T.y * 200;
+    gr.SetTransform(QM);
+    gr.DrawImage(img, 0, 0, w, h, 0, 0, img.Width, img.Height, 0, alpha);
+    if (f > 0) gr.FillSolidRect(0, 0, w, h, withAlpha(fadeBg(), f * alpha / 255));   // tinted like the row
+    gr.ResetTransform();
+}
+// Each title is drawn once into a small bitmap (the strip at TOP_RES px per unit) and that is mapped onto the case: a
+// screen of shelves (a dozen on an ultrawide array) lays out no text while it moves. Kept for the most recent titles.
+const TOP_RES = 1.5, TOP_KEEP = 320, TOP_IMG = new Map();
+function topStrip(t, paper = TOP_PAPER, ink = TOP_INK) {
+    const key = `${t}|${paper}|${ink}`;
+    let img = TOP_IMG.get(key);
+    if (img) { TOP_IMG.delete(key); TOP_IMG.set(key, img); return img; }
+    const T = TOP_STRIP, w = (T.x1 - T.x0) * 100, h = T.y * 200;
+    if (!LABEL_FONTS.top) { LABEL_FONTS.top = d2d.Font("Geist Mono SemiBold", 17, 0); LABEL_FONTS.topC = d2d.Font("Microsoft YaHei UI", 18, 1); }
+    img = d2d.CreateImage(Math.ceil(w * TOP_RES), Math.ceil(h * TOP_RES));
+    const g = img.GetGraphics();
+    g.SetTransform(new Float32Array([TOP_RES, 0, 0, TOP_RES, 0, 0]));
+    g.FillSolidRect(0, 0, w, h, paper);
+    g.FillSolidRect(0, 0, 4, h, C.accent);
+    g.DrawText(t, isCJK(t) ? LABEL_FONTS.topC : LABEL_FONTS.top, ink, 12, 0, w - 20, h, DT_SINGLE | DT_ELLIPSIS);
+    g.ResetTransform();
+    img.ReleaseGraphics(g);
+    TOP_IMG.set(key, img);
+    if (TOP_IMG.size > TOP_KEEP) TOP_IMG.delete(TOP_IMG.keys().next().value);
+    return img;
+}
+TOKEN_LISTENERS.push(() => TOP_IMG.clear());   // the accent tab follows the scheme
+
+function drawArchive(gr) {
+    THUMB_KEEP.clear();
+    const G = arRows();
+    if (!G.length) { drawArchiveEmpty(gr); return; }
+    if (AF.open) { AR.hits = []; drawArtistFile(gr); drawInfoLayer(gr); drawArchiveNote(gr); return; }   // artist.js
+    const aw = arrayW(), [Ox, Oy] = origin(), k = arK(), meta = CASE_META.array, sz = CASE_META.array_res[0];
+    const ax = CASE_META.axes, I = arrayImages();
+    const lift = inspLift(), turn = inspTurn(), g = arrayGeom();
+    // on an ultrawide array the rows stand further apart (sx, sy: see arrayGeom); the sprites keep their size
+    const toScreen = it => [Ox + (it.x * ax.x[0] * g.sx + it.y * ax.y[0] + it.z * ax.z[0]) * k, Oy + (it.x * ax.x[1] * g.sy + it.y * ax.y[1] + it.z * ax.z[1]) * k];
+    gr.PushClip(0, 0, aw, H);
+    // Shelf by shelf, back to front: a shelf stands wholly behind the shelves in front of it (the camera looks along
+    // +x), so each is drawn as one layer: its rail slots and cases back to front, then its front lip if the rail has one.
+    const R = railImages(), rows = [...AR.rows].filter(([, r]) => r.pos.x > -1 - frontRows() && r.pos.x < g.count).sort((p, q) => q[1].pos.x - p[1].pos.x);
+    AR.hits = [];
+    let selItem = null;
+    if (!LABEL_LIVE) drawFloor(gr, rows, G, Ox, Oy, k, toScreen);   // the wallpaper takes the floor's place
+    for (const [gi, r] of rows) {
+        const row = G[gi], albums = row.albums, pos = r.pos.x, x = -pos * ROWP, active = gi === AR.group, [i0, i1] = caseWindow(r, row);
+        const nSlots = slotCount(row), items = [];
+        // a rail slot sorts just in front of the case behind it and behind the case standing in it
+        if (R) for (let s = -1; s <= nSlots; s++) {
+            const y = (s - r.scroll.x) * PITCH;
+            if (y < -30 || y > 60) continue;
+            items.push({ rail: s < 0 ? "front" : s >= nSlots ? "back" : "mid", gi, pos, x, y, z: 0, close: CLOSE[1] * (y + .4) });
+        }
+        for (let i = i0; i <= i1; i++) {
+            const c = r.cases.get(i);
+            if (!c) continue;
+            const isSel = active && i === r.sel;
+            const y = (slotOf(row, i) - r.scroll.x) * PITCH + c.gap.x, z = c.lift.x + (isSel ? LIFT_OUT * lift : 0);
+            // where the case rests without the hover lift: its click area (#7), so the lift under the mouse does not
+            // move the case being aimed at
+            const yr = (slotOf(row, i) - r.scroll.x) * PITCH + c.gap.to, zr = caseTargets(i, r, active, row, -1).lift + (isSel ? LIFT_OUT * lift : 0);
+            items.push({ gi, i, c, a: albums[i], active, isSel, pos, x, y, z, yr, zr, close: CLOSE[1] * y + CLOSE[2] * z * .2 });
+        }
+        items.sort((p, q) => p.close - q.close);
+        for (const it of items) {
+            const [sx, sy] = toScreen(it);
+            if (it.rail) { drawRailSlot(gr, it, sx, sy, k, aw); continue; }
+            it.rest = toScreen({ x: it.x, y: it.yr, z: it.zr });
+            selItem = drawArrayCase(gr, it, sx, sy, k, aw, I) || selItem;
+        }
+        drawLip(gr, row, gi, r, x, toScreen, k);
+    }
+    // The case under the mouse was found when the mouse last moved; the shelves may have moved under it since (a shelf
+    // switched with the keys, or one gone from view), so it is looked for again where the mouse stands, in this frame's
+    // click areas: a click then takes the case shown under it, not one that was there.
+    if (AR.hover >= 0) {
+        const c = AR.inspOn || AF.open ? null : caseUnder(AR.mouseX, AR.mouseY), h = c ? c.i : -1, hg = c ? c.gi : -1;
+        if (h !== AR.hover || hg !== AR.hoverRow) { AR.hover = h; AR.hoverRow = hg; clock.wake(); }
+    }
+    if (AR.selPlate) {
+        const p = AR.selPlate;
+        drawCasePlate(gr, p.a, p.ox, p.oy, p.k);
+        AR.selPlate = null;
+    }
+    if (AR.hoverPlate) {
+        const h = AR.hoverPlate, t = [...(h.a.title || tr("UNTITLED"))];
+        drawCasePlate(gr, h.a, h.ox, h.oy, h.k, h.alpha, t.length > 40 ? t.slice(0, 39).join("") + "…" : t.join(""));
+        AR.hoverPlate = null;
+    }
+    // the array dissolves into the background towards the file panel and the controls (over the wallpaper, mostly)
+    const edge = LABEL_LIVE ? withAlpha(C.bg, .8) : C.bg;
+    gr.FillGradRect(aw - dp(100), 0, dp(100) + 1, H, 0, withAlpha(C.bg, 0), edge);
+    gr.FillGradRect(0, H - dp(139), aw, dp(80) + 1, 90, withAlpha(C.bg, 0), edge);
+    gr.FillSolidRect(0, H - dp(60), aw, dp(60), edge);
+    drawSelectNumeral(gr);
+    drawRuler(gr);
+    drawGroupSwitch(gr);
+    if (turn === 0) drawArchiveBar(gr);
+    if (turn > 0) { drawInspection(gr, turn); drawArchiveNote(gr); }
+    gr.PopClip();
+    // album file
+    drawInfoLayer(gr);
+}
+// the album file, cached as a layer (with the wallpaper under it, when there is one)
+function drawInfoLayer(gr) {
+    const wp = LABEL_LIVE ? WP.comp : null;
+    if (AR.dirtyInfo || !AR.info || AR.info.wp !== wp) { AR.info = renderLayer(W - infoX() + dp(20), H, drawInfo, AR.info); AR.info.wp = wp; AR.dirtyInfo = false; }
+    gr.DrawImage(AR.info.img, infoX() - dp(20), 0, AR.info.w, AR.info.h, 0, 0, AR.info.w, AR.info.h);
+    infoHits(infoX() - dp(20));
+}
+
+// one case of the array at screen point (sx, sy); returns { ox, oy } for the selected one
+function drawArrayCase(gr, it, sx, sy, k, aw, I) {
+    const meta = CASE_META.array, sz = CASE_META.array_res[0];
+    const ox = sx - meta.origin[0] * k, oy = sy - meta.origin[1] * k, S = sz * k;
+    if (ox > aw || ox + S < 0 || oy > H || oy + S < 0) return null;
+    let selItem = null;
+    if (it.isSel) { AR.from = [ox + meta.center[0] * k, oy + meta.center[1] * k]; selItem = { ox, oy }; }
+    if (it.isSel && inspTurn() > 0) return selItem;                   // drawn by the inspection
+    // (with the frosted glass switched off every case is drawn as the selected one is: clear, its cover sharp)
+    const alpha = rowAlpha(it.pos), f = rowTint(it.pos), t = thumbOf(it.a), cl = AR.frost ? clamp(it.c.clear.x, 0, 1) : 1;
+    // One way of drawing a case at every place, so a row moving between places changes smoothly (a tinted row was drawn
+    // frosted whatever its cases' clearing, so a case went frosted or clear at once as its row left or reached the
+    // front). The cover under the case, the sharp one over the blurred as the case clears; tinted like the row.
+    tintedCover(gr, meta.cover, ox, oy, k, alpha, f, t && cl > .01 ? t.img : null, t ? t.blur : null, cl);
+    // the case: frosted, clear as it is selected
+    if (cl < .99) drawTinted(gr, I.frost, "case" + CASE_DIR, f, ox, oy, S, S, Math.round(alpha * (1 - cl)));
+    if (cl > .01) drawTinted(gr, I.clear, "case-clear" + CASE_DIR, f, ox, oy, S, S, Math.round(alpha * cl));
+    // the spine labels belong to the selected shelf: they fade with its place as a shelf moves into it or out of it
+    const la = Math.round(alpha * selness(it.pos));
+    if (la > 0) drawSpineLabel(gr, meta.label, ox, oy, k, it.a.no, la);
+    // the top title: as its shelf shows them, and on the case under the mouse and its neighbours on any shelf (unless
+    // CASE UNDER THE MOUSE is NOTHING), less tinted the nearer the mouse, so a case on a shelf behind can be read
+    const hv = AR.hoverMode === "none" ? 0 : clamp(it.c.hov.x, 0, 1), ta = Math.round(alpha * Math.max(readable(f), hv));
+    if (AR.topTitles && ta > 0) drawTopTitle(gr, it.a, ox, oy, k, ta, f * (1 - hv));
+    // the whole case (front face and top edge) at its resting place answers the mouse, on every shelf in view (a case
+    // on another shelf switches to it); the one under it is outlined
+    if (alpha > 0) {
+        const P = casePoly(), rx = it.rest[0] - meta.origin[0] * k, ry = it.rest[1] - meta.origin[1] * k;
+        AR.hits.push({ i: it.i, gi: it.gi, quad: P.map(([px, py]) => [rx + px * k, ry + py * k]) });
+        const hovered = it.i === AR.hover && it.gi === AR.hoverRow && !it.isSel && AR.insp === 0;
+        if (hovered && AR.hoverMode === "label") AR.hoverPlate = { a: it.a, ox, oy, k, alpha };
+        if (hovered && AR.hoverMode === "outline") gr.DrawPolygon(withAlpha(C.accent, alpha / 255), Math.max(HAIR, dp(1.5)), P.flatMap(([px, py]) => [ox + px * k, oy + py * k]));
+    }
+    // the selected case's corner marks, on its cover (a see-through shelf in front covers them, as it covers the case),
+    // and its plate, a label beside it: drawn after every shelf (drawArchive), over the see-through ones in front
+    if (it.isSel && it.c.clear.x > .6 && AR.insp === 0) {
+        for (const [px, py] of meta.cover) gr.FillSolidRect(Math.round(ox + px * k - dp(3)), Math.round(oy + py * k - dp(3)), dp(6), dp(6), C.accent);
+        AR.selPlate = { a: it.a, ox, oy, k };
+    }
+    return selItem;
+}
+// a plate led out from the top corner of a case's cover: ARC-#### for the selected case, the title (the album's, or
+// the song's when every track is its own item) for the one under the mouse in "label" mode
+function drawCasePlate(gr, a, ox, oy, k, alpha = 255, txt = `ARC-${pad(a.no, 4)}`) {
+    const top = CASE_META.array.cover[1], x1 = ox + top[0] * k + dp(4), y1 = oy + top[1] * k - dp(4), lx = x1 + dp(26), ly = y1 - dp(30);
+    const fg = withAlpha(C.fg, alpha / 255), s = st(AR_ST.plate, C.bg, C.fg);
+    gr.DrawLine(x1, y1, lx, ly, HAIR, fg);
+    gr.DrawLine(lx, ly, lx + dp(60), ly, HAIR, fg);
+    const pw = labelWidth(txt, s) + dp(16);
+    gr.FillSolidRect(lx + dp(60), ly - dp(9), pw, dp(18), fg);
+    label(gr, txt, s, lx + dp(68), ly - Math.round(labelHeight(AR_ST.plate) / 2));
+}
+
+// a case's outline in sprite px: its front face and top edge (case model units: 4 wide, 3.5 high, 0.46 deep)
+let CASE_POLY = null;
+function casePoly() {
+    if (CASE_POLY && CASE_POLY.meta === CASE_META) return CASE_POLY;   // made again for another skin's case.json
+    const m = CASE_META.array.origin, ax = CASE_META.axes, at = (x, y, z) => [m[0] + x * ax.x[0] + y * ax.y[0] + z * ax.z[0], m[1] + x * ax.x[1] + y * ax.y[1] + z * ax.z[1]];
+    CASE_POLY = [at(-2, -.23, 0), at(2, -.23, 0), at(2, -.23, 3.5), at(2, .23, 3.5), at(-2, .23, 3.5), at(-2, -.23, 3.5)];
+    CASE_POLY.meta = CASE_META;
+    return CASE_POLY;
+}
+
+// With "Show the shelves in front" (the context menu; off by default) FRONT_ROWS shelves in front of the selected one
+// stay in view, see-through (FRONT_OPACITY), so a shelf just left is still there to go back to (with the mouse, see
+// archiveMouseMove); not on an ultrawide array, whose shelves stand side by side
+const FRONT_ROWS = 2, FRONT_OPACITY = .6;
+const frontRows = () => roomOn() ? ROOM_FRONT : AR.frontShelves && !arrayGeom().wide ? FRONT_ROWS : 0;
+// rows fade in at the back; in front they turn see-through, then fade out beyond the last one shown
+const rowAlpha = pos => {
+    const n = frontRows(), front = pos >= 0 ? 1 : !n ? clamp(1 + pos, 0, 1) : lerp(1, FRONT_OPACITY, clamp(-pos, 0, 1)) * clamp(n + 1 + pos, 0, 1);
+    return Math.round(255 * front * clamp((arrayGeom().count - pos) / .8, 0, 1));
+};
+// how far a row is tinted towards the background: by its distance from the selected row's place, behind (and in front,
+// with the shelves in front shown; on an ultrawide array, from the selected row); the floor may fade them less
+// (floor.json "tint"). It follows a moving row smoothly.
+const rowTint = pos => {
+    const g = arrayGeom(), floor = FLOOR.meta && FLOOR.meta.tint != null ? FLOOR.meta.tint : 1;
+    if (!g.wide) { const d = frontRows() ? Math.abs(pos) : Math.max(0, pos); return clamp(.38 * Math.min(d, 1) + .14 * d, 0, .8) * floor; }
+    const distance = Math.abs(pos - (AR.group - arrayStart()));
+    return clamp(.32 * Math.min(distance, 1) + .24 * distance / Math.max(1, g.count - 1), 0, .6) * floor;
+};
+// how much of a row's print (top titles, row number, lip) shows at tint f: all of it up to 0.4, none from 0.5 (it went
+// at 0.5 at once, mid-move)
+const readable = f => clamp((.5 - f) / .1, 0, 1);
+// how near a row is to the selected row's place (1 there, 0 a row away): the selected shelf's spine labels fade with it
+const selness = pos => clamp(1 - Math.abs(pos - (AR.group - arrayStart())), 0, 1);
+
+// The shelf's front lip, an optional look (lip-*.png, described by rail.json → lip; the shipped rail has none, so this
+// draws nothing), drawn after everything standing on the shelf, then its print on the pale face panel, mapped like the spine label (100 units per world unit along the row,
+// down the panel): the ∞ emblem on the front end, each group's name where it starts on the shelf (with its size),
+// slot numbers under the slots, hazard stripes on the back end.
+const LIP_INK = 0xFF1B1C18, LIP_SOFT = 0xFF77766F;
+function drawLip(gr, row, gi, r, x, toScreen, k) {
+    const L = RAIL_META && RAIL_META.lip, R = ARIMG.rail;
+    if (!L || !R || !R["lip-mid"]) return;
+    const pos = r.pos.x, alpha = rowAlpha(pos), aw = arrayW(), n = slotCount(row);
+    if (alpha <= 0) return;
+    for (let sl = -1; sl <= n; sl++) {
+        const y = (sl - r.scroll.x) * PITCH;
+        if (y < -30 || y > 60) continue;
+        const [sx, sy] = toScreen({ x, y, z: 0 });
+        drawRailSlot(gr, { rail: sl < 0 ? "lip-front" : sl >= n ? "lip-back" : "lip-mid", gi, pos }, sx, sy, k, aw);
+    }
+    const f = rowTint(pos), lr = readable(f);
+    if (lr <= 0) return;   // too far back to read
+    const tone = c => withAlpha(mix(c, fadeBg(), f), alpha * lr / 255);
+    const y0 = -.5 - r.scroll.x, lx = x + L.x, o = toScreen({ x: lx, y: y0, z: L.z1 }), u = toScreen({ x: lx, y: y0 + 1, z: L.z1 }), v = toScreen({ x: lx, y: y0, z: L.z1 - 1 });
+    QM[0] = (u[0] - o[0]) / 100; QM[1] = (u[1] - o[1]) / 100; QM[2] = (v[0] - o[0]) / 100; QM[3] = (v[1] - o[1]) / 100; QM[4] = o[0]; QM[5] = o[1];
+    const ph = (L.z1 - L.z0) * 100;   // panel height in units
+    if (!LABEL_FONTS.lip) {
+        LABEL_FONTS.lip = d2d.Font("Geist Mono SemiBold", 30, 0); LABEL_FONTS.lipC = d2d.Font("Microsoft YaHei UI", 28, 1);
+        LABEL_FONTS.lipS = d2d.Font("Geist Mono Medium", 13, 0); LABEL_FONTS.lipN = d2d.Font("Geist Mono", 12, 0);
+    }
+    gr.SetTransform(QM);
+    // front end: the emblem on an ink plate and the shelf number
+    gr.FillSolidRect(-84, 10, 76, ph - 20, tone(LIP_INK));
+    drawEmblem(gr, 0, -84, 10, 76, ph * .55, 11, tone(0xFFF2F1EC));
+    gr.DrawText(`SHELF
+${pad(gi + 1, 2)}`, LABEL_FONTS.lipS, tone(0xFFF2F1EC), -84, 10 + ph * .52, 76, ph * .45 - 20, 0x00000800 | 0x00000001);
+    // the groups on this shelf
+    row.segs.forEach((g, j) => {
+        const ux = g.slot * 100 + 6, next = j + 1 < row.segs.length ? row.segs[j + 1].slot - 1 : n, w = (next - g.slot) * 100 - 16;
+        gr.FillSolidRect(ux, 16, 8, 8, tone(C.accent));
+        gr.DrawText(groupName(g.name), isCJK(groupName(g.name)) ? LABEL_FONTS.lipC : LABEL_FONTS.lip, tone(LIP_INK), ux + 16, 4, Math.max(40, w - 16), 36, DT_SINGLE | DT_ELLIPSIS);
+        const meta = `${LIB.groupBy === "none" ? "" : tr(GROUP_LABEL[LIB.groupBy]) + " " + pad(g.gi + 1, 2) + "  ·  "}${unitWord(g.total)}${g.parts > 1 ? `  ·  ${g.part} / ${g.parts}` : ""}`;
+        gr.DrawText(meta, LABEL_FONTS.lipS, tone(LIP_SOFT), ux + 16, 42, Math.max(40, w - 16), 18, DT_SINGLE | DT_ELLIPSIS);
+    });
+    // slot numbers and ticks along the bottom of the panel
+    gr.FillSolidRect(0, ph - 26, n * 100, 1.2, tone(LIP_SOFT));
+    for (let sl = 0; sl < n; sl++) {
+        gr.FillSolidRect(sl * 100, ph - 32, 1.2, 12, tone(LIP_SOFT));
+        gr.DrawText(pad(sl + 1, 2), LABEL_FONTS.lipN, tone(LIP_SOFT), sl * 100, ph - 22, 100, 16, DT_CENTER_SINGLE);
+    }
+    // back end: hazard stripes
+    gr.PushClip(n * 100 + 8, 10, 70, ph - 20);
+    for (let hx = n * 100 + 8 - ph; hx < n * 100 + 78; hx += 24) gr.FillPolygon(tone(C.accent), 0, [hx, ph - 10, hx + ph - 20, 10, hx + ph - 8, 10, hx + 12, ph - 10]);
+    gr.PopClip();
+    gr.ResetTransform();
+}
+
+function drawArchiveEmpty(gr) {
+    const t = LIB.filter ? tr("NOTHING MATCHES \"{0}\"", LIB.filter.toUpperCase()) : tr(LIB.live ? "NO ALBUMS · THE MEDIA LIBRARY AND THE PLAYLISTS ARE EMPTY" : "INDEXING LIBRARY …");
+    label(gr, t, st(AR_ST.meta, C["text-muted"]), arrayW() / 2, H / 2 - dp(6), 1);
+    // nothing to show yet: a way to the media library's folders (Preferences › Media Library)
+    if (LIB.live && !LIB.filter) {
+        const bt = tr("+ ADD MUSIC FOLDER"), bw = labelWidth(bt, st(AR_ST.btn, 0)) + dp(36), bh = dp(40);
+        const bx = Math.round(arrayW() / 2 - bw / 2), by = Math.round(H / 2 + dp(26));
+        gr.FillSolidRect(bx, by, bw, bh, C.fg);
+        label(gr, bt, st(AR_ST.btn, C.bg, C.fg), bx + dp(18), by + Math.round((bh - labelHeight(AR_ST.btn)) / 2));
+        hits.add("ar-addmusic", bx, by, bw, bh);
+    }
+    drawArchiveBar(gr);
+}
+// foobar2000's Media Library page, where music folders are added (Library › Configure)
+function addMusicFolder() { if (!fb.RunMainMenuCommand("Library/Configure")) fb.ShowPreferences(); }
+
+// FILTER · "word" · 12 ALBUMS  ×   (top left, while the header's search filters the archive)
+function drawFilterChip(gr, x = dp(32), y = dp(22)) {
+    if (!LIB.filter) return 0;
+    const h = dp(22);
+    const s = st(AR_ST.key, C.bg, C.fg), t = `${tr("FILTER")}  ·  "${LIB.filter.toUpperCase()}"  ·  ${unitWord(filteredCount())}`;
+    const w = labelWidth(t, s) + dp(20);
+    gr.FillSolidRect(x, y, w, h, C.fg);
+    gr.FillSolidRect(x, y, dp(4), h, C.accent);
+    label(gr, t, s, x + dp(12), y + Math.round((h - labelHeight(AR_ST.key)) / 2));
+    box(gr, x + w, y, h, h, C.fg);
+    gr.DrawLine(x + w + dp(7), y + dp(7), x + w + h - dp(7), y + h - dp(7), HAIR, C.fg);
+    gr.DrawLine(x + w + h - dp(7), y + dp(7), x + w + dp(7), y + h - dp(7), HAIR, C.fg);
+    hits.add("ar-filter", x, y, w + h, h);
+    return w + h;
+}
+
+// ALBUM / SELECT 05 / 12
+function drawSelectNumeral(gr) {
+    const g = curGroup(), x = dp(24), y = H - dp(150);
+    label(gr, tr({ albums: "ALBUM / SELECT", tracks: "TRACK / SELECT", folders: "FOLDER / SELECT" }[itemUnit()]), st(AR_ST.sel, C["text-muted"]), x, y);
+    const f = font(56, 300), cell = Math.round(gr.CalcTextWidth("0", f, true)), h = Math.ceil(f.Height);
+    const w = drawRoll(gr, AR.selRoll, f, C.fg, x - dp(3), y + dp(14), cell, h);
+    gr.DrawText(`/ ${pad(g.albums.length, AR.selRoll.to.length)}`, font(16, 400), C["text-muted"], x + w + dp(12), y + dp(14) + h - dp(34), dp(120), dp(24), DT_SINGLE);
+}
+
+// album index: one mark per album (a window of them in long rows), ↑ ↓ at the ends
+function drawRuler(gr) {
+    const r = AR.rows.get(AR.group);
+    if (!r) return;
+    const n = curGroup().albums.length, M = rulerCount(), step = dp(RULER_STEP), x0 = rulerX0(), y0 = H - dp(48);
+    const s0 = AR.rulerStart.x;
+    gr.DrawText("↑", font(16, 400), C.fg, x0 - dp(40), y0 - dp(16), dp(24), dp(24), DT_CENTER_SINGLE);
+    gr.DrawText("↓", font(16, 400), C.fg, x0 + Math.min(n, M) * step + dp(14), y0 - dp(16), dp(24), dp(24), DT_CENTER_SINGLE);
+    hits.add("ar-prev", x0 - dp(44), y0 - dp(20), dp(32), dp(32));
+    hits.add("ar-next", x0 + Math.min(n, M) * step + dp(10), y0 - dp(20), dp(32), dp(32));
+    gr.PushClip(x0 - dp(4), y0 - dp(30), Math.min(n, M) * step + dp(4), dp(60));
+    for (const [i, s] of AR.ticks) {
+        const x = Math.round(x0 + (i - s0) * step), h = dp(s.x), on = i === r.sel;
+        gr.FillSolidRect(x, Math.round(y0 - h / 2 - dp(4)), on ? dp(3) : dp(2), h, on ? C.fg : C["line-dim"]);
+    }
+    gr.PopClip();
+    AR.rulerGeom = { x0, y0, step, s0, n, M };
+    hits.add("ar-ruler", x0 - dp(4), y0 - dp(24), Math.min(n, M) * step + dp(4), dp(40));
+    // the album under the mouse (or under a drag along the index), named on a plate above its mark (#8)
+    const ht = AR.hoverTick, a = ht >= 0 ? curGroup().albums[ht] : null;
+    if (a) {
+        const s = st(AR_ST.plate, C.bg, C.fg), t = fitLabel(`${pad(ht + 1, 2)}  ${a.title || tr("UNTITLED")}`, s, dp(280)), w = labelWidth(t, s) + dp(16), h = dp(20);
+        const mx = Math.round(x0 + (ht - s0) * step), px = clamp(mx - Math.round(w / 2), dp(8), arrayW() - w - dp(8)), py = y0 - dp(46);
+        gr.FillSolidRect(mx, py + h, HAIR, dp(10), C.fg);
+        gr.FillSolidRect(px, py, w, h, C.fg);
+        label(gr, t, s, px + dp(8), py + Math.round((h - labelHeight(AR_ST.plate)) / 2));
+    }
+}
+// a drag along the album index (#8): from a press on it until the release, wherever the mouse goes
+function rulerTickAt(x) { const R = AR.rulerGeom; return R ? clamp(Math.round((x - R.x0) / R.step + R.s0), 0, R.n - 1) : -1; }
+function rulerDown(x) { if (!AR.rulerGeom || AR.inspOn) return; pickStop(); AR.rulerDrag = true; AR.hoverTick = rulerTickAt(x); clock.wake(); }
+function rulerMove(x) { const t = rulerTickAt(x); if (t !== AR.hoverTick) { AR.hoverTick = t; clock.wake(); } }
+function rulerUp() {
+    AR.rulerDrag = false;
+    const r = AR.rows.get(AR.group);
+    if (r && AR.hoverTick >= 0) moveAlbum(AR.hoverTick - r.sel);
+    clock.wake();
+}
+
+// ← SHELF 01 / 08  AMBIENT →
+function drawGroupSwitch(gr) {
+    const g = curGroup(), cx = Math.round(arrayW() * .774), y = H - dp(82);
+    const lbl = tr("SHELF") + " ", tail = ` / ${pad(arRows().length, 2)}`, s = st(AR_ST.sel, C["text-muted"]);
+    const f = font(9, 500), cell = Math.round(gr.CalcTextWidth("0", f, true) + .14 * dp(9));
+    const w = labelWidth(lbl, s) + cell * 2 + labelWidth(tail, s), x = cx - w / 2;
+    label(gr, lbl, s, x, y);
+    drawRoll(gr, AR.groupRoll, f, C["text-muted"], x + labelWidth(lbl, s), y, cell, labelHeight(AR_ST.sel));
+    label(gr, tail, s, x + labelWidth(lbl, s) + cell * 2, y);
+    label(gr, fitLabel(groupName(g.name), st(AR_ST.group, 0), dp(180)), st(AR_ST.group, C.fg), cx, y + dp(16), 1);
+    // the count and the name open the list of every shelf (shelfMenu): a small chevron after the count says so
+    if (arRows().length > 1) {
+        const vx = Math.round(x + w + dp(10)), vy = Math.round(y + labelHeight(AR_ST.sel) / 2), v = dp(3);
+        gr.DrawLine(vx - v, vy - v / 2, vx, vy + v / 2, HAIR, C["text-muted"]);
+        gr.DrawLine(vx, vy + v / 2, vx + v, vy - v / 2, HAIR, C["text-muted"]);
+        hits.add("ar-gname", cx - dp(78), y - dp(4), dp(156), dp(40));
+    }
+    const can =d => AR.group + d >= 0 && AR.group + d < arRows().length;
+    // ← the next shelf (behind, to the left on screen) · → the one before (towards the front)
+    gr.DrawText("←", font(16, 400), can(1) ? C.fg : C["line-dim"], cx - dp(110), y + dp(2), dp(24), dp(24), DT_CENTER_SINGLE);
+    gr.DrawText("→", font(16, 400), can(-1) ? C.fg : C["line-dim"], cx + dp(86), y + dp(2), dp(24), dp(24), DT_CENTER_SINGLE);
+    hits.add("ar-gnext", cx - dp(116), y - dp(4), dp(36), dp(36));
+    hits.add("ar-gprev", cx + dp(80), y - dp(4), dp(36), dp(36));
+}
+
+// the inspected case's final scale: ×2 of its size in the row, × the inspection size (MENU › Audio Archive or the Style
+// view), but never larger than fits the array area with the caption above and the button below
+function inspectK(k0, meta = CASE_META) {
+    const last = meta.inspect[meta.inspect.length - 1], c = last.crop || [0, 0, ...meta.inspect_res];
+    const fit = Math.min(arrayW() * .9 / c[2], (H - dp(190)) / c[3]);
+    return Math.max(k0, Math.min(k0 * INSPECT_ZOOM * (STATE.inspectScale || 1), fit));
+}
+// inspection, stage 2 (e: 0 lifted above its row … 1 in front): the case moves to the middle, grows ×2 and turns
+// square-on through the evenly spaced pre-rendered frames; between two frames the next one fades in over the current
+// one and the cover and label quads are interpolated, so the turn has no visible steps
+// (fade: the whole of it faded, the room's, which shows it square-on at once, e = 1: over the room's own background
+// colour, whatever the mode (RHINE LAB's white under a dark theme), the text inked to suit it)
+// what a room case's label says of an album (lib/album.js drawInfoLabel: the inspection's frame, the room's selected case)
+const albumInfoLabel = a => ({ title: a.title || tr("UNTITLED"), sub: a.artist || "",
+    rows: [["YEAR", a.year || "—"], ["TRACKS", pad(a.tracks || 0, 2)], ["GENRE", [...(a.genre || a.grp || "—")].slice(0, 14).join("")]], foot: `ARC-${pad(a.no, 4)}`, foot2: fmtChip(a, true) });
+function drawInspection(gr, e, fade = 1) {
+    const frames = ARIMG.inspect, a = curAlbum(), aw = arrayW(), S = swapState(), sa = Math.round(255 * S.a * fade), room = roomOn();
+    const bg = room ? fadeBg() : C.bg, lit = ((bg >>> 16 & 255) * .3 + (bg >>> 8 & 255) * .59 + (bg & 255) * .11) / 255 > .5;
+    const ink = !room ? C.fg : lit ? 0xFF1B1C18 : 0xFFF2F2F2, muted = !room ? C["text-muted"] : mix(ink, bg, .4);
+    gr.FillSolidRect(0, 0, aw, H, withAlpha(bg, .82 * e * fade));
+    if (!frames || !a || !ARIMG.inspectMeta) return;
+    const n = frames.length, x = e * (n - 1), i0 = Math.min(n - 2, Math.floor(x)), f = clamp(x - i0, 0, 1), IM = inspSkin().meta;
+    const M0 = ARIMG.inspectMeta[i0], M1 = ARIMG.inspectMeta[i0 + 1], full = IM.inspect_res;
+    const k0 = arK() * (IM.array_ppu || CASE_META.array_ppu) / IM.inspect_ppu, k = lerp(k0, inspectK(k0, IM), e);
+    const from = AR.from || [aw * .49, H * .5], cx = lerp(from[0], aw * .49, e), cy = lerp(from[1], H * .5, e);   // (the room: AR.from never set)
+    const ox = cx - M0.center[0] * k + S.dx, oy = cy - M0.center[1] * k;
+    const mixQ = (A, B) => A.map((p, j) => [lerp(p[0], B[j][0], f), lerp(p[1], B[j][1], f)]);
+    const coverQ = mixQ(M0.cover, M1.cover), labelQ = M0.label && M1.label ? mixQ(M0.label, M1.label) : null;   // (RHINE LAB's case: no label)
+    const big = cover(albumFirst(a), () => window.Repaint()), t = thumbOf(a);
+    const cov = big && big.img ? big.img : t ? t.img : null;
+    if (cov) quadImage(gr, cov, coverQ, ox, oy, k, sa);
+    else gr.FillPolygon(withAlpha(C.well, S.a), 0, quadPts(coverQ, ox, oy, k));
+    const frame = (img, M, alpha) => {
+        const c = M.crop || [0, 0, full[0], full[1]];
+        gr.DrawImage(img, ox + c[0] * k, oy + c[1] * k, c[2] * k, c[3] * k, 0, 0, img.Width, img.Height, 0, alpha);
+    };
+    frame(frames[i0], M0, sa);
+    if (f > .01 && frames[i0 + 1] !== frames[i0]) frame(frames[i0 + 1], M1, Math.round(sa * f));
+    if (labelQ) drawSpineLabel(gr, labelQ, ox, oy, k, a.no, sa);
+    // (a room case whose label takes the album: RHINE LAB's, lib/album.js drawInfoLabel)
+    if (M1.info) drawInfoLabel(gr, M1.info.map(([px, py]) => [ox + px * k, oy + py * k]), albumInfoLabel(a), sa);
+    if (e > .85 && !SWAP.phase) {   // (its marks, title and button wait until a swap is over)
+        const q = coverQ.map(([px, py]) => [ox + px * k, oy + py * k]), al = (e - .85) / .15;
+        for (const [px, py] of q) gr.FillSolidRect(Math.round(px - dp(3)), Math.round(py - dp(3)), dp(6), dp(6), withAlpha(C.accent, al * fade));
+        if (al > .5 && fade > .5) {
+            // the text above and the button below keep clear of the case's edges (the frame's crop is the case's box)
+            const c = M1.crop, left = Math.round(c ? ox + c[0] * k : q[0][0]);
+            const top = c ? oy + c[1] * k : q[0][1] - dp(40), bottom = c ? oy + (c[1] + c[3]) * k : q[3][1] + dp(20);
+            const y2 = Math.round(top - dp(16) - labelHeight(AR_ST.inspM)), y1 = y2 - dp(6) - labelHeight(AR_ST.insp);
+            label(gr, `${tr("INSPECTION")}  ·  ARC-${pad(a.no, 4)}`, st(AR_ST.insp, ink, bg), left, y1);
+            const sub = a.album ? (albumOf(a) || {}).title || "" : tr("{0} TRACKS", pad(a.tracks, 2));
+            label(gr, `${fmtChip(a)}  ·  ${sub}  ·  ${a.grp || ""}`, st(AR_ST.inspM, muted, bg), left, y2);
+            // ← RETURN TO ARCHIVE
+            const bx = left, by = Math.round(bottom + dp(16)), bs = st(AR_ST.btn, ink, bg), bw = labelWidth("←  RETURN TO ARCHIVE", bs) + dp(22), bh = dp(26);
+            gr.FillSolidRect(bx, by, bw, bh, bg);
+            box(gr, bx, by, bw, bh, ink);
+            label(gr, "←  RETURN TO ARCHIVE", bs, bx + dp(11), by + Math.round((bh - labelHeight(AR_ST.btn)) / 2));
+            hits.add("ar-return", bx, by, bw, bh);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------------------------------- the file
+const INFO_HITS = [];
+function infoHits(ox) { for (const [id, x, y, w, h, data] of INFO_HITS) hits.add(id, ox + x, y, w, h, data); }
+
+function drawInfo(gr, w, h) {
+    gr.FillSolidRect(0, 0, w, h, C.bg);
+    if (LABEL_LIVE) drawWallpaper(gr, "stage", infoX() - dp(20), 0, w, h, 0, 0);
+    INFO_HITS.length = 0;
+    const a = curAlbum();
+    if (!a) return;
+    const x = dp(20), iw = fileW(), gname = groupName(a.grp || "");
+    // the halftone (05 STYLE), under the ghost group name (both pages)
+    halftoneDecor(gr, w, h, dp(210));
+    // ghost group name, low behind the actions
+    const gf = font(132, 700), gw = gr.CalcTextWidth(gname, gf);
+    gr.DrawStrokedText(gname, gf, withAlpha(C["line-faint"], .45), HAIR, 0, 0, h - dp(150), gw + dp(20), dp(170));
+    let y = dp(34);
+    // AUDIO ARCHIVE / AMBIENT
+    let ex = x + label(gr, "AUDIO ARCHIVE", st(AR_ST.eyebrow, C["text-muted"]), x, y);
+    ex += label(gr, "  /  ", st(AR_ST.eyebrow, C["text-muted"]), ex, y);
+    label(gr, fitLabel(gname, st(AR_ST.eyebrowB, 0), iw - (ex - x)), st(AR_ST.eyebrowB, C.fg), ex, y);
+    y += dp(24);
+    if (AR.page === "tracks") drawInfoTracks(gr, a, x, y, iw, w, h);
+    else if (AR.page === "artist") drawInfoArtist(gr, a, x, y, iw, w, h);
+    else drawInfoFile(gr, a, x, y, iw, w, h);
+    drawInfoPages(gr, x, iw, h);
+}
+
+// the dots at the bottom: ● FILE  ○ TRACKS  ○ ARTIST (a click on one, or L, turns the page; the name goes to the next)
+const INFO_PAGES = [["file", "FILE"], ["tracks", "TRACKS"], ["artist", "ARTIST"]];
+function drawInfoPages(gr, x, iw, h) {
+    const cy = h - dp(22), r = dp(3.5), gap = dp(16), s = st(AR_ST.key, C["text-muted"]), names = INFO_PAGES.map(([, t]) => tr(t));
+    const cx0 = x + iw / 2 - gap * (INFO_PAGES.length - 1) / 2, at = INFO_PAGES.findIndex(([k]) => k === AR.page);
+    // a plate under the dots, so the halftone does not run through them
+    const nw = labelWidth(names[at], s), pw = (INFO_PAGES.length - 1) * gap + 2 * r + dp(14) + nw + dp(16), px = cx0 - r - dp(10);
+    gr.FillSolidRect(px, cy - dp(11), pw, dp(22), C.bg);
+    INFO_PAGES.forEach(([k], i) => {
+        const cx = cx0 + i * gap;
+        if (i === at) gr.FillEllipse(cx - r, cy - r, 2 * r, 2 * r, C.accent);
+        else gr.DrawEllipse(cx - r + HAIR / 2, cy - r + HAIR / 2, 2 * r - HAIR, 2 * r - HAIR, Math.max(HAIR, dp(1.2)), C["text-muted"]);
+        INFO_HITS.push(["ar-page", cx - dp(8), cy - dp(11), dp(16), dp(22), k]);
+    });
+    const lx = cx0 + (INFO_PAGES.length - 1) * gap + r + dp(12);
+    label(gr, names[at], s, lx, cy - Math.round(labelHeight(AR_ST.key) / 2));
+    INFO_HITS.push(["ar-page", lx - dp(2), cy - dp(11), nw + dp(4), dp(22), INFO_PAGES[(at + 1) % INFO_PAGES.length][0]]);
+}
+
+// ▶ PLAY ALBUM / PLAY TRACK / PLAY FOLDER (inverse) · OPEN ALBUM ↗ (orange focus frame); the key that does the same
+// (Space) is printed on the button, dimmed. Returns its height.
+function drawInfoButtons(gr, x, y, isTrack) {
+    const fold = !isTrack && !!(curAlbum() || {}).folder, openTxt = tr(fold ? "OPEN IN PLAYLIST" : "OPEN ALBUM");
+    const bh = dp(40), bs = st(AR_ST.btn, C.bg, C.fg), playTxt = tr(isTrack ? "PLAY TRACK" : fold ? "PLAY FOLDER" : "PLAY ALBUM");
+    const ks = st(AR_ST.key, mix(C.bg, C.fg, .45), C.fg), kt = tr("SPACE"), kw = labelWidth(kt, ks);
+    const pw = dp(14) + dp(10) + dp(10) + labelWidth(playTxt, bs) + dp(14) + kw + dp(14);
+    gr.FillSolidRect(x, y, pw, bh, C.fg);
+    icon(gr, "play", x + dp(19), y + bh / 2, 9, C.bg);
+    label(gr, playTxt, bs, x + dp(34), y + Math.round((bh - labelHeight(AR_ST.btn)) / 2));
+    label(gr, kt, ks, x + pw - dp(14) - kw, y + Math.round((bh - labelHeight(AR_ST.key)) / 2));
+    INFO_HITS.push(["ar-play", x, y, pw, bh]);
+    const ox2 = x + pw + dp(10), os = st(AR_ST.btn, C.fg), ow = dp(14) + labelWidth(openTxt, os) + dp(40) + dp(26);
+    if (!LABEL_LIVE) gr.FillSolidRect(ox2, y, ow, bh, C.bg);   // over the halftone (a wallpaper shows through, as before)
+    box(gr, ox2, y, ow, bh, C.fg);
+    box(gr, ox2 - dp(4), y - dp(4), ow + dp(8), bh + dp(8), C.accent);
+    label(gr, openTxt, os, ox2 + dp(14), y + Math.round((bh - labelHeight(AR_ST.btn)) / 2));
+    const ax0 = ox2 + ow - dp(24), ay0 = y + bh / 2 + dp(5), aL = dp(9), sw = Math.max(HAIR, dp(1.5));
+    gr.DrawLine(ax0, ay0, ax0 + aL, ay0 - aL, sw, C.accent);
+    gr.DrawLine(ax0 + dp(2.5), ay0 - aL, ax0 + aL, ay0 - aL, sw, C.accent);
+    gr.DrawLine(ax0 + aL, ay0 - aL, ax0 + aL, ay0 - dp(2.5), sw, C.accent);
+    INFO_HITS.push(["ar-open", ox2, y, ow, bh]);
+    // ♥: the album's heart (a track item's own, while SHOW TRACKS is on; lib/favourite.js)
+    const c = curAlbum(), on = !!c && (isTrack ? isFav(itemTrack(c)) : isFavAlbum(c.key)), hx = ox2 + ow + dp(14), hs = dp(16);
+    if (!LABEL_LIVE) gr.FillSolidRect(hx, y, bh, bh, C.bg);
+    box(gr, hx, y, bh, bh, AR.favHover ? C.accent : C.fg);
+    drawHeart(gr, hx + (bh - hs) / 2, y + (bh - hs) / 2 + dp(1), hs, on, on ? C.accent : C.fg);
+    INFO_HITS.push(["ar-fav", hx, y, bh, bh]);
+    return bh;
+}
+
+// FILE: the album file as it always was (the first tracks, as many as fit; "+ N MORE" turns to the TRACKS page)
+function drawInfoFile(gr, a, x, y, iw, w, h) {
+    // bracketed ALBUM NO. 0269 (FOLDER NO. for a folder) + format chip
+    const noTxt = tr(a.folder ? "FOLDER NO." : "ALBUM NO.") + " ", hh = dp(34), hs = st(AR_ST.head, C.fg), lw = labelWidth(noTxt, hs);
+    const f = font(13, 600), cell = Math.round(gr.CalcTextWidth("0", f, true) + .12 * dp(13)), bw = dp(20) + lw + cell * 4 + dp(16);
+    for (const [cx, cy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) gr.FillSolidRect(x + cx * (bw - dp(5)), y + cy * (hh - dp(5)), dp(5), dp(5), C.fg);
+    const ty = y + Math.round((hh - labelHeight(AR_ST.head)) / 2);
+    label(gr, noTxt, hs, x + dp(20), ty);
+    drawRoll(gr, AR.noRoll, f, C.fg, x + dp(20) + lw, ty, cell, labelHeight(AR_ST.head));
+    // the format chip keeps clear of the bracket: the short form when the full one does not fit, none when neither does
+    const chipW = t => labelWidth(t, { size: 9.5, weight: 600, track: .1, colour: 0, bg: 0 }) + dp(8) * 2 + dp(12);
+    const chipTxt = [fmtChip(a), fmtChip(a, true)].find(t => chipW(t) <= iw - bw - dp(10));
+    if (chipTxt) chip(gr, chipTxt, x + iw - chipW(chipTxt), y + Math.round((hh - dp(22)) / 2), dp(22), "acc", 9.5, C.bg);
+    y += hh + dp(14);
+    gr.FillSolidRect(x, y, w - x, HEAVY, C.fg);
+    y += HEAVY + dp(20);
+    // the album's title, or the track's: on the title tag (05 STYLE), or on title plates (wraps, two lines at most)
+    const al = albumOf(a) || a, isTrack = al !== a;
+    const title = AR.title ? scrambleText(AR.title) : (a.title || tr("UNTITLED")), tf = fontFor(a.title || "U", 25, 600);
+    const own = isTrack ? albumTrackList(a).rows.find(r => r.own) : null;
+    const th = drawTag(gr, x, y, iw, title, { track: isTrack ? (own ? own.no : "") : tr("ALL"), total: pad(al.tracks || 0, 2), arc: pad(a.no, 4), year: a.year, codec: (a.codec || "").toUpperCase(), artist: a.artist });
+    if (!th) {
+        const lines = gr.EstimateLineWrap(title, tf, iw - dp(24)), lh = dp(42);
+        for (let i = 0, ly = y; i < Math.min(4, lines.length); i += 2, ly += lh + dp(2)) {
+            let t = lines[i];
+            if (i === 2 && lines.length > 4) t = t.replace(/.?$/, "…");
+            const tw = Math.min(iw, Math.ceil(gr.CalcTextWidth(t, tf)) + dp(24));
+            gr.FillSolidRect(x, ly, tw, lh, C.fg);
+            gr.DrawText(t, tf, C.bg, x + dp(12), ly, tw - dp(12), lh, DT_SINGLE);
+        }
+    }
+    y += th ? th + dp(14) : dp(104);
+    // artist, year / tracks / length
+    label(gr, fitLabel((a.artist || tr("UNKNOWN ARTIST")).toUpperCase(), st(AR_ST.artist, 0), iw), st(AR_ST.artist, C.fg), x, y);
+    y += dp(22);
+    const meta = isTrack ? `${(al.title || tr("UNTITLED")).toUpperCase()} / ${a.year || "—"} / ${fmtTime(a.length)}`
+                         : `${a.year || "—"} / ${tr("{0} TRACKS", pad(a.tracks, 2))} / ${fmtTime(a.length)}`;
+    label(gr, fitLabel(meta, st(AR_ST.meta, 0), iw), st(AR_ST.meta, C["text-muted"]), x, y);
+    y += dp(28);
+    // profile table
+    gr.FillSolidRect(x, y, iw, dp(18), C.fg);
+    const phy = y + Math.round((dp(18) - labelHeight(ST.ph)) / 2);
+    label(gr, tr("PROFILE"), st(ST.ph, C.bg, C.fg), x + dp(8), phy);
+    label(gr, `ARC-${pad(a.no, 4)}`, st(ST.ph, C.bg, C.fg), x + iw - dp(8), phy, 2);
+    y += dp(18 + 10);
+    const res = a.lossless && a.bits ? `${a.bits} / ${+(a.rate / 1000).toFixed(1)}` : a.kbps ? `${a.kbps} KBPS` : "—";
+    const cells = [[tr("FORMAT"), (a.codec || "—").toUpperCase()], [tr("RES"), res], ["GENRE", (a.genre || "—").toUpperCase()], [tr("DISCS"), String(a.discs)],
+                   [tr("ADDED"), a.added ? a.added.slice(0, 10) : "—"], [tr("PLAYS"), a.plays ? String(a.plays) : "—"]];
+    const colW = iw / 2;
+    cells.forEach(([kk, v], i) => {
+        const cx = x + dp(8) + (i % 2) * colW, cy = y + Math.floor(i / 2) * dp(20);
+        label(gr, kk, st(AR_ST.key, C["text-muted"]), cx, cy + dp(2));
+        text(gr, v, 11, 400, C.fg, cx + dp(72), cy - dp(2), colW - dp(84), dp(18));
+    });
+    y += dp(60) + dp(12);
+    // the album's tracks, as many as fit above the buttons: click one to play the album from it (the selected track
+    // item is marked, the playing track has ▶)
+    // (below the list: the "+ N MORE" row, the buttons, the page dots and a margin, more with the source note)
+    const below = dp(24 + 18 + 40) + dp(26) + dp(LIB.source === "playlists" ? 56 : 28);
+    const rowH = dp(24), fit = clamp(Math.floor((h - y - below) / rowH), 1, 40), TL = albumTracks(a, fit);
+    if (!TL.rows.length) label(gr, tr(LIB.live ? "NO TRACKS" : "INDEXING …"), st(AR_ST.more, C["text-muted"]), x + dp(34), y + dp(6));
+    TL.rows.forEach((t, k) => {
+        const ry = y + k * rowH, hov = AR.infoHover === t.i;
+        if (t.own || hov) gr.FillSolidRect(x - dp(8), ry, iw + dp(16), rowH, t.own ? C.panel : withAlpha(C.fg, .06));
+        if (t.own) gr.FillSolidRect(x - dp(8), ry, dp(3), rowH, C.accent);
+        gr.DrawText(t.playing ? "▶" : t.no, font(12, 400), t.playing ? C.accent : C["text-muted"], x, ry, dp(34), rowH, DT_SINGLE);
+        text(gr, t.title, 12, t.own ? 600 : 400, AR.skipInst && t.inst && !t.own ? C["text-muted"] : C.fg, x + dp(34), ry, iw - dp(34) - dp(70), rowH);
+        gr.DrawText(fmtTime(t.len), font(12, 400), C["fg-soft"], x + iw - dp(70), ry, dp(70), rowH, DT_RIGHT_SINGLE);
+        INFO_HITS.push(["ar-track", x - dp(8), ry, iw + dp(16), rowH, t.i]);
+    });
+    y += Math.max(1, TL.rows.length) * rowH;
+    const more = TL.total - TL.first - TL.rows.length;
+    if (more > 0 && TL.rows.length) {
+        const mw = label(gr, tr("+ {0} MORE  ·  ALL TRACKS", more), st(AR_ST.more, C["text-muted"]), x + dp(34), y + dp(6));
+        INFO_HITS.push(["ar-page", x + dp(30), y, mw + dp(8), rowH, "tracks"]);
+    }
+    y += dp(24 + 18);
+    const bh = drawInfoButtons(gr, x, y, isTrack);
+    if (LIB.source === "playlists") label(gr, tr("SOURCE · ALL PLAYLISTS (NO MEDIA LIBRARY FOLDERS)"), st(AR_ST.key, C["text-muted"]), x, y + bh + dp(16));
+}
+
+// TRACKS: the album's title and totals, then every track with its rating, scrolled by the wheel over the panel;
+// discs get a header row. A click on the marks rates the track (the same mark again clears it), elsewhere on the row
+// it plays the album from there. The buttons stay at the bottom.
+function drawInfoTracks(gr, a, x, y, iw, w, h) {
+    const al = albumOf(a) || a, isTrack = al !== a, L = albumTrackList(a);
+    const tt = al.title || tr("UNTITLED");
+    text(gr, tt, 18, 600, C.fg, x, y, iw, dp(28));
+    y += dp(30);
+    label(gr, fitLabel((al.artist || a.artist || tr("UNKNOWN ARTIST")).toUpperCase(), st(AR_ST.artist, 0), iw), st(AR_ST.artist, C.fg), x, y);
+    y += dp(22);
+    const n = L.rows.length, meta = `${al.year || a.year || "—"} / ${tr("{0} TRACKS", pad(n, 2))} / ${fmtTime(L.total)}`;
+    label(gr, fitLabel(meta, st(AR_ST.meta, 0), iw), st(AR_ST.meta, C["text-muted"]), x, y);
+    // RATED 7 / 12 · ◆ 3.8, right
+    if (n) {
+        const rs = st(AR_ST.meta, L.rated ? C.fg : C["text-muted"]), rt = L.rated ? `${tr("RATED {0} / {1}", L.rated, n)}  ·  ${L.avg.toFixed(1)}` : tr("NOT RATED");
+        label(gr, rt, rs, x + iw, y, 2);
+    }
+    y += dp(26);
+    gr.FillSolidRect(x, y, w - x, HEAVY, C.fg);
+    y += HEAVY + dp(12);
+    // column heads
+    // (a heart column before the ratings, lib/favourite.js)
+    const ms = dp(9), rw = ratingWidth(ms), tx = x + dp(34), timeW = dp(52), rx = x + iw - timeW - dp(14) - rw, ks = st(AR_ST.key, C["text-muted"]);
+    const fs = dp(10), fx = rx - dp(16) - fs;
+    label(gr, tr("NO."), ks, x, y);
+    label(gr, tr("TITLE"), ks, tx, y);
+    drawHeart(gr, fx, y + Math.round((labelHeight(AR_ST.key) - fs) / 2), fs, false, C["text-muted"]);
+    label(gr, tr("RATING"), ks, rx, y);
+    label(gr, tr("TIME"), ks, x + iw, y, 2);
+    y += dp(18);
+    hline(gr, x, y, iw, C["line-faint"]);
+    y += dp(4);
+    // the rows, between the heads and the buttons
+    const bh = dp(40), by = h - dp(22) - dp(20) - bh - (LIB.source === "playlists" ? dp(24) : 0), listH = by - dp(18) - y, rowH = dp(26);
+    if (!n) { label(gr, tr(LIB.live ? "NO TRACKS" : "INDEXING …"), st(AR_ST.more, C["text-muted"]), tx, y + dp(8)); }
+    else {
+        // the display rows: a header per disc when there are several, then its tracks
+        const D = [];
+        let disc = null;
+        for (const r of L.rows) { if (L.discs > 1 && r.disc !== disc) { disc = r.disc; D.push({ head: r.disc }); } D.push(r); }
+        const fit = Math.max(1, Math.floor(listH / rowH));
+        AR.listMax = Math.max(0, D.length - fit);
+        // a new album opens on its selected track item (else at the top)
+        if (AR.listKey !== a.key) { AR.listKey = a.key; const at = D.findIndex(r => r.own); AR.listScroll = at > fit - 2 ? at - 1 : 0; }
+        AR.listScroll = clamp(AR.listScroll, 0, AR.listMax);
+        D.slice(AR.listScroll, AR.listScroll + fit).forEach((r, k) => {
+            const ry = y + k * rowH;
+            if (r.head !== undefined) {
+                label(gr, `${tr("DISC")} ${r.head || "—"}`, st(AR_ST.key, C.fg), x, ry + Math.round((rowH - labelHeight(AR_ST.key)) / 2));
+                hline(gr, x + dp(64), ry + rowH / 2, iw - dp(64), C["line-faint"]);
+                return;
+            }
+            const hov = AR.infoHover === r.i, rh = AR.rateHover && AR.rateHover.i === r.i ? AR.rateHover.n : 0;
+            if (r.own || hov) gr.FillSolidRect(x - dp(8), ry, iw + dp(16), rowH, r.own ? C.panel : withAlpha(C.fg, .06));
+            if (r.own) gr.FillSolidRect(x - dp(8), ry, dp(3), rowH, C.accent);
+            gr.DrawText(r.playing ? "▶" : r.no, font(12, 400), r.playing ? C.accent : C["text-muted"], x, ry, dp(34), rowH, DT_SINGLE);
+            text(gr, r.title, 12, r.own ? 600 : 400, AR.skipInst && r.inst && !r.own ? C["text-muted"] : C.fg, tx, ry, fx - dp(10) - tx, rowH);
+            if (r.fav || hov) drawHeart(gr, fx, ry + (rowH - fs) / 2 + dp(1), fs, r.fav, r.fav ? C.accent : AR.favRow === r.i ? C.fg : C["line-dim"]);
+            drawRating(gr, rx, ry + (rowH - ms) / 2, ms, r.rating, rh);
+            gr.DrawText(fmtTime(r.len), font(12, 400), C["fg-soft"], x + iw - timeW, ry, timeW, rowH, DT_RIGHT_SINGLE);
+            INFO_HITS.push(["ar-track", x - dp(8), ry, fx - dp(6) - (x - dp(8)), rowH, r.i]);
+            INFO_HITS.push(["ar-favt", fx - dp(6), ry, fs + dp(12), rowH, r.i]);
+            INFO_HITS.push(["ar-track", x + iw - timeW, ry, timeW + dp(8), rowH, r.i]);
+            INFO_HITS.push(["ar-rate", rx - dp(6), ry, rw + dp(12), rowH, { i: r.i, pad: dp(6), size: ms }]);
+        });
+        // the scroll bar, when the list is longer than the room
+        if (AR.listMax > 0) {
+            const th = fit * rowH, bh2 = Math.max(dp(18), th * fit / D.length), by2 = y + (th - bh2) * AR.listScroll / AR.listMax;
+            gr.FillSolidRect(x + iw + dp(10), y, HAIR, th, C["line-faint"]);
+            gr.FillSolidRect(x + iw + dp(9), Math.round(by2), dp(3), Math.round(bh2), C.fg);
+        }
+    }
+    drawInfoButtons(gr, x, by, isTrack);
+    if (LIB.source === "playlists") label(gr, tr("SOURCE · ALL PLAYLISTS (NO MEDIA LIBRARY FOLDERS)"), st(AR_ST.key, C["text-muted"]), x, by + bh + dp(12));
+}
+
+// ------------------------------------------------------------------------------------------------------ actions
+function archivePlaylist() {
+    let pl = plman.FindPlaylist(ARCHIVE_PLAYLIST);
+    if (pl >= 0 && plman.IsAutoPlaylist(pl)) pl = -1;
+    if (pl < 0) pl = plman.CreatePlaylist(plman.PlaylistCount, ARCHIVE_PLAYLIST);
+    return pl;
+}
+// keep: a track asked for by name, kept even when it is an instrumental the setting leaves out
+function loadAlbum(a, keep) {
+    let list = albumHandles(a);
+    if (!list || !list.Count) return -1;
+    if (AR.skipInst) list = dropInstrumentals(list, keep);
+    const pl = archivePlaylist();
+    plman.ClearPlaylist(pl);
+    plman.InsertPlaylistItems(pl, 0, list);
+    return pl;
+}
+// plays the selected item's album from track `at` (default: the item's own track, else the first)
+function playAlbum(at) {
+    const a = curAlbum(), full = albumHandles(a);
+    if (!full || !full.Count) return;
+    const want = at !== undefined ? full[clamp(at, 0, full.Count - 1)] : itemTrack(a);
+    const pl = loadAlbum(a, want);
+    if (pl < 0) return;
+    const list = plman.GetPlaylistItems(pl);
+    let i = 0;
+    if (want) for (let k = 0; k < list.Count; k++) if (sameTrack(list[k], want)) { i = k; break; }
+    plman.ActivePlaylist = pl;
+    plman.ExecutePlaylistDefaultAction(pl, i);
+    AR.tracks.key = "";
+}
+// the playing track is this item (a track item) or on this album, or in this folder
+function itemPlaying(a, np = fb.GetNowPlaying()) { return !!(a && np && (a.album ? sameTrack(itemTrack(a), np) : (a.folder ? folderKeyOf(np.Path) : albumKey(np)) === a.key)); }
+// Inspect from elsewhere: the transport's cover and the signal profile card ask for the playing (else focused) track.
+// The Archive opens on its album (or on the track itself while SHOW TRACKS is on) and inspects it once the view is
+// shown and the item is listed; the grid gives way to the case array for it (the room inspects in place).
+const INSPECT_ASK = { key: "", timer: 0 };
+function inspectRequest() {
+    const h = fb.GetNowPlaying() || fb.GetFocusItem();
+    if (!h) return;
+    INSPECT_ASK.key = itemKeyOf(h);
+    if (STATE.view !== "archive") send("view", "archive");   // the view comes back here with the next "state"
+    else inspectPending(0);
+}
+function inspectPending(delay = 450) {
+    if (!INSPECT_ASK.key || !ARCHIVE_ON || INSPECT_ASK.timer) return;
+    // after the view's scan transition, so the lift and turn are seen
+    INSPECT_ASK.timer = window.SetTimeout(() => {
+        INSPECT_ASK.timer = 0;
+        const key = INSPECT_ASK.key;
+        if (!key || !ARCHIVE_ON) return;
+        // not listed: wait for the catalog while the library is still being read, else leave the selection alone
+        if (!LIB.groups.some(g => g.albums.some(x => x.key === key))) {   // the groups list every item, in either layout
+            if (LIB.live) INSPECT_ASK.key = "";
+            return;
+        }
+        INSPECT_ASK.key = "";
+        if (AR.layout === "grid") setLayout("array");
+        AR.inspOn = false; AR.insp = 0;
+        placeSelection(key);
+        if (!curAlbum()) return;
+        AR.inspOn = true; inspectImages(); clock.wake(); window.Repaint();
+    }, delay);
+}
+LIB_LISTENERS.push(kind => { if (kind === "catalog") inspectPending(0); });
+
+function openAlbum() {
+    const pl = loadAlbum(curAlbum());
+    if (pl < 0) return;
+    plman.ActivePlaylist = pl;
+    send("view", "playlists");
+}
+
+// ------------------------------------------------------------------------------------------------------- input
+function inQuad(x, y, q) {   // any polygon
+    let inside = false;
+    for (let i = 0, j = q.length - 1; i < q.length; j = i++) {
+        const [xi, yi] = q[i], [xj, yj] = q[j];
+        if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+}
+// the case at (x, y), on any shelf: the selected shelf's first (a see-through shelf in front, drawn over it, does not
+// take its cases), then the other shelves', the nearest (drawn last) first
+// (in the room every shelf is solid: the nearest case is the one under the mouse, whichever shelf it is on)
+function caseUnder(x, y) {
+    for (const own of roomOn() ? [null] : [true, false]) for (let j = AR.hits.length - 1; j >= 0; j--) {
+        const c = AR.hits[j];
+        if ((own === null || (c.gi === AR.group) === own) && inQuad(x, y, c.quad)) return c;
+    }
+    return null;
+}
+function archiveMouseMove(x, y, a) {
+    AR.mouseX = x; AR.mouseY = y;
+    artistMouseMove(x, y, a);
+    // the file panel's track rows highlight under the mouse; over a row's marks, the rating they would give shows
+    const th = a && (a.id === "ar-track" || a.id === "ar-favt") ? a.data : a && a.id === "ar-rate" ? a.data.i : -1;
+    const rh = a && a.id === "ar-rate" ? { i: a.data.i, n: ratingAt(x, a.x + a.data.pad, a.data.size) } : null;
+    const fr = a && a.id === "ar-favt" ? a.data : -1, fb2 = !!(a && a.id === "ar-fav");   // a row's heart, the album's heart
+    if (th !== AR.infoHover || (rh && rh.n) !== (AR.rateHover && AR.rateHover.n) || (rh && rh.i) !== (AR.rateHover && AR.rateHover.i) || fr !== AR.favRow || fb2 !== AR.favHover) {
+        AR.infoHover = th; AR.rateHover = rh; AR.favRow = fr; AR.favHover = fb2; AR.dirtyInfo = true;
+        window.RepaintRect(infoX() - dp(20), 0, W - infoX() + dp(20), H);
+    }
+    if (AR.layout === "grid") return gridMouseMove(x, y, a);
+    const c = !AR.inspOn && !AF.open && x < arrayW() && !a ? caseUnder(x, y) : null, h = c ? c.i : -1, hg = c ? c.gi : -1;
+    if (roomOn()) roomPointer(c);   // room.js: an empty case rises under the mouse too
+    let ht = -1;
+    if (a && a.id === "ar-ruler" && AR.rulerGeom) { const R = AR.rulerGeom; ht = clamp(Math.round((x - R.x0) / R.step + R.s0), 0, R.n - 1); }
+    if (h !== AR.hover || hg !== AR.hoverRow || ht !== AR.hoverTick) { AR.hover = h; AR.hoverRow = hg; AR.hoverTick = ht; clock.wake(); }
+    return h >= 0;
+}
+function archiveMouseLeave() {
+    if (AR.infoHover >= 0 || AR.rateHover) { AR.infoHover = -1; AR.rateHover = null; AR.dirtyInfo = true; window.Repaint(); }
+    if (GRID.hover) { GRID.hover = null; window.Repaint(); }
+    if (AR.rulerDrag) return;   // a drag along the album index goes on outside the panel
+    AR.mouseX = AR.mouseY = -1;
+    if (roomOn()) roomPointer(null);
+    if (AR.hover >= 0 || AR.hoverTick >= 0) { AR.hover = AR.hoverRow = -1; AR.hoverTick = -1; clock.wake(); }
+}
+function archiveClick(x, y, a) {
+    if (a && a.id === "ar-pick") { randomPick(); return; }
+    pickStop();
+    if (artistClick(a)) return;
+    if (AR.inspOn) { AR.inspOn = false; clock.wake(); return; }
+    if (a) {
+        switch (a.id) {
+            case "ar-play": playAlbum(); return;
+            case "ar-addmusic": addMusicFolder(); return;
+            case "ar-track": playAlbum(a.data); return;
+            case "ar-rate": {
+                const L = AR.list, h = L && L.handles ? L.handles[a.data.i] : null;
+                if (h) setRating(h, ratingAt(x, a.x + a.data.pad, a.data.size));
+                return;
+            }
+            case "ar-page": setInfoPage(a.data); return;
+            case "ar-unit": setUnit(a.data); return;
+            case "ar-open": openAlbum(); return;
+            case "ar-fav": { const c = curAlbum(); if (c && c.album) setFav(itemTrack(c)); else if (c) setFavAlbum(c.key); return; }
+            case "ar-favt": { const L = AR.list, h = L && L.handles ? L.handles[a.data] : null; if (h) setFav(h); return; }
+            case "ar-prev": moveAlbum(-1); return;
+            case "ar-next": moveAlbum(1); return;
+            case "ar-gprev": moveGroup(-1); return;
+            case "ar-gnext": moveGroup(1); return;
+            case "ar-gname": shelfMenu(x, y); return;
+            case "ar-ruler": if (AR.hoverTick >= 0) moveAlbum(AR.hoverTick - AR.rows.get(AR.group).sel); return;
+            case "ar-layout": setLayout(a.data); return;
+            case "ar-filter": send("search-clear"); return;
+            case "ar-per": setPerPage(a.data); return;
+            case "ar-group": setGroupBy(a.data); return;
+            case "ar-sort": setSortBy(a.data); return;
+            case "ar-fold": barMenu(a.data, a.x, a.y + a.h); return;
+        }
+    }
+    if (AF.open && x < arrayW()) return;   // the artist file covers the shelves
+    if (AR.layout === "grid") { gridClick(x, y, a); return; }
+    if (roomOn()) { roomClick(); return; }
+    if (AR.hover >= 0 && AR.hoverRow !== AR.group) { selectCase(AR.hoverRow, AR.hover); return; }
+    if (AR.hover >= 0) {
+        const r = AR.rows.get(AR.group);
+        if (AR.hover === r.sel) { AR.inspOn = true; inspectImages(); clock.wake(); }
+        else moveAlbum(AR.hover - r.sel);
+    }
+}
+// the wheel: along the shelf (the array) or down the grid; over the TRACKS page, through its list. With Shift held
+// (or a sideways wheel, archiveWheelH) it switches shelves (the grid: sections), as ← → do.
+function archiveWheel(step) {
+    pickStop();
+    if (AF.open && AR.mouseX < arrayW()) { artistWheel(step); return; }   // the artist file's track list (artist.js)
+    if (utils.IsKeyPressed(0x10)) { archiveShelf(step > 0 ? 1 : -1); return; }
+    // over the shelf switch under the array: from shelf to shelf
+    const over = hits.at(AR.mouseX, AR.mouseY);
+    if (over && /^ar-g(name|prev|next)$/.test(over.id)) { archiveShelf(step > 0 ? 1 : -1); return; }
+    if (AR.page === "tracks" && AR.mouseX >= infoX() - dp(20) && curAlbum()) {
+        const s = clamp(AR.listScroll - step * 3, 0, AR.listMax);
+        if (s !== AR.listScroll) { AR.listScroll = s; AR.dirtyInfo = true; AR.rateHover = null; window.RepaintRect(infoX() - dp(20), 0, W - infoX() + dp(20), H); }
+        return;
+    }
+    // the ARTIST page, when it is too short for all of it (artist.js)
+    if (AR.page === "artist" && AF.max > 0 && AR.mouseX >= infoX() - dp(20) && curAlbum()) { artPageScroll(AF.scroll - step * dp(60)); return; }
+    if (AR.layout === "grid") gridWheel(step); else moveAlbum(step > 0 ? -1 : 1);
+}
+function archiveWheelH(step) { pickStop(); archiveShelf(step > 0 ? -1 : 1); }
+// d = 1: the next shelf back (the array: up and to the left, as ←), the grid: the section above; -1 the other way
+function archiveShelf(d) {
+    if (AR.layout !== "grid") { moveGroup(d); return; }
+    const gi = clamp(AR.group - d, 0, LIB.groups.length - 1);
+    if (gi !== AR.group) gridSelect(gi, rowState(gi).sel);
+}
+function archiveKey(vk) {
+    // the artist file: Esc closes it, M (or Tab) turns FILE / MAP; I opens or closes it
+    if (AF.open && vk === 0x1B) { artistFileOpen(false); return true; }
+    if (AF.open && (vk === 0x4D || vk === 0x09)) { artistTab(); return true; }
+    if (vk === 0x49) { artistFileOpen(); return true; }
+    if (vk === 0x52) { randomPick(); return true; }   // R
+    if (vk === 0x46 && curAlbum()) { openFolder(itemTrack(curAlbum()) || albumFirst(curAlbum())); return true; }   // F: the selected item's folder
+    if (PICK.steps && (vk === 0x1B || vk === 0x0D || vk === 0x20 || vk === 0x47 || (vk >= 0x21 && vk <= 0x28))) {
+        pickStop();
+        if (vk === 0x1B) return true;
+    }
+    if (AR.inspOn) {
+        if (vk === 0x1B) { AR.inspOn = false; clock.wake(); return true; }
+        if (vk === 0x0D) { openAlbum(); return true; }
+        if (vk === 0x20) { playAlbum(); return true; }
+        return vk >= 0x21 && vk <= 0x28;   // navigation keys do nothing while inspecting
+    }
+    if (vk === 0x47) { setLayout(LAYOUTS[(LAYOUTS.findIndex(([l]) => l === AR.layout) + 1) % LAYOUTS.length][0]); return true; }   // G: the next layout
+    if (vk === 0x4C) { setInfoPage(INFO_PAGES[(INFO_PAGES.findIndex(([k]) => k === AR.page) + 1) % INFO_PAGES.length][0]); return true; }   // L: the album file's next page
+    if (AR.layout === "grid" && gridKey(vk)) return true;
+    if (roomOn() && roomKey(vk)) return true;
+    switch (vk) {
+        case 0x26: moveAlbum(-1); return true;          // ↑
+        case 0x28: moveAlbum(1); return true;           // ↓
+        // the next shelf stands behind, up and to the left: ← goes to it, → back towards the front (#16)
+        case 0x25: moveGroup(1); return true;           // ←
+        case 0x27: moveGroup(-1); return true;          // →
+        case 0x21: moveAlbum(-10); return true;         // Page Up
+        case 0x22: moveAlbum(10); return true;          // Page Down
+        case 0x24: moveAlbum(-1e6); return true;        // Home
+        case 0x23: moveAlbum(1e6); return true;         // End
+        case 0x0D: if (curAlbum()) { AR.inspOn = true; inspectImages(); clock.wake(); } return true;
+        case 0x20: {                                    // Space: play the album (play / pause when it is the one playing)
+            const a = curAlbum(), np = fb.GetNowPlaying();
+            if (itemPlaying(a, np)) fb.PlayOrPause(); else playAlbum();
+            return true;
+        }
+    }
+    return false;
+}
+// A right click's own target, for "Add to playlist" and "Properties": the track row under the mouse (the TRACKS page,
+// the artist file's lists), else the item under the mouse (the selection stays where it is), else the selected item.
+// { kind: "track" | "album" | "folder", list, name }
+const TF_MENU_TITLE = fb.TitleFormat("%title%");
+function menuTarget(x, y) {
+    const a = hits.at(x, y);
+    const track = h => { const list = fb.CreateHandleList(); list.Add(h); return { kind: "track", list, name: TF_MENU_TITLE.EvalWithMetadb(h) }; };
+    const item = c => { const t = itemTrack(c); return t ? track(t) : { kind: c.folder ? "folder" : "album", list: albumHandles(c), name: c.title || "" }; };
+    const row = a && (a.id === "ar-track" || a.id === "ar-favt") ? a.data : a && a.id === "ar-rate" ? a.data.i : -1;
+    if (row >= 0 && AR.list && AR.list.handles && AR.list.handles[row]) return track(AR.list.handles[row]);
+    if (a && (a.id === "art-trk" || a.id === "art-alb")) {
+        const A = curArtist(), lib = A && A.lib, r = a.id === "art-trk" ? artistTracks(lib)[a.data] : artistAlbums(lib)[a.data];
+        if (r) return a.id === "art-trk" ? track(r.h) : item(r);
+    }
+    let c = null;
+    if (!a && x < arrayW() && !AF.open && !AR.inspOn) {
+        if (AR.layout === "grid") { const g = gridAt(x, y); c = g ? LIB.groups[g.gi].albums[g.i] : null; }
+        else { const u = caseUnder(x, y), sh = u && !u.empty ? arRows()[u.gi] : null; c = sh ? sh.albums[u.i] || null : null; }
+    }
+    c = c || curAlbum();
+    return c ? item(c) : null;
+}
+// the target's tracks at the end of a playlist (to < 0: a new one, named by the user); a note says what went where
+function addToPlaylist(tg, to) {
+    if (!tg || !tg.list || !tg.list.Count) return;
+    if (to < 0) {
+        let name;
+        try { name = utils.InputBox(window.ID, tr("Playlist name"), tr("New playlist"), tg.name || "", true); } catch (e) { return; }
+        if (!name || !name.trim()) return;
+        to = plman.CreatePlaylist(plman.PlaylistCount, name.trim());
+    }
+    plman.UndoBackup(to);
+    plman.InsertPlaylistItems(to, plman.PlaylistItemCount(to), tg.list);
+    const n = tg.list.Count;
+    archiveNote(`${tr(n === 1 ? "{0} TRACK" : "{0} TRACKS", n)}  ·  ${tr("ADDED TO {0}", plman.GetPlaylistName(to).toUpperCase())}`);
+}
+// a short note under the top bar (what a menu did where it cannot be seen), gone after a moment
+function archiveNote(text) {
+    AR.note = { text, at: Date.now() };
+    window.Repaint();
+    window.SetTimeout(() => { if (AR.note && Date.now() - AR.note.at >= 2800) { AR.note = null; window.Repaint(); } }, 2900);
+}
+function drawArchiveNote(gr) {
+    if (!AR.note) return;
+    const x = dp(32), y = dp(88), h = dp(24), s = st(AR_ST.key, C.bg, C.fg);
+    const t = fitLabel(AR.note.text, s, arrayW() - dp(96)), w = labelWidth(t, s) + dp(24);
+    gr.FillSolidRect(x, y, w, h, C.fg);
+    gr.FillSolidRect(x, y, dp(4), h, C.accent);
+    label(gr, t, s, x + dp(14), y + Math.round((h - labelHeight(AR_ST.key)) / 2));
+}
+// every shelf by name, to go straight to one (a click on the shelf's name under the array)
+function shelfMenu(x, y) {
+    const R = arRows(), m = window.CreatePopupMenu(), PER = 30;
+    const name = i => `${pad(i + 1, 2)}   ${groupName(R[i].name).replace(/&/g, "&&")}\t${R[i].albums.length}`;
+    if (R.length <= PER) R.forEach((g, i) => m.AppendMenuItem(0, i + 1, name(i)));
+    else for (let p = 0; p < R.length; p += PER) {   // a long list (folders): thirty to a page
+        const sub = window.CreatePopupMenu(), end = Math.min(R.length, p + PER);
+        for (let i = p; i < end; i++) sub.AppendMenuItem(0, i + 1, name(i));
+        if (AR.group >= p && AR.group < end) sub.CheckMenuRadioItem(p + 1, end, AR.group + 1);
+        const cut = s => { const t = [...groupName(s).replace(/&/g, "&&")]; return t.length > 18 ? t.slice(0, 17).join("") + "…" : t.join(""); };
+        sub.AppendTo(m, AR.group >= p && AR.group < end ? 0x8 : 0, `${pad(p + 1, 2)} – ${pad(end, 2)}   ${cut(R[p].name)} … ${cut(R[end - 1].name)}`);
+    }
+    if (R.length <= PER && R.length) m.CheckMenuRadioItem(1, R.length, AR.group + 1);
+    const id = m.TrackPopupMenu(x, y);
+    if (id > 0) moveGroup(id - 1 - AR.group);
+}
+function archiveMenu(x, y) {
+    const m = window.CreatePopupMenu(), by =["genre", "decade", "artist", "folder", "favourites", "none"], sorts = SORT_BY.map(([k]) => k);
+    ["Group by genre", "Group by decade", "Group by artist initial", "Group by folder", "Group by favourites", "No groups"].forEach((t, i) => m.AppendMenuItem(0, 30 + i, tr(t)));
+    m.CheckMenuRadioItem(30, 30 + by.length - 1, 30 + Math.max(0, by.indexOf(LIB.groupBy)));
+    const so = window.CreatePopupMenu();
+    ["Artist", "Album title", "Year", "Date added (newest first)"].forEach((t, i) => so.AppendMenuItem(0, 400 + i, tr(t)));
+    so.CheckMenuRadioItem(400, 403, 400 + Math.max(0, sorts.indexOf(LIB.sortBy)));
+    so.AppendTo(m, 0, tr("Sort by"));
+    m.AppendMenuItem(showTracks() ? 0x8 : 0, 10, tr("Show every track as its own item"));
+    m.AppendMenuItem(itemUnit() === "folders" ? 0x8 : 0, 21, tr("Show every folder as one item"));
+    m.AppendMenuSeparator();
+    m.AppendMenuItem(0, 7, tr("Case array") + "\tG");
+    m.AppendMenuItem(0, 8, tr("Cover grid") + "\tG");
+    m.AppendMenuItem(0, 22, tr("Archive room") + "\tG");
+    m.CheckMenuItem(7, AR.layout === "array"); m.CheckMenuItem(8, AR.layout === "grid"); m.CheckMenuItem(22, AR.layout === "room");
+    const per = window.CreatePopupMenu();
+    PER_PAGE.forEach((n, i) => per.AppendMenuItem(0, 300 + i, tr("{0} covers", n)));
+    per.CheckMenuRadioItem(300, 300 + PER_PAGE.length - 1, 300 + Math.max(0, PER_PAGE.indexOf(GRID.per)));
+    per.AppendTo(m, 0, tr("Grid: covers per page"));
+    m.AppendMenuItem(AR.barCompact ? 0x8 : 0, 25, tr("Compact top bar"));
+    m.AppendMenuSeparator();
+    const fold = !!(curAlbum() || {}).folder;
+    m.AppendMenuItem(curAlbum() ? 0 : 1, 9, tr(fold ? "Play folder" : "Play album"));
+    m.AppendMenuItem(curAlbum() ? 0 : 1, 5, tr(fold ? "Open folder in playlist" : "Open album in playlist"));
+    m.AppendMenuItem(curAlbum() ? 0 : 1, 13, tr("Open containing folder") + "\tF");
+    // what the mouse is on (a track row, a case, a cover), else the selected item: into a playlist, or its tags
+    const tg = menuTarget(x, y), tgOn = !!(tg && tg.list && tg.list.Count), lists = [], ap = window.CreatePopupMenu();
+    ap.AppendMenuItem(0, 800, tr("New playlist") + "…");
+    for (let i = 0; i < plman.PlaylistCount; i++) if (!plman.IsAutoPlaylist(i) && !OWN_PLAYLISTS.has(plman.GetPlaylistName(i))) lists.push(i);   // not the theme's own (lib/bus.js)
+    if (lists.length) ap.AppendMenuSeparator();
+    lists.forEach((p, k) => ap.AppendMenuItem(plman.IsPlaylistLocked(p) ? 1 : 0, 801 + k, plman.GetPlaylistName(p).replace(/&/g, "&&")));
+    ap.AppendTo(m, tgOn ? 0 : 1, tr({ track: "Add track to playlist", folder: "Add folder to playlist" }[tg && tg.kind] || "Add album to playlist"));
+    m.AppendMenuItem(tgOn ? 0 : 1, 23, tr("Properties (edit tags)…"));
+    m.AppendMenuItem(curAlbum() ? 0 : 1, 11, tr("Random pick") + "	R");
+    m.AppendMenuItem(AR.topTitles ? 0x8 : 0, 12, tr("Titles on the cases' top edges"));
+    m.AppendMenuItem(AR.frontShelves ? 0x8 : 0, 18, tr("Show the shelves in front (see-through)"));
+    m.AppendMenuItem(AR.frost ? 0x8 : 0, 20, tr("Frosted glass on the cases"));
+    m.AppendMenuItem(AR.page === "tracks" ? 0x8 : 0, 14, tr("Album file: all tracks with ratings") + "\tL");
+    m.AppendMenuItem(AR.skipInst ? 0x8 : 0, 15, tr("Play albums without instrumentals"));
+    m.AppendMenuItem(curAlbum() ? 0 : 1, 19, tr("Artist file") + "	I");
+    m.AppendMenuItem(ART.online ? 0x8 : 0, 24, tr("Artist file: look artists up online"));
+    ratingMenu(m, 600);
+    const c = curAlbum(), cOn = !!c && (c.album ? isFav(itemTrack(c)) : isFavAlbum(c.key));
+    m.AppendMenuItem((c ? 0 : 1) | (cOn ? 0x8 : 0), 16, tr(c && c.album ? "Favourite track" : c && c.folder ? "Favourite folder" : "Favourite album"));
+    m.AppendMenuItem(0, 17, tr("Open favourites playlist"));
+    favMenu(m, 700);
+    const hv = window.CreatePopupMenu();
+    ["Outline it", "Show its title", "Nothing"].forEach((t, i) => hv.AppendMenuItem(0, 500 + i, tr(t)));
+    hv.CheckMenuRadioItem(500, 502, 500 + HOVER_MODES.indexOf(AR.hoverMode));
+    hv.AppendTo(m, 0, tr("Case under the mouse"));
+    m.AppendMenuSeparator();
+    const skins = appendSkinMenu(m, 100);
+    m.AppendMenuItem(0, 6, tr("Re-index library"));
+    const id = m.TrackPopupMenu(x, y);
+    if (id >= 30 && id < 30 + by.length) setGroupBy(by[id - 30]);
+    else if (id >= 800) addToPlaylist(tg, id === 800 ? -1 : lists[id - 801]);
+    else if (id === 23) fb.RunContextCommandWithMetadb("Properties", tg.list);
+    else if (id === 25) setBarCompact(!AR.barCompact);
+    else if (id === 24) { artistOnline(!ART.online); AF.prefKey = ""; AR.dirtyInfo = true; AF.dirty = true; window.Repaint(); }
+    else if (id === 16) { if (c.album) setFav(itemTrack(c)); else setFavAlbum(c.key); }
+    else if (id === 17) { favPlaylist(libHandles); send("view", "playlists"); }
+    else if (id >= 700 && favMenuPick(id, 700)) { /* the listeners read the hearts again */ }
+    else if (id >= 400 && sorts[id - 400]) setSortBy(sorts[id - 400]);
+    else if (id === 9) playAlbum();
+    else if (id === 11) randomPick();
+    else if (id === 13) openFolder(itemTrack(curAlbum()) || albumFirst(curAlbum()));
+    else if (id >= 500 && HOVER_MODES[id - 500]) { AR.hoverMode = HOVER_MODES[id - 500]; setSetting("caseHover", AR.hoverMode); window.Repaint(); }
+    else if (id === 12) { AR.topTitles = !AR.topTitles; setSetting("caseTopTitles", AR.topTitles); window.Repaint(); }
+    else if (id === 20) setFrost(!AR.frost);
+    else if (id === 18) { AR.frontShelves = !AR.frontShelves; setSetting("archiveFrontShelves", AR.frontShelves); requestVisibleThumbs(); clock.wake(); window.Repaint(); }
+    else if (id === 14) setInfoPage(AR.page === "tracks" ? "file" : "tracks");
+    else if (id === 19) artistFileOpen(true);
+    else if (id === 15) { AR.skipInst = !AR.skipInst; setSetting("skipInstrumentals", AR.skipInst); AR.dirtyInfo = true; window.Repaint(); }
+    else if (id >= 600 && ratingMenuPick(id, 600)) { AR.listVer++; AR.dirtyInfo = true; window.Repaint(); }
+    else if (id === 10) setUnit(showTracks() ? "albums" : "tracks");
+    else if (id === 21) setUnit(itemUnit() === "folders" ? "albums" : "folders");
+    else if (id === 5) openAlbum();
+    else if (id === 6) libIndex(true);
+    else if (id === 7 || id === 8 || id === 22) setLayout(id === 8 ? "grid" : id === 22 ? "room" : "array");
+    else if (id >= 300 && PER_PAGE[id - 300]) setPerPage(PER_PAGE[id - 300]);
+    else if (id >= 100 && skins[id - 100]) send("skin", skins[id - 100].id);
+}

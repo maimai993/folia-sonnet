@@ -1,0 +1,409 @@
+﻿"use strict";
+// 01 · ARCHIVE, GRID layout (stage.js includes this after archive.js): every album as a cover in a grid, in sections by
+// the archive's grouping (genre, decade or artist initial), for browsing by eye. It shares the archive's selection and
+// its album file on the right; LAYOUT [ARRAY | GRID] (key G) switches between the two.
+//   click a cover: select it · double-click / Space: play the album · Enter: open it in the Archive playlist
+//   wheel scrolls; arrows move the selection (across sections), Page Up / Down a screen, Home / End
+//   PER PAGE 10 · 36 · 50 · 75 · 100 · 200: about that many covers on screen (the cover size follows)
+// Only the covers on screen (and a row around them) are drawn and asked for; thumbnails come from the library worker's
+// disk cache (lib/library.js), so a few thousand albums scroll as easily as a few dozen.
+
+// ARRAY (the shelves of cases), GRID (covers) and ROOM (room.js: the artist file's room)
+const LAYOUTS = [["array", "ARRAY"], ["grid", "GRID"], ["room", "ROOM"]];
+AR.layout = LAYOUTS.some(([l]) => l === getSetting("archiveLayout", "array")) ? getSetting("archiveLayout", "array") : "array";
+AR.barCompact = getSetting("archiveBar", "full") === "compact";   // the top bar folded to the choices in use (drawArchiveBar)
+const GRID = { scroll: Spring(0, 10), geo: null, hover: null, reveal: true, per: getSetting("gridPerPage", 36) };
+const PER_PAGE = [10, 36, 50, 75, 100, 200];
+function setPerPage(n) {
+    if (n === GRID.per) return;
+    GRID.per = n;
+    setSetting("gridPerPage", n);
+    GRID.geo = null; GRID.reveal = true;   // reveal: jump to the selection at the next paint
+    clock.wake(); window.Repaint();
+}
+const GRID_ST = {
+    head: { size: 9, weight: 600, track: .16 },
+    count: { size: 8.5, weight: 500, track: .12 },
+    year: { size: 8, weight: 600, track: .08 },
+};
+
+function setLayout(l) {
+    if (l === AR.layout) return;
+    const key = curAlbum() ? curAlbum().key : AR.selAlbum;
+    AR.layout = l;
+    setSetting("archiveLayout", l);
+    send("ar-layout", l);   // (the cards' hero case is the room's while the Archive shows the room: lib/album.js)
+    if (typeof dirty !== "undefined") dirty.card = true;
+    if (l === "grid") { GRID.geo = null; GRID.reveal = true; }
+    placeSelection(key);   // the array's rows are shelves, the grid's sections are groups: find the album again
+    requestVisibleThumbs();
+    clock.wake();
+    window.Repaint();
+}
+
+// geometry: covers of `cell` px in `cols` columns; each section is a header and its rows; y in content coordinates
+function gridGeom() {
+    const aw = arrayW(), padX = dp(32), gap = dp(18), top = dp(100);
+    const key = `${aw}|${H}|${LIB.gen}|${LIB.groupBy}|${LIB.sortBy}|${LIB.unit}|${LIB.filter}|${LIB.groupsVer}|${SCALE}|${GRID.per}`;
+    if (GRID.geo && GRID.geo.key === key) return GRID.geo;
+    // the column count whose covers come closest to GRID.per on one screen (titles under covers of 80 dp and more)
+    const viewH = H - top - dp(24), fit = cols => {
+        const cell = Math.floor((aw - 2 * padX - (cols - 1) * gap) / cols), lab = cell >= dp(80) ? dp(42) : 0;
+        return { cols, cell, lab, n: cols * viewH / (cell + lab + gap) };
+    };
+    let best = fit(2);
+    for (let c = 3; c <= 40; c++) { const f = fit(c); if (f.cell < dp(36)) break; if (Math.abs(f.n - GRID.per) < Math.abs(best.n - GRID.per)) best = f; }
+    const { cols, cell, lab } = best, rowH = cell + lab + gap, headH = dp(48);
+    const secs = [];
+    let y = 0;
+    LIB.groups.forEach((g, gi) => {
+        const rows = Math.ceil(g.albums.length / cols);
+        secs.push({ gi, y, y0: y + headH, rows });
+        y += headH + rows * rowH + dp(12);
+    });
+    GRID.geo = { key, padX, gap, top, cols, cell, lab, rowH, headH, secs, total: y, viewH, aw };
+    return GRID.geo;
+}
+const gridMaxScroll = G => Math.max(0, G.total - G.viewH);
+
+// dragging the scroll bar's thumb (a press on the track first centres the thumb there); the grid follows at once
+function gridBarDown(y, a) {
+    const b = a.data, grab = y >= b.by && y <= b.by + b.bh ? y - b.by : b.bh / 2;
+    GRID.drag = { grab, b };
+    gridBarMove(y);
+}
+function gridBarMove(y) {
+    const { grab, b } = GRID.drag, s = clamp((y - grab - b.top) / Math.max(1, b.th - b.bh), 0, 1) * b.max;
+    GRID.scroll.to = GRID.scroll.x = s; GRID.scroll.v = 0;
+    const now = performance.now();
+    if (now - gridAskedAt > 120) { gridAskedAt = now; gridThumbs(); }
+    window.RepaintRect(0, 0, arrayW(), H);
+}
+function gridBarUp() { GRID.drag = null; gridThumbs(); window.RepaintRect(0, 0, arrayW(), H); }
+// content position of album i of section s
+function cellPos(G, s, i) { return [G.padX + (i % G.cols) * (G.cell + G.gap), s.y0 + Math.floor(i / G.cols) * G.rowH]; }
+
+// scroll so the selected cover is in view (jump: no animation)
+function gridReveal(jump = false) {
+    const G = gridGeom(), s = G.secs[AR.group], r = AR.rows.get(AR.group);
+    if (!s || !r || G.viewH <= 0) { GRID.reveal = true; return; }   // not laid out yet: on the next paint
+    GRID.reveal = false;
+    const [, y] = cellPos(G, s, r.sel), view = G.viewH;
+    let t = GRID.scroll.to;
+    if (y - G.headH < t) t = y - (r.sel < G.cols ? G.headH : dp(12));
+    else if (y + G.cell + G.lab > t + view) t = y + G.cell + G.lab - view + dp(12);
+    GRID.scroll.to = clamp(t, 0, gridMaxScroll(G));
+    if (jump) GRID.scroll.x = GRID.scroll.to;
+}
+
+let gridAskedAt = 0;
+function gridUpdate(dt) {
+    const more = stepSpring(GRID.scroll, dt), now = performance.now();
+    if (more && now - gridAskedAt > 120) { gridAskedAt = now; gridThumbs(); }
+    return more;
+}
+
+// the cells whose rows meet content y0..y1: [[section, index]] top to bottom
+function gridRange(y0, y1) {
+    const G = gridGeom(), out = [];
+    for (const s of G.secs) {
+        const g = LIB.groups[s.gi];
+        if (s.y0 + s.rows * G.rowH < y0 || s.y > y1) continue;
+        const r0 = Math.max(0, Math.floor((y0 - s.y0) / G.rowH)), r1 = Math.min(s.rows - 1, Math.floor((y1 - s.y0) / G.rowH));
+        for (let i = r0 * G.cols; i <= Math.min(g.albums.length - 1, (r1 + 1) * G.cols - 1); i++) out.push([s, i]);
+    }
+    return out;
+}
+const gridVisible = () => { const G = gridGeom(); return gridRange(GRID.scroll.x, GRID.scroll.x + G.viewH); };
+// Covers are fetched for where the grid is going (the scroll target), not where it is: that screen first, then two
+// screens below it and one above, so they are there before they scroll in. Asked again while it scrolls and whenever
+// a cell on screen has none yet (repeated asks for the same covers cost nothing).
+function gridThumbs() {
+    const G = gridGeom(), t = GRID.scroll.to, h = G.viewH, cell = ([s, i]) => LIB.groups[s.gi].albums[i];
+    const list = [...gridRange(t, t + h), ...gridRange(t + h, t + 3 * h), ...gridRange(t - h, t).reverse()].map(cell);
+    setThumbBudget(list.length + 40);
+    requestThumbs(list, list.length);
+}
+
+function drawGrid(gr) {
+    THUMB_KEEP.clear();
+    if (!LIB.groups.length) { drawArchiveEmpty(gr); return; }
+    if (AF.open) { drawArtistFile(gr); drawInfoLayer(gr); return; }   // artist.js
+    if (GRID.reveal) { gridReveal(true); gridThumbs(); }
+    const G = gridGeom(), sy = Math.round(GRID.scroll.x), aw = G.aw, np = fb.GetNowPlaying(), playingKey = np ? itemKeyOf(np) : "";
+    const selR = AR.rows.get(AR.group), selI = selR ? selR.sel : -1;
+    gr.PushClip(0, G.top, aw, H - G.top);
+    for (const s of G.secs) {
+        const g = LIB.groups[s.gi], hy = G.top + s.y - sy;
+        if (hy > H || s.y0 + s.rows * G.rowH - sy + G.top < G.top) continue;
+        // section header: GENRE 01 · AMBIENT ───── 12 ALBUMS
+        if (hy + G.headH > G.top) {
+            const ly = hy + dp(14);
+            gr.FillSolidRect(G.padX, ly + dp(3), dp(5), dp(5), s.gi === AR.group ? C.accent : C.fg);
+            const t = LIB.groupBy === "none" ? groupName(g.name) : `${tr(GROUP_LABEL[LIB.groupBy])} ${pad(s.gi + 1, 2)}  ·  ${groupName(g.name)}`.toUpperCase();
+            const lw = label(gr, fitLabel(t, st(GRID_ST.head, C.fg), aw - dp(260)), st(GRID_ST.head, C.fg), G.padX + dp(14), ly);
+            const c = unitWord(g.albums.length), cw = labelWidth(c, st(GRID_ST.count, C["text-muted"]));
+            label(gr, c, st(GRID_ST.count, C["text-muted"]), aw - G.padX, ly + dp(1), 2);
+            gr.FillSolidRect(G.padX + dp(14) + lw + dp(14), ly + dp(6), Math.max(0, aw - G.padX - cw - dp(14) - (G.padX + dp(14) + lw + dp(14))), HAIR, C["line-faint"]);
+        }
+    }
+    let missing = false;
+    for (const [s, i] of gridVisible()) {
+        const a = LIB.groups[s.gi].albums[i], [cx, cyc] = cellPos(G, s, i), x = cx, y = G.top + cyc - sy, c = G.cell;
+        const t = thumbOf(a), sel = s.gi === AR.group && i === selI, hov = GRID.hover && GRID.hover.gi === s.gi && GRID.hover.i === i;
+        if (t === undefined && !thumbPending.has(coverKey(a))) missing = true;
+        if (t && t.img) gr.DrawImage(t.img, x, y, c, c, 0, 0, t.img.Width, t.img.Height);
+        else {
+            gr.FillSolidRect(x, y, c, c, C.well);
+            // (the number only where the cell holds it: at a large text scale it ran over the neighbouring covers)
+            const ns = st(GRID_ST.count, C["text-muted"], C.well), nt = `ARC-${pad(a.no, 4)}`;
+            if (labelWidth(nt, ns) <= c - dp(6)) label(gr, nt, ns, x + c / 2, y + c / 2 - dp(6), 1);
+            else if (labelWidth(pad(a.no, 4), ns) <= c - dp(6)) label(gr, pad(a.no, 4), ns, x + c / 2, y + c / 2 - dp(6), 1);
+        }
+        box(gr, x, y, c, c, hov && !sel ? C.accent : withAlpha(C.fg, .12));
+        if (a.year && c >= dp(80)) {
+            const yt = String(a.year), ys = st(GRID_ST.year, C.fg, C.bg), yw = labelWidth(yt, ys) + dp(10);
+            gr.FillSolidRect(x, y, yw, dp(16), C.bg);
+            label(gr, yt, ys, x + dp(5), y + Math.round((dp(16) - labelHeight(GRID_ST.year)) / 2));
+        }
+        if (np && (a.album ? sameTrack(itemTrack(a), np) : a.key === playingKey)) gr.FillSolidRect(x, y + c - dp(4), dp(18), dp(4), C.accent);
+        if (sel) {
+            box(gr, x - dp(5), y - dp(5), c + dp(10), c + dp(10), C.fg, Math.max(HAIR, dp(1.5)));
+            for (const [px, py] of [[x, y], [x + c, y], [x, y + c], [x + c, y + c]]) gr.FillSolidRect(Math.round(px - dp(3)), Math.round(py - dp(3)), dp(6), dp(6), C.accent);
+        }
+        if (G.lab) {
+            text(gr, a.title || tr("UNTITLED"), 10, sel ? 700 : 600, C.fg, x, y + c + dp(6), c, dp(18));
+            text(gr, a.artist || "—", 9, 500, C["text-muted"], x, y + c + dp(23), c, dp(16));
+        }
+    }
+    if (missing) window.SetTimeout(gridThumbs, 0);   // a cell on screen without its cover: ask (after this paint)
+    // the scroll bar: a thin track at the right edge of the grid with a thumb that can be dragged (or a click on the
+    // track jumps there); it widens under the mouse and while dragged
+    const max = gridMaxScroll(G);
+    if (max > 0) {
+        const th = G.viewH, bh = Math.max(dp(24), th * G.viewH / G.total), by = G.top + (th - bh) * (GRID.scroll.x / max);
+        const hot = GRID.drag || (GRID.barHover), tw = hot ? dp(6) : dp(3);
+        gr.FillSolidRect(aw - dp(12), G.top, HAIR, th, C["line-faint"]);
+        gr.FillSolidRect(Math.round(aw - dp(11.5) - tw / 2), Math.round(by), tw, Math.round(bh), GRID.drag ? C.accent : C.fg);
+        hits.add("grid-bar", aw - dp(22), G.top, dp(20), th, { top: G.top, th, bh, by, max });
+    }
+    gr.PopClip();
+    // fade under the top bar
+    gr.FillGradRect(0, G.top, aw, dp(18), 90, LABEL_LIVE ? withAlpha(C.bg, .8) : C.bg, withAlpha(C.bg, 0));
+    gr.FillSolidRect(G.padX, G.top - dp(10), G.aw - 2 * G.padX, HAIR, withAlpha(C.fg, .5));
+    drawArchiveBar(gr);
+    // album file (as in the array layout)
+    drawInfoLayer(gr);
+}
+
+// The archive's top bar, in both layouts (a plate behind each control: the array's cases pass under them):
+//   ■ ALBUM GRID · 250 ALBUMS · BY GENRE (grid)   SHOW [ALBUMS | TRACKS | FOLDERS]   PER PAGE [10 … 200] (grid)   LAYOUT [ARRAY | GRID]
+//   [FILTER · "word" · 12 ALBUMS ×]     GROUP [GENRE | DECADE | A–Z | FOLDER | FAV | NONE]   SORT [ARTIST | TITLE | YEAR | ADDED]
+// A control that does not fit its row folds to the choice in use, the rest in a menu (TITLE [CURRENT ⌄]): the widest
+// first, LAYOUT last. "Compact top bar" (the archive's menu) folds all but LAYOUT whatever the width, and puts the two
+// rows on one when that fits.
+function drawArchiveBar(gr) {
+    const grid = AR.layout === "grid", xr = arrayW() - dp(32), y1 = dp(22), y2 = dp(54), x0 = dp(32);
+    const fw = drawFilterChip(gr, x0, grid ? y2 : y1);
+    const pw = drawPickButton(gr, x0 + (fw ? fw + dp(12) : 0), grid ? y2 : y1);
+    // what each row has for its controls: right of the filter chip and RANDOM PICK, or of the least of the grid's title
+    const used = x0 + (fw ? fw + dp(12) : 0) + (pw ? pw + dp(24) : 0), least = x0 + dp(14) + dp(150) + dp(32);
+    const room1 = xr - (grid ? least : used), room2 = xr - (grid ? used : x0);
+    let [r1, r2] = barControls(grid);
+    const compact = AR.barCompact, one = compact && barWidth([...r1, ...r2], barFold([...r1, ...r2], 0, true)) <= room1;
+    if (one) { r1 = [...r1, ...r2]; r2 = []; }
+    const f1 = barFold(r1, room1, compact), f2 = barFold(r2, room2, compact);
+    const row = (cs, fold, y) => cs.reduce((x, c) => (fold.has(c[0]) ? segChip(gr, x, y, c) : segToggle(gr, x, y, c[1], c[2], c[3], c[4], c[5])) - dp(24), xr) + dp(24);
+    const lx = row(r1, f1, y1);
+    if (grid) {   // the title in the room left of the toggles: with the grouping when it fits, shortened when even that does not
+        const room = lx - dp(32) - (x0 + dp(14)), hs = st(GRID_ST.head, C.fg), n = filteredCount();
+        const base = `${tr({ albums: "ALBUM GRID", tracks: "TRACK GRID", folders: "FOLDER GRID" }[itemUnit()])}  ·  ${unitWord(n)}`, full = LIB.groupBy === "none" ? base : `${base}  ·  ${tr("BY {0}", tr(GROUP_LABEL[LIB.groupBy]))}`;
+        if (room > dp(40)) {
+            gr.FillSolidRect(x0, y1 + dp(10), dp(5), dp(5), C.fg);
+            const t = [full, base, unitWord(n)].find(v => labelWidth(v, hs) <= room) || unitWord(n);
+            label(gr, fitLabel(t, hs, room), hs, x0 + dp(14), y1 + dp(6));
+        }
+    }
+    row(r2, f2, y2);
+    drawArchiveNote(gr);   // archive.js: what a menu just did
+}
+// the bar's controls, each row from the right: [key, title, items, the one in use, hit id, marks]
+function barControls(grid) {
+    const r1 = [["layout", "LAYOUT", LAYOUTS, AR.layout, "ar-layout", true]];
+    if (grid) r1.push(["per", "PER PAGE", PER_PAGE.map(n => [n, String(n)]), GRID.per, "ar-per", false]);
+    r1.push(["unit", "SHOW", UNITS, itemUnit(), "ar-unit", false]);
+    return [r1, [["sort", "SORT", SORT_BY, LIB.sortBy, "ar-sort", false], ["group", "GROUP", GROUP_BY, LIB.groupBy, "ar-group", false]]];
+}
+const barText = c => (c[2].find(([v]) => v === c[3]) || c[2][0])[1];
+// a control's width, title and plate gap included: as a row of choices, or folded
+function barItemW(c, folded) {
+    const s = st(GRID_ST.count, 0), tw = labelWidth(tr(c[1]), s) + dp(12);
+    if (folded) return tw + dp(9) + labelWidth(tr(barText(c)), s) + dp(24);
+    return tw + c[2].reduce((n, [, t]) => n + (c[5] ? dp(20) : dp(9)) + labelWidth(tr(t), s) + dp(9), 0);
+}
+const barWidth = (cs, fold) => cs.reduce((n, c, i) => n + (i ? dp(24) : 0) + barItemW(c, fold.has(c[0])), 0);
+// the keys of the controls of a row that fold so it fits `room` (all: every one but LAYOUT, to begin with)
+function barFold(cs, room, all) {
+    const fold = new Set(all ? cs.filter(c => c[0] !== "layout").map(c => c[0]) : []);
+    while (barWidth(cs, fold) > room) {
+        const open = cs.filter(c => !fold.has(c[0])).sort((a, b) => (a[0] === "layout") - (b[0] === "layout") || barItemW(b) - barItemW(a));
+        if (!open.length) break;
+        fold.add(open[0][0]);
+    }
+    return fold;
+}
+// TITLE [CURRENT ⌄] right-aligned at xr, on a plate as segToggle's: a folded control. Returns the left edge.
+function segChip(gr, xr, y, c) {
+    const hh = dp(22), s = st(GRID_ST.count, 0), ty = y + Math.round((hh - labelHeight(GRID_ST.count)) / 2);
+    const title = tr(c[1]), text = tr(barText(c)), bw = dp(9) + labelWidth(text, s) + dp(24), left = xr - bw - dp(12) - labelWidth(title, s);
+    gr.FillSolidRect(left - dp(8), y - dp(4), xr - left + dp(12), hh + dp(8), C.bg);
+    label(gr, title, st(GRID_ST.count, C["text-muted"]), left, ty);
+    label(gr, text, st(GRID_ST.count, C.fg, C.bg), xr - bw + dp(9), ty);
+    const cx = xr - dp(12), cy = y + Math.round(hh / 2), a = dp(3);
+    gr.DrawLine(cx - a, cy - a / 2, cx, cy + a / 2, HAIR, C.fg);
+    gr.DrawLine(cx, cy + a / 2, cx + a, cy - a / 2, HAIR, C.fg);
+    box(gr, xr - bw, y, bw, hh, C["line-faint"]);
+    hits.add("ar-fold", left, y, xr - left, hh, c[0]);
+    return left;
+}
+// a folded control's choices, as a menu under it
+function barMenu(key, x, y) {
+    const c = barControls(AR.layout === "grid").flat().find(v => v[0] === key);
+    if (!c) return;
+    const m = window.CreatePopupMenu(), at = c[2].findIndex(([v]) => v === c[3]);
+    c[2].forEach(([, t], i) => m.AppendMenuItem(0, i + 1, tr(t)));
+    if (at >= 0) m.CheckMenuRadioItem(1, c[2].length, at + 1);
+    const id = m.TrackPopupMenu(x, y), set = { layout: setLayout, per: setPerPage, unit: setUnit, sort: setSortBy, group: setGroupBy }[key];
+    if (id > 0) set(c[2][id - 1][0]);
+}
+function setBarCompact(on) {
+    AR.barCompact = !!on;
+    setSetting("archiveBar", on ? "compact" : "full");
+    window.Repaint();
+}
+
+// ⚂ RANDOM PICK  R (after the filter chip): a run through the shelves to a random item, which then plays (randomPick)
+function drawPickButton(gr, x, y) {
+    if (!arRows().length) return 0;
+    const on = !!PICK.steps, h = dp(22), fg = on ? C.bg : C.fg, bg = on ? C.fg : C.bg, s = st(GRID_ST.count, fg, bg);
+    const t = tr(on ? "PICKING …" : "RANDOM PICK"), ks = st(GRID_ST.count, on ? C.bg : C["text-muted"], bg), kw = labelWidth("R", ks);
+    const w = dp(28) + labelWidth(t, s) + dp(14) + kw + dp(10), ty = y + Math.round((h - labelHeight(GRID_ST.count)) / 2);
+    gr.FillSolidRect(x, y, w, h, bg);
+    box(gr, x, y, w, h, on ? C.fg : C["line-faint"]);
+    // a die showing three
+    const ds = dp(10), dx = x + dp(9), dy = y + Math.round((h - ds) / 2);
+    box(gr, dx, dy, ds, ds, fg);
+    for (const p of [.28, .5, .72]) gr.FillSolidRect(Math.round(dx + p * ds - dp(1)), Math.round(dy + (1 - p) * ds - dp(1)), dp(2), dp(2), C.accent);
+    label(gr, t, s, x + dp(28), ty);
+    label(gr, "R", ks, x + w - dp(10) - kw, ty);
+    hits.add("ar-pick", x, y, w, h);
+    return w;
+}
+
+// TITLE [■ A | □ B | …] right-aligned at xr, on a plate; items [[value, text]]; marks: the square toggle marks.
+// Returns the left edge (of the title).
+// cur: the value that is on, or a list of them (each item then turns on and off by itself)
+function segToggle(gr, xr, y, title, items, cur, hitId, marks = false) {
+    const hh = dp(22), s = st(GRID_ST.count, 0), ty = y + Math.round((hh - labelHeight(GRID_ST.count)) / 2);
+    title = tr(title); items = items.map(([v, t]) => [v, tr(t)]);
+    const widths = items.map(([, t]) => (marks ? dp(20) : dp(9)) + labelWidth(t, s) + dp(9)), total = widths.reduce((a, b) => a + b, 0);
+    const tw = labelWidth(title, s), left = xr - total - dp(12) - tw;
+    gr.FillSolidRect(left - dp(8), y - dp(4), xr - left + dp(12), hh + dp(8), C.bg);
+    label(gr, title, st(GRID_ST.count, C["text-muted"]), left, ty);
+    let x = xr - total;
+    items.forEach(([v, t], i) => {
+        const on = Array.isArray(cur) ? cur.includes(v) : cur === v, col = on ? C.bg : C["text-muted"];
+        if (on) gr.FillSolidRect(x, y, widths[i], hh, C.fg);
+        if (marks) toggleMark(gr, x + dp(9), y + hh / 2, on, col);
+        label(gr, t, st(GRID_ST.count, col, on ? C.fg : C.bg), x + (marks ? dp(20) : dp(9)), ty);
+        hits.add(hitId, x, y, widths[i], hh, v);
+        x += widths[i];
+    });
+    box(gr, xr - total, y, total, hh, C["line-faint"]);
+    return left;
+}
+
+// ------------------------------------------------------------------------------------------------------- input
+function gridAt(x, y) {
+    const G = gridGeom();
+    if (x >= G.aw || y < G.top) return null;
+    const cy = y - G.top + GRID.scroll.x;
+    for (const s of G.secs) {
+        if (cy < s.y0 || cy >= s.y0 + s.rows * G.rowH) continue;
+        const col = Math.floor((x - G.padX) / (G.cell + G.gap)), row = Math.floor((cy - s.y0) / G.rowH);
+        const lx = x - G.padX - col * (G.cell + G.gap), ly = cy - s.y0 - row * G.rowH, i = row * G.cols + col;
+        if (col < 0 || col >= G.cols || lx > G.cell || ly > G.cell + G.lab || i >= LIB.groups[s.gi].albums.length) return null;
+        return { gi: s.gi, i };
+    }
+    return null;
+}
+function gridSelect(gi, i, reveal = true) {
+    const g = LIB.groups[gi];
+    if (!g) return;
+    i = clamp(i, 0, g.albums.length - 1);
+    if (gi !== AR.group) { AR.group = gi; AR.ticks.clear(); }
+    const r = rowState(gi);
+    r.sel = i;
+    r.scroll.to = scrollTarget(i, g);
+    selectionChanged();
+    if (reveal) gridReveal(); else GRID.reveal = false;   // a click: the cover is already in view
+    clock.wake();
+}
+function gridMouseMove(x, y, a) {
+    const bar = !!(a && a.id === "grid-bar");
+    if (bar !== !!GRID.barHover) { GRID.barHover = bar; window.RepaintRect(0, 0, arrayW(), H); }
+    const h = a ? null : gridAt(x, y), old = GRID.hover;
+    if ((h && (!old || old.gi !== h.gi || old.i !== h.i)) || (!h && old)) { GRID.hover = h; window.RepaintRect(0, 0, arrayW(), H); }
+    return !!h;
+}
+function gridClick(x, y, a) {
+    if (a) return false;   // the toggle and the file's buttons are handled by archiveClick
+    const h = gridAt(x, y);
+    if (h) gridSelect(h.gi, h.i, false);
+    return true;
+}
+function gridDblClick(x, y) {
+    const h = gridAt(x, y);
+    if (h) { gridSelect(h.gi, h.i, false); playAlbum(); }
+}
+function gridWheel(step) {
+    const G = gridGeom();
+    GRID.scroll.to = clamp(GRID.scroll.to - step * G.rowH * .75, 0, gridMaxScroll(G));
+    gridThumbs();
+    clock.wake();
+}
+// arrows move across sections: down from a section's last row goes to the next section in the same column
+function gridMove(dx, dy) {
+    const G = gridGeom(), r = AR.rows.get(AR.group), n = LIB.groups.length;
+    if (!r) return;
+    let gi = AR.group, i = r.sel + dx + dy * G.cols;
+    const len = k => LIB.groups[k].albums.length;
+    if (dx) {
+        if (i < 0 && gi > 0) { gi--; i = len(gi) - 1; }
+        else if (i >= len(gi) && gi < n - 1) { gi++; i = 0; }
+    } else if (dy) {
+        const col = r.sel % G.cols;
+        if (i < 0 && gi > 0) { gi--; i = Math.min(len(gi) - 1, Math.floor((len(gi) - 1) / G.cols) * G.cols + col); }
+        else if (i >= len(gi)) {
+            if (Math.floor(r.sel / G.cols) < Math.floor((len(gi) - 1) / G.cols)) i = len(gi) - 1;   // a shorter last row
+            else if (gi < n - 1) { gi++; i = Math.min(len(gi) - 1, col); }
+        }
+    }
+    gridSelect(gi, i);
+}
+function gridKey(vk) {
+    const G = gridGeom(), page = Math.max(1, Math.floor(G.viewH / G.rowH));
+    switch (vk) {
+        case 0x25: gridMove(-1, 0); return true;        // ←
+        case 0x27: gridMove(1, 0); return true;         // →
+        case 0x26: gridMove(0, -1); return true;        // ↑
+        case 0x28: gridMove(0, 1); return true;         // ↓
+        case 0x21: gridMove(0, -page); return true;     // Page Up
+        case 0x22: gridMove(0, page); return true;      // Page Down
+        case 0x24: gridSelect(0, 0); return true;       // Home
+        case 0x23: gridSelect(LIB.groups.length - 1, 1e6); return true;   // End
+        case 0x0D: openAlbum(); return true;
+    }
+    return false;
+}
+TOKEN_LISTENERS.push(() => { GRID.geo = null; });

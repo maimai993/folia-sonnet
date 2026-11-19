@@ -383,7 +383,8 @@ export default {
         "stageTitle": "Rhine Lab",
         "stageHint": "Rak album 3D",
         "rotateHint": "Beralih ke lanskap…",
-        "play": "Putar"
+        "play": "Putar",
+        "assetsMissing": "Paket gambar belum diunduh, jadi tema tampil dengan warna polos. Opsi unduh akan tersedia di versi berikutnya."
     },
     "libraryTui": {
         "back": "Kembali",

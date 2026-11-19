@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>rhine skeleton probe</title>
+    <style>html, body { margin: 0; height: 100%; } iframe { width: 100%; height: 100%; border: 0; }</style>
+  </head>
+  <body>
+    <iframe id="f"></iframe>
+    <script>
+      /*
+       * 手动验证「莱茵生命」骨架（res/rhine-theme/）时的探针页，不进产品代码。
+       * 用法：`npm run dev -- --port 5199` 之后打开
+       *   /rhine-skeleton.html?theme=dark&lang=zh-CN&assets=1
+       * 参数：theme=light|dark、lang=任意语言、assets=1 表示「资源包在」。宿主（RhineHome）
+       * 推给主题的东西这里只是最小的一份，够看出降级长什么样。
+       */
+      var q = new URLSearchParams(location.search);
+      var frame = document.getElementById('f');
+      var insets = { top: 0, right: 0, bottom: 0, left: 0 };
+      var config = {
+        language: q.get('lang') || 'zh-CN',
+        theme: q.get('theme') === 'light' ? 'light' : 'dark',
+        assets: q.get('assets') === '1' ? 'downloaded' : 'bundled',
+        hasAssetsPackage: q.get('assets') === '1',
+        note: q.get('note') || '图片素材包还没有下载，当前以纯色显示。下载入口随之后的版本提供。',
+        insets: insets,
+      };
+      frame.src = '/res/rhine-theme/index.html?lang=' + encodeURIComponent(config.language)
+        + '&theme=' + config.theme + '&assets=' + (config.hasAssetsPackage ? '1' : '0')
+        + '&note=' + encodeURIComponent(config.note);
+      function push() { frame.contentWindow.postMessage({ type: 'rhine-config', config: config }, '*'); }
+      window.addEventListener('message', function (event) {
+        if (event.source !== frame.contentWindow || !event.data) return;
+        if (event.data.type === 'rhine-theme-ready') {
+          document.title = 'ready degraded=' + event.data.degraded;
+          push();
+        }
+      });
+      // 手动改安全区：?safe=48 把顶部推到 48px，看安全区是不是真的生效。
+      if (q.get('safe')) { insets.top = Number(q.get('safe')); document.body.style.paddingTop = insets.top + 'px'; }
+    </script>
+  </body>
+</html>
