@@ -5,7 +5,7 @@
 // 按 frontend-runtime-guardrails 的硬规矩，连续量不能进 React state，所以这里整体交给 canvas，
 // React 只在动画结束（一个离散事件）时收到一次回调。
 
-import { buildBlueprint, type BlueprintBlock } from './swarmBlueprint';
+import { buildFallbackBlueprint, measureBlueprint, type BlueprintBlock } from './swarmBlueprint';
 import { cursorColor, drawCursor, drawGrowingRect, drawTypedText } from './swarmDraw';
 import { createSwarm, releaseSwarm, stepSwarm, type SwarmCursor, type SwarmField } from './swarmPhysics';
 
@@ -58,7 +58,15 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
      * 读一次 offsetHeight 就够了，代价是一次同步布局，发生在启动动画开始时。
      */
     void document.body.offsetHeight;
-    const blocks = buildBlueprint({ width, height });
+    /*
+     * 蓝图要的是**真实界面**的矩形，不是按比例摆的假版式（#420 反馈：「完全就是在假装画」）。
+     * 但启动这一刻真实界面往往还没布局完（应用正在读库、首屏还在渲染），量不到东西。
+     * 所以先试一次，量不到就先起步，gather 阶段每帧再试 —— 一旦量到就整份换上。
+     */
+    void document.body.offsetHeight;
+    let blocks = measureBlueprint();
+    let usingFallback = blocks.length < 3;
+    if (usingFallback) blocks = buildFallbackBlueprint({ width, height });
     // 移动端少一些光标：每只都要画形状，36 只在低端机上会掉帧。
     const count = width * height > 900 * 1600 ? 32 : 20;
     const field: SwarmField = createSwarm({ count, radius: Math.min(width, height) * 0.18, spawn: { width, height } }, {
@@ -139,6 +147,15 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 4200 }: Swa
         stepSwarm(field, dt, Math.min(width, height) * 0.18);
 
         if (phase === 'gather') {
+            // 还在用兜底版式：每帧再量一次真实界面，量到就换（此时还没开始建，换掉不会有错位）。
+            if (usingFallback && elapsedMs < GATHER_MS) {
+                const measured = measureBlueprint();
+                if (measured.length >= 3) {
+                    blocks = measured;
+                    usingFallback = false;
+                    console.info(`[SwarmSplash] 量到真实界面 ${measured.length} 块`);
+                }
+            }
             if (elapsedMs >= GATHER_MS || elapsedMs >= maxDurationMs) {
                 phase = 'build';
                 blockIndex = 0;
