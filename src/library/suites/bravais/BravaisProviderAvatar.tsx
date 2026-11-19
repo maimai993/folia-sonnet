@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { hasPlatformIcon } from '../../../components/shared/platformIcons/registry';
 import { PlatformIcon } from '../../../components/shared/platformIcons/PlatformIcon';
 import { platformMarkOf } from '../../../components/login/PlatformMark';
@@ -39,7 +39,8 @@ const BravaisProviderAvatar: React.FC<{ providerId: string; name: string; avatar
             </span>
         );
     }
-    const mark = platformMarkOf(providerId as OnlineProviderId, name);    return (
+    const mark = platformMarkOf(providerId as OnlineProviderId, name);
+    return (
         <span className={`bravais-account-avatar is-badge${className ? ` ${className}` : ''}`} style={{ backgroundColor: mark.color, color: mark.onColor }} aria-hidden
             data-bravais-account-avatar="badge">
             {mark.letter}

@@ -3,7 +3,6 @@ import type { ProbeDefinition } from './definition';
 import { PlatformIcon } from '../../src/components/shared/platformIcons/PlatformIcon';
 import { PLATFORM_ICONS } from '../../src/components/shared/platformIcons/registry';
 import { PlatformMark } from '../../src/components/login/PlatformMark';
-import type { OnlineProviderId } from '../../src/types/onlineMusic';
 
 // dev/probes/platformIcons.probe.tsx
 /**
@@ -62,13 +61,13 @@ const Probe: React.FC = () => (
 
         {/* 平台记号（登录窗口、切换器、资料库徽章都画它）：有图形的画图形，没登记的画字 + 颜色。 */}
         <Row title="平台记号：登记过的画图形，没登记的回落「字 + 颜色」" tone="light">
-            {[...PLATFORM_ICONS.map(entry => ({ id: entry.id as string, label: entry.id })), ...UNREGISTERED].map(({ id, label }) => (
+            {[...PLATFORM_ICONS.map(entry => ({ id: entry.id, label: entry.id })), ...UNREGISTERED].map(({ id, label }) => (
                 <Cell key={id} caption={label}>
                     <div className="flex items-end gap-3">
-                        <PlatformMark providerId={id as OnlineProviderId} label={label} size={16} />
-                        <PlatformMark providerId={id as OnlineProviderId} label={label} size={24} />
-                        <PlatformMark providerId={id as OnlineProviderId} label={label} size={32} />
-                        <PlatformMark providerId={id as OnlineProviderId} label={label} size={48} />
+                        <PlatformMark providerId={id} label={label} size={16} />
+                        <PlatformMark providerId={id} label={label} size={24} />
+                        <PlatformMark providerId={id} label={label} size={32} />
+                        <PlatformMark providerId={id} label={label} size={48} />
                     </div>
                 </Cell>
             ))}

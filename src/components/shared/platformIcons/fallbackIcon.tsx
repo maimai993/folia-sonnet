@@ -1,4 +1,4 @@
-﻿// src/components/shared/platformIcons/fallbackIcon.tsx
+// src/components/shared/platformIcons/fallbackIcon.tsx
 // 兜底图标：没登记的来源（本地曲库、mod 加进来的平台、将来的新平台）一律用它。
 // 和 Folia 本尊的图标一样是**自绘**的：一个中性的几何记号，不指向任何第三方。
 //
@@ -6,8 +6,6 @@
 // `stroke` 是实心的一笔。这一枚只有线，所以内容全是 `outline`。
 
 import { platformIconArt, type PlatformIconArt, type PlatformIconGesture } from './platformIconShapes';
-
-const W = '#FFFFFF';
 
 // 中性灰：不带识别色相，一看就知道「这个来源没有专属图标」。
 const gestures: PlatformIconGesture[] = [

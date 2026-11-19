@@ -1,4 +1,4 @@
-﻿// src/components/shared/platformIcons/feiniuIcon.tsx
+// src/components/shared/platformIcons/feiniuIcon.tsx
 // 飞牛的**自绘**图标：一个朝上的箭头穿进圆环，取深蓝这一个识别色相。
 // 这是自绘图形，不是官方 logo：原来的那张位图是对方自带的深色画布 + 红色圆 + 白色音符，
 // 这里既不复刻那块深色画布，也不画音符。
@@ -7,8 +7,6 @@
 // `stroke` 是实心的一笔。同一份数据既拼成图标，也机械转成安卓通知栏的纯白剪影。
 
 import { platformIconArt, type PlatformIconArt, type PlatformIconGesture } from './platformIconShapes';
-
-const W = '#FFFFFF';
 
 // 飞牛：深蓝（原来是黑底，改成识别色相底，和本目录其他图标同一套底板）。
 const gestures: PlatformIconGesture[] = [

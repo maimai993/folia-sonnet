@@ -1,4 +1,4 @@
-﻿// src/components/shared/platformIcons/bilibiliIcon.tsx
+// src/components/shared/platformIcons/bilibiliIcon.tsx
 // B 站的**自绘**图标：一台极简的「显示器 + 两根天线」，只取粉色这一个识别色相。
 // 这是自绘图形，不是官方 logo：原来那份位图是官方电视造型的矢量复刻，本文件刻意不画眼睛、
 // 不画 512 画布那一套比例，只留「带天线的方屏」这个大类线索。
@@ -7,8 +7,6 @@
 // `stroke` 是实心的一笔。同一份数据既拼成图标，也机械转成安卓通知栏的纯白剪影。
 
 import { platformIconArt, type PlatformIconArt, type PlatformIconGesture } from './platformIconShapes';
-
-const W = '#FFFFFF';
 
 // B 站：粉。识别线索是「带天线的屏幕」——两根斜天线 + 一个圆角方屏 + 屏心一道十字。
 const gestures: PlatformIconGesture[] = [
