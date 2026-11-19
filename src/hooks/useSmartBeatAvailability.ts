@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { probeBeatThisGpu } from '../services/analysis/beatThisGpu';
-import { isNativeBeatAnalysisAvailable } from '../services/automix/nativeBeats';
+import { isNativeBeatPlatform } from '../services/automix/nativeBeats';
+import { localInferenceBlockedReason } from '../services/aiMemoryGate';
 import type { SmartBeatMode } from '../types';
 
 // src/hooks/useSmartBeatAvailability.ts
@@ -19,7 +20,7 @@ import type { SmartBeatMode } from '../types';
 // 而权重其实已经在包里了，只是没人去问原生那一份。
 // 这就是「去掉节拍效果仅在桌面版可用」要修的地方。
 
-export type SmartBeatAvailability = 'ready' | 'desktopOnly' | 'noGpu';
+export type SmartBeatAvailability = 'ready' | 'desktopOnly' | 'noGpu' | 'inferenceDisabled';
 
 const hasBeatThisBridge = () => typeof window !== 'undefined' && typeof window.electron?.getBeatThisGpuWeights === 'function';
 
@@ -30,9 +31,15 @@ const hasBeatThisBridge = () => typeof window !== 'undefined' && typeof window.e
 export function useSmartBeatAvailability(mode: SmartBeatMode): SmartBeatAvailability {
     // Optimistic until the probe answers: a hint flashing "no GPU" on every open would be worse.
     const [gpu, setGpu] = useState(true);
-    const native = isNativeBeatAnalysisAvailable();
+    /*
+     * 平台能不能跑原生推理（安卓）与**此刻允不允许跑**是两件事（#401）：
+     * 「禁用 AI 推理」总闸关着时 isNativeBeatAnalysisAvailable() 也是 false，
+     * 以前直接拿它当判据，于是安卓被误判成「仅桌面版可用」。现在平台判据与闸门分开问。
+     */
+    const nativePlatform = isNativeBeatPlatform();
+    const blocked = localInferenceBlockedReason();
 
-    const probe = mode === 'on' && !native;
+    const probe = mode === 'on' && !nativePlatform;
 
     useEffect(() => {
         if (!probe) return;
@@ -48,13 +55,14 @@ export function useSmartBeatAvailability(mode: SmartBeatMode): SmartBeatAvailabi
     if (mode === 'off') return 'ready';
 
     /*
-     * 安卓这条路：有原生推理能力就一定 ready。
+     * 安卓这条路：平台能跑推理，但总闸关着时提示用户去关掉它 —— 这才是他能做的事。
+     * 说成「仅桌面版可用」会让人以为手机做不到，其实是开关挡住了（#401 / #409 反馈）。
      *
      * 为什么不看「模型是否已落盘」：权重是内置的，所谓准备只是把 assets 拷到私有目录，
      * 这一步总是会成功。如果要求「已落盘」才算 ready，用户第一次点开设置就会看到
      * 「不可用」—— 而实际上只要他按下播放，它自己就会准备好。
      */
-    if (native) return 'ready';
+    if (nativePlatform) return blocked ? 'inferenceDisabled' : 'ready';
 
     if (!hasBeatThisBridge()) return 'desktopOnly';
     return gpu || !probe ? 'ready' : 'noGpu';

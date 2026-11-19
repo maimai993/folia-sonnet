@@ -1,6 +1,5 @@
 import { createAiFetch } from './aiNativeFetch';
 import { requestAiCompletionViaNative } from './aiNativeCompletion';
-import { assertOnlineInferenceAllowed } from './aiMemoryGate';
 import {
     aiProtocolOf,
     isAiConfigured,
@@ -37,9 +36,29 @@ export interface AiCompletionTarget {
     model: string;
 }
 
+/**
+ * 一张要交给模型的图。
+ *
+ * 只支持 base64 data URL（data:image/jpeg;base64,...）—— 三家供应商都接受内联图片，
+ * 而外部 URL 会被部分兼容端点拒绝（它们不替我们下载）。调用方自己压好再传，别把原图塞进来。
+ */
+export interface AiImageInput {
+    /** data:image/<fmt>;base64,<data> */
+    dataUrl: string;
+    /** 这张图是干什么的（「封面」「第 30 秒的画面」），写进提示词让模型知道该看什么。 */
+    label: string;
+}
+
 export interface AiCompletionRequest {
     system: string;
     prompt: string;
+    /**
+     * 随提问一起交出去的图（多模态）。
+     *
+     * 没给就是纯文本，行为与以前完全一致。给了之后：OpenAI 兼容走 image_url，
+     * Anthropic 走 image block，Gemini 走 inlineData。
+     */
+    images?: readonly AiImageInput[];
     /** Best effort: the provider may cap it lower. */
     maxTokens?: number;
     temperature?: number;
@@ -180,7 +199,7 @@ const runOpenAi = async (request: AiCompletionRequest, send: typeof fetch): Prom
             model,
             messages: [
                 { role: 'system', content: request.system },
-                { role: 'user', content: request.prompt },
+                { role: 'user', content: buildOpenAiUserContent(request) },
             ],
             temperature,
             ...(request.maxTokens ? { max_tokens: request.maxTokens } : {}),
@@ -208,6 +227,68 @@ const runOpenAi = async (request: AiCompletionRequest, send: typeof fetch): Prom
     return text;
 };
 
+
+/** 把 data:image/jpeg;base64,xxx 拆成媒体类型与裸 base64；格式不对返回 null（这张图就跳过）。 */
+const splitImageDataUrl = (dataUrl: string): { mediaType: string; data: string } | null => {
+    const matched = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
+    return matched ? { mediaType: matched[1].toLowerCase(), data: matched[2] } : null;
+};
+type OpenAiUserContent = string | Array<
+    { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }
+>;
+
+/**
+ * OpenAI 兼容端点的 user 内容。
+ *
+ * 没有图就**保持纯字符串**：一大批兼容端点（各家中转、本地推理服务）对数组形式的 content
+ * 支持参差不齐，纯文本路径不能被这次改动拖下水。
+ */
+const buildOpenAiUserContent = (request: AiCompletionRequest): OpenAiUserContent => {
+    if (!request.images || request.images.length === 0) return request.prompt;
+    const parts: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }> = [
+        { type: 'text', text: request.prompt },
+    ];
+    for (const image of request.images) {
+        if (!splitImageDataUrl(image.dataUrl)) continue;
+        parts.push({ type: 'image_url', image_url: { url: image.dataUrl } });
+    }
+    return parts.length > 1 ? parts : request.prompt;
+};
+/**
+ * Anthropic 的 user content：没图时是纯字符串，有图时是 block 数组（image 在前，文字在后）。
+ *
+ * 图放前面是有讲究的：Claude 对「先看图再看指令」的遵从度明显更好，问「这条视频像不像
+ * 这首歌」时它得先看见画面。
+ */
+const buildAnthropicUserContent = (request: AiCompletionRequest) => {
+    if (!request.images || request.images.length === 0) return request.prompt;
+    const blocks: Array<Record<string, unknown>> = [];
+    for (const image of request.images) {
+        const split = splitImageDataUrl(image.dataUrl);
+        if (!split) continue;
+        blocks.push({
+            type: 'image',
+            source: { type: 'base64', media_type: split.mediaType, data: split.data },
+        });
+    }
+    if (blocks.length === 0) return request.prompt;
+    blocks.push({ type: 'text', text: request.prompt });
+    return blocks;
+};
+
+/** Gemini 的 parts：inlineData 与 	ext（顺序同 Anthropic，图在前）。 */
+const buildGeminiParts = (request: AiCompletionRequest) => {
+    const parts: Array<Record<string, unknown>> = [];
+    if (request.images && request.images.length > 0) {
+        for (const image of request.images) {
+            const split = splitImageDataUrl(image.dataUrl);
+            if (!split) continue;
+            parts.push({ inlineData: { mimeType: split.mediaType, data: split.data } });
+        }
+    }
+    parts.push({ text: request.prompt });
+    return parts;
+};
 const runAnthropic = async (request: AiCompletionRequest, send: typeof fetch): Promise<string> => {
     const settings = readAiSettings();
     const apiKey = resolveAiApiKey(settings);
@@ -225,7 +306,7 @@ const runAnthropic = async (request: AiCompletionRequest, send: typeof fetch): P
             model: resolveAiModel(settings),
             max_tokens: request.maxTokens ?? 4096,
             ...(request.system ? { system: request.system } : {}),
-            messages: [{ role: 'user', content: request.prompt }],
+            messages: [{ role: 'user', content: buildAnthropicUserContent(request) }],
         }),
         signal: request.signal,
     });
@@ -259,7 +340,7 @@ const runGemini = async (request: AiCompletionRequest, send: typeof fetch): Prom
         },
         body: JSON.stringify({
             systemInstruction: { parts: [{ text: request.system }] },
-            contents: [{ parts: [{ text: request.prompt }] }],
+            contents: [{ parts: buildGeminiParts(request) }],
             generationConfig: {
                 ...(request.json === false ? {} : { responseMimeType: 'application/json' }),
                 ...(request.maxTokens ? { maxOutputTokens: request.maxTokens } : {}),
@@ -297,10 +378,14 @@ export const requestAiCompletion = async (request: AiCompletionRequest): Promise
     const { target, configured } = readAiTarget();
     if (!configured) throw new Error(AI_NOT_CONFIGURED);
 
-    // 总闸被打开时不发起在线补全（issue #401）。注意这里**不看内存水位**：在线补全只是一次
-    // 网络请求，内存紧的时候禁它没有任何收益。闸门关着就以 ai-memory-guarded 开头抛出，
-    // 调用方按「这台机器现在不该算」处理，别当普通失败反复重试。
-    assertOnlineInferenceAllowed();
+    /*
+     * 这里**不再**因为「禁用 AI 推理」而拒绝（#418）。
+     *
+     * 那道开关管的是**本机模型**（拍点分析、音轨分离）—— 它们要加载几十 MB 权重、占满内存。
+     * 在线补全只是一次网络请求，本机只解析一段文本，关掉它没有任何资源上的收益，只会让
+     * 用户以为功能坏了。开关自己的说明也是这么写的：「AI 主题、歌词动画导演这些走网络的
+     * 补全不受影响」。文案与实现必须一致。
+     */
 
     /*
      * 安卓先走原生补全：请求由原生发起后，WebView 冻不冻结都与它无关 —— OkHttp 在

@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { PlaybackEntryViewOptions } from './PlaybackEntryViewOptions';
 import { LibrarySuiteOnboardingOptions } from './LibrarySuiteOnboardingOptions';
-import { DeviceTypeOptions } from './DeviceTypeOptions';
 import { usePlaybackEntryViewStore, type StartupPromptPage } from '../../../stores/usePlaybackEntryViewStore';
 import { useThemeSettingsStore } from '../../../stores/useThemeSettingsStore';
 import { resolveReducedMotion, useMotionSettingsStore } from '../../../stores/useMotionSettingsStore';
@@ -142,8 +141,6 @@ const PromptPanel: React.FC<{ theme?: Theme | null; pages: readonly PromptPage[]
                     <div className="mt-5">
                         {page === 'library-suite' ? (
                             <LibrarySuiteOnboardingOptions isDaylight={isDaylight} accentColor={accentColor} />
-                        ) : page === 'device-type' ? (
-                            <DeviceTypeOptions isDaylight={isDaylight} accentColor={accentColor} />
                         ) : (
                             <PlaybackEntryViewOptions
                                 value={playbackEntryView}

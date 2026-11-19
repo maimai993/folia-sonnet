@@ -278,14 +278,29 @@ class FoliaWallpaperPlugin : Plugin() {
         // 这两个模式是互斥的两层：跟随样式走 WebView 叠层，精简走原生小悬浮窗。
         // 用户在设置里切样式的那一刻就要生效，所以这里顺手催一次，不等 600ms 巡检。
         val overlay = top.izuna.foliamajor.wallpaper.FloatingLyricsOverlay.shared(context)
-        overlay.start()
+        val overlayAllAppsFlag: Float? = WallpaperLyricsState.tuning()?.get("wp.overlayAllApps")
+        val overlayAllApps = (overlayAllAppsFlag ?: 0f) >= 0.5f
         /*
-         * 叠加模式下「左右 / 宽度」是设置里的滑条管的，而位置只在挂窗口和转屏时才算 ——
-         * 少了这一下，滑条拖到头小窗也一动不动。这里每次外观下发都重新摆一次，
-         * 滑条边拖边看得到（这就是设置里那几根条要的「实时预览」）。
+         * 只在用户**明确要**「在所有应用上叠加」时挂悬浮窗（#424）。
+         *
+         * 悬浮窗是系统级窗口，压在桌面图标**上面** —— 没被要求时挂着它，用户看到的就是
+         * 「图标都看不见了」（反馈原话）。壁纸服务那边画的内容在图标**下面**，才是可接受的默认路径。
+         *
+         * 以前这里是 `overlayAllApps || !wallpaperActive`：第二个条件写反了 —— 壁纸没设上时
+         * 它恒真，于是永远启动悬浮窗。现在只认开关本身。
          */
-        overlay.applyOverlayTuning()
-        call.resolve()
+        if (overlayAllApps) {
+            overlay.start()
+            /*
+             * 叠加模式下「左右 / 宽度」是设置里的滑条管的，而位置只在挂窗口和转屏时才算 ——
+             * 少了这一下，滑条拖到头小窗也一动不动。这里每次外观下发都重新摆一次，
+             * 滑条边拖边看得到（这就是设置里那几根条要的「实时预览」）。
+             */
+            overlay.applyOverlayTuning()
+        } else {
+            // 壁纸自己在画：把可能残留的悬浮窗撤掉，别留一层在图标上面。
+            overlay.stop()
+        }
     }
 
     /**

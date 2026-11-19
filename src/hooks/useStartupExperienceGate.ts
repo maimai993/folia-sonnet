@@ -134,7 +134,9 @@ export const useStartupExperienceGate = (
     const hasSeenLibrarySuitePrompt = usePlaybackEntryViewStore(state => state.hasSeenLibrarySuitePrompt);
     const needsLibrarySuitePrompt = hasOnboardingLibrarySuiteChoice() && !hasSeenLibrarySuitePrompt;
     const hasAnsweredDeviceType = useDeviceProfileStore(state => state.hasAnsweredDeviceType);
-    const needsDeviceTypePrompt = isAndroidNativeRuntime() && !hasAnsweredDeviceType;
+    // 「这是手机还是平板」与界面缩放那两页已按需求整体删除（#424 反馈）：设备类型改为自动判定，
+    // 见 services/androidPhoneLayout 的 resolveDeviceType。这里恒 false，引导不再停在这一步。
+    const needsDeviceTypePrompt = false;
     const isPlaybackEntryViewPromptOpen = usePlaybackEntryViewStore(state => state.isPlaybackEntryViewPromptOpen);
     const [lastSeenReleaseNotesVersion, setLastSeenReleaseNotesVersion] = useState(readLastSeenReleaseNotesVersion);
     const [hasSeenFreeSoftwareNotice, setHasSeenFreeSoftwareNotice] = useState(readHasSeenFreeSoftwareNotice);

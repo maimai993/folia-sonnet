@@ -13,7 +13,6 @@ import { settingsAnchorSubview } from '../../../../utils/settingsAnchorModel';
 import { isCapacitorAndroid } from '../../../../platform/runtime';
 import { settingsCardClassFor } from '../settingsCardClasses';
 import AndroidForceLandscapeSetting from '../AndroidForceLandscapeSetting';
-import DeviceTypeSetting from '../DeviceTypeSetting';
 import LyricFlatSetting from '../LyricFlatSetting';
 import LyricsWallpaperSettingsSection from '../LyricsWallpaperSettingsSection';
 import { AI, LYRICS_WALLPAPER_OPTIONS, LYRICS, LYRICS_WALLPAPER, O, SONG_THEME, THEME, VIEW } from './appearance/options';
@@ -91,8 +90,6 @@ const AppearancePage: React.FC = () => {
                 液态玻璃的开关与参数在「性能与动效」页那一组里（它同时是性能设置）。 */}
             <Group def={VIEW}>
                 <LyricFlatSetting />
-                {/* 下面两项组件内部自行判断运行时：非安卓直接返回 null，这里不用再判端。 */}
-                <DeviceTypeSetting />
                 <AndroidForceLandscapeSetting />
             </Group>
 

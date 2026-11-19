@@ -856,6 +856,9 @@ declare global {
       openPerfCheck?: () => Promise<boolean>;
       /** Every process's memory, MB, summed and by Chromium process type: the check's memory reading. */
       getPerfCheckMetrics?: () => Promise<PerfCheckProcessMemory>;
+      /** 界面缩放（#1264）：只作用于当前窗口。安卓没有这个桥，运行时退到 CSS zoom。 */
+      setPageZoomFactor?: (factor: number) => void;
+      getPageZoomFactor?: () => number;
       /** From the check window: a line for the runtime log, written by the main process. */
       logPerfCheck?: (text: string) => Promise<boolean>;
       /** From the check window: the measuring is over (done, failed or cancelled): the main window lets go of its hold. */

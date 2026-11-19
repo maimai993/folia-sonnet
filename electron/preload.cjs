@@ -1,6 +1,12 @@
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webFrame, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
+    // 界面缩放（#1264）。webFrame 的缩放只算这一个窗口，不像 webContents.setZoomFactor 按源传给同源的遥控窗口。
+    setPageZoomFactor: (factor) => {
+        const value = Number(factor);
+        if (Number.isFinite(value) && value >= 0.25 && value <= 5) webFrame.setZoomFactor(value);
+    },
+    getPageZoomFactor: () => webFrame.getZoomFactor(),
     webUtils: {
       // File.path was removed in modern Electron; this is the supported way to
       // resolve the OS path of a dropped file from the renderer.

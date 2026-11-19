@@ -143,10 +143,11 @@ class FoliaNativePlugin : Plugin() {
          * 的机器上 20MB 左右就会 OOM（#261，`Failed to allocate 150994952 byte`）。
          *
          * ⚠️ 2026-11-18 又炸了一次（`Failed to allocate 16874384 byte`，崩溃时堆只剩 6.7MB）：
-         * 一份**在 8MiB 以内**的响应，只靠序列化放大就补上了最后一刀。所以上限再收一档到 2MiB ——
-         * 歌单 / 歌词 / 推荐这类 JSON 绝大多数远小于它；真正更大的东西该走落盘 + 返回路径（#262）。
+         * 一份**在 8MiB 以内**的响应，只靠序列化放大就补上了最后一刀。所以上限收到 4MiB ——
+         * 2MiB 试过一版，结果把封面缓存整片打挂（`Native HTTP response exceeds the bridge size limit`），
+         * 那个代价换不来多少安全余量。真正更大的东西该走落盘 + 返回路径（#262）。
          */
-        const val DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+        const val DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 
         /**
          * 调用方可以按需放宽到这么大，但不会再大。
