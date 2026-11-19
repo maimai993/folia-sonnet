@@ -1,4 +1,4 @@
-// test/unit/onlineMusic/platformNamePlaces.ts
+﻿// test/unit/onlineMusic/platformNamePlaces.ts
 // The files outside a platform's own folders that name the platform, with the number of lines
 // that do (platformNameCount.ts counts them) and why those lines may stay. The numbers only go
 // down: omniArchitecture.test.ts fails when a file names a platform more often than it says
@@ -36,7 +36,23 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/repositories/cacheUsage.ts': { n: { bilibili: 1 }, kind: 'file', why: 'the category walker says the MV match caches are not counted here, since the panel measures them itself' },
     'src/utils/songThemeAutoGeneration.ts': { n: { bilibili: 4 }, kind: 'question', why: 'songs from this video platform do not get an automatic AI theme: the picture is already the song, so a theme would only compete with it' },
     'src/App.tsx': { n: {}, kind: 'file', why: 'the thin shell: it only strings the wiring hooks together, so it names no platform. When it grows back into a monolith this line is the signal that something came home that should have stayed in a hook' },
-    'src/components/login/PlatformMark.tsx': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
+    'src/components/login/PlatformMark.tsx': { n: {}, kind: 'file', why: 'the platform mark asks platformIcons/registry whether there is a drawn icon and otherwise draws the letter and colour the platform declared; it names no platform' },
+    // 自绘图形的那一处（issue #451）：每家平台自己的那一份图形就在它自己的文件里，
+    // registry 是「平台 id → 图形」的登记表 —— 和 src/services/onlineMusic/providerRegistry.ts 一样，
+    // 这个目录就是画图标的地方，它本来就该点名每一家。
+    'src/components/shared/platformIcons/registry.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 3, spotify: 3, qishui: 3, appleMusic: 2, feiniu: 2, lxmusic: 3, bilibili: 2 }, kind: 'list', why: 'the table of the drawn platform icons: which file draws which platform, and the name of its android notification badge' },
+    'src/components/shared/platformIcons/platformIds.ts': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, ytm: 1, spotify: 1, qishui: 1, appleMusic: 1, feiniu: 1, lxmusic: 1, bilibili: 1 }, kind: 'list', why: 'the ids the icons are filed under (one line each), so a caller passes an id instead of a platform name' },
+    'src/components/shared/platformIcons/neteaseIcon.tsx': { n: { netease: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/qqIcon.tsx': { n: { qq: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/kugouIcon.tsx': { n: { kugou: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/bodianIcon.tsx': { n: { bodian: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/feiniuIcon.tsx': { n: { fnmusic: 2, feiniu: 1 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/qishuiIcon.tsx': { n: { qishui: 1 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/lxmusicIcon.tsx': { n: { lxmusic: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/appleMusicIcon.tsx': { n: { appleMusic: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/bilibiliIcon.tsx': { n: { bilibili: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/spotifyIcon.tsx': { n: { spotify: 3 }, kind: 'doc' },   // comments only,
+    'src/components/shared/platformIcons/ytmIcon.tsx': { n: { ytm: 3 }, kind: 'doc' },   // comments only,
     'src/hooks/useExclusiveKeyLayer.ts': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
     'src/library/core/account/providerAccountDeps.service.ts': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
     'src/library/suites/bravais/bravaisAccount.css': { n: { fnmusic: 1 }, kind: 'file', why: 'fork-only or 0.7.26 file; pinned by the upstream merge' },   // comments only,
@@ -60,7 +76,6 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'electron/qishuiApiBridge.cjs': { n: { netease: 1, qishui: 142 }, kind: 'doc' },
     'electron/stageApi.cjs': { n: { netease: 18 }, kind: 'main', why: 'the stage API: its lyric source type and its search through the local service' },
     'electron/tempDirEnvironment.cjs': { n: { netease: 1 }, kind: 'doc' },
-    'src/assets/providers/appIcons.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 4, spotify: 3, qishui: 2, appleMusic: 2, feiniu: 2, lxmusic: 3, bilibili: 2 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; the icons of the two desktop-only platforms; appleMusic +3 by the v0.7.27 sync (its icon import and the entry in the table) — this file is the platform icon table, it is supposed to name every platform' },
     'src/components/Carousel3D.tsx': { n: { netease: 2 }, kind: 'doc' },   // comments only,
     'src/components/app/appWiring/useAppPlaybackQueue.ts': { n: { netease: 1, kugou: 1 }, kind: 'file', why: 'the playback-queue wiring: it carries the per-platform queue quirks that live in the wiring rather than in a platform folder' },   // comments only,
     'src/components/app/appWiring/useAppAccountsAndStage.ts': { n: { netease: 5 }, kind: 'file', why: 'the account/stage wiring: it opens the sign-in window and names 网易云 as the account that is always there' },
@@ -128,11 +143,9 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/library/core/home/homeSpecialCards.ts': { n: { netease: 1, kugou: 1, bodian: 1 }, kind: 'doc' },   // comments only,
     'src/library/core/home/libraryHomeActions.service.ts': { n: { qq: 1 }, kind: 'doc' },   // comments only,
     'src/library/core/home/useLibraryHomeSources.ts': { n: { netease: 1, lxmusic: 10 }, kind: 'doc' },
-    'src/library/suites/bravais/BravaisProviderAvatar.tsx': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, qishui: 1, feiniu: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/bravais/bravaisAlbumWall.ts': { n: { netease: 1, qq: 1, kugou: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/bravais/useBravaisHomeChrome.ts': { n: { netease: 1 }, kind: 'doc' },   // comments only,
-    'src/library/suites/grid/account/OnlineProviderSwitcher.tsx': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, qishui: 1, feiniu: 1, lxmusic: 2 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
-    'src/library/suites/grid/account/ProviderConnectButton.tsx': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, fnmusic: 1, feiniu: 1 }, kind: 'doc' },   // comments only,
+    'src/library/suites/grid/account/OnlineProviderSwitcher.tsx': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, qishui: 1, feiniu: 1, lxmusic: 2 }, kind: 'doc' },   // comments only,
     'src/library/suites/grid/collection/GridView.tsx': { n: { ytm: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/grid/entry.ts': { n: { qq: 1, lxmusic: 1 }, kind: 'doc' },   // comments only,
     'src/library/suites/grid/home/Grid3DSlider.tsx': { n: { netease: 1 }, kind: 'doc' },   // comments only,

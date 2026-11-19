@@ -1,4 +1,4 @@
-# Omni 在线音乐层
+﻿# Omni 在线音乐层
 
 `src/services/onlineMusic/omni.ts` 是普通在线歌曲数据的唯一公开入口。组件、hook、store 和普通 app service 不得直接调用具体 provider、registry、transport 或 raw API；只有明确的跨 provider 编排，或 provider adapter/transport 自身，才可以使用 provider-explicit 层。
 
@@ -132,7 +132,7 @@ Apple Music 的推荐能力已接入个人 FM（Apple personal station 持续补
 - 推荐偏好（账号上那份会影响推荐的设置）：见下面「推荐偏好」。
 - 应用开着时要盯着的东西（比如本地服务起不来）：provider 的 `watch` 成员。提示由 `src/components/app/useProviderNotices.ts` 统一显示，不用改它。
 - 登录要靠的本地服务：`auth.localService`，登录窗口会显示它的错误和重启按钮。
-- 多种登录方式和图标：`auth.getLoginMethods` 回 `iconKey`，图标放 `src/assets/providers/<iconKey>.svg`。
+- 多种登录方式和图标：`auth.getLoginMethods` 回 `iconKey`，图标是 `src/components/shared/platformIcons/` 里登记的自绘图形（`iconKey` 通常就是平台 id）。平台位图已经全部删掉，不要再往 `src/assets/providers/` 放官方图标。
 - 平台在界面上的名字：`shortNameKey` 是名字的 i18n key（`onlineProviderName.<id>`），界面用 `providerDisplayName` 翻译；没有就显示 `shortName`。
 - 跨源歌词匹配的来源：`src/utils/lyrics/lyricSources.ts` 的 `ENTRIES` 加一行，三份语言文件加 `lyricProvider.foo`。`platform: true` 的来源经它的 provider 去搜，`lyricMatchSources.ts` 不用改。只在桌面端可用的平台（provider 的 `getAvailability` 在网页版回 `configured: false`）在 `ENTRIES` 里还要设 `needsConfiguredProvider: true`，否则网页版的匹配窗口和自动匹配也会去问它（汽水这样设）。按 id 就能取到歌词的平台，可以在 `lyricMatchSources.ts` 的 `OWN_ACCESS` 里给它加 `knownById`：本地歌匹配过这个平台的歌以后，自动匹配按 id 直接取，不再只在搜索结果里找（网易云、汽水这样做；id 超出 number 精度的按字符串回，不转成数）。
 - 跨源歌词匹配搜不到时换个名字再搜：平台给的歌名带着括号里的译名或版本、另有不带它们的原名时，`lyrics.getSearchAlias` 回原名和歌手（QQ 的 `name`、酷狗去掉 `Suffix` / `trans_param.songname_suffix` 的歌名、波点的 `name`，Apple Music 去 jp 目录查）；歌手在别处另有写法时，`lyrics.getAlternateArtistName` 回那个写法（网易云 cloudsearch 歌手的 `tns` / `alias`，YouTube Music 问另一种语言的页面）。QQ、酷狗、波点、网易云在 normalize 时把要用的字段存进 `sourceRef.providerData`，Apple Music 和 YouTube Music 在被问到时才去查。调用方经 `omni.getLyricSearchAlias` / `omni.getAlternateArtistName` 传给 `autoMatchBestLyric`，不是歌词来源的平台（波点）也用得上。歌名去掉的部分是伴奏一类标记（`伴奏`、`Instrumental`、`Off Vocal` 等）时不换名字搜，免得伴奏配上原唱的歌词。歌名的译名和说明（网易云的 `tns` / `alia`、QQ 的 `subtitle`、波点的 `FSONGNAME` / `subtitle`）常是「某剧主题曲」一类文字，不当别名。

@@ -3359,7 +3359,13 @@ class FoliaPlaybackService : android.app.Service() {
         /**
          * 平台 key → 角标 drawable。
          *
-         * 图标文件在 res/drawable-nodpi/ 下（ic_provider_*.png，与 src/assets/providers/ 的同一套）。
+         * 图标是 res/drawable/ic_provider_*.xml 里的**纯白剪影 VectorDrawable**：自绘图形去掉底板，
+         * 只留特征笔画。之所以必须是剪影、不能是彩色图 —— 通知栏的 smallIcon 从 Android 5.0 起
+         * 只认 alpha，彩色图会被整体染成一个没有细节的色块。
+         *
+         * 这些 XML 由 `npm run build:provider-badges` 从
+         * `src/components/shared/platformIcons/` 的自绘图形生成（与前端 <PlatformIcon> 同一份几何），
+         * 平台 id 与资源名的对应写在那个目录的 `registry.ts` 里。
          * 没登记的平台（含空值）一律回落 Folia 本尊 —— 通知栏角标永远画得出东西，只是不一定认得。
          */
         private fun providerIconRes(badge: String?): Int {
@@ -3369,17 +3375,14 @@ class FoliaPlaybackService : android.app.Service() {
                 "qq" -> return R.drawable.ic_provider_qq
                 "kugou" -> return R.drawable.ic_provider_kugou
                 "bodian" -> return R.drawable.ic_provider_bodian
-                // 飞牛（自建服务）：图标是**白色剪影 + 透明底**，不是那张彩色图 ——
-                // 通知栏的 smallIcon 从 Android 5.0 起只认 alpha，彩色图会被整体染成一个
-                // 没有细节的色块。剪影由那张官方图标去掉红底得来（alpha 取三通道最小值）。
                 "feiniu" -> return R.drawable.ic_provider_feiniu
-                // 汽水音乐：Electron-only，但通知栏角标资源仍保留一份白色剪影，保持全量接入。
+                // 汽水音乐：Electron-only，但通知栏角标资源仍保留一份剪影，保持全量接入。
                 "qishui" -> return R.drawable.ic_provider_qishui
-                // 洛雪音源（免登录）：绿色音符图标去色后的白色剪影（alpha 取三通道最大值）。
+                // 洛雪音源（免登录）。
                 "lxmusic" -> return R.drawable.ic_provider_lxmusic
-                // Apple Music（v0.7.27 上游新增）：官方图标去色后的白色剪影。
+                // Apple Music（v0.7.27 上游新增）。
                 "appleMusic" -> return R.drawable.ic_provider_applemusic
-                // 视频平台：小电视的白色剪影（同样是 alpha-only 的 smallIcon）。
+                // 视频平台。
                 "bilibili" -> return R.drawable.ic_provider_bilibili
                 else -> return R.mipmap.ic_launcher
             }

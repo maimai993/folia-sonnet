@@ -1,4 +1,4 @@
-import type { SongResult, UnifiedSong } from '../../../types';
+﻿import type { SongResult, UnifiedSong } from '../../../types';
 import type {
     AudioQualityPreference,
     MediaId,
@@ -609,7 +609,7 @@ const logout = async (): Promise<void> => {
 };
 
 // 扫码登录方式：`id` 就是后端 `?channel=` 的取值，UI 层只认 labelKey 与 iconKey。
-// services 层不 import 任何 .svg：iconKey 是图标的名字，UI 层按它取 src/assets/providers/ 里同名的文件。
+// services 层不 import 任何图形：iconKey 是图标的名字，UI 层按它到 src/components/shared/platformIcons/ 里取自绘图形。
 // `qq` 是 QQ 扫码登录通道的 canonical 名字（旧名 `mobile`，后端仍在入口归一，
 // 所以新版 Folia 配旧后端也不会断）。协议本身没变：仍送 tmeLoginType 6、收回 loginType 2。
 // `qqmusic` 是用 QQ 音乐 App 扫码（App 登的是 QQ 还是微信账号都行），后端在 /login/channels 里说有才显示：

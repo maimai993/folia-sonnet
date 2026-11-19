@@ -36,8 +36,8 @@ type LoginMessageProps = {
     note?: string;
     /** 平台或者本地服务自己的话。 */
     quote?: { who: string; text: string; code?: string };
-    /** 登录方式：一个分段的选择，选了之后还留着，可以再换。 */
-    methods?: { options: Array<{ value: string; label: string; icon: string }>; value: string | null; onChange: (id: string) => void };
+    /** 登录方式：一个分段的选择，选了之后还留着，可以再换。`icon` 是画在前面的一枚小图形，没有就不画。 */
+    methods?: { options: Array<{ value: string; label: string; icon: React.ReactNode }>; value: string | null; onChange: (id: string) => void };
     actions: MessageAction[];
     /** 「稍后再试」：按钮先倒数到这一种失败等完的时刻，再变成第一个操作。 */
     waitFor?: LoginFailure | null;
@@ -119,7 +119,7 @@ export const LoginMessage: React.FC<LoginMessageProps> = ({ sceneKey, headline, 
                         options={methods.options.map(option => ({
                             value: option.value,
                             label: option.label,
-                            icon: option.icon ? <img src={option.icon} alt="" draggable={false} className="h-4 w-4" /> : undefined,
+                            icon: option.icon ?? undefined,
                         }))}
                         onChange={methods.onChange}
                     />
