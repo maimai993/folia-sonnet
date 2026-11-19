@@ -24,8 +24,6 @@ import {
 } from '../backgrounds/registry';
 import BackgroundPicture from '../preview/BackgroundPicture';
 import GyroTiltSettingsCard from '../backgrounds/GyroTiltSettingsCard';
-import { hasFreeCamera } from '../backgrounds/freeCameraModes';
-import { useSceneSettingsStore } from '../../scenes/settings/useSceneSettingsStore';
 import { usePlayerChromeSettingsStore } from '../../../stores/usePlayerChromeSettingsStore';
 import SmartBeatSettingsCard from '../SmartBeatSettingsCard';
 import BeatEffectsGroup from '../BeatEffectsGroup';
@@ -228,15 +226,8 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
     const randomPool = useRandomPool();
 
     const enablePlayerPageNativeBlur = usePlayerChromeSettingsStore(state => state.enablePlayerPageNativeBlur);
+    const backgroundEntry = getVisualizerBackgroundRegistryEntry(backgroundConfig?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE);
     const resolvedBackgroundMode = backgroundConfig?.mode ?? DEFAULT_VISUALIZER_BACKGROUND_MODE;
-    /*
-     * 正在用场景时，陀螺仪也一样有用：场景的镜头跟着手机歪，靠的就是这张卡片里那份
-     * 开关与灵敏度（见 scenes/engine/sceneSignals 的 trackLook）。场景不在这份
-     * hasFreeCamera 清单里 —— 那是「3D 背景」的清单 —— 所以单独问一次。
-     */
-    const activeSceneId = useSceneSettingsStore(state => state.sceneId);
-    const gyroRelevant = Boolean(activeSceneId) || hasFreeCamera(resolvedBackgroundMode);
-    const backgroundEntry = getVisualizerBackgroundRegistryEntry(resolvedBackgroundMode);
     const backgroundModeOptions = useMemo(() => (
         VISUALIZER_BACKGROUND_REGISTRY.map(entry => ({
             value: entry.mode,
@@ -341,13 +332,13 @@ const VisPlaygroundSettingsPanel: React.FC<VisPlaygroundSettingsPanelProps> = (p
                       * 智能动感模式: a setting of the whole picture, with no one style's options.
                       *
                       * 陀螺仪适配也在这里：它同样管的是整个画面，不是某个背景自己的调优项。
-                      * 只有 3D 背景（町景 / 粒子 / 星河 / 安魂 / 音域回响）挂轨道相机，
-                      * 别的背景开了也没有东西可动，所以按当前背景决定显不显示。
+                      * 所以**每个画面都显示** —— 以前只在这两个 3D 背景里露出来，等于把
+                      * 「体感只能在这里用」写进了界面（issue #429）。
                       */}
                     {activeSection === 'global' && (
                         <>
                             <SmartBeatSettingsCard t={t} />
-                            {gyroRelevant && <GyroTiltSettingsCard t={t} />}
+                            <GyroTiltSettingsCard t={t} />
                         </>
                     )}
 

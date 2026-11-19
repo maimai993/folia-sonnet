@@ -10,28 +10,16 @@ import {
 } from '../../../stores/useGyroSettingsStore';
 
 // src/components/visualizer/backgrounds/GyroTiltSettingsCard.tsx
-// 「陀螺仪适配」开关 —— 全局一份，四个 3D 背景共用。
+// 「陀螺仪适配」开关 —— 全局一份，所有画面共用。
 //
 // 这个开关原先住在町景里，可它要做的事情跟背景长什么样无关：手机往哪边歪，
-// 镜头就跟着轻轻偏一点。粒子 / 星河 / 安魂 / 音域回响用的是同一套轨道相机
-// （backgrounds/orbitStage.ts），所以开关也该是全局的。
+// 镜头就跟着轻轻偏一点。所有 3D 背景（町景 / 粒子 / 音域回响）用的是同一套轨道相机
+// （backgrounds/orbitStage.ts），场景（scenes/）那边转镜头读的也是这一份，
+// 所以开关与灵敏度只有这一处。
 //
-// 场景（scenes/）那边转镜头读的也是这一份灵敏度，所以滑块放在这、放一处就够。
+// 它不按背景区分：开着就在每个画面里都生效，关掉才是唯一的「不生效」（issue #429）。
 
 const GYRO_GROUP: SettingsGroupDef = { id: 'bg-gyro-tilt', titleKey: 'options.gyroTiltSettings' };
-
-/**
- * 可以单独关掉陀螺仪的背景。
- *
- * 场景是同一个入口（'scenes'），因为场景内部共用 sceneSignals 那一套转镜头，
- * 拆到每个场景各给一个开关反而让人找不着。
- */
-const GYRO_MODES = [
-    { mode: 'scenes', labelKey: 'options.gyroModeScenes' },
-    { mode: 'particles', labelKey: 'options.gyroModeParticles' },
-    { mode: 'sonic', labelKey: 'options.gyroModeSonic' },
-    { mode: 'machi', labelKey: 'options.gyroModeMachi' },
-] as const;
 
 interface GyroTiltSettingsCardProps {
     t: (key: string) => string;
@@ -42,8 +30,6 @@ const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
     const toggle = useGyroSettingsStore(state => state.handleToggleGyroTilt);
     const gyroTiltGain = useGyroSettingsStore(state => state.gyroTiltGain);
     const setGain = useGyroSettingsStore(state => state.handleSetGyroTiltGain);
-    const perMode = useGyroSettingsStore(state => state.gyroTiltPerMode);
-    const setForMode = useGyroSettingsStore(state => state.handleSetGyroTiltForMode);
     const supported = gyroTiltSupported();
 
     const handleChange = async (enable: boolean) => {
@@ -81,19 +67,9 @@ const GyroTiltSettingsCard: React.FC<GyroTiltSettingsCardProps> = ({ t }) => {
                 note={t('options.gyroTiltGainHint')}
             />
             {/*
-             * 单独关掉某个背景。没配过就是「跟随全局」，所以 checked 取 ?? true：
-             * 全局开着的时候这些默认都是开的，用户点一下就只关这一个。
+             * 这里原来还有一排「按背景单独关」的开关。现在所有画面都吃同一份读数 ——
+             * 那排开关只会让人在某个背景里莫名其妙地转不动（issue #429），已经删掉。
              */}
-            {GYRO_MODES.map(({ mode, labelKey }) => (
-                <ToggleRow
-                    key={mode}
-                    label={t(labelKey)}
-                    checked={perMode[mode] ?? true}
-                    disabled={!supported || !gyroTiltEnabled}
-                    onChange={enable => setForMode(mode, enable)}
-                    note={mode === 'scenes' ? t('options.gyroTiltPerModeHint') : undefined}
-                />
-            ))}
         </Group>
     );
 };

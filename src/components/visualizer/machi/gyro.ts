@@ -7,11 +7,10 @@
 
 export {
     GYRO_TILT_RANGE as MACHI_GYRO_RANGE,
-    GYRO_TILT_MAX_STEP as MACHI_GYRO_MAX_STEP,
     gyroTiltSupported as machiGyroSupported,
     requestGyroTiltPermission as requestMachiGyroPermission,
     gyroScreenAngle as machiScreenAngle,
-    gyroScreenOffsets as machiScreenOffsets,
+    gyroScreenTilt as machiScreenTilt,
     subscribeGyroTilt as subscribeMachiGyro,
     type GyroTiltOffsets as MachiGyroOffsets,
 } from '../backgrounds/gyroTilt';

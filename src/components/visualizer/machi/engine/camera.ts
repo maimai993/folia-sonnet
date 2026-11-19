@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MachiCameraView } from '../types';
-import { MACHI_GYRO_MAX_STEP, type MachiGyroOffsets } from '../gyro';
+import { type MachiGyroOffsets } from '../gyro';
 
 // src/components/visualizer/machi/engine/camera.ts
 // 町景的镜头：正交投影的斜俯视。缩放 1 时按视口把场景给的构图点（底座、最高的招牌……）都框进去，并给底部字幕让出一点；
@@ -104,10 +104,15 @@ export class MachiCamera {
     needsRender = true;
     /** 陀螺仪适配：开了才收读数，读数换成镜头偏移叠在静止视角上。 */
     private gyro = false;
+    /**
+     * 陀螺仪偏移。读数过来直接换掉，这一帧就贴到画面上 —— 平滑（死区 + 一阶低通）
+     * 已经在 backgrounds/gyroTilt.ts 那条链路里做完，相机再追一遍就是第二段迟滞。
+     */
     private readonly gyroOffsets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
     /** 上一次真正叠进画面的偏移：不在静止位置时按差值继续跟，不从 restView() 重摆。 */
     private readonly gyroApplied: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
-    private readonly gyroTargets: MachiGyroOffsets = { azimuth: 0, elevation: 0 };
+    /** 关掉陀螺仪时镜头要缓回机位：这个系数每帧涨到 1，涨满就停。 */
+    private gyroRelease = 0;
     /** 自定义视角下拖动停稳了：新视角（相对默认构图）交给外面存。 */
     onCommit: ((view: MachiCameraView) => void) | null = null;
     /** 镜头被拖动了：暂停时渲染循环睡着，要叫醒它。 */
@@ -150,40 +155,69 @@ export class MachiCamera {
     setGyro(gyro: boolean) {
         if (gyro === this.gyro) return;
         this.gyro = gyro;
-        if (!gyro) {
-            this.gyroTargets.azimuth = 0;
-            this.gyroTargets.elevation = 0;
-        }
+        // 关掉时不清零：gyroRelease 从 0 涨到 1，这一路把偏移乘回去，镜头就缓回机位。
+        if (!gyro) this.gyroRelease = 0;
         this.needsRender = true;
         this.onWake?.();
     }
 
-    /** 陀螺仪读数：目标偏移（弧度）。镜头一帧一帧追过去。 */
+    /**
+     * 陀螺仪读数：偏移（弧度）。直接换掉，下面的 stepGyro 这一帧就贴上去。
+     */
     setGyroOffsets(offsets: MachiGyroOffsets) {
         if (!this.gyro) return;
-        if (offsets.azimuth === this.gyroTargets.azimuth && offsets.elevation === this.gyroTargets.elevation) return;
-        this.gyroTargets.azimuth = offsets.azimuth;
-        this.gyroTargets.elevation = offsets.elevation;
-        // 暂停时循环是睡着的：叫醒它追这一下。
+        if (offsets.azimuth === this.gyroOffsets.azimuth && offsets.elevation === this.gyroOffsets.elevation) return;
+        this.gyroOffsets.azimuth = offsets.azimuth;
+        this.gyroOffsets.elevation = offsets.elevation;
+        // 暂停时循环是睡着的：叫醒它贴这一下。
         this.onWake?.();
     }
 
-    /** 偏移还在往目标追（暂停时循环要接着跑）。 */
+    /** 关掉陀螺仪后偏移还没淡完（暂停时循环要接着跑）。 */
     private get gyroMoving() {
-        return Math.abs(this.gyroTargets.azimuth - this.gyroOffsets.azimuth) > 1e-4
-            || Math.abs(this.gyroTargets.elevation - this.gyroOffsets.elevation) > 1e-4;
+        return this.gyroRelease < 1;
     }
 
-    /** 往里追一帧：按帧间隔收敛，单帧不过 MAX_STEP，手机放下时不会抖。 */
+    /**
+     * 每帧：把偏移贴到画面上。
+     *
+     * 开着时就是读数本身（不追、不滤）。关掉之后 gyroRelease 从 0 涨到 1，
+     * 期间偏移按 (1 - gyroRelease) 缩小 —— 这一段是「淡出」而不是「平滑」，
+     * 0.35 秒走完，用户看到的是镜头缓缓回机位。
+     */
     private stepGyro(realDelta: number) {
-        if (!this.gyroMoving) return;
-        const k = Math.min(1, realDelta * 8);
-        const follow = (current: number, target: number) => {
-            const want = current + (target - current) * k;
-            return Math.abs(want - current) > MACHI_GYRO_MAX_STEP ? current + Math.sign(want - current) * MACHI_GYRO_MAX_STEP : want;
-        };
-        this.gyroOffsets.azimuth = follow(this.gyroOffsets.azimuth, this.gyroTargets.azimuth);
-        this.gyroOffsets.elevation = follow(this.gyroOffsets.elevation, this.gyroTargets.elevation);
+        if (this.gyro) {
+            if (this.gyroRelease !== 1) this.gyroRelease = 1;
+            const wanted = this.gyroOffsets;
+            if (wanted.azimuth === this.gyroApplied.azimuth && wanted.elevation === this.gyroApplied.elevation) return;
+            this.applyGyro(wanted.azimuth, wanted.elevation);
+            return;
+        }
+        if (this.gyroRelease >= 1) return;
+        /*
+         * 淡出：把这一帧该剩的比例算好、把总量同步缩下来。
+         *
+         * 总量必须和叠上去的那一份一起缩：下一条读数（关掉之后不会再来了）也好、
+         * 下一帧的对比也好，都以它为「已经叠了多少」，留着旧值会重复叠加一次。
+         */
+        this.gyroRelease = Math.min(1, this.gyroRelease + Math.max(0, realDelta) / 0.35);
+        const left = 1 - this.gyroRelease;
+        this.gyroOffsets.azimuth *= left;
+        this.gyroOffsets.elevation *= left;
+        this.applyGyro(this.gyroOffsets.azimuth, this.gyroOffsets.elevation);
+        if (this.gyroRelease >= 1) {
+            this.gyroOffsets.azimuth = 0;
+            this.gyroOffsets.elevation = 0;
+        }
+    }
+
+    /** 把一份偏移摆进画面：在静止位置就重摆，被拖过就按差值补。 */
+    private applyGyro(azimuth: number, elevation: number) {
+        // 先按「还没叠新偏移」算差值：下面 place() 会用 gyroApplied 反推换算，顺序不能反。
+        const previousAzimuth = this.gyroApplied.azimuth;
+        const previousElevation = this.gyroApplied.elevation;
+        this.gyroApplied.azimuth = azimuth;
+        this.gyroApplied.elevation = elevation;
         this.needsRender = true;
         // 镜头停在静止位置时（没在拖、没在回正）才自己摆一下；拖拽时交给拖拽。
         if (this.still) {
@@ -197,8 +231,8 @@ export class MachiCamera {
         if (!this.interacting && !this.returning && !this.commitPending) {
             const current = this.view();
             this.place({
-                azimuth: current.azimuth - this.gyroApplied.azimuth,
-                elevation: current.elevation - this.gyroApplied.elevation,
+                azimuth: current.azimuth - previousAzimuth,
+                elevation: current.elevation - previousElevation,
                 zoom: current.zoom,
             }, this.target.clone());
         }

@@ -3,15 +3,19 @@ import {
     MACHI_GYRO_RANGE,
     machiGyroSupported,
     machiScreenAngle,
-    machiScreenOffsets,
     requestMachiGyroPermission,
     subscribeMachiGyro,
 } from '@/components/visualizer/machi/gyro';
 // 期望值按实现自己的死区与灵敏度算，改常量时这里不必跟着挪数字。
-import { DEAD_ZONE_DEGREES, SENSITIVITY } from '@/components/visualizer/backgrounds/gyroTilt';
+import { GYRO_TILT_DEAD_ZONE_DEGREES, GYRO_TILT_SENSITIVITY } from '@/components/visualizer/backgrounds/gyroTilt';
+import { gyroScreenTilt } from '@/components/visualizer/backgrounds/gyroTilt';
 
 // test/unit/visualizer/machi/gyro.test.ts
 // 町景陀螺仪读数：相对按下开关那一刻的偏移、夹在范围内、没有 DeviceOrientationEvent 时静静地什么都不做。
+// 平滑是按时间做的一阶低通（gyroTiltModel），node 环境没有 rAF，所以每条读数只推进 1/60 秒 ——
+// 想看到「走到底」就得连着喂几条读数，这也正是真机上发生的事。
+
+const DEGREE = Math.PI / 180;
 
 /** 造一个假 window，装上 DeviceOrientationEvent 与事件收发。 */
 const fakeWindow = (permission?: () => Promise<string>) => {
@@ -33,8 +37,10 @@ const fakeWindow = (permission?: () => Promise<string>) => {
     return target;
 };
 
-// 偏移按度数给，断言的容差按“到范围内的百分比”看。
-const DEGREE = Math.PI / 180;
+/** 同一条姿态连喂 frames 次：每喂一次推进一帧，低通因此有足够时间收敛到目标。 */
+const hold = (target: ReturnType<typeof fakeWindow>, pose: { beta: number; gamma: number }, frames: number) => {
+    for (let frame = 0; frame < frames; frame += 1) target.dispatch('deviceorientation', pose);
+};
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -61,10 +67,8 @@ describe('machi gyro', () => {
         /*
          * beta 与 gamma 一起动了 6°，方向都是「变大」，所以两个轴都该是正的。
          *
-         * 不再钉死具体幅度：两条轴同时动时，相对旋转是在手机自己的坐标系里
-         * 分解的，两个轴会各自分到一部分，不会像按欧拉角直接相减那样
-         * 「gamma 变 6° 就正好读到 6°」。这里要确认的是「动起来了、方向对、
-         * 没有串成一边倒」。
+         * 不钉死具体幅度：读数先过死区、再乘灵敏度，然后按时间平滑 ——
+         * 第一条只走一帧的量。这里要确认的是「动起来了、方向对、没有串成一边倒」。
          */
         expect(seen[0]!.azimuth).toBeGreaterThan(0);
         expect(seen[0]!.elevation).toBeGreaterThan(0);
@@ -80,8 +84,17 @@ describe('machi gyro', () => {
         // 分两步转，每步都在可信幅度里（一步跳太多会被当成换系，重新取基准）。
         target.dispatch('deviceorientation', { beta: 50, gamma: -50 });
         target.dispatch('deviceorientation', { beta: 89, gamma: -89 });
-        expect(seen[0]!.azimuth).toBeCloseTo(-MACHI_GYRO_RANGE.azimuth, 6);
-        expect(seen[0]!.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
+        // 连喂一串：输出走到上限就停住，不许越过。
+        const start = seen.length;
+        hold(target, { beta: 89, gamma: -89 }, 120);
+        const settled = seen[seen.length - 1]!;
+        expect(settled.azimuth).toBeCloseTo(-MACHI_GYRO_RANGE.azimuth, 6);
+        expect(settled.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
+        // 中途每一帧都不越过上限（含符号）。
+        for (const offsets of seen.slice(start)) {
+            expect(Math.abs(offsets.azimuth)).toBeLessThanOrEqual(MACHI_GYRO_RANGE.azimuth + 1e-9);
+            expect(Math.abs(offsets.elevation)).toBeLessThanOrEqual(MACHI_GYRO_RANGE.elevation + 1e-9);
+        }
     });
 
     it('skips readings the device sends without motion data', () => {
@@ -107,9 +120,16 @@ describe('machi gyro', () => {
         // 转屏后第一条读数重新当基准，画面不会跳。
         target.dispatch('deviceorientation', { beta: 30, gamma: -20 });
         expect(seen).toHaveLength(1);
-        target.dispatch('deviceorientation', { beta: 30, gamma: -22 });
-        // 2° 的倾斜经死区与灵敏度后是一个可观的偏移，方向为负（gamma 变小）。
-        expect(seen[1]!.azimuth).toBeLessThan(0);
+        hold(target, { beta: 30, gamma: -25 }, 120);
+        /*
+         * 从新基准算的倾角是一个可观的偏移，连喂到收敛之后停在那儿（不漂）。
+         *
+         * 不钉具体数值：手机竖着拿时，欧拉角里「左右歪」与「上下歪」是耦合的，
+         * gamma 变 5° 在四元数里读出来不是刚好 5°；这里要的是「新基准生效、读数跟得上」。
+         */
+        const settled = seen[seen.length - 1]!.azimuth;
+        expect(Math.abs(settled)).toBeGreaterThan(3 * DEGREE);
+        expect(Math.abs(settled)).toBeLessThanOrEqual(MACHI_GYRO_RANGE.azimuth + 1e-9);
     });
 
     it('comes back after sitting at the limit instead of sticking there', () => {
@@ -117,18 +137,18 @@ describe('machi gyro', () => {
         const seen: { azimuth: number; elevation: number }[] = [];
         subscribeMachiGyro(offsets => seen.push(offsets));
         target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
-        // 转到远超范围：夹在上限。
+        // 转到远超范围：连喂到上限。
         target.dispatch('deviceorientation', { beta: 0, gamma: 40 });
-        expect(seen[0]!.azimuth).toBeCloseTo(MACHI_GYRO_RANGE.azimuth, 6);
+        hold(target, { beta: 0, gamma: 40 }, 120);
+        expect(seen[seen.length - 1]!.azimuth).toBeCloseTo(MACHI_GYRO_RANGE.azimuth, 6);
         /*
-         * 停在极限上转回来：必须跟着回，不能卡住。
-         *
-         * 输出过了按时间的平滑，所以不是一步到位：每走一步只逼近剩余距离的一部分。
-         * 这里断言的是「往回走了」—— 关键是回得来，不是回得多快。
+         * 停在极限上转回来：必须马上跟着回，不能卡住。现在读数本身留住了真实倾角，
+         * 回到 4° 时目标就不是上限了，第一帧就该往回走。
          */
-        target.dispatch('deviceorientation', { beta: 0, gamma: 2 });
-        expect(seen[1]!.azimuth).toBeLessThan(MACHI_GYRO_RANGE.azimuth);
-        expect(seen[1]!.azimuth).toBeGreaterThan(0);
+        target.dispatch('deviceorientation', { beta: 0, gamma: 4 });
+        const back = seen[seen.length - 1]!.azimuth;
+        expect(back).toBeLessThan(MACHI_GYRO_RANGE.azimuth);
+        expect(back).toBeGreaterThan(0);
     });
 
     it('takes the pose as a new reference when the reading jumps (phone past vertical)', () => {
@@ -136,21 +156,26 @@ describe('machi gyro', () => {
         const seen: { azimuth: number; elevation: number }[] = [];
         subscribeMachiGyro(offsets => seen.push(offsets));
         target.dispatch('deviceorientation', { beta: 88, gamma: 0 });
-        target.dispatch('deviceorientation', { beta: 100, gamma: 0 });
-        expect(seen[0]!.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
+        /*
+         * 一点点转到上限：一次跳 12° 以上会被当成换系、重取基准（见 MAX_TRUSTED_JUMP），
+         * 所以真实的倾斜是几十条读数一条一条累积出来的，这里也照那样喂（每步 1°）。
+         * 上限在倾角 21° 左右，所以一路喂到 beta 115。
+         */
+        for (let beta = 89; beta <= 115; beta += 1) hold(target, { beta, gamma: 0 }, 8);
+        hold(target, { beta: 115, gamma: 0 }, 60);
+        expect(seen[seen.length - 1]!.elevation).toBeCloseTo(MACHI_GYRO_RANGE.elevation, 6);
         // 翻过竖直方向，读数换系跳一大截：不能当成「倾斜到极限」，而是以新姿态为基准、偏移归零。
         target.dispatch('deviceorientation', { beta: -85, gamma: 0 });
-        expect(seen[1]).toEqual({ azimuth: 0, elevation: 0 });
+        expect(seen[seen.length - 1]).toEqual({ azimuth: 0, elevation: 0 });
         /*
          * 从新基准继续转，仍然跟得上。
          *
-         * 3° 的倾斜经死区（1°）与灵敏度（2.5）后是 5°；
-         * 但输出还带着上一帧（上限 5°）的低通残留，所以不是 5° 也不是 1.25°。
-         * 这里只断言「跟着新基准走了」—— 符号对、量级不为零。
+         * 平滑要把输出从 0 拉到自己那一侧，所以第一帧只是「小了一点」，不是一步到位。
+         * 这里断言方向与不为零。
          */
         target.dispatch('deviceorientation', { beta: -88, gamma: 0 });
-        expect(seen[2]!.elevation).toBeLessThan(0);
-        expect(Math.abs(seen[2]!.elevation)).toBeGreaterThan(0);
+        expect(seen[seen.length - 1]!.elevation).toBeLessThan(0);
+        expect(Math.abs(seen[seen.length - 1]!.elevation)).toBeGreaterThan(0);
     });
 
     it('asks iOS for permission and reports what the user said', async () => {
@@ -170,25 +195,18 @@ describe('machi gyro', () => {
     });
 
     it('maps device axes onto screen axes for every screen angle', () => {
-        /*
-         * gyroScreenOffsets 里带着死区（1.5°）与灵敏度（1.5），所以 10° 的倾斜
-         * 进来是 (10 - 1.5) × 1.5 = 12.75°，不是 10°。
-         */
-        const tilted = (10 - DEAD_ZONE_DEGREES) * SENSITIVITY;
-        // 竖屏：gamma 管左右、beta 管上下。
-        expect(machiScreenOffsets(0, 10, 0)).toEqual({ azimuth: tilted * DEGREE, elevation: 0 });
-        expect(machiScreenOffsets(10, 0, 0)).toEqual({ azimuth: 0, elevation: tilted * DEGREE });
+        // 竖屏：gamma 管左右、beta 管上下（换坐标系这一步不改数值）。
+        expect(gyroScreenTilt(0, 10, 0)).toEqual({ beta: 0, gamma: 10 });
+        expect(gyroScreenTilt(10, 0, 0)).toEqual({ beta: 10, gamma: 0 });
         // 横屏 90°：两轴互换（左右变成上下、上下变成左右）。
-        expect(machiScreenOffsets(10, 0, 90)).toEqual({ azimuth: -tilted * DEGREE, elevation: 0 });
-        expect(machiScreenOffsets(0, 10, 90)).toEqual({ azimuth: 0, elevation: tilted * DEGREE });
+        expect(gyroScreenTilt(10, 0, 90)).toEqual({ beta: 0, gamma: -10 });
+        expect(gyroScreenTilt(0, 10, 90)).toEqual({ beta: 10, gamma: 0 });
         // 反方向横过来：符号相反。
-        expect(machiScreenOffsets(10, 0, 270).azimuth).toBeCloseTo(tilted * DEGREE, 6);
-        expect(machiScreenOffsets(10, 0, 270).elevation).toBeCloseTo(0, 6);
-        expect(machiScreenOffsets(0, 10, 270).azimuth).toBeCloseTo(0, 6);
-        expect(machiScreenOffsets(0, 10, 270).elevation).toBeCloseTo(-tilted * DEGREE, 6);
+        expect(gyroScreenTilt(10, 0, 270).gamma).toBeCloseTo(10, 6);
+        expect(gyroScreenTilt(10, 0, 270).beta).toBeCloseTo(0, 6);
         // 倒置：两轴都反。
-        expect(machiScreenOffsets(10, 10, 180).azimuth).toBeCloseTo(-tilted * DEGREE, 6);
-        expect(machiScreenOffsets(10, 10, 180).elevation).toBeCloseTo(-tilted * DEGREE, 6);
+        expect(gyroScreenTilt(10, 10, 180).gamma).toBeCloseTo(-10, 6);
+        expect(gyroScreenTilt(10, 10, 180).beta).toBeCloseTo(-10, 6);
     });
 
     it('reads the screen angle, falling back to window.orientation and portrait', () => {
@@ -211,21 +229,14 @@ describe('machi gyro', () => {
         target.dispatch('deviceorientation', { beta: 0, gamma: 0 });
         /*
          * 横屏下左右倾（设备坐标是 beta）：屏幕上是左右转，方向为负。
-         *
-         * 断言方向而不是「正好顶到上限」：5° 的倾斜经灵敏度之后是 6°，
-         * 到不了 ±9° 的天花板。真要验夹取请用大得多的倾角。
+         * 连喂到收敛，断言方向与幅度 —— 读数保留真实倾角，5° 经死区与灵敏度后大约是
+         * (5 - 死区) × 灵敏度，远不到上限。
          */
         target.dispatch('deviceorientation', { beta: 5, gamma: 0 });
-        expect(seen[0]!.azimuth).toBeLessThan(0);
-        expect(seen[0]!.elevation).toBeCloseTo(0, 6);
-        /*
-         * 横屏下上下倾（设备坐标是 gamma）：屏幕上是俯仰。
-         *
-         * 输出现在按真实时间做指数逼近，不是原来那个「每步走 25%」，所以断言的是
-         * 「两个轴都在动、方向对」，而不是某个固定的中间值或「占满上限」。
-         */
-        target.dispatch('deviceorientation', { beta: 5, gamma: 4 });
-        expect(seen[1]!.azimuth).toBeLessThan(0);
-        expect(seen[1]!.elevation).toBeGreaterThan(0);
+        hold(target, { beta: 5, gamma: 0 }, 120);
+        const settled = seen[seen.length - 1]!;
+        expect(settled.azimuth).toBeLessThan(0);
+        expect(settled.azimuth).toBeCloseTo(-((5 - GYRO_TILT_DEAD_ZONE_DEGREES) * GYRO_TILT_SENSITIVITY) * DEGREE, 3);
+        expect(settled.elevation).toBeCloseTo(0, 6);
     });
 });

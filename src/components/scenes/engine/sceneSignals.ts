@@ -1,6 +1,6 @@
 import { getSongAlbumLabel, getSongArtistLabel } from '../../../services/onlineMusic/songMetadata';
 import { beatImpact, handoffProgress } from '../../../stores/motionSignals';
-import { readGyroTiltEnabledForMode, readGyroTiltGain, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
+import { readGyroTiltEnabled, useGyroSettingsStore } from '../../../stores/useGyroSettingsStore';
 import { selectCoverUrl, usePlaybackStore } from '../../../stores/usePlaybackStore';
 import { subscribeGyroTilt, gyroTiltSupported, type GyroTiltOffsets } from '../../visualizer/backgrounds/gyroTilt';
 import type { DualTheme } from '../../../types';
@@ -127,14 +127,6 @@ export const createSceneSignals = (getProps: () => VisualizerSharedProps, getSon
 const DRAG_START_PX = 5;
 /** How far a drag turns the head, radians per CSS pixel: across half a wide window is about half a turn. */
 const LOOK_PER_PX = (0.18 * Math.PI) / 180;
-/**
- * 陀螺仪读数进场景的基准倍数。
- *
- * 背景那边（gyroTilt.ts）要的是「镜头轻轻偏一点」，上限只有 ±9°/±5°；场景里歪手机是想
- * 「看旁边」，这点角度看不出来，所以基准放大 6 倍，再乘用户自己的灵敏度
- * （设置里的「陀螺仪灵敏度」，默认 0.7）。陀螺仪自己的死区与低通照旧，抖还是被压住的。
- */
-const SCENE_GYRO_BASE_GAIN = 6;
 
 /**
  * Drag to look, for every scene alike: a press on the scene that moves turns the head, as a game's mouse
@@ -153,9 +145,15 @@ export const trackLook = (root: HTMLElement) => {
     /*
      * 陀螺仪：歪手机和拖动是两种不同性质的输入，不能简单相加。
      * 拖动给的是**增量**（这一手转了多少），陀螺仪给的是**绝对姿态**（相对拿起手机那一刻歪了多少）。
-     * 所以陀螺仪的数字每帧作为一个「当前姿态」写进 gyro，look() 交出去的是
-     * 「上一次交出去时的姿态」到「这一次的交出去」之间的差，再并上这一帧拖动的增量。
+     * 所以陀螺仪的数字每帧作为一个「当前姿态」记在 gyro 里，look() 交出去的是
+     * 「上一次交出去时的姿态」到「这一次」之间的差，再并上这一帧拖动的增量。
      * 这样手一直歪着不动、镜头就停在那个角度，不会每帧继续往里拧。
+     *
+     * ★ 陀螺仪的姿态**原样**用，不在这里再滤一遍。
+     *
+     * 早先这里还有一段「每次 look() 只走 0.18」的指数逼近：陀螺仪那侧已经滤过一次，
+     * 这一段又在它上面串了约 110ms 的迟滞，场景里歪手机比背景里还要慢半拍。
+     * 现在读数到姿态是一条直线，迟滞只剩 gyroTiltModel 里那一条时间常数。
      */
     let gyro: GyroTiltOffsets = { azimuth: 0, elevation: 0 };
     let sentYaw = 0;
@@ -164,15 +162,13 @@ export const trackLook = (root: HTMLElement) => {
     let unsubscribeGyro: (() => void) | null = null;
     const startGyro = () => {
         if (unsubscribeGyro || !gyroTiltSupported()) return;
-        // 背景那边只要「轻轻偏一点」（±9°/±5°），转镜头要看得见，所以放大再交给场景。
-        // 倍数只作用在场景这一侧，背景的设置一点没动。用户的灵敏度每帧读一次：
-        // 拖滑块时立刻生效，不用把场景重挂一遍。
+        /*
+         * 背景那边给的是镜头偏移（弧度），场景要的是「头转了多少」，正负一致、就是同一个数：
+         * 歪 15° 时背景里的天空平移 22°，场景里整个画面转 22°。以前场景这边不管用户
+         * 设置成多少都再乘 6 倍，同一个动作在两个画面里的幅度对不上，现在不乘了。
+         */
         unsubscribeGyro = subscribeGyroTilt((offsets) => {
-            const gain = SCENE_GYRO_BASE_GAIN * readGyroTiltGain();
-            gyro = {
-                azimuth: offsets.azimuth * gain,
-                elevation: offsets.elevation * gain,
-            };
+            gyro = { azimuth: offsets.azimuth, elevation: offsets.elevation };
         });
     };
     const stopGyro = () => {
@@ -181,8 +177,8 @@ export const trackLook = (root: HTMLElement) => {
         gyro = { azimuth: 0, elevation: 0 };
     };
     const syncGyroSubscription = () => {
-        // 全局开关 + 「场景」这一个分组的开关，两个都开才订阅。
-        if (readGyroTiltEnabledForMode('scenes')) startGyro();
+        // 只看全局开关：场景也永远吃读数（用户自己关掉是唯一的不吃）。
+        if (readGyroTiltEnabled()) startGyro();
         else stopGyro();
     };
     // 订阅与否跟着开关走；开关一变跟着起停。

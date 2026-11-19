@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { readGyroTiltEnabledForMode } from '../../../stores/useGyroSettingsStore';
-import { GYRO_TILT_MAX_STEP, subscribeGyroTilt, type GyroTiltOffsets } from './gyroTilt';
+import { readGyroTiltEnabled } from '../../../stores/useGyroSettingsStore';
+import { subscribeGyroTilt, type GyroTiltOffsets } from './gyroTilt';
 
 // src/components/visualizer/backgrounds/orbitStage.ts
 //
@@ -53,14 +53,6 @@ export interface OrbitStageOptions {
     autoReturn?: boolean;
     /** 视角变了（每帧至少一次）。 */
     onChange?: () => void;
-    /**
-     * 这个舞台属于哪个背景（'particles' / 'sonic' …）。
-     *
-     * 用来查「这个背景自己有没有单独关掉陀螺仪」—— 同一个 OrbitStage 服务好几个背景，
-     * 各背景的开关互不影响，所以必须由调用方告诉它是哪一个。
-     * 不传就只看全局开关。
-     */
-    gyroMode?: string;
 }
 
 /**
@@ -92,13 +84,16 @@ export class OrbitStage {
     private disposed = false;
 
     /*
-     * 陀螺仪适配的偏移状态。
+     * 陀螺仪适配的偏移：就是订阅那边交出来的那个数（已经过死区、灵敏度和一阶低通）。
      *
-     * target 是读数换算出来的目标偏移，applied 是当前实际叠上去的 ——
-     * 两者分开是为了平滑：读数抖，直接照抄会让画面一帧一帧地跳。
+     * ★ 这里**不再自己追一遍**。
+     *
+     * 早先 target / applied 两套值分开存、每帧按 3.6 的时间常数往不过去的那个推，
+     * 理由是「读数抖、直接照抄会一跳一跳」。但订阅那边早就滤过一遍了，两段指数串起来
+     * 等于一条 450ms 的曲线 —— 用户看到的就是「倾斜手机，画面慢半拍才跟上」。
+     * 现在只转存，画面上跟的就是 gyroTiltModel 定死的那条时间常数。
      */
-    private gyroTarget: GyroTiltOffsets = { azimuth: 0, elevation: 0 };
-    private gyroApplied: GyroTiltOffsets = { azimuth: 0, elevation: 0 };
+    private gyroOffset: GyroTiltOffsets = { azimuth: 0, elevation: 0 };
     private unsubscribeGyro: (() => void) | null = null;
     /**
      * ★ 用户摆好的视角（不含陀螺仪偏移）的相机位置。
@@ -263,11 +258,11 @@ export class OrbitStage {
              *
              * 它只是「叠在」用户摆好的视角之上，不改 controls 自己的状态 ——
              * 所以松手、回正、双击归位这些行为都不受影响；关掉开关时偏移
-             * 自己缓回零，镜头就回到原来的机位。
+             * 归零，镜头就回到原来的机位。
              *
-             * 全局开关见 stores/useGyroSettingsStore，四个 3D 背景共用一份。
+             * 用的是全局那一个开关（stores/useGyroSettingsStore），不再区分背景。
              */
-            this.stepGyroTilt(dt);
+            this.stepGyroTilt();
             /*
              * ★ 没有「闲置自动回正」。
              *
@@ -284,33 +279,28 @@ export class OrbitStage {
      * 陀螺仪适配：把手机倾斜叠到相机上。
      *
      * 只改相机的方位角 / 极角，**不动** controls 的 target 和距离 ——
-     * 缩放和归位逻辑因此完全不受影响。偏移每帧往里追一点（读数抖，直接
-     * 照抄会一跳一跳），关掉开关或读数归零时也自然缓回原机位。
+     * 缩放和归位逻辑因此完全不受影响。偏移的值由 gyroTilt.ts 那一条链路算好并滤好，
+     * 这里只管贴上去；关掉开关时订阅那边把自己交回零，镜头就自然缓回原机位。
      *
      * 方位角在 OrbitControls 的 min/maxAzimuthAngle 之外还可能被用户拖到边界，
      * 叠加后不重新夹取：夹了会让「拖到边界 + 歪手机」时手感变硬。这里只保证
      * 极角不穿过两极（穿过去画面会翻滚）。
      */
-    private stepGyroTilt(dt: number) {
+    private stepGyroTilt() {
         const controls = this.controls;
         if (!controls) return;
 
-        const enabled = readGyroTiltEnabledForMode(this.options.gyroMode);
-        if (!enabled) {
-            /*
-             * 关掉时把目标归零，让偏移自己缓回去。
-             * 退订放在目标归零之后：读数不再进来，但缓动还要继续跑。
-             */
-            this.gyroTarget.azimuth = 0;
-            this.gyroTarget.elevation = 0;
+        // 开关是全局的那一份（见 stores/useGyroSettingsStore）。任何画面都吃读数，
+        // 不再按背景分开开关：那层白名单只会让人在某个背景里莫名其妙地转不动。
+        if (!readGyroTiltEnabled()) {
             if (this.unsubscribeGyro) {
                 this.unsubscribeGyro();
                 this.unsubscribeGyro = null;
             }
+            this.gyroOffset = { azimuth: 0, elevation: 0 };
         } else if (!this.unsubscribeGyro) {
             this.unsubscribeGyro = subscribeGyroTilt((offsets) => {
-                this.gyroTarget.azimuth = offsets.azimuth;
-                this.gyroTarget.elevation = offsets.elevation;
+                this.gyroOffset = offsets;
             });
         }
 
@@ -319,45 +309,14 @@ export class OrbitStage {
          * （见那里的注释：controls 是从 camera.position 反推球坐标的，
          *  偏移留在那里会被它当成用户视角吸收进去）。
          *
-         * 所以下面**无条件**把当前的 applied 贴回去 —— 哪怕偏移没在变，
+         * 所以下面**无条件**把当前的偏移贴回去 —— 哪怕没在变，
          * 也要把刚才撤掉的那一份补上，否则偏移会凭空消失。
-         */
-        const moving = Math.abs(this.gyroTarget.azimuth - this.gyroApplied.azimuth) > 1e-4
-            || Math.abs(this.gyroTarget.elevation - this.gyroApplied.elevation) > 1e-4;
-
-        /*
-         * ★ 用户正在拖的时候不叠加偏移。
          *
-         * 拖动是明确的动作，这一刻手机怎么歪都不该跟它抢方向盘 ——
-         * 用户反馈「可以拖动但是还是会被陀螺仪强制拉」，正是这个。
-         * 拖动期间目标压到零（偏移淡回），松手之后重新读数、从零开始贴。
+         * ★ 用户正在拖的时候不叠加偏移（拖动优先），但也不把偏移清零：清掉的话
+         * 松手瞬间镜头会先弹回机位再重新偏过去，看起来是「松手抖一下」。拖动期间
+         * 只是不往上叠，松手后直接用当时的读数接上。
          */
-        if (this.interacting) {
-            this.gyroTarget.azimuth = 0;
-            this.gyroTarget.elevation = 0;
-        }
-
-        /*
-         * 指数趋近 + 单帧步长上限：读数突变时不会一下子把镜头甩出去。
-         *
-         * ★ 3.6（约 0.28 秒的跟随时间常数）。
-         *
-         * 走过 9.0（太跟手，噪声全进画面）、2.6（稳但显得迟钝，
-         * 用户反馈「根本看不出来」）、现在 3.6：读数本身已经被低通滤过一遍，
-         * 这里不必再压得那么慢，倾斜手机时画面能及时跟上。
-         */
-        const t = 1 - Math.exp(-3.6 * Math.min(0.1, Math.max(0, dt)));
-        const follow = (current: number, target: number) => {
-            const next = current + (target - current) * t;
-            const step = next - current;
-            return current + Math.min(GYRO_TILT_MAX_STEP, Math.max(-GYRO_TILT_MAX_STEP, step));
-        };
-        if (moving) {
-            this.gyroApplied.azimuth = follow(this.gyroApplied.azimuth, this.gyroTarget.azimuth);
-            this.gyroApplied.elevation = follow(this.gyroApplied.elevation, this.gyroTarget.elevation);
-        }
-
-        this.applyGyroOffset(this.gyroApplied.azimuth, this.gyroApplied.elevation);
+        this.applyGyroOffset(this.interacting ? 0 : this.gyroOffset.azimuth, this.interacting ? 0 : this.gyroOffset.elevation);
         this.options.onChange?.();
     }
 
