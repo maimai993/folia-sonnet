@@ -47,7 +47,7 @@ type Input =
 export const useAppOverlayModels = (model: Input) => {
     const {
         canToggleCurrentPlayback, clearPersistedStagePlaybackCache, clearStagePlaybackSession, closeLyricMatch,
-        closeSearchView, commandPalette, commandPaletteContext, currentView, devDebugSnapshot, effectiveLoopMode,
+        backCollection, closeSearchView, commandPalette, commandPaletteContext, currentView, devDebugSnapshot, effectiveLoopMode,
         handleAudioOutputDeviceChange, handleChangeReplayGainMode, handleLike, handleLyricMatchComplete,
         handleLyricMatchPureMusicMarkChanged, handleNaviLyricMatchComplete, handleNextTrack,
         handleOnlineLyricMatchComplete, handlePrevTrack, handleSaveLyricFilterPattern, handleSearchLoadMore,
@@ -67,6 +67,7 @@ export const useAppOverlayModels = (model: Input) => {
     } = model;
     const appOverlaysModel = useAppOverlaysModel({
         theme,
+        backCollection,
         closeSearchView,
         handleSearchOverlaySubmit,
         handleSearchLoadMore,

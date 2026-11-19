@@ -21,6 +21,20 @@ import {
     type AudioConsoleSettings,
     type AudioConsoleStereo,
     type AudioConsoleLimiter,
+    type AudioConsoleLossCompensation,
+    type AudioConsoleNoiseGate,
+    type AudioConsoleDeEsser,
+    type AudioConsoleDePlosive,
+    type AudioConsoleBassBoost,
+    type AudioConsoleExciter,
+    type AudioConsoleTransient,
+    type AudioConsoleToneShaping,
+    type AudioConsoleLoudness,
+    type AudioConsoleBalance,
+    type AudioConsoleNormalize,
+    type AudioConsoleRestore,
+    type AudioConsoleAdvanced,
+    type AudioConsoleScene,
 } from '../utils/audioConsole';
 
 type AudioConsoleStore = {
@@ -33,6 +47,20 @@ type AudioConsoleStore = {
     setStereo: (patch: Partial<AudioConsoleStereo>) => void;
     setSaturation: (patch: Partial<AudioConsoleSaturation>) => void;
     setLimiter: (patch: Partial<AudioConsoleLimiter>) => void;
+    setCompensation: (patch: Partial<AudioConsoleLossCompensation>) => void;
+    setNoiseGate: (patch: Partial<AudioConsoleNoiseGate>) => void;
+    setDeEsser: (patch: Partial<AudioConsoleDeEsser>) => void;
+    setDePlosive: (patch: Partial<AudioConsoleDePlosive>) => void;
+    setBassBoost: (patch: Partial<AudioConsoleBassBoost>) => void;
+    setExciter: (patch: Partial<AudioConsoleExciter>) => void;
+    setTransient: (patch: Partial<AudioConsoleTransient>) => void;
+    setTone: (patch: Partial<AudioConsoleToneShaping>) => void;
+    setLoudness: (patch: Partial<AudioConsoleLoudness>) => void;
+    setBalance: (patch: Partial<AudioConsoleBalance>) => void;
+    setNormalize: (patch: Partial<AudioConsoleNormalize>) => void;
+    setRestore: (patch: Partial<AudioConsoleRestore>) => void;
+    setAdvanced: (patch: Partial<AudioConsoleAdvanced>) => void;
+    setScene: (patch: Partial<AudioConsoleScene>) => void;
     /** 后置十段全部归零（不动开关与曲线）。 */
     resetPostEqGains: () => void;
     /**
@@ -137,6 +165,201 @@ export const useAudioConsoleStore = create<AudioConsoleStore>((set) => ({
     setLimiter: (patch) => set(state => ({
         settings: commit(
             { ...state.settings, limiter: { ...state.settings.limiter, ...patch } },
+            state.settings,
+        ),
+    })),
+
+    // 母带块的六个 setter 与上面几块同构：局部展开 → commit（去重 + 节流写盘）。
+    setCompensation: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    compensation: { ...state.settings.mastering.compensation, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setNoiseGate: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    noiseGate: { ...state.settings.mastering.noiseGate, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setDeEsser: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    deEsser: { ...state.settings.mastering.deEsser, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setDePlosive: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    dePlosive: { ...state.settings.mastering.dePlosive, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setBassBoost: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    bassBoost: { ...state.settings.mastering.bassBoost, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setExciter: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    exciter: { ...state.settings.mastering.exciter, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setTransient: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    transient: { ...state.settings.mastering.transient, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setTone: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    tone: { ...state.settings.mastering.tone, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setLoudness: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    loudness: { ...state.settings.mastering.loudness, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setBalance: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    balance: { ...state.settings.mastering.balance, ...patch },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setNormalize: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    studio: {
+                        ...state.settings.mastering.studio,
+                        normalize: { ...state.settings.mastering.studio.normalize, ...patch },
+                    },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setRestore: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    studio: {
+                        ...state.settings.mastering.studio,
+                        restore: { ...state.settings.mastering.studio.restore, ...patch },
+                    },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setAdvanced: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    studio: {
+                        ...state.settings.mastering.studio,
+                        advanced: { ...state.settings.mastering.studio.advanced, ...patch },
+                    },
+                },
+            },
+            state.settings,
+        ),
+    })),
+
+    setScene: (patch) => set(state => ({
+        settings: commit(
+            {
+                ...state.settings,
+                mastering: {
+                    ...state.settings.mastering,
+                    studio: {
+                        ...state.settings.mastering.studio,
+                        scene: { ...state.settings.mastering.studio.scene, ...patch },
+                    },
+                },
+            },
             state.settings,
         ),
     })),

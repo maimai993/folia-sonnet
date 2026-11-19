@@ -6,6 +6,7 @@ import { isNativePlaybackReconciling, subscribeNativePlaybackSync } from './nati
 import type { MutableRefObject } from 'react';
 import { currentTime } from '../../stores/motionSignals';
 import { nativePlaybackEngine } from './nativePlaybackEngine';
+import { publishNativeResume, takeNativeResume, usePendingResumeStore } from '../../stores/usePendingResumeStore';
 
 // src/services/playbackEngine/useNativePlaybackRuntime.ts
 //
@@ -30,8 +31,7 @@ type UseNativePlaybackRuntimeOptions = {
     audioSrc: string | null;
     shouldAutoPlayRef: MutableRefObject<boolean>;
     /**
-     * 上次听到哪儿（秒）。两条起播路读的是同一个 ref：`<audio>` 那边由 `onLoadedMetadata`
-     * 消费，这里在 `setSource` 时带走。谁先跑到谁消费，另一边读到 null 就从头开始。
+     * 窗口交接、转码恢复等非会话路径的起点（秒）；会话恢复单独核对音源与意图。
      */
     pendingResumeTimeRef: MutableRefObject<number | null>;
     isLyricsLoading: boolean;
@@ -59,39 +59,57 @@ export const useNativePlaybackRuntime = ({
 
     const reconciling = useSyncExternalStore(subscribeNativePlaybackSync, isNativePlaybackReconciling, () => false);
     const takes = enabled && !reconciling && nativePlaybackEngine.supports(audioSrc);
+    // 会话恢复的续播位置走 store：位置晚到时值会变化，触发下面装源 effect 重跑。
+    const resumeRevision = usePendingResumeStore(state => state.revision);
 
     // 地址 → 播放器。blob 地址（本地歌）原生吃不下，那种歌整首回落到 <audio>。
     useEffect(() => {
         if (!enabled || reconciling || isNativePlaybackReconciling() || !audioSrc) return;
-        if (!nativePlaybackEngine.supports(audioSrc)) {
-            // 「开关开了但这首歌还是网页在播」的全部答案都在这行日志里 —— 均衡器还能听出
-            // 变化，就是因为它根本没走原生。看日志比猜快。
-            console.info('[NativePlayer] 这一首回落到 <audio>', audioSrc.slice(0, 24), '(原生吃不下这种地址)');
-            return;
-        }
-        console.info('[NativePlayer] 接管这一首', audioSrc.slice(0, 24));
+        const live = usePlaybackStore.getState();
+        if (audioSrc !== live.audioSrc || !nativePlaybackEngine.supports(audioSrc)) return;
+        const songKey = live.currentSong ? getPlaybackSongKey(live.currentSong) : null;
         nativePlaybackEngine.setRepeatMode(callbacksRef.current.repeatOne ? 1 : 0);
-        const song = usePlaybackStore.getState().currentSong;
-        /*
-         * 恢复会话时的续播位置。在这里消费而不是在引擎里：引擎不知道「这一首是新装的还是
-         * 重新协商的」，而对后者再跳一次位置会把正在播的歌拽回去。
-         */
-        const resumeAtSec = pendingResumeTimeRef.current;
+        const pending = takeNativeResume();
+        const resume = pending?.url === audioSrc && pending.songKey === songKey && pending.stillWanted()
+            && (pending.sourceToken === undefined || pending.sourceToken === nativePlaybackEngine.currentSourceToken()) ? pending : null;
+        // 非会话的 ref（窗口交接/转码恢复）仍走原有协议；会话位置从不回退到无 key 的副本。
+        const refPosition = pendingResumeTimeRef.current;
         pendingResumeTimeRef.current = null;
-        const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
-        void nativePlaybackEngine.setSource(audioSrc, {
-            songKey: song ? getPlaybackSongKey(song) : null,
-            startPositionMs: resumeAtSec !== null ? Math.max(0, Math.round(resumeAtSec * 1000)) : null,
-        }).catch(error => {
-            if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration) return;
-            if (nativePlaybackEngine.activeUrl() !== audioSrc) return;
-            // 同一条装源失败只报一次：setSource 已经把它记成可重试状态了（#368）。
-            const sourceError = nativePlaybackEngine.sourceReadyError();
-            if (sourceError && sourceError !== error) return;
-            console.error('[NativePlayer] prepare failed', error);
-            callbacksRef.current.onError(String(error));
-        });
-    }, [audioSrc, enabled, reconciling, pendingResumeTimeRef]);
+        const sameSource = nativePlaybackEngine.activeUrl() === audioSrc && nativePlaybackEngine.currentSongKey() === songKey;
+        // 位置通知不是用户重试：上一单已经失败时，不能仅因读到了秒数又重装同一首。
+        if (resume && sameSource && nativePlaybackEngine.sourceReadyError()) return;
+        if (!sameSource || nativePlaybackEngine.sourceReadyError()) {
+            const expectedSourceGeneration = nativePlaybackEngine.sourceGeneration() + 1;
+            void nativePlaybackEngine.setSource(audioSrc, {
+                songKey,
+                startPositionMs: refPosition === null || resume ? null : Math.max(0, Math.round(refPosition * 1000)),
+            }).catch((error: unknown) => {
+                if (nativePlaybackEngine.sourceGeneration() !== expectedSourceGeneration || nativePlaybackEngine.activeUrl() !== audioSrc) return;
+                const sourceError = nativePlaybackEngine.sourceReadyError();
+                if (sourceError && sourceError !== error) return;
+                console.error('[NativePlayer] prepare failed', error);
+                callbacksRef.current.onError(String(error));
+            });
+        }
+        if (resume) {
+            const ownsSource = () => {
+                const state = usePlaybackStore.getState();
+                return revision === usePendingResumeStore.getState().revision && resume.stillWanted() && state.audioSrc === resume.url && !!state.currentSong
+                    && getPlaybackSongKey(state.currentSong) === resume.songKey;
+            };
+            const sourceToken = nativePlaybackEngine.currentSourceToken();
+            const revision = usePendingResumeStore.getState().revision;
+            void nativePlaybackEngine.seekForResume(resume.seconds, ownsSource, () => {
+                // 已发布过更新的位置（即便也已被消费），不许旧命令重新排到它后面。
+                if (!sourceToken || revision !== usePendingResumeStore.getState().revision) return;
+                publishNativeResume({ ...resume, sourceToken });
+            }).catch((error: unknown) => {
+                console.error('[NativePlayer] resume seek failed', error);
+            });
+        } else if (sameSource && refPosition !== null) {
+            void nativePlaybackEngine.seek(refPosition).catch((error: unknown) => console.error('[NativePlayer] seek failed', error));
+        }
+    }, [audioSrc, enabled, reconciling, resumeRevision, pendingResumeTimeRef]);
 
     // 关掉开关、或没有歌了 → 收掉播放器，别让上一首在后台继续响。
     useEffect(() => {
@@ -122,14 +140,14 @@ export const useNativePlaybackRuntime = ({
             // 只让当前 source 的起播意图同步状态，避免迟到的结果覆盖恢复、换歌或 ABA 换源。
             // applied === false：这次 play 被原生判为已被取代（例如同一瞬间通知栏暂停），不能写 PLAYING。
             if (
-                applied !== false
+                applied
                 && nativePlaybackEngine.playIntentGeneration() === playIntentGeneration + 1
                 && nativePlaybackEngine.sourceGeneration() === sourceGeneration
                 && nativePlaybackEngine.currentSongKey() === songKey
             ) {
                 setPlayerState(PlayerState.PLAYING);
             }
-        }).catch(error => {
+        }).catch((error: unknown) => {
             if (
                 nativePlaybackEngine.playIntentGeneration() !== playIntentGeneration + 1
                 || nativePlaybackEngine.sourceGeneration() !== sourceGeneration

@@ -11,7 +11,8 @@ import {
     type WallViewCenter,
 } from '../../../components/wall/wallView';
 import type { WallCameraRange } from '../../../components/wall/finiteWall';
-import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN } from './bravaisConstants';
+import { BRAVAIS_CAMERA_TWEEN_S, BRAVAIS_CULL_EDGE_MARGIN, BRAVAIS_OVERSCAN, getBravaisScale } from './bravaisConstants';
+import { useLatticeSettingsStore, WALL_ZOOM_MAX, WALL_ZOOM_MIN } from '../../../stores/useLatticeSettingsStore';
 import { rubberBand } from './bravaisFiniteWall';
 import { computeBravaisFrame, getTiltReach } from './bravaisFrame';
 import type { BravaisFrameState } from './useBravaisFrame';
@@ -105,6 +106,15 @@ export const useBravaisCamera = ({
     fieldRef: RefObject<HTMLDivElement | null>;
     reducedMotion: boolean;
 }) => {
+    // 缩放倍率交回 store（与播放页磁贴墙共用一份，跨会话保留）。
+    const wallZoom = useLatticeSettingsStore(state => state.wallZoom);
+    const setWallZoom = useLatticeSettingsStore(state => state.handleSetWallZoom);
+    const wallZoomRef = useRef(wallZoom);
+    wallZoomRef.current = wallZoom;
+    /** 捏合途中把倍率写回 store：夹在上下限内，存的是相对基准档位的倍数。 */
+    const onZoomFactor = useCallback((factor: number) => {
+        setWallZoom(Math.min(WALL_ZOOM_MAX, Math.max(WALL_ZOOM_MIN, factor)));
+    }, [setWallZoom]);
     // 已裁剪（渲染了 slot）的可见范围；墙渲染它外扩 overscan 的 slot。
     const [bounds, setBounds] = useState<Bounds | null>(null);
     const boundsRef = useRef<Bounds | null>(null);
@@ -227,12 +237,26 @@ export const useBravaisCamera = ({
         if (range && settleNow) settle();
     }, [settle]);
 
-    // 拖动与滚轮：wall 的 hook 交回平移相机，换算成视图中心再走同一条 moveTo。
+    /**
+     * 拖动、滚轮与捏合：wall 的 hook 交回平移相机，位置换算成视图中心再走同一条 moveTo。
+     *
+     * ★ 倍率必须一起接过来（#409）。以前这里只取位置：
+     *     moveTo(constrain(viewCenterFromCamera(next, view)), ...)
+     * 于是 useWallPointerPan 的 zoomAt 改了 next.scale，这里当场丢掉 —— 捏合算得再对画面也不缩，
+     * 用户看到的就是「双指彻底没反应」。Bravais 的倍率真源是 view.scale（useBravaisViewport 由
+     * wallZoom 乘出来的），所以缩放变化要写回 store，再由 viewport 那一层重新出 scale。
+     */
     const applyCamera = useCallback((next: LatticeCamera, updateBounds?: boolean) => {
         const view = frameRef.current.view;
         if (!view) return;
+        const base = getBravaisScale(view.width);
+        if (base > 0 && Number.isFinite(next.scale)) {
+            const factor = next.scale / base;
+            // 只在真的变了时写：拖动时 next.scale 不变，不该因此触发 store 更新。
+            if (Math.abs(factor - wallZoomRef.current) > 1e-3) onZoomFactor(factor);
+        }
         moveTo(constrain(viewCenterFromCamera(next, view)), Boolean(updateBounds));
-    }, [constrain, frameRef, moveTo]);
+    }, [constrain, frameRef, moveTo, onZoomFactor]);
     const getWorldBounds = useCallback((camera: LatticeCamera) => {
         const view = frameRef.current.view;
         if (!view) return { left: 0, right: 0, top: 0, bottom: 0 };
@@ -245,10 +269,24 @@ export const useBravaisCamera = ({
         containerRef: fieldRef,
         reducedMotion,
         overscan: BRAVAIS_OVERSCAN,
+        // 与 needsRecull 用同一个边距，拖动这边才和宿主判「要不要重裁」时按同一个数走（#427）。
+        cullEdgeMargin: BRAVAIS_CULL_EDGE_MARGIN,
         bounds: bounds ?? { left: 0, right: 0, top: 0, bottom: 0 },
         cameraRef,
         getWorldBounds,
         viewportRef,
+        /*
+         * 捏合 / Ctrl+滚轮缩放（#409）。Bravais 墙一直没给这个宿主 —— useWallPointerPan 里
+         * `if (!zoomRef.current) return false` 直接把捏合挡在门外，所以「双指彻底没反应」。
+         * 倍率与播放页的磁贴墙共用 useLatticeSettingsStore.wallZoom（BravaisStage 读它，
+         * useBravaisViewport 用它乘到基准档位上）。
+         */
+        zoom: {
+            baseScale: () => getBravaisScale(frameRef.current.view?.width ?? window.innerWidth),
+            minFactor: WALL_ZOOM_MIN,
+            maxFactor: WALL_ZOOM_MAX,
+            onZoomEnd: factor => setWallZoom(factor),
+        },
     });
 
     useEffect(() => () => {

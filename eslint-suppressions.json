@@ -112,14 +112,6 @@
       "count": 1
     }
   },
-  "benchmark_chorus.js": {
-    "@stylistic/quotes": {
-      "count": 2
-    },
-    "no-useless-assignment": {
-      "count": 1
-    }
-  },
   "build/afterPack.cjs": {
     "@stylistic/indent": {
       "count": 73
@@ -1554,12 +1546,6 @@
     }
   },
   "src/components/ProgressBar.tsx": {
-    "@stylistic/quotes": {
-      "count": 2
-    },
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    },
     "@typescript-eslint/no-deprecated": {
       "count": 1
     },
@@ -1933,9 +1919,6 @@
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "count": 4
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "src/components/app/overlays/now-playing-toast/nowPlayingToastVisibility.ts": {
@@ -2157,7 +2140,7 @@
       "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     },
     "dedicatus/log-module-prefix": {
       "count": 2
@@ -2503,14 +2486,6 @@
       "count": 2
     }
   },
-  "src/components/command-palette/pinnedCommandPreferences.ts": {
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
-    },
-    "no-restricted-properties": {
-      "count": 2
-    }
-  },
   "src/components/command-palette/queueSearch.ts": {
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -2826,47 +2801,26 @@
     }
   },
   "src/components/modal/SettingsModal.tsx": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 2
-    },
-    "@typescript-eslint/no-explicit-any": {
-      "count": 19
-    },
     "@typescript-eslint/no-misused-promises": {
       "count": 2
-    },
-    "@typescript-eslint/no-unnecessary-boolean-literal-compare": {
-      "count": 1
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 11
     },
-    "@typescript-eslint/no-unsafe-argument": {
-      "count": 2
-    },
     "@typescript-eslint/no-unsafe-assignment": {
-      "count": 10
-    },
-    "@typescript-eslint/no-unsafe-call": {
-      "count": 19
+      "count": 7
     },
     "@typescript-eslint/no-unsafe-member-access": {
-      "count": 40
+      "count": 12
     },
     "@typescript-eslint/no-unsafe-return": {
-      "count": 1
-    },
-    "@typescript-eslint/restrict-plus-operands": {
       "count": 1
     },
     "@typescript-eslint/use-unknown-in-catch-callback-variable": {
       "count": 1
     },
-    "dedicatus/restricted-apis": {
-      "count": 19
-    },
     "react-hooks/exhaustive-deps": {
-      "count": 2
+      "count": 1
     }
   },
   "src/components/modal/ThemePark.tsx": {
@@ -2879,14 +2833,6 @@
   },
   "src/components/modal/UnavailableReplacementDialog.tsx": {
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
-    }
-  },
-  "src/components/modal/UserGuidePageContent.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 2
-    },
-    "dedicatus/ui-literal-text": {
       "count": 1
     }
   },
@@ -3652,11 +3598,6 @@
       "count": 1
     }
   },
-  "src/components/visualizer/backgrounds/VisualizerBackgroundRenderer.tsx": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    }
-  },
   "src/components/visualizer/backgrounds/common/FluidBackground.tsx": {
     "@stylistic/indent": {
       "count": 34
@@ -3793,9 +3734,6 @@
     }
   },
   "src/components/visualizer/cadenza/VisualizerCadenza.tsx": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 5
     },
@@ -3911,16 +3849,10 @@
   },
   "src/components/visualizer/claddagh/VisualizerCladdagh.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 4
+      "count": 3
     },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 3
-    },
-    "@typescript-eslint/no-unnecessary-type-assertion": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "count": 1
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "count": 3
@@ -4058,9 +3990,6 @@
     }
   },
   "src/components/visualizer/fume/VisualizerFume.tsx": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 2
     },
@@ -5387,12 +5316,6 @@
     }
   },
   "src/components/visualizer/monet/VisualizerMonet.tsx": {
-    "@stylistic/indent": {
-      "count": 85
-    },
-    "@stylistic/quotes": {
-      "count": 1
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 1
     },
@@ -5688,9 +5611,6 @@
     "@eslint-community/eslint-comments/require-description": {
       "count": 1
     },
-    "@stylistic/indent": {
-      "count": 232
-    },
     "@typescript-eslint/no-deprecated": {
       "count": 1
     },
@@ -5903,14 +5823,8 @@
     "@typescript-eslint/consistent-type-imports": {
       "count": 8
     },
-    "@typescript-eslint/no-non-null-assertion": {
-      "count": 2
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 4
-    },
-    "@typescript-eslint/no-unnecessary-type-assertion": {
-      "count": 2
     }
   },
   "src/components/visualizer/sonnet/sonnetAnimatedGraphics.ts": {
@@ -6398,7 +6312,7 @@
       "count": 2
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 18
+      "count": 15
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 2
@@ -6887,37 +6801,25 @@
       "count": 1
     },
     "dedicatus/restricted-apis": {
-      "count": 3
+      "count": 2
     }
   },
   "src/i18n/locales/en.ts": {
-    "@stylistic/indent": {
-      "count": 6702
-    },
     "@stylistic/quotes": {
       "count": 13012
     }
   },
   "src/i18n/locales/in.ts": {
-    "@stylistic/indent": {
-      "count": 6702
-    },
     "@stylistic/quotes": {
       "count": 13180
     }
   },
   "src/i18n/locales/vi.ts": {
-    "@stylistic/indent": {
-      "count": 6702
-    },
     "@stylistic/quotes": {
       "count": 13180
     }
   },
   "src/i18n/locales/zh-CN.ts": {
-    "@stylistic/indent": {
-      "count": 6702
-    },
     "@stylistic/quotes": {
       "count": 13180
     }
@@ -6949,9 +6851,6 @@
     },
     "@typescript-eslint/no-misused-promises": {
       "count": 4
-    },
-    "@typescript-eslint/no-unnecessary-condition": {
-      "count": 1
     },
     "@typescript-eslint/no-unnecessary-type-conversion": {
       "count": 2
@@ -7735,12 +7634,6 @@
     }
   },
   "src/library/suites/grid/artist/ArtistGridView.tsx": {
-    "@stylistic/indent": {
-      "count": 33
-    },
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 2
-    },
     "@typescript-eslint/no-explicit-any": {
       "count": 5
     },
@@ -7858,17 +7751,11 @@
     }
   },
   "src/library/suites/grid/directory/GridMap.tsx": {
-    "@stylistic/indent": {
-      "count": 26
-    },
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    },
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "count": 6
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
@@ -7880,7 +7767,7 @@
       "count": 1
     },
     "react-hooks/exhaustive-deps": {
-      "count": 6
+      "count": 1
     }
   },
   "src/library/suites/grid/directory/GridMapBatchItemList.tsx": {
@@ -7910,12 +7797,6 @@
     }
   },
   "src/library/suites/grid/home/Grid3D.tsx": {
-    "@stylistic/indent": {
-      "count": 5
-    },
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    },
     "@typescript-eslint/no-deprecated": {
       "count": 1
     },
@@ -8961,9 +8842,6 @@
     }
   },
   "src/services/coverCache.ts": {
-    "@typescript-eslint/no-empty-object-type": {
-      "count": 1
-    },
     "@typescript-eslint/no-unnecessary-boolean-literal-compare": {
       "count": 1
     },
@@ -8977,9 +8855,6 @@
     }
   },
   "src/services/db.ts": {
-    "@stylistic/indent": {
-      "count": 165
-    },
     "@typescript-eslint/no-dynamic-delete": {
       "count": 1
     },
@@ -10627,9 +10502,6 @@
     }
   },
   "src/services/prefetchService.ts": {
-    "@stylistic/indent": {
-      "count": 9
-    },
     "@typescript-eslint/consistent-type-imports": {
       "count": 1
     },
@@ -10663,9 +10535,6 @@
     }
   },
   "src/services/repositories/cacheUsage.ts": {
-    "@stylistic/indent": {
-      "count": 55
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 2
     }
@@ -10832,7 +10701,7 @@
   },
   "src/stores/useAudioSettingsStore.ts": {
     "dedicatus/restricted-apis": {
-      "count": 17
+      "count": 1
     }
   },
   "src/stores/useAutomixSettingsStore.ts": {
@@ -10972,25 +10841,13 @@
     }
   },
   "src/stores/useSearchNavigationStore.ts": {
-    "@stylistic/indent": {
-      "count": 5
-    },
     "@typescript-eslint/no-unnecessary-condition": {
       "count": 12
-    },
-    "@typescript-eslint/no-unnecessary-type-assertion": {
-      "count": 1
-    },
-    "dedicatus/restricted-apis": {
-      "count": 2
     }
   },
   "src/stores/useSettingsModalStore.ts": {
     "@typescript-eslint/switch-exhaustiveness-check": {
       "count": 1
-    },
-    "dedicatus/restricted-apis": {
-      "count": 2
     }
   },
   "src/stores/useSleepTimerStore.ts": {
@@ -11227,7 +11084,7 @@
   },
   "src/utils/audioEqualizer.ts": {
     "dedicatus/restricted-apis": {
-      "count": 2
+      "count": 1
     }
   },
   "src/utils/blobGuards.ts": {
@@ -13145,21 +13002,6 @@
       "count": 1
     }
   },
-  "test/unit/qishui/explore.test.ts": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
-    }
-  },
-  "test/unit/qishui/fm.test.ts": {
-    "@typescript-eslint/no-floating-promises": {
-      "count": 1
-    }
-  },
-  "test/unit/qishui/localSongMatch.test.ts": {
-    "no-loss-of-precision": {
-      "count": 1
-    }
-  },
   "test/unit/realecoReleaseMetadata.test.ts": {
     "@typescript-eslint/no-require-imports": {
       "count": 1
@@ -13266,11 +13108,6 @@
   "test/unit/visualizer/fumeLineFit.test.ts": {
     "@typescript-eslint/consistent-type-imports": {
       "count": 2
-    }
-  },
-  "test/unit/visualizer/hanabi/hanabiText.test.ts": {
-    "@typescript-eslint/consistent-type-imports": {
-      "count": 1
     }
   },
   "test/unit/visualizer/lumiere/lumiereFixtures.ts": {

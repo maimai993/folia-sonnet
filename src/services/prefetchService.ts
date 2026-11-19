@@ -59,7 +59,7 @@ const MAX_PREFETCH_CACHE_SIZE = 200; // Evict least recently used entries beyond
  * try to fetch. Never awaited: a slow decode must not hold up the song after this one.
  */
 const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined) => {
-  /*
+    /*
    * 智能动感的整曲曲线**始终**提前预热，与「预先拆分音轨」总开关无关。
    *
    * 总开关只管那几十秒的 SCNet 拆轨（songAssetPrecompute.ts 里的 prepareSongTracks），
@@ -70,10 +70,10 @@ const analyseForAutomix = (song: SongResult, audioUrl: string | null | undefined
    * 放在最前面的 gate 之前：下面那段 `if (!automixEnabled && !balancing) return`
    * 是 automix 自己的省电开关，不该顺手把这件事也关掉。不 await，不拖住预取队列。
    */
-  queueSongAssetPrecompute(song);
-  const settingsAudioSettings = useAudioSettingsStore.getState();
-  const settingsAutomixSettings = useAutomixSettingsStore.getState();
-  const settingsLyricSettings = useLyricSettingsStore.getState();
+    queueSongAssetPrecompute(song);
+    const settingsAudioSettings = useAudioSettingsStore.getState();
+    const settingsAutomixSettings = useAutomixSettingsStore.getState();
+    const settingsLyricSettings = useLyricSettingsStore.getState();
     // Nothing reads a profile while blending is switched off, and this is not a cheap thing to
     // produce for nobody: the whole file is read, decoded, and put through the beat model in the
     // inference process - per prefetched track, and a prefetch pass covers three of them. Blending
@@ -339,7 +339,7 @@ const prefetchSong = async (
     if (existing?.audioUrl && existing.audioUrl !== 'CACHED_IN_DB') {
         existing.audioUrl = toSafePlaybackUrl(existing.audioUrl) ?? null;
     }
-  const currentSettingsLyricSettings = useLyricSettingsStore.getState();
+    const currentSettingsLyricSettings = useLyricSettingsStore.getState();
     const lyricPreferenceMatches = !currentSettingsLyricSettings.autoUseBestLyric
         || existing?.lyricPreferenceSource === currentSettingsLyricSettings.preferredAlternativeLyricSource;
     if (existing && lyricPreferenceMatches && existing.audioUrl && isUrlValid(existing.audioUrlFetchedAt) && (existing.lyrics || existing.lyricRaw?.isPureMusic)) {
@@ -416,9 +416,9 @@ const prefetchSong = async (
                 const onlineLyricsState = await loadOnlineLyricsState(song);
                 const resolvedLyrics = resolveOnlineLyrics(onlineLyricsState, parsedLyrics);
 
-  const settingsAudioSettings = useAudioSettingsStore.getState();
-  const settingsAutomixSettings = useAutomixSettingsStore.getState();
-  const settingsLyricSettings = useLyricSettingsStore.getState();
+                const settingsAudioSettings = useAudioSettingsStore.getState();
+                const settingsAutomixSettings = useAutomixSettingsStore.getState();
+                const settingsLyricSettings = useLyricSettingsStore.getState();
                 const autoUseBest = settingsLyricSettings.autoUseBestLyric;
                 // 「跟随播放平台来源」在这里落地成一个真能发请求的平台：下游只认具体平台。
                 const preferredSource = resolveLyricSourcePreference(settingsLyricSettings, song);

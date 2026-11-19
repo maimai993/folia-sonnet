@@ -136,8 +136,8 @@ describe('云缓存的本地一层', () => {
             skipPull: false,
         });
 
-        expect(result.value).toEqual({ theme: { fresh: true } });
-        expect(result.source).toBe('ai');
+        expect(result!.value).toEqual({ theme: { fresh: true } });
+        expect(result!.source).toBe('ai');
         /* 脏的那份被抹掉了：老答案不能一直挡着；留下来的是这次新生成的那一份。 */
         const after = await readLocalCloudEntry('theme', KEY_STALE);
         expect(after?.how).toBe('own');

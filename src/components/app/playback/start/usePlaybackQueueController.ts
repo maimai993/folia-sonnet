@@ -58,6 +58,8 @@ import { playbackFade } from '../../../../services/playbackFade';
 import { getProviderSongMetadata } from '../../../../services/onlineMusic/songMetadata';
 import { setStatusMessage as setStatusMsg, beginStatusLoading, completeStatusLoading, failStatusLoading, cancelStatusLoading, reviseStatusLoading, withStatusLoadingResult } from '../../../../stores/useStatusMessageStore';
 import { setAudioSrc, setCachedCoverUrl, setCurrentLineIndex, setCurrentSong, setDuration, setIsFmMode, setPlayQueue, setPlayerState, startLoadingToPlay, usePlaybackStore } from '../../../../stores/usePlaybackStore';
+import { requestNativeSkip } from './requestNativeSkip';
+import { cancelSessionResume } from '../../../../stores/usePendingResumeStore';
 import { askedSongKeyRef, askForSong, keepSongsOfProvidersStanding, makeSongCurrent, playsDroppedSoFar, providerDropsSoFar, providerPlaysDroppedSoFar, showSong, startOfAskedSong, startPlay, withdrawAsk } from '../currentSong';
 import { personalFmEndingsSoFar } from '../personalFmEndings';
 import { loadOnlineSongAudio } from '../source/songAudioSource';
@@ -681,6 +683,7 @@ export function usePlaybackQueueController({
             return;
         }
         const song = allowedSong;
+        cancelSessionResume();
 
         // 两轨合一的分派点：原生播放激活时，App 内点歌不再由 JS 解析地址、起 <audio>，
         // 而是把「这首歌 + 手里最新的队列」整体交给原生执行（原生解析、播放、推回
@@ -1629,14 +1632,9 @@ export function usePlaybackQueueController({
         // skipped=false，这里照旧走 Web 逻辑（它兜得住队尾停止、FM 补货这些分支）。
         if (nativePlaybackRef?.current && !isFmMode && loopMode !== 'shuffle' && !heldSong
             && !options?.isAutomixAdvance && !options?.fromSong && playQueue.length > 0 && currentSong) {
-            try {
-                const { skipped } = await FoliaPlayback.requestSkip({ direction: 1 });
-                if (skipped) {
-                    if (shouldNavigateToPlayer) navigateToPlaybackView();
-                    return;
-                }
-            } catch {
-                // 桥不可用（老版本原生没有这个方法）：照常走 Web 流程。
+            if (await requestNativeSkip(1)) {
+                if (shouldNavigateToPlayer) navigateToPlaybackView();
+                return;
             }
         }
 
@@ -1761,14 +1759,9 @@ export function usePlaybackQueueController({
 
         // 两轨合一：上一首同样分流给原生（见 handleNextTrack 的注释）。
         if (nativePlaybackRef?.current && !isFmMode && loopMode !== 'shuffle' && !heldSong) {
-            try {
-                const { skipped } = await FoliaPlayback.requestSkip({ direction: -1 });
-                if (skipped) {
-                    if (shouldNavigateToPlayerOnTrackChange) navigateToPlaybackView();
-                    return;
-                }
-            } catch {
-                // 桥不可用（老版本原生没有这个方法）：照常走 Web 流程。
+            if (await requestNativeSkip(-1)) {
+                if (shouldNavigateToPlayerOnTrackChange) navigateToPlaybackView();
+                return;
             }
         }
 

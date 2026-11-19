@@ -28,8 +28,12 @@ vi.mock('@/services/aiNativeFetch', () => ({
     },
 }));
 
-beforeEach(() => {
+beforeEach(async () => {
     state.urls.length = 0;
+    // 「禁用 AI 推理」总闸默认打开（#401）。这几条验的是请求发往哪个端点，先把它关掉。
+    // 直接改 store：它在 import 时就读过一次 localStorage，光写存储来不及。
+    const { useAiInferenceSettingsStore } = await import('@/stores/useAiInferenceSettingsStore');
+    useAiInferenceSettingsStore.getState().setAiInferenceDisabled(false);
     localStorage.setItem('foliaAiProviderSettings', JSON.stringify({
         provider: 'deepseek',
         deepseekApiKey: 'sk-test',

@@ -217,12 +217,12 @@ export function useBeatFxTrack(): boolean {
     useEffect(() => {
         if (!envelopesWanted || !identity || !song) return undefined;
         const { envelopes } = loadBeatFxTrackEnvelopes(song, { storedOnly });
-        void envelopes.catch(error => console.warn('[BeatFx] music envelopes failed', error));
+        void envelopes.catch((error: unknown) => console.warn('[BeatFx] music envelopes failed', error));
         return () => {
             // 切歌或效果关掉：让分离在下一个窗口停下，已分离的曲线留在内存里下次接着用。
             setWantedEnvelopeTrack(null);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- Keyed on track identity; unrelated song object changes must not restart separation.
     }, [identity, envelopesWanted, storedOnly]);
 
     // Until the analysis service's 2b: a separation still running stopped (at its next segment) when the

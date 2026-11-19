@@ -28,6 +28,7 @@ import { ConsoleSlider, formatDb } from './controls';
 // audioEffects.ts 的 AUDIO_CONSOLE_EFFECT_IDS）。
 
 type EqualizerPaneProps = {
+    nativeConsole: boolean;
     draft: AudioEqualizerSettings;
     /** 正在听模组的曲线：十段与效果都是只读的。 */
     curveHeard: boolean;
@@ -41,6 +42,7 @@ type EqualizerPaneProps = {
 };
 
 const EqualizerPane: React.FC<EqualizerPaneProps> = ({
+    nativeConsole,
     draft,
     curveHeard,
     presetIds,
@@ -73,7 +75,7 @@ const EqualizerPane: React.FC<EqualizerPaneProps> = ({
 
                 {/* 曲线形状与两个旋钮也一起让路：曲线接管时改 Q 或总增益，等于在改模组那条曲线的
                     形状，而这一页此刻呈现的不是用户自己的声音。 */}
-                <div inert={curveHeard}>
+                {nativeConsole && <div inert={curveHeard}>
                     <EqualizerSection title={t('ui.equalizerCurve')} hint={t('ui.equalizerCurveHint')}>
                         <div className="px-4 pb-3.5 pt-3">
                             <Segmented
@@ -117,7 +119,7 @@ const EqualizerPane: React.FC<EqualizerPaneProps> = ({
                             </p>
                         </div>
                     </EqualizerSection>
-                </div>
+                </div>}
 
                 <AudioEffectGrid
                     effects={draft.effects}

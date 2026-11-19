@@ -95,6 +95,8 @@ type AppOverlaysAmbient = {
 export type AppOverlaysDeps = {
     theme: any;
     closeSearchView: () => void;
+    /** 退掉一层合集（搜索页的安卓返回键逐层返回用，#411）。 */
+    backCollection: () => void;
     handleSearchOverlaySubmit: SearchOverlayProps['onSubmitSearch'];
     handleSearchLoadMore: () => Promise<void>;
     handleSearchResultPlay: (track: UnifiedSong) => void;
@@ -149,6 +151,7 @@ export const buildAppOverlaysModel = ({
     theme,
     isDaylight,
     closeSearchView,
+    backCollection,
     handleSearchOverlaySubmit,
     handleSearchLoadMore,
     handleSearchResultPlay,
@@ -251,6 +254,7 @@ export const buildAppOverlaysModel = ({
                 theme,
                 isDaylight,
                 onClose: closeSearchView,
+                onBackCollection: backCollection,
                 onSubmitSearch: handleSearchOverlaySubmit,
                 onLoadMore: handleSearchLoadMore,
                 onPlayTrack: handleSearchResultPlay,

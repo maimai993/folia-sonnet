@@ -96,8 +96,8 @@ export default function Lattice({
     const { t } = useTranslation();
     // 关键词着色走全局开关（useVisualizerSettingsStore）——曾看莫奈的 tuning，已被收编。
     // probe / 上游调用方以 prop 注入时优用 prop。
-    const keywordColoringEnabled = lyricKeywordColoringEnabled
-        ?? useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    const storedKeywordColoringEnabled = useVisualizerSettingsStore(state => state.keywordColoringEnabled);
+    const keywordColoringEnabled = lyricKeywordColoringEnabled ?? storedKeywordColoringEnabled;
     const vignette = useLatticeSettingsStore(state => state.latticeVignette);
     const lightsOn = useLatticeSettingsStore(state => state.latticeLightsOn);
     const posterTintEnabled = useLatticeSettingsStore(state => state.latticePosterTintEnabled);

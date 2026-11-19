@@ -568,7 +568,7 @@ export const bilibiliProvider: OnlineMusicProvider = {
             const cid = bilibiliCidOf(song)
                 ?? (bvid
                     ? (await fetchBilibiliVideoInfo(bvid)).cid
-                    : (await fetchBilibiliEpisodeCid(epId!)));
+                    : epId ? (await fetchBilibiliEpisodeCid(epId)) : null);
             if (!cid) return null;
             /*
              * 这一家的「音质」其实是**画质**（画面和声音是一起取的）。
@@ -774,7 +774,7 @@ export const bilibiliProvider: OnlineMusicProvider = {
         },
 
         /** 收藏夹等歌单里的曲目。id 就是 library 那边给的 shelf.id。 */
-        async getPlaylistTracks(id, limit: number, offset: number, collection?: ProviderCollection) {
+        async getPlaylistTracks(id, limit: number, offset: number) {
             const raw = String(id);
             /*
              * 「点了歌单没反应」先分清两头：卡片点的动作有没有走到这里、走到了

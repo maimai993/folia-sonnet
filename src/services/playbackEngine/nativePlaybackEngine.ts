@@ -101,6 +101,9 @@ class NativePlaybackEngine {
     private playIntentVersion = 0;
     private sourceGenerationVersion = 0;
     private sourceReadyPromise: Promise<void> = Promise.resolve();
+    // activeUrl 在 prepare 排队前已更新，不能证明原生真的接住了这一代。
+    private preparedGeneration = -1;
+    private manualSeekVersion = 0;
     /**
      * 这次装源已经失败过的证据（prepare 被拒，或原生异步报 error）。
      *
@@ -158,12 +161,22 @@ class NativePlaybackEngine {
      * 认领是一个 transport epoch 边界：不向原生发送命令，但必须使认领前的
      * 播放意图和排队命令失效，避免迟到的 Promise 污染新会话。
      */
-    adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; speed?: number }): void {
+    adoptSnapshot(snapshot: NativePlaybackSnapshot & { url: string; baseUrl?: string; speed?: number }): boolean {
+        // 对外地址是原始 URL；伴奏/清唱时原生实际加载的是本地 file:// 轨，不能当成换了源。
+        const publicUrl = snapshot.baseUrl || snapshot.url;
+        const active = this.activeUrl();
+        const sameMedia = !!snapshot.sourceToken && snapshot.sourceToken === this.sourceToken
+            && (active === snapshot.url || active === publicUrl) && this.songKey === snapshot.songKey;
         this.ensureSubscription();
+        // 同一个 MediaItem 的认领不洗掉它已经失败的事实：原生那份仍处于 error，下一次 play 必须重新 prepare。
+        const failed = sameMedia ? this.sourceReadyFailure : null;
         this.playIntentVersion++;
         this.sourceGenerationVersion++;
         this.sourceReadyPromise = Promise.resolve();
-        this.currentUrl = snapshot.url;
+        this.preparedGeneration = failed ? -1 : this.sourceGenerationVersion;
+        this.sourceReadyFailure = failed;
+        this.sourceReadyGeneration++;
+        this.currentUrl = sameMedia && active ? active : publicUrl;
         this.songKey = snapshot.songKey ?? null;
         // 认领原生此刻装着的 source：此后只收这个令牌的事件，认领前排队的旧事件被丢弃（#341）。
         this.sourceToken = snapshot.sourceToken || null;
@@ -176,6 +189,7 @@ class NativePlaybackEngine {
         this.stalled = snapshot.buffering ?? false;
         this.updatedAtMs = performance.now();
         this.lastDeliveredMs = this.positionMs;
+        return sameMedia;
     }
     private listeners = new Set<(event: NativePlaybackEvent) => void>();
     private subscriptionStarted = false;
@@ -300,6 +314,7 @@ class NativePlaybackEngine {
             // 原生已判定这次装源被更新的换源 / stop 取代（没执行）：不再给新 source 推旧音量。
             if (prepared?.stale || sourceGeneration !== this.sourceGenerationVersion) return;
             await nativePlayer.setVolume(this.volume);
+            if (sourceGeneration === this.sourceGenerationVersion) this.preparedGeneration = sourceGeneration;
         }, () => sourceGeneration === this.sourceGenerationVersion);
         // 装源失败要记下来，否则同一 URL 的重试会被上面的早退挡掉（#368）。
         const sourceReadyGeneration = ++this.sourceReadyGeneration;
@@ -313,7 +328,7 @@ class NativePlaybackEngine {
          */
         this.sourceReadyPromise = sourceReady.then(
             () => { },
-            error => {
+            (error: unknown) => {
                 if (sourceReadyGeneration === this.sourceReadyGeneration) this.sourceReadyFailure = error;
             },
         );
@@ -353,7 +368,7 @@ class NativePlaybackEngine {
                     }),
                     () => this.currentUrl === retryUrl,
                 );
-            })().catch(error => {
+            })().catch((error: unknown) => {
                 this.sourceReadyFailure = error;
             });
         }
@@ -402,7 +417,39 @@ class NativePlaybackEngine {
         this.updatedAtMs = performance.now();
     }
 
+    currentSourceToken(): string | null {
+        return this.sourceToken;
+    }
+
+    manualSeekGeneration(): number {
+        return this.manualSeekVersion;
+    }
+
+    /** 在 prepare 后占住命令顺序；只有同代装源成功、仅因后台未发出的 seek 才能留到前台。 */
+    async seekForResume(seconds: number, stillWanted: () => boolean, deferUntilForeground: () => void): Promise<void> {
+        const targetMs = Math.max(0, Math.round(seconds * 1000));
+        const songKey = this.songKey;
+        const sourceToken = this.sourceToken;
+        const manualSeek = this.manualSeekVersion;
+        const current = () => manualSeek === this.manualSeekVersion && sourceToken === this.sourceToken && this.songKey === songKey
+            && this.sourceGenerationVersion === this.preparedGeneration
+            && !this.sourceReadyFailure && stillWanted();
+        await this.enqueueNativeCommand(async () => {
+            if (!songKey || !sourceToken) return;
+            if (isNativePlaybackReconciling()) {
+                deferUntilForeground();
+                return;
+            }
+            const eventsBefore = this.appliedEventSeq;
+            const result = await nativePlayer.seek(targetMs, { songKey, sourceToken });
+            if (result?.stale || !current() || isNativePlaybackReconciling() || this.appliedEventSeq !== eventsBefore) return;
+            this.positionMs = this.lastDeliveredMs = targetMs;
+            this.updatedAtMs = performance.now();
+        }, current);
+    }
+
     async seek(seconds: number): Promise<void> {
+        this.manualSeekVersion++;
         /*
          * 订阅先立起来：seek 之后要靠 `seeked` / `playing` 事件把真实位置带回来。
          * 通知栏起播、认领未成功时这条订阅可能还没建 —— 不建就永远收不到回执，

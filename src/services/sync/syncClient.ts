@@ -43,13 +43,14 @@ const buildUrl = (config: SyncProviderConfig, path: string) => (
 );
 
 /**
- * 同步接口允许整段回传的上限：16MiB，比桥的默认 8MiB 宽一档。
+ * 同步接口允许整段回传的上限：4MiB。
  *
- * 这里是**用户自建服务**，一次可能拿回几百条主题（`/themes/list?limit=500`，每条是一个
- * 完整主题 JSON）。撞上默认上限时原生会直接 reject，重试多少次都一样，而界面上只能显示
- * 「同步失败」—— 与其让用户去猜，不如给足余量；再大就不是主题数据了。
+ * 这里原来放到 16MiB（比桥的默认 8MiB 宽一档），理由是「自建服务可能一次回几百条主题」。
+ * 但 16MiB 的响应走过桥时，heap 里的序列化放大能到 100MB 以上 —— 2026-11-18 的 OOM 报告
+ * 把这条列为踩雷点之一。所以降到 4MiB：超过这个量应该让服务端分页（`limit`），
+ * 而不是一次把整库塞进一条消息里。
  */
-const SYNC_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
+const SYNC_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 
 const requestJson = async <T,>(
     config: SyncProviderConfig,

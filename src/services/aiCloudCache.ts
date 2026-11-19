@@ -680,6 +680,13 @@ export const withAiCloudCache = async <T>(options: {
     generate: () => Promise<T>;
     validate: (value: unknown) => T | null;
     /**
+     * 现在允许不允许生成。返回 false 时：**缓存照常读**，只是没命中就直接返回 null，不发起推理、也不上报。
+     *
+     * 场景是 AI 推理总闸 / 内存压力（#401）：禁用推理不该连带把「别人算好的答案」也一起挡掉 ——
+     * 读缓存不耗本地资源，命中就是这台机器该拿到的东西。
+     */
+    canGenerate?: () => boolean;
+    /**
      * 只生成出一半时，把云端已有的另一半并进去再回传。
      *
      * 部署端点与 Electron 这两条路只能出主题，出不了动画决策。不合并就整条覆盖，
@@ -710,8 +717,8 @@ export const withAiCloudCache = async <T>(options: {
      * 「重新判断」永远是同一个结果。
      */
     skipPull?: boolean;
-}): Promise<{ value: T; source: AiCloudCacheSource }> => {
-    const { kind, fingerprint, generate, validate, combine, songTitle, platform, lyricHash, lyricText, isPureMusic, skipPull } = options;
+}): Promise<{ value: T; source: AiCloudCacheSource } | null> => {
+    const { kind, fingerprint, generate, validate, combine, songTitle, platform, lyricHash, lyricText, isPureMusic, skipPull, canGenerate } = options;
 
     let previous: unknown = null;
     /*
@@ -764,6 +771,17 @@ export const withAiCloudCache = async <T>(options: {
          * 生成不出来的那一半。丢掉就等于把已有的成果擦掉。
          */
         if (pulled.status === 'hit') previous = pulled.payload;
+    }
+
+    /*
+     * 缓存没命中、而此刻又不允许生成（AI 推理被禁用 / 内存压力，见 #401）：直接收工。
+     *
+     * 关键是这一句放在**拉缓存之后** —— 「禁用推理不影响用缓存里的结果」是用户明确的要求：
+     * 别人算好的答案读下来不耗本地资源，不该被一起挡掉。这里也不 push：没生成东西就没什么可回传。
+     */
+    if (canGenerate && !canGenerate()) {
+        console.info('[ai-cache] pull missed and generation is not allowed now, skipping');
+        return null;
     }
 
     const value = await generate();

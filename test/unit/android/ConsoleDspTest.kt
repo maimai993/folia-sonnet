@@ -33,6 +33,38 @@ class ConsoleDspTest {
 
     private fun gainDb(out: FloatArray, ref: FloatArray): Double = 20.0 * log10(rms(out, 9600) / rms(ref, 9600))
 
+    @Test
+    fun `耳机交叉馈送不会把前声道送到后声道`() {
+        val stage = StereoStage().apply { configure(sampleRate) }
+        val pcm = FloatArray(256 * 4)
+        pcm[0] = 1f
+        stage.process(pcm, 0, 256, 4, StereoSettings(enabled = true, crossfeed = 1f))
+        assertTrue((0 until 256).any { pcm[it * 4 + 1] != 0f })
+        assertTrue((0 until 256).all { pcm[it * 4 + 2] == 0f && pcm[it * 4 + 3] == 0f })
+    }
+
+    @Test
+    fun `响度标准化随输入电平而非固定增益变化`() {
+        fun normalized(amplitude: Double): Double {
+            val stage = StudioStage().apply { configure(sampleRate, 1) }
+            val pcm = tone(400.0, sampleRate * 8, amplitude)
+            val settings = StudioSettings(normalize = NormalizeSettings(enabled = true))
+            stage.process(pcm, 0, pcm.size, 1, settings)
+            return rms(pcm, sampleRate * 7)
+        }
+        assertTrue(normalized(0.4) / normalized(0.2) < 1.2)
+    }
+
+    @Test
+    fun `只传部分母带参数时其余模块保持中性`() {
+        val parsed = EqSettings.fromJson(JSONObject("""{"version":2,"mastering":{"studio":{"scene":{"compare":true}}},"stereo":{"rotation":27,"crossfeed":0.3}}"""))
+        assertTrue(parsed.mastering.studio.scene.compare)
+        assertTrue(!parsed.mastering.noiseGate.enabled)
+        val saved = EqSettings.fromJson(parsed.toJson())
+        assertEquals(0.3f, saved.stereo.crossfeed, 1e-5f)
+        assertEquals(27f, saved.stereo.rotation, 1e-5f)
+    }
+
     /** 按 128 帧一块把整段跑完，与 EqAudioProcessor 的调用方式一致。 */
     private fun runCompressor(buffer: FloatArray, channels: Int, settings: CompressorSettings) {
         val stage = MultibandCompressor()
@@ -342,7 +374,25 @@ class ConsoleDspTest {
               "postEq": { "enabled": true, "gains": [0,0,0,0,0,4,0,0,0,0], "mode": "geq", "q": 1.2, "globalGainDb": 1.5 },
               "stereo": { "enabled": true, "width": 1.5, "bassMonoHz": 140 },
               "saturation": { "enabled": true, "mode": "tube", "driveDb": 14, "mix": 0.35, "outputDb": -8 },
-              "limiter": { "ceilingDb": -1.2, "releaseMs": 260 }
+              "limiter": { "ceilingDb": -1.2, "releaseMs": 260 },
+              "mastering": {
+                "compensation": { "enabled": true, "amount": 0.8, "maxGainDb": 8, "responseMs": 400 },
+                "noiseGate": { "enabled": true, "thresholdDb": -55, "attackMs": 7, "releaseMs": 200, "reductionDb": -18 },
+                "deEsser": { "enabled": true, "frequencyHz": 7200, "thresholdDb": -20, "ratio": 6 },
+                "dePlosive": { "enabled": true, "reductionDb": -9 },
+                "bassBoost": { "enabled": true, "gainDb": 5, "frequencyHz": 110 },
+                "exciter": { "enabled": true, "amount": 0.6, "mix": 0.4 },
+                "transient": { "enabled": true, "amount": -0.3 },
+                "tone": { "air": 2, "presence": 1.5, "warmth": 3, "clarity": 1 },
+                "loudness": { "enabled": true, "amount": 0.7 },
+                "balance": { "enabled": true, "value": -0.25 },
+                "studio": {
+                  "normalize": { "enabled": true, "targetLufs": -12.5, "truePeak": true },
+                  "restore": { "declick": true, "hum": true, "denoise": true, "amount": 0.7 },
+                  "advanced": { "dynamicEq": true, "dynamicEqFreq": 220, "dynamicEqAmount": 6, "vocalBoost": 0.3 },
+                  "scene": { "genre": "rock", "compare": false, "headphone": "sony", "amount": 0.8 }
+                }
+              }
             }
             """.trimIndent(),
         )
@@ -406,6 +456,25 @@ class ConsoleDspTest {
 
         assertEquals(first.limiter.ceilingDb, second.limiter.ceilingDb, 1e-4f)
         assertEquals(first.limiter.releaseMs, second.limiter.releaseMs, 1e-4f)
+
+        // 工作室块：四大方向 12 项往返一致
+        val s1 = first.mastering.studio
+        val s2 = second.mastering.studio
+        assertEquals(s1.normalize.enabled, s2.normalize.enabled)
+        assertEquals(s1.normalize.targetLufs, s2.normalize.targetLufs, 1e-4f)
+        assertEquals(s1.normalize.truePeak, s2.normalize.truePeak)
+        assertEquals(s1.restore.declick, s2.restore.declick)
+        assertEquals(s1.restore.hum, s2.restore.hum)
+        assertEquals(s1.restore.denoise, s2.restore.denoise)
+        assertEquals(s1.restore.amount, s2.restore.amount, 1e-4f)
+        assertEquals(s1.advanced.dynamicEq, s2.advanced.dynamicEq)
+        assertEquals(s1.advanced.dynamicEqFreq, s2.advanced.dynamicEqFreq, 1e-4f)
+        assertEquals(s1.advanced.dynamicEqAmount, s2.advanced.dynamicEqAmount, 1e-4f)
+        assertEquals(s1.advanced.vocalBoost, s2.advanced.vocalBoost, 1e-4f)
+        assertEquals(s1.scene.genre, s2.scene.genre)
+        assertEquals(s1.scene.compare, s2.scene.compare)
+        assertEquals(s1.scene.headphone, s2.scene.headphone)
+        assertEquals(s1.scene.amount, s2.scene.amount, 1e-4f)
 
         // 再写一次必须与第一次逐字节相同：说明读写两侧对字段集合的认知是一致的。
         assertEquals(first.toJson().toString(), second.toJson().toString())

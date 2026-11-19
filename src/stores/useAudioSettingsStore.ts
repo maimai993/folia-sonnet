@@ -24,6 +24,7 @@ import { getStoredBoolean, getStoredString, removeStoredKey, setStoredBoolean, s
 import { writeNativeLoopMode } from '../services/nativeQueueBridge';
 import { writeNativeSettings } from '../services/nativeSettingsBridge';
 import { setStatusMessage } from './useStatusMessageStore';
+import { isLocalInferenceAllowed } from '../services/aiMemoryGate';
 import { setAudioFocusPolicy } from '../platform/foliaNative';
 import { isCapacitorAndroid } from '../platform/runtime';
 import { nativePlayer } from '../services/playbackEngine/nativePlayerPlugin';
@@ -601,6 +602,16 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         void setAudioFocusPolicy(enable);
     },
     handleToggleVocalCancel: (enable) => {
+        // 与 handleToggleVocalOnly 同理：伴奏轨也是 on-device 分离，闸门挡着就当场拒绝。
+        if (enable && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            if (get().vocalCancelEnabled) {
+                setStoredBoolean(VOCAL_CANCEL_KEY, false);
+                set({ vocalCancelEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) void nativePlayer.setVocalCancelEnabled(false).catch(() => undefined);
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_CANCEL_KEY, enable);
         if (enable) setStoredBoolean(VOCAL_ONLY_KEY, false);
         /*
@@ -626,6 +637,22 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
         void nativePlayer.setVocalCancelEnabled(enable).catch(() => undefined);
     },
     handleToggleVocalOnly: (enable) => {
+        /*
+         * 要开分离就当场拒绝，而不是「先把开关拨过去、再让原生去拦」。
+         *
+         * 分离是人声 / 伴奏两轨的 on-device 推理（SCNet），推理被闸门挡着时拨过去只会让界面上
+         * 先出现一次「正在分离」再退回 —— 用户看到的就是「点了还是开始分离了」（#401 反馈）。
+         */
+        if (enable && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            // 界面可能已经乐观更新过开关，这里拨回去。
+            if (get().vocalOnlyEnabled) {
+                setStoredBoolean(VOCAL_ONLY_KEY, false);
+                set({ vocalOnlyEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) void nativePlayer.setVocalOnlyEnabled(false).catch(() => undefined);
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_ONLY_KEY, enable);
         if (enable) setStoredBoolean(VOCAL_CANCEL_KEY, false);
         set({
@@ -663,6 +690,21 @@ export const useAudioSettingsStore = create<AudioSettingsState>((set, get) => ({
     handleSetVocalMode: (mode) => {
         const cancel = mode === 'instrumental';
         const only = mode === 'vocal';
+        // 三选一里切到「人声」或「伴奏」都要起分离：闸门挡着就当场拒绝，别让原生白跑一趟。
+        if ((cancel || only) && !isLocalInferenceAllowed()) {
+            setStatusMessage({ type: 'error', text: i18n.t('notifications.stemInferenceBlocked') });
+            if (get().vocalCancelEnabled || get().vocalOnlyEnabled) {
+                setStoredBoolean(VOCAL_CANCEL_KEY, false);
+                setStoredBoolean(VOCAL_ONLY_KEY, false);
+                set({ vocalCancelEnabled: false, vocalOnlyEnabled: false, vocalCancelState: 'idle', vocalCancelPercent: 0 });
+                if (isCapacitorAndroid()) {
+                    void Promise.resolve()
+                        .then(() => nativePlayer.setVocalTrackMode('off'))
+                        .catch(() => undefined);
+                }
+            }
+            return;
+        }
         setStoredBoolean(VOCAL_CANCEL_KEY, cancel);
         setStoredBoolean(VOCAL_ONLY_KEY, only);
         set({

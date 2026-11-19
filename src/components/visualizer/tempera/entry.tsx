@@ -76,7 +76,7 @@ export default defineVisualizer({
             descKey: 'options.beatEffect_temperaMelodyShiftDesc',
             source: 'envelopes',
         },
-            {
+        {
             id: BEAT_EFFECT_IDS.temperaSeamPulse,
             nameKey: 'options.beatEffect_temperaSeamPulse',
             descKey: 'options.beatEffect_temperaSeamPulseDesc',

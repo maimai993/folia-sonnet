@@ -17,7 +17,6 @@ import { createWallWheelClassifier, stepWallWheel, wallWheelDelta, WALL_PAN_INER
 // 所以缩放途中不经过 React，只有落定那一次 setState。
 
 const DRAG_THRESHOLD_PX = 7;
-const CULL_EDGE_MARGIN_PX = 180;
 // 两下 wheel 之间隔得比这短就算同一次手势（触控板 / 惯性约 16ms 一下；停手再滚是新手势，按光标下面的东西重新算）。
 const WHEEL_LATCH_MS = 160;
 // 锁定期间光标挪开超过这么多才算换了目标（墙在光标下滑动时浏览器补发的 pointermove 坐标不变）。
@@ -41,6 +40,11 @@ type WallPointerPanOptions = {
     reducedMotion: boolean | null;
     overscan: number;
     /**
+     * 离已裁剪范围的边缘还剩这么多（世界单位）就重新裁剪。必须与宿主自己判「要不要重裁」时用的边上同一个数，
+     * 否则拖动这边按一个数提前触发、宿主那边按另一个数推演，边界型的断言会两边对不上（#427）。
+     */
+    cullEdgeMargin: number;
+    /**
      * 宿主要不要钳制相机（比如有限拼贴的边界、性能优先时的行程上限）。拖动 / 滚轮 / 惯性都过这一道，
      * 键盘与播放跟随的补间不走这里 —— 它们要能把任意一张卡带到眼前。
      */
@@ -54,7 +58,7 @@ type WallPointerPanOptions = {
 };
 
 export const useWallPointerPan = ({
-    applyCamera, animationRef, stopPan, containerRef, reducedMotion, overscan, clampCamera,
+    applyCamera, animationRef, stopPan, containerRef, reducedMotion, overscan, cullEdgeMargin, clampCamera,
     bounds, cameraRef, getWorldBounds, viewportRef, zoom,
 }: WallPointerPanOptions) => {
     const boundsRef = useRef(bounds);
@@ -86,13 +90,13 @@ export const useWallPointerPan = ({
         const next = clampCameraRef.current ? clampCameraRef.current(requested) : requested;
         const visible = getWorldBounds(next, viewportRef.current);
         const culled = boundsRef.current;
-        const padding = overscan - CULL_EDGE_MARGIN_PX;
+        const padding = overscan - cullEdgeMargin;
         const nearCullEdge = visible.left < culled.left - padding
             || visible.right > culled.right + padding
             || visible.top < culled.top - padding
             || visible.bottom > culled.bottom + padding;
         applyCamera(next, nearCullEdge);
-    }, [applyCamera, cameraRef, getWorldBounds, overscan, viewportRef]);
+    }, [applyCamera, cameraRef, cullEdgeMargin, getWorldBounds, overscan, viewportRef]);
 
     const interrupt = useCallback(() => {
         stopPan();
@@ -172,7 +176,12 @@ export const useWallPointerPan = ({
     }, []);
 
     const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-        if (event.button !== 0) return;
+        /*
+         * 触屏上第二根手指的 button 在某些 WebView 里不是 0（是 -1 或 1）；只认 0 会让
+         * 捏合的第二根手指被整条丢掉，表现就是「双指没反应」（#409）。所以触屏一律放行，
+         * 鼠标仍只认左键。
+         */
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
         // Panning stays available while a card is open, but a drag that starts on the open card
         // belongs to its own controls - the progress bar seeks by dragging.
         // Only actual controls are excluded; the cover, title and surrounding space can pan.

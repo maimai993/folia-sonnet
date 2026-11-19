@@ -53,12 +53,13 @@ class FoliaNativePlayerPlugin : Plugin() {
     private var playerGeneration = 0L
 
     /** 在播放器线程换源前撤销旧媒体的缓冲豁免；代数过期（插件已被新实例取代）时不碰全局状态。 */
-    private fun prepareClearingStall(target: FoliaNativePlayer, url: String, startPositionMs: Long, mediaId: String?) {
+    private fun prepareClearingStall(target: FoliaNativePlayer, url: String, startPositionMs: Long, mediaId: String?, sourceToken: String? = null) {
         val generation = playerGeneration
         target.prepare(
             url,
             startPositionMs,
             mediaId,
+            sourceToken = sourceToken,
             onPlayerThreadBeforePrepare = { PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() } },
         )
     }
@@ -124,6 +125,9 @@ class FoliaNativePlayerPlugin : Plugin() {
             val playing: Boolean,
             val speed: Float,
             val buffering: Boolean,
+            val sourceToken: String?,
+            /** 对外的原始地址：伴奏/清唱时 [url] 是本地 file:// 轨，这里仍是平台给的原地址。 */
+            val baseUrl: String? = null,
         ) {
             fun toJson(): org.json.JSONObject = org.json.JSONObject().apply {
                 put("songKey", songKey)
@@ -133,6 +137,8 @@ class FoliaNativePlayerPlugin : Plugin() {
                 put("playing", playing)
                 put("speed", speed.toDouble())
                 put("buffering", buffering)
+                put("sourceToken", sourceToken)
+                if (!baseUrl.isNullOrEmpty()) put("baseUrl", baseUrl)
             }
         }
 
@@ -157,6 +163,9 @@ class FoliaNativePlayerPlugin : Plugin() {
                 player.isPlaying(),
                 player.getSpeed(),
                 player.isBuffering(),
+                player.currentResumeSourceToken(),
+                // 只在伴奏/清唱轨时带原始地址：交叉淡化等换源只改 lastUrl、不刷新 baseUrl，普通轨带它会指向上一首。
+                if (player.isOnInstrumental()) player.baseUrl() else null,
             )
         }
 
@@ -667,6 +676,7 @@ class FoliaNativePlayerPlugin : Plugin() {
         val startPositionMs = call.getDouble("startPositionMs")
         val repeatMode = call.getInt("repeatMode")
         val webSongKey = call.getString("songKey")
+        val sourceToken = call.getString("sourceToken")
         if (repeatMode != null) {
             current.setRepeatMode(repeatMode)
         }
@@ -709,10 +719,11 @@ class FoliaNativePlayerPlugin : Plugin() {
                 Uri.fromFile(cachedTrack).toString(),
                 if (startPositionMs != null) startPositionMs.toLong() else -1L,
                 webSongKey,
+                sourceToken,
             )
         } else {
             // 旧媒体的缓冲豁免不能跨媒体继承：清理排到播放器线程、与旧事件同序，换源前旧事件无法再写回。
-            prepareClearingStall(current, url, if (startPositionMs != null) startPositionMs.toLong() else -1L, webSongKey)
+            prepareClearingStall(current, url, if (startPositionMs != null) startPositionMs.toLong() else -1L, webSongKey, sourceToken)
         }
         // Web 亲自装源 = 原生那一单派发作废，服务的 pending 换成 Web 选的这首（#182 审查 M2）。
         MAIN.post { top.izuna.foliamajor.FoliaPlaybackService.activeService()?.onWebPrepared(webSongKey) }
@@ -791,6 +802,24 @@ class FoliaNativePlayerPlugin : Plugin() {
         }
         current.seek(positionMs.toLong())
         call.resolve()
+    }
+
+    @PluginMethod
+    fun seekForResume(call: PluginCall) {
+        val current = player
+        val position = call.getDouble("positionMs")
+        val songKey = call.getString("songKey")
+        val token = call.getString("sourceToken")
+        if (current == null || position == null || songKey.isNullOrEmpty() || token.isNullOrEmpty()) {
+            call.reject("A player, positionMs, songKey and sourceToken are required.")
+            return
+        }
+        current.seekForResume(position.toLong(), songKey, token) { outcome ->
+            outcome.fold(
+                { applied -> call.resolve(JSObject().apply { put("ok", applied); put("stale", !applied) }) },
+                { error -> call.reject("Resume seek failed", Exception(error)) },
+            )
+        }
     }
 
     @PluginMethod
