@@ -4,48 +4,35 @@ import { resolveUiZoomFactor } from '../utils/uiZoom';
 // src/services/uiZoomRuntime.ts
 // 界面缩放（#1264，移植自上游）套到当前窗口上：启动时在首屏渲染前套一次，之后跟着设置改。
 //
-// 桌面版走 preload 的 `webFrame.setZoomFactor`（与上游一致）。
+// 两条实现，按平台选：
+//   · 桌面版 —— preload 的 `webFrame.setZoomFactor`，浏览器级的视图缩放，与上游完全一致；
+//   · 安卓 —— 改 `<html>` 的 **font-size**。
 //
-// 安卓没有 webFrame。试过的三条路各有各的坑，记在这里免得再走一遍：
-//   · CSS `zoom`：`position: fixed` 的参考系与 `100vh` 一起被缩，播放条 / 设置页底栏
-//     跑到屏幕外或停在中间，右侧导航也会错位。
-//   · `zoom` + 根元素 width/height 补偿：仍然错位（根变大后 fixed 以更大的画布为参考）。
-//   · viewport `initial-scale`：布局正确，但**只在页面加载时生效**，改挡位后不重排，
-//     表现是「只能放大、缩小没反应」。
-//
-// 现在这条同时满足两件事：`transform: scale()` 只影响渲染，**不改变布局计算**；
-// 想让缩小之后不留白，再把宿主按 1/scale 反向放大即可 —— 布局按原尺寸算，画面上铺满。
+// ★ 安卓为什么是 font-size 而不是 zoom / transform / initial-scale：
+//   项目自己的 Tailwind 间距、字号、圆角都是 rem（见 src/styles/androidPhoneFit.css 的
+//   `html { font-size: var(--folia-ui-scale-normal) }`），所以调字号就是**让整页按比例重排**——
+//   布局是真重排，`position: fixed` 的播放条、设置页底栏、右侧导航都还在原位。
+//   另外三条路都试过并否掉：CSS `zoom` 会把 fixed 的参考系一起缩（UI 跑到屏幕外）；
+//   `transform: scale` 会新建包含块（整页塌黑）；viewport `initial-scale` 只在加载时生效
+//   （改挡位不重排，表现是「只能放大、缩小没反应」）。
 
 let installed = false;
 
-/** 缩放作用的宿主：优先 #root（应用本体），没有就用 body。 */
-const zoomHost = (): HTMLElement | null => (
-    document.getElementById('root') ?? document.body ?? null
-);
-
-const applyDomZoom = (factor: number) => {
+/** 没有 webFrame 的平台：把挡位写进 `<html>` 的字号。 */
+const applyHtmlScale = (enabled: boolean, step: Parameters<typeof resolveUiZoomFactor>[1]) => {
     const root = document.documentElement;
-    const host = zoomHost();
-    if (!host) return;
-    if (Math.abs(factor - 1) < 0.001) {
-        host.style.removeProperty('transform');
-        host.style.removeProperty('transform-origin');
-        host.style.removeProperty('width');
-        host.style.removeProperty('height');
+    if (!enabled) {
+        // 交回设备类型那一层（它按 --folia-ui-scale-* 自己算）。
+        root.style.removeProperty('font-size');
         root.removeAttribute('data-folia-ui-zoom');
         return;
     }
     /*
-     * 先按 1/scale 把宿主撑大，再整体 scale 回去：
-     * 布局阶段宿主拿到「撑大后」的宽高，缩小渲染之后正好铺满可视区。
-     * transform 会为 fixed 子元素建立新的包含块，但宿主与视口同尺寸，两边重合，
-     * 所以播放条与设置页底栏仍然贴在屏幕边上。
+     * 内联样式优先级高于 androidPhoneFit.css 里的 `var(--folia-ui-scale-*)`，
+     * 所以用户显式设的挡位会盖住设备类型的默认档 —— 这正是「拉过一次就以它为准」。
      */
-    host.style.transformOrigin = 'top left';
-    host.style.transform = `scale(${factor})`;
-    host.style.width = `${100 / factor}%`;
-    host.style.height = `${100 / factor}%`;
-    root.setAttribute('data-folia-ui-zoom', String(factor));
+    root.style.fontSize = `${step}%`;
+    root.setAttribute('data-folia-ui-zoom', String(step));
 };
 
 /** 按当前设置缩放这个窗口，并在开关或挡位改动时跟着改。 */
@@ -53,19 +40,36 @@ export const installUiZoom = () => {
     if (installed) return;
     installed = true;
     const electron = window.electron;
+    const hasNativeZoom = typeof electron?.setPageZoomFactor === 'function';
+
     const apply = (enabled: boolean, step: Parameters<typeof resolveUiZoomFactor>[1]) => {
-        const factor = resolveUiZoomFactor(enabled, step);
-        if (electron?.setPageZoomFactor) {
-            // 桌面版：与窗口现在的缩放比，不和上次设的比 —— 默认菜单的 Ctrl+=/-/0 会绕过设置改掉它。
-            const current = electron.getPageZoomFactor?.() ?? 1;
+        if (hasNativeZoom) {
+            const factor = resolveUiZoomFactor(enabled, step);
+            // 与窗口现在的缩放比，不和上次设的比 —— 默认菜单的 Ctrl+=/-/0 会绕过设置改掉它。
+            const current = electron?.getPageZoomFactor?.() ?? 1;
             if (Math.abs(current - factor) < 0.001) return;
-            electron.setPageZoomFactor(factor);
+            electron?.setPageZoomFactor?.(factor);
         } else if (typeof document !== 'undefined') {
-            applyDomZoom(factor);
+            applyHtmlScale(enabled, step);
         }
-        console.info(`[UiZoom] page zoom ${Math.round(factor * 100)}%`);
+        console.info(`[UiZoom] ${enabled ? `${step}%` : 'off (100%)'}`);
     };
+
     const initial = useDesktopSettingsStore.getState();
     apply(initial.uiZoomEnabled, initial.uiZoomStep);
     useDesktopSettingsStore.subscribe(state => apply(state.uiZoomEnabled, state.uiZoomStep));
+
+    if (!hasNativeZoom && typeof window !== 'undefined') {
+        /*
+         * 设备类型那一层会在转屏 / resize 时重写 --folia-ui-scale-*，而它写的是变量、
+         * 我们写的是内联 font-size（优先级更高），本来不会被盖掉。这里再补一次是为了
+         * 「转屏后字号被别的路径清掉」这种边角情况 —— 注册得比它晚，所以跑在它后面。
+         */
+        const reapply = () => {
+            const state = useDesktopSettingsStore.getState();
+            applyHtmlScale(state.uiZoomEnabled, state.uiZoomStep);
+        };
+        window.addEventListener('orientationchange', reapply);
+        window.addEventListener('resize', reapply);
+    }
 };
