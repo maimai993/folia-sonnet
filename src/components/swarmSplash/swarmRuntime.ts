@@ -69,13 +69,11 @@ export const createSwarmRuntime = ({ canvas, onDone, maxDurationMs = 6200 }: Swa
      * 量出来的矩形会全是 0（那样就只能退回兜底版式，用户看到的又变成「假装画」）。
      * 读一次 offsetHeight 就够了，代价是一次同步布局，发生在启动动画开始时。
      */
-    void document.body.offsetHeight;
     /*
      * 蓝图要的是**真实界面**的矩形，不是按比例摆的假版式（#420 反馈：「完全就是在假装画」）。
      * 但启动这一刻真实界面往往还没布局完（应用正在读库、首屏还在渲染），量不到东西。
      * 所以先试一次，量不到就先起步，gather 阶段每帧再试 —— 一旦量到就整份换上。
      */
-    void document.body.offsetHeight;
     let blocks = measureBlueprint();
     let usingFallback = blocks.length < 3;
     /** 每块画多久：块多就快一点，整体控制在 BUILD_BUDGET_MS 里。 */

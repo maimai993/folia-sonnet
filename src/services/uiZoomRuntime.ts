@@ -46,9 +46,9 @@ export const installUiZoom = () => {
         if (hasNativeZoom) {
             const factor = resolveUiZoomFactor(enabled, step);
             // 与窗口现在的缩放比，不和上次设的比 —— 默认菜单的 Ctrl+=/-/0 会绕过设置改掉它。
-            const current = electron?.getPageZoomFactor?.() ?? 1;
+            const current = electron.getPageZoomFactor?.() ?? 1;
             if (Math.abs(current - factor) < 0.001) return;
-            electron?.setPageZoomFactor?.(factor);
+            electron.setPageZoomFactor?.(factor);
         } else if (typeof document !== 'undefined') {
             applyHtmlScale(enabled, step);
         }
