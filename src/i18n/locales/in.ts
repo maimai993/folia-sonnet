@@ -9421,6 +9421,8 @@ export default {
     "lanCastDevices": "{{count}} speaker ditemukan",
     "lanCastRescan": "Cari ulang",
     "lanCastNoDevice": "Speaker tidak ditemukan. Pastikan ponsel dan speaker memakai WiFi yang sama dan DLNA aktif di speaker.",
+    "lanCastSkippedDevices_other": "{{count}} perangkat menjawab tetapi tidak dikenali sebagai speaker",
+    "lanCastSkippedShort_other": "{{count}} tidak dikenali",
     "lanCastPlaying": "Suara ada di {{name}}, ponsel dibisukan",
     "lanCastFollowed": "Ganti lagu otomatis dikirim ke {{name}}",
     "lanCastLocalHint": "Ponsel dibisukan, bilah progres dan lirik tetap berjalan; ganti lagu otomatis mengikuti di speaker.",

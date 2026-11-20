@@ -31,9 +31,15 @@ type RelayPlugin = {
 };
 
 type CastPlugin = {
-    discover?: (options: { timeoutMs?: number }) => Promise<{ devices?: LanSpeaker[] }>;
+    discover?: (options: { timeoutMs?: number }) => Promise<{
+        devices?: LanSpeaker[];
+        /** 应答了但没读成设备的数量（原生新版才给）。 */
+        skipped?: number;
+        /** 一共几台应答了。 */
+        attempted?: number;
+    }>;
     play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{ ok?: boolean }>;
-    stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean }>;
+    stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean; reason?: string }>;
     getVolume?: (options: { volumeControlUrl: string }) => Promise<{ volume?: number }>;
     setVolume?: (options: { volumeControlUrl: string; volume: number }) => Promise<{ ok?: boolean }>;
     setMute?: (options: { volumeControlUrl: string; muted: boolean }) => Promise<{ ok?: boolean }>;
@@ -382,15 +388,36 @@ export const queryWifiState = async (): Promise<boolean | null> => {
 
 // ------------------------------------------------------------------ 对外能力
 
-export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[]> => {
+/**
+ * 一次发现的完整结果。
+ *
+ * `skipped` 是「应答了但没读成设备」的数量：过去这些设备静默从列表里消失，用户只知道少了一台
+ * （issue M22）。旧版本原生插件不给这个字段，读成 0。
+ */
+export type LanDiscoverResult = {
+    devices: LanSpeaker[];
+    skipped: number;
+};
+
+export const discoverLanSpeakersDetailed = async (timeoutMs = 3200): Promise<LanDiscoverResult> => {
     const plugin = cast();
     if (!plugin?.discover) throw new Error('当前设备不支持局域网投送');
     const result = await plugin.discover({ timeoutMs });
     // 原生已经拦过一遍，这里再拦是防旧版本插件（升级后第一次启动仍可能路由到旧的原生实现）。
-    return (result?.devices ?? []).filter(device => (
+    const devices = (result?.devices ?? []).filter(device => (
         Boolean(device?.controlUrl && device?.name) && isTrustedLanTarget(device.controlUrl)
     ));
+    const rawSkipped = Number(result?.skipped ?? 0);
+    const skipped = Number.isFinite(rawSkipped) && rawSkipped > 0 ? Math.floor(rawSkipped) : 0;
+    // 前端自己又滤掉的设备也算「被跳过」：它们在用户眼里同样是「少了一台」。
+    const dropped = (result?.devices?.length ?? 0) - devices.length;
+    return { devices, skipped: skipped + Math.max(0, dropped) };
 };
+
+/** 只要列表的老调用方。 */
+export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[]> => (
+    (await discoverLanSpeakersDetailed(timeoutMs)).devices
+);
 
 export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrack): Promise<void> => {
     const plugin = cast();
@@ -427,7 +454,12 @@ export const stopCastingToSpeaker = async (): Promise<void> => {
     const plugin = cast();
     let stopError: unknown = null;
     try {
-        if (session && plugin?.stop) await plugin.stop({ controlUrl: session.speaker.controlUrl });
+        if (session && plugin?.stop) {
+            const result = await plugin.stop({ controlUrl: session.speaker.controlUrl });
+            // 原生没停成时带上原因（例如音响已经离线 → 「连不上」而不是「没反应」，issue M22）。
+            // 本地状态照样收口：音响那边停没停是它的事，手机不能因此一直静音。
+            if (result?.ok === false && result.reason) stopError = new Error(result.reason);
+        }
     } catch (error) {
         // 音响可能已离线；本地状态无论如何都要收口，不能留一个「永远静音」的手机。
         stopError = error;

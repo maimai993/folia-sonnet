@@ -9575,6 +9575,8 @@ export default {
     "lanCastDevices": "找到 {{count}} 台音响",
     "lanCastRescan": "重新搜索",
     "lanCastNoDevice": "没搜到音响。请确认手机和音响在同一个 WiFi、且音响已开启 DLNA 投送。",
+    "lanCastSkippedDevices_other": "有 {{count}} 台设备应答了，但没有被识别成音响",
+    "lanCastSkippedShort_other": "{{count}} 台未识别",
     "lanCastPlaying": "声音已交给 {{name}}，手机已静音",
     "lanCastFollowed": "切歌已自动推送到 {{name}}",
     "lanCastLocalHint": "手机已静音，进度条和歌词照常走，声音只在音响上；切歌会自动跟着换。",

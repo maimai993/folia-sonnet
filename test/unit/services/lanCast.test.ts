@@ -124,6 +124,96 @@ describe('lanCast 投送目标准入', () => {
         const found = await discoverLanSpeakers(1000);
         expect(found.map(item => item.id)).toEqual(['a']);
     });
+
+    // issue M22：应答了但没读成设备的数量要能传到界面，不能静默少几台。
+    it('发现结果带上被跳过的设备数量', async () => {
+        plugins.FoliaLanCast = {
+            discover: vi.fn(async () => ({
+                devices: [
+                    { id: 'a', name: '客厅音响', location: 'http://192.168.1.20:49152/desc.xml', controlUrl: 'http://192.168.1.20:49152/c', manufacturer: '' },
+                ],
+                attempted: 3,
+                skipped: 2,
+            })),
+        };
+        const { discoverLanSpeakersDetailed } = await load();
+        const found = await discoverLanSpeakersDetailed(1000);
+        expect(found.devices.map(item => item.id)).toEqual(['a']);
+        expect(found.skipped).toBe(2);
+    });
+
+    it('前端自己滤掉的设备也算被跳过', async () => {
+        plugins.FoliaLanCast = {
+            discover: vi.fn(async () => ({
+                devices: [
+                    { id: 'a', name: '客厅音响', location: 'http://192.168.1.20:49152/desc.xml', controlUrl: 'http://192.168.1.20:49152/c', manufacturer: '' },
+                    { id: 'b', name: '伪造', location: 'http://example.com/d.xml', controlUrl: 'http://example.com/c', manufacturer: '' },
+                ],
+                attempted: 4,
+                skipped: 1,
+            })),
+        };
+        const { discoverLanSpeakersDetailed } = await load();
+        const found = await discoverLanSpeakersDetailed(1000);
+        expect(found.devices.map(item => item.id)).toEqual(['a']);
+        // 原生跳了 1 台，前端又滤掉 1 台：用户眼里一共「少了两台」。
+        expect(found.skipped).toBe(2);
+    });
+
+    it('旧版本插件不给 skipped 时按 0 处理，不产出 NaN', async () => {
+        plugins.FoliaLanCast = {
+            discover: vi.fn(async () => ({
+                devices: [
+                    { id: 'a', name: '客厅音响', location: 'http://192.168.1.20:49152/desc.xml', controlUrl: 'http://192.168.1.20:49152/c', manufacturer: '' },
+                ],
+            })),
+        };
+        const { discoverLanSpeakersDetailed } = await load();
+        const found = await discoverLanSpeakersDetailed(1000);
+        expect(found.skipped).toBe(0);
+    });
+
+    it('停止投送时把音响那边没停成的原因带出来', async () => {
+        plugins.FoliaNative = {
+            lanCastPrepare: vi.fn(async () => ({
+                port: 45678, lanIp: '192.168.1.5', token: 'lc-t', expiresAt: Date.now() + 3_600_000,
+            })),
+            lanCastRelease: vi.fn(async () => undefined),
+        };
+        plugins.FoliaLanCast = {
+            play: vi.fn(async () => ({ ok: true })),
+            // 音响已经断电：原生这次说「连不上」，而不是无条件 403/失败。
+            stop: vi.fn(async () => ({ ok: false, reason: '连不上这台音响：请确认它已开机、和手机在同一个 WiFi' })),
+        };
+        const lanCast = await load();
+        await lanCast.castTrackToSpeaker(
+            { id: 'a', name: 'a', location: '', controlUrl: 'http://192.168.1.20:49152/c', manufacturer: '' },
+            { url: 'http://127.0.0.1:1/remote-audio/x', title: 't', artist: 'a' },
+        );
+        await expect(lanCast.stopCastingToSpeaker()).rejects.toThrow('连不上这台音响');
+        // 本地状态照样收口：手机不能因为音响没答话就一直静音。
+        expect(lanCast.hasCastLease()).toBe(false);
+        expect(lanCast.getCastingSpeaker()).toBeNull();
+    });
+
+    it('停成功时不报错', async () => {
+        plugins.FoliaNative = {
+            lanCastPrepare: vi.fn(async () => ({
+                port: 45678, lanIp: '192.168.1.5', token: 'lc-t', expiresAt: Date.now() + 3_600_000,
+            })),
+            lanCastRelease: vi.fn(async () => undefined),
+        };
+        const stop = vi.fn(async () => ({ ok: true }));
+        plugins.FoliaLanCast = { play: vi.fn(async () => ({ ok: true })), stop };
+        const lanCast = await load();
+        await lanCast.castTrackToSpeaker(
+            { id: 'a', name: 'a', location: '', controlUrl: 'http://192.168.1.20:49152/c', manufacturer: '' },
+            { url: 'http://127.0.0.1:1/remote-audio/x', title: 't', artist: 'a' },
+        );
+        // 正常停成功时不该抛错（别把「停成功」也报成失败）。
+        await expect(lanCast.stopCastingToSpeaker()).resolves.toBeUndefined();
+        expect(stop).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('lanCast 租约与收回路径', () => {

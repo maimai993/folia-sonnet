@@ -129,4 +129,19 @@ internal object LanCastLogText {
         val prefix = token.take(TOKEN_PREFIX_LENGTH)
         return "长度 ${token.length}、前缀 $prefix、$shape"
     }
+
+    /** 不含主机与端口的响应正文片段，给「音响到底回了什么」这类排查用（issue M22）。 */
+    fun bodySnippet(raw: String?, maxLength: Int = BODY_SNIPPET_LENGTH): String {
+        val text = raw?.trim()?.replace(WHITESPACE, " ").orEmpty()
+        if (text.isEmpty()) return "空正文"
+        return if (text.length > maxLength) {
+            text.take(maxLength) + "…（共 ${text.length} 字符）"
+        } else {
+            text
+        }
+    }
+
+    private const val BODY_SNIPPET_LENGTH = 240
+
+    private val WHITESPACE = Regex("\\s+")
 }
