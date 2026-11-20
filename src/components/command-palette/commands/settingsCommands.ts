@@ -68,6 +68,12 @@ export const settingsCommands: CommandPaletteCommand[] = [
     createSettingsCommand('settings-options', 'Open Options', 'Open the options center', ['settings', 'options', '设置', '选项'], 'options', null, { executeShortcut: 'o' }),
     createSettingsCommand('settings-appearance', 'Appearance settings', 'Open visual and appearance settings', ['appearance', 'visual settings', '外观', '视觉'], 'options', 'appearance'),
     createSettingsAnchorCommand('settings-ai-provider', 'AI provider settings', 'Choose an AI provider and model', ['model connection', 'api key', '模型设置', '供应商', '密钥', 'deepseek', 'kimi', 'glm', 'qwen', '通义', '智谱'], 'electronSettings', { platform: ['electron'] }),
+    /*
+     * AI 云缓存是功能性设置（决定数据往哪发、要不要带写入令牌），按 settings-feature-integration
+     * 接进命令面板。默认关闭、没有内置地址（issue H34），所以这条命令的实际用途就是
+     * 「带用户去把地址填上」—— 关键词里把「共享」「缓存」「服务器」都写上，搜哪个都能到。
+     */
+    createSettingsAnchorCommand('settings-cloud-cache', 'AI cloud cache', 'Share generated stage themes with a self-hosted server', ['cloud cache', 'shared theme', 'cache server', '云缓存', '共享主题', '缓存服务器', '写入令牌', 'write token'], 'cloudCacheBaseUrl'),
     createSettingsAnchorCommand('settings-theme-presets', 'Theme presets', 'Jump to the built-in and saved theme presets', ['preset theme', 'color preset', '预设主题'], 'themePresets'),
     createSettingsAnchorCommand('settings-lyrics-renderer', 'Lyrics renderer', 'Jump to how lyrics are drawn on the player', ['lyric renderer', 'lyric engine', '歌词渲染'], 'lyricsRenderer'),
     createSettingsAnchorCommand('settings-grid-card-style', 'Grid card style', 'Jump to how the home grid draws its cards', ['card style', 'polaroid', 'grid style', '卡片样式'], 'grid3dCardStyle', GRID_ONLY),

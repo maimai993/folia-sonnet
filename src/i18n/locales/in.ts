@@ -1027,6 +1027,10 @@ export default {
                 "title": "Pengaturan tampilan",
                 "description": "Buka pengaturan visual dan tampilan"
             },
+            "settings-cloud-cache": {
+                "title": "Cache cloud AI",
+                "description": "Arahkan cache tema bersama ke server Anda sendiri"
+            },
             "settings-general": {
                 "title": "Pengaturan umum",
                 "description": "Buka preferensi aplikasi umum"

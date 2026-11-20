@@ -1027,6 +1027,10 @@ export default {
                 "title": "Cài đặt giao diện",
                 "description": "Mở cài đặt thị giác và giao diện"
             },
+            "settings-cloud-cache": {
+                "title": "Bộ nhớ đệm đám mây AI",
+                "description": "Trỏ bộ nhớ đệm chủ đề dùng chung vào máy chủ của bạn"
+            },
             "settings-general": {
                 "title": "Cài đặt chung",
                 "description": "Mở tùy chọn chung của ứng dụng"
@@ -5934,9 +5938,15 @@ export default {
         "deepseekApiKey": "DeepSeek API key",
         "deepseekApiKeyDesc": "This is the only field you need. The endpoint is pinned to api.deepseek.com and the model defaults to deepseek-v4-flash (you can still override it below).",
         "cloudCache": "Cloud cache",
-        "cloudCacheDesc": "AI theme and AI director results are stored on the server keyed by the MD5 of the lyric file. Lyrics someone already generated come back instantly, and anything you generate is uploaded for the next person.",
+        "cloudCacheDesc": "Hasil tema AI dan sutradara AI disimpan di server dengan kunci MD5 berkas lirik. Lirik yang sudah pernah dibuat orang lain langsung tersedia tanpa memanggil model lagi; kalau token tulis diisi, hasil Anda juga dikirim balik untuk membantu orang berikutnya.",
         "cloudCacheBaseUrl": "Cloud service URL",
-        "cloudCacheBaseUrlDesc": "Point this at your own server if you self-host; leave it empty for the official one. Applies immediately.",
+        "cloudCacheBaseUrlDesc": "Isi alamat server Anda sendiri (atau yang Anda percaya), atau server yang Anda bangun sendiri. Aplikasi tidak menyertakan alamat pihak ketiga apa pun; biarkan kosong untuk mematikan cache cloud. Berlaku seketika.",
+        "cloudCacheBaseUrlPlaceholder": "https://alamat-server-anda",
+        "cloudCacheNeedBaseUrlTitle": "Alamat layanan cloud belum diisi",
+        "cloudCacheNeedBaseUrl": "Cache cloud menyimpan hasil di server yang Anda tentukan sendiri; aplikasi tidak mengirim data apa pun ke alamat pihak ketiga bawaan. Isi alamatnya dulu, baru nyalakan sakelar di atas. Membaca hasil orang lain tidak butuh token; token tulis hanya diperlukan kalau Anda ingin mengirim balik hasil buatan Anda sendiri.",
+        "cloudCacheWriteToken": "Token tulis",
+        "cloudCacheWriteTokenDesc": "Nilai AI_CACHE_WRITE_TOKEN yang dikonfigurasi di server. Kosongkan untuk mode hanya-baca: hasil orang lain tetap bisa diambil, hanya hasil Anda sendiri yang tidak dikirim balik.",
+        "cloudCacheWriteTokenPlaceholder": "Kosongkan untuk hanya-baca",
         "cloudCacheProbe": "Test connection",
         "cloudCacheProbeOk": "Cloud service reachable",
         "cloudCacheProbeFailed": "Cannot reach the cloud service: ",

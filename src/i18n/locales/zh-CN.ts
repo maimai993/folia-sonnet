@@ -1043,6 +1043,10 @@ export default {
                 "title": "外观设置",
                 "description": "打开视觉和外观设置"
             },
+            "settings-cloud-cache": {
+                "title": "AI 云缓存",
+                "description": "把共享主题缓存指向你自己的服务器"
+            },
             "settings-general": {
                 "title": "通用设置",
                 "description": "打开全局应用偏好"

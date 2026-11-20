@@ -1027,6 +1027,10 @@ export default {
                 "title": "Appearance settings",
                 "description": "Open visual and appearance settings"
             },
+            "settings-cloud-cache": {
+                "title": "AI cloud cache",
+                "description": "Point the shared theme cache at your own server"
+            },
             "settings-general": {
                 "title": "General settings",
                 "description": "Open general app preferences"
