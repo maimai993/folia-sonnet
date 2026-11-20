@@ -54,7 +54,16 @@ function readBaseline(root: string, relative: string): Record<string, number> {
     return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 }
 
-export interface Violation { file: string; found: number; allowed: number; unit: 'controls' | 'lines' }
+export interface Violation {
+    file: string;
+    found: number;
+    allowed: number;
+    /**
+     * `lines` = 实测超过允许值（真的超限）；
+     * `lines-stale` = 基线记的数字与实测不符（变大或变小都算，issue L7）。
+     */
+    unit: 'controls' | 'lines' | 'lines-stale';
+}
 
 export function scanControls(root: string = repoRoot): Violation[] {
     const baseline = readBaseline(root, CONTROL_BASELINE);
@@ -72,10 +81,30 @@ export function scanControls(root: string = repoRoot): Violation[] {
 export function scanSizes(root: string = repoRoot): Violation[] {
     const baseline = readBaseline(root, SIZE_BASELINE);
     const violations: Violation[] = [];
+    const actual = new Map<string, number>();
     for (const file of listSources(root)) {
         const lines = countLines(fs.readFileSync(path.join(root, file), 'utf8'));
+        actual.set(file, lines);
         const allowed = baseline[file] ?? MAX_LINES;
         if (lines > allowed) violations.push({ file, found: lines, allowed, unit: 'lines' });
+    }
+    /*
+     * 基线只许变小，而且要跟实测一致（issue L7）。
+     *
+     * 原来只抓「变大」，于是 `App.tsx` 从 2990 行拆到 37 行、`SettingsModal.tsx` 从 1496
+     * 降到 1436，基线里还是旧数 —— 门禁照样绿，可它报出来的「超限清单」已经不是事实了。
+     * 这里把「基线里记着一个已经不长这样的文件」也当成失败：拆完要么把它从基线里去掉，
+     * 要么把数字改成实测值，两种都得是显式动作。
+     *
+     * 文件已经不在源码树里（删除或改名）同样算陈旧，一并清掉。
+     */
+    for (const [file, recorded] of Object.entries(baseline)) {
+        const now = actual.get(file);
+        if (now === undefined) {
+            violations.push({ file, found: 0, allowed: recorded, unit: 'lines-stale' });
+            continue;
+        }
+        if (now !== recorded) violations.push({ file, found: now, allowed: recorded, unit: 'lines-stale' });
     }
     return violations;
 }
@@ -106,19 +135,31 @@ function main(): void {
     }
     const controls = scanControls();
     const sizes = scanSizes();
+    // 「变大」是超限，「变了但没同步基线」是基线陈旧，两类分开讲，免得混杂看不清。
+    const overLimit = sizes.filter(v => v.unit === 'lines');
+    const stale = sizes.filter(v => v.unit === 'lines-stale');
     let failed = false;
     if (controls.length) {
         failed = true;
         console.error('手写控件（应改用 src/components/ui 里的控件）：');
         for (const v of controls) console.error('  ' + v.file + '  写了 ' + v.found + ' 个，基线允许 ' + v.allowed);
     }
-    if (sizes.length) {
+    if (overLimit.length) {
         failed = true;
         console.error('文件超长（上限 800 行，超了要拆）：');
-        for (const v of sizes) console.error('  ' + v.file + '  ' + v.found + ' 行，基线允许 ' + v.allowed);
+        for (const v of overLimit) console.error('  ' + v.file + '  ' + v.found + ' 行，基线允许 ' + v.allowed);
+    }
+    if (stale.length) {
+        failed = true;
+        console.error('基线陈旧：这些文件的实测行数与基线不符（基线只许变小，且必须等于实测）：');
+        for (const v of stale) {
+            const now = v.found === 0 ? '已不在源码树里' : v.found + ' 行';
+            console.error('  ' + v.file + '  基线记 ' + v.allowed + ' 行，实测 ' + now);
+        }
+        console.error('  重构完跑 npm run check:size -- --update 重写基线。');
     }
     if (failed) process.exitCode = 1;
-    else console.log('UI 门禁通过：没有新增手写控件，没有超过 800 行的文件。');
+    else console.log('UI 门禁通过：没有新增手写控件，没有超过 800 行的文件，基线等于实测。');
 }
 
 // 只有直接运行才走 CLI；单测 import 时没有副作用。
