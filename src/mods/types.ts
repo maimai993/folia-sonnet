@@ -23,6 +23,13 @@ export interface ModMainCallStats {
     longestMs: number;
     /** Calls that threw, or whose promise rejected. */
     failures: number;
+    /**
+     * 安卓宿主熔断过它的证据（issue M15）：一次同步调用在同一句代码里卡住没回来。
+     * 桌面端主进程没有这一项，缺省即没有。
+     */
+    hung?: boolean;
+    /** 它卡在哪一句（宿主给的说法，只用于提示）；不卡时为 null。 */
+    hungWhere?: string | null;
 }
 
 export interface ModLabelMap {

@@ -680,6 +680,11 @@ const hostInfo = {
     folium: { major: FOLIUM_VERSION.major, minor: FOLIUM_VERSION.minor },
     folia: null,
     platform: 'android',
+    /*
+     * 宿主自己的状态（不算模组能力，只是为了把并发症的结论说给模组听，issue M15）。
+     * `unresponsive` 是「这个调用之后模组代码有没有回来」那一条观察，见下面的熔断一节。
+     */
+    modSystem: Object.freeze({ unresponsive: true }),
 };
 
 // --------------------------------------------------------------------- 发现
@@ -781,6 +786,94 @@ const secrets = createModSecrets({
 const guard = createModGuard((report) => {
     emitLog('warn', `[${report.modId}] ${report.where} 用时 ${Math.round(report.ms)}ms`);
 });
+
+// --------------------------------------------------------------------- 熔断（issue M15）
+
+/*
+ * 所有模组共用一条线程、一个 isolate：模组里一句同步死循环会让这条线程再也回不到事件循环，
+ * 别的模组的 rpc、悬浮窗、定时器全部停摆。V8 没法安全打断同步代码，所以这里能做的只有两件事：
+ *
+ *   1. 认出来：进入模组代码前后记下是哪个模组、在哪一句（guard.cjs 的 current / progress），
+ *      再起一条 1 秒一次的观察——两次读数里同一个模组都卡在门内、且没有任何调用完成，
+ *      就把它判成「无响应」，日志里点名，并让它的调用立刻回 `mod-hung`，不再干等原生那 180 秒；
+ *   2. 收窄：给 V8 设一个堆上限（Java 侧 --max-old-space-size），内存爆掉时是宿主失败、
+ *      可以被重启，而不是整个进程被系统杀掉（连带 WebView 与播放服务）。
+ *
+ * 正常的长任务不受影响：没有调用卡在门内时观察什么都不做；有调用在门内但别的调用还在完成，
+ * 说明事件循环还活着，也不算卡死。
+ */
+/** 多久看一次。够密，能从模组调用的几十毫秒里抓到它；够疏，空转时几乎不占 CPU。 */
+const HUNG_WATCH_MS = 1000;
+/** 两次观察。第一次发现卡住只记下来，第二次仍卡在同一个位置、期间又没有调用完成，才判成卡死。 */
+const HUNG_CONFIRMATIONS = 2;
+
+const hungMarks = new Map(); // modId -> { where, since }
+
+const isModMarkedHung = (modId) => hungMarks.has(modId);
+
+const markModHung = (modId, where) => {
+    if (hungMarks.has(modId)) {
+        return;
+    }
+    hungMarks.set(modId, { where, since: Date.now() });
+    if (typeof guard.noteFault === 'function') {
+        guard.noteFault(modId, 'unresponsive', where);
+    }
+    emitLog('error', `[${modId}] 无响应：${where} 在一秒以上没有任何调用完成，后续调用立即回 mod-hung`);
+};
+
+/**
+ * 这一句之后，模组代码有没有回来。
+ *
+ * 读 hostInfo 里的固定字段——宿主自己的对象，不经过任何模组代码，读它不会被模组卡住。
+ */
+const isHungWatchActive = () => hostInfo.modSystem?.unresponsive === true;
+
+// 当前可疑的调用：同一段模组代码在里面待了多久、期间完成的调用数有没有变化。
+let suspect = null;
+
+const lookForHungMod = () => {
+    if (!isHungWatchActive()) {
+        return;
+    }
+    let inside = null;
+    try {
+        inside = typeof guard.current === 'function' ? guard.current() : null;
+    } catch (error) {
+        return;
+    }
+    if (!inside) {
+        suspect = null;
+        return;
+    }
+    const progress = guard.progress();
+    /*
+     * 可疑的起点按「墙钟」算：进入这段模组代码的时刻（inside.since）加上两次观察的间隔。
+     * 不用「自己的 tick 记数」——死循环时这条观察根本跑不到，等到它终于醒过来时已经晚了，
+     * 拿 tick 数去比只会永远差一格，永远判不出来（第一版就是这么错的）。
+     */
+    if (!suspect || suspect.modId !== inside.modId || suspect.where !== inside.where) {
+        suspect = { modId: inside.modId, where: inside.where, progress };
+        return;
+    }
+    // 这段模组代码卡住期间还有调用完成：它在等异步，不是死循环，重新数。
+    if (progress !== suspect.progress) {
+        suspect.progress = progress;
+        return;
+    }
+    if (Date.now() - inside.since < HUNG_WATCH_MS * HUNG_CONFIRMATIONS) {
+        return;
+    }
+    markModHung(inside.modId, inside.where);
+};
+
+const startHungWatch = () => {
+    // 定时器自己不算事件循环被卡：死循环时它会一直不醒，醒来时正好看到门内的模组。
+    const timer = setInterval(lookForHungMod, HUNG_WATCH_MS);
+    if (timer && typeof timer.unref === 'function') {
+        timer.unref();
+    }
+};
 
 let runtimeSnapshot = null;
 
@@ -1132,6 +1225,14 @@ const loadAll = () => {
         try {
             // 必须在 runtime.load() 之前跑完：模组在激活时就会读自己的状态文件。
             normalizeModStateFile(id);
+            /*
+             * 上一次运行里被熔断（无响应）的模组，重新载入时要把标记清掉（issue M15）：
+             * 「停用再启用 / 重载」是用户唯一的出路，清不掉的话它被修好了也还是一直回 mod-hung。
+             */
+            hungMarks.delete(id);
+            if (typeof guard.clearHung === 'function') {
+                guard.clearHung(id);
+            }
             const runtime = buildModRuntime(item);
             runtimes.set(id, runtime);
             runtime.load((error) => {
@@ -1178,6 +1279,21 @@ const requireRuntime = (modId) => {
     return {
         error: { ok: false, error: discoveredCache.entries.has(modId) ? 'mod-not-loaded' : 'mod-not-found' },
     };
+};
+
+/*
+ * 被熔断的模组（issue M15）：它的上一次调用在同一句代码里卡了一秒以上没回来，原生那条 180 秒
+ * 超时对它来说太长了 —— 后续调用立刻回 `mod-hung`，面板据此提示「无响应，停用并重载」。
+ *
+ * 只挡这个模组自己的调用：别的模组照常走。重新启用 / 重载这个模组（loadAll）时标记会清掉。
+ */
+const hungRefusal = (modId, op) => {
+    if (!isModMarkedHung(modId)) {
+        return null;
+    }
+    const mark = hungMarks.get(modId);
+    emitLog('warn', `[${modId}] ${op} 被拒绝：该模组无响应（${mark ? mark.where : '未知位置'}）`);
+    return { ok: false, error: `mod-hung:${modId}` };
 };
 
 const operations = {
@@ -1263,6 +1379,10 @@ const operations = {
     },
 
     rpc: async ({ modId, name, args }) => {
+        const hung = hungRefusal(modId, `rpc ${name}`);
+        if (hung) {
+            return hung;
+        }
         const { runtime, error } = requireRuntime(modId);
         if (error) {
             return error;
@@ -1356,6 +1476,10 @@ const operations = {
     },
 
     secrets: async ({ modId, op, key, value }) => {
+        const hung = hungRefusal(modId, `secrets ${op}`);
+        if (hung) {
+            return hung;
+        }
         try {
             switch (op) {
                 case 'get':
@@ -1407,7 +1531,20 @@ const operations = {
         return { ok: true, result: null };
     },
 
-    'call-stats': ({ modId }) => ({ ok: true, result: guard.getStats(modId) }),
+    /*
+     * 门里的统计（guard.cjs）。除了单模组的耗时，还把「有没有模组无响应」一起交出去
+     * （issue M15）：设置页的模组行据此显示「无响应 · 停用并重载」。
+     */
+    'call-stats': ({ modId }) => {
+        const stats = guard.getStats(modId);
+        const hung = isModMarkedHung(modId) ? hungMarks.get(modId) : null;
+        return {
+            ok: true,
+            result: stats === null && !hung
+                ? null
+                : { ...(stats ?? {}), hung: Boolean(hung), hungWhere: hung ? hung.where : null },
+        };
+    },
 
     'ffmpeg-status': () => ({ ok: true, result: ffmpegStatus() }),
 
@@ -1502,6 +1639,11 @@ const main = () => {
     });
     // 同理：模组的 main 一 require('electron') 就得拿到替身。
     installElectronShim(buildElectronModule());
+    /*
+     * 熔断的观察要在模组代码第一次被调用之前就位（issue M15）：模组的 main 就是在 loadAll 里
+     * 同步跑的，一个在 activate 阶段就死循环的模组只有从那时起就看着才发现得了。
+     */
+    startHungWatch();
     const list = loadAll();
     foliaNode.ready();
     send('event', { type: 'ready', list });

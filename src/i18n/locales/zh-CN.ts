@@ -3026,7 +3026,12 @@ export default {
             "noFailures": "没有出错",
             "main": "后台部分一共用了 {{total}} 毫秒，最长一次 {{longest}} 毫秒",
             "slow": "慢",
-            "slowHint": "这个模组启动慢，或者运行时用的时间多。Folia 不会因此关掉它。"
+            "slowHint": "这个模组启动慢，或者运行时用的时间多。Folia 不会因此关掉它。",
+            "hung": "无响应",
+            "hungHint": "这个模组有一次后台调用一直没有返回，其它模组的调用也被它拖着。停用它之前，它的调用会直接被拒绝。",
+            "hungHintWhere": "卡在：{{where}}。停用它之前，其它模组的调用也会被它拖着。",
+            "hungRelease": "停用",
+            "hungReload": "停用并重载"
         },
         "commandUnavailable": "该模组命令已不可用。",
         "cancelExport": "取消",

@@ -17,6 +17,13 @@ import type { ModMainCallStats } from '../types';
 // showing the cost costs nothing.
 //
 // "Slow" is a mark on the row. Folia switches nothing off for being slow.
+//
+// The one exception is a Node entry that stopped responding (issue M15): on
+// Android every mod shares one thread, so a mod frozen in a synchronous loop
+// stalls every other mod's calls with it, and nothing can interrupt it. The host
+// then answers that mod's calls with `mod-hung` at once instead of making them
+// wait out the timeout, and says so in its stats (guard.cjs). The row shows it,
+// with the two actions that get out of it: stop the mod, or reload with it off.
 
 /** A start this long uses up the whole wait of the first screen by itself (src/bootstrap.tsx). */
 export const SLOW_START_MS = 1500;
@@ -26,6 +33,9 @@ export const SLOW_RUNNING_MS = 240;
 export const SLOW_MAIN_CALL_MS = 100;
 /** How often the manager reads the numbers while it is on screen. */
 const READ_INTERVAL_MS = 2000;
+
+/** 宿主的应答：这个模组无响应（它的调用现在会立刻回 mod-hung）。 */
+export const MOD_HUNG_ERROR = 'mod-hung';
 
 export interface ModCost {
     /** Where the start of its client stands (a finished start in whole milliseconds); undefined when it has none running here. */
@@ -47,6 +57,10 @@ export interface ModCost {
     slowStart: boolean;
     slowRunning: boolean;
     slowMain: boolean;
+    /** Its Node entry stopped responding: a synchronous call never came back (Android host, issue M15). */
+    hung: boolean;
+    /** Where it stopped, as the host named it (for the row's tooltip); null when it did not. */
+    hungWhere: string | null;
 }
 
 const round = (value: number, digits: number) => Number(value.toFixed(digits));
@@ -70,10 +84,16 @@ export const describeModCost = (
         slowStart: start?.state === 'started' ? start.ms >= SLOW_START_MS : start?.state === 'starting' && start.late,
         slowRunning: runningMs !== null && runningMs >= SLOW_RUNNING_MS,
         slowMain: main !== null && main.longestMs >= SLOW_MAIN_CALL_MS,
+        // The hung mark only ever comes from the host gate; the desktop's main process has none.
+        hung: main?.hung === true,
+        hungWhere: typeof main?.hungWhere === 'string' ? main.hungWhere : null,
     };
 };
 
 export const isModSlow = (cost: ModCost | undefined) => Boolean(cost && (cost.slowStart || cost.slowRunning || cost.slowMain));
+
+/** The mod is frozen and its calls are being refused: shown before "slow", which it also is. */
+export const isModHung = (cost: ModCost | undefined) => cost?.hung === true;
 
 const readCosts = async (modIds: readonly string[]): Promise<Record<string, ModCost>> => {
     const main = await getModCallStats();

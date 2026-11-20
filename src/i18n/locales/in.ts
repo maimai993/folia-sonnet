@@ -3010,7 +3010,12 @@ export default {
             "noFailures": "Tidak ada kegagalan",
             "main": "Bagian latar: total {{total}} ms, panggilan terlama {{longest}} ms",
             "slow": "Lambat",
-            "slowHint": "Mod ini lambat saat mulai atau memakai banyak waktu saat berjalan. Folia tidak mematikannya karena itu."
+            "slowHint": "Mod ini lambat saat mulai atau memakai banyak waktu saat berjalan. Folia tidak mematikannya karena itu.",
+            "hung": "Tidak merespons",
+            "hungHint": "Salah satu panggilan latar mod ini tidak pernah kembali; panggilan mod lain ikut tertahan. Panggilannya ditolak sampai mod ini dimatikan.",
+            "hungHintWhere": "Tertahan di: {{where}}. Panggilan mod lain ikut tertahan sampai mod ini dimatikan.",
+            "hungRelease": "Matikan",
+            "hungReload": "Matikan dan muat ulang"
         },
         "commandUnavailable": "Perintah mod ini sudah tidak tersedia.",
         "cancelExport": "Batal",
