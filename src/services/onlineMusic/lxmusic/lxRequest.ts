@@ -10,7 +10,74 @@
 
 import { resolveProxiedUrl } from '../../proxiedUrl';
 import { hasNativeHttp, nativeHttpRequest } from '../../nativeAndroidBridge';
+import { registerSelfHostedService } from '../../nativeSelfHostedServices';
 import { isAllowedLxRequestUrl } from './lxRequestGuard';
+
+// ---------------------------------------------------------------------------
+// 音源主机授信（C1）
+// ---------------------------------------------------------------------------
+
+/**
+ * 某支音源脚本会连的主机。
+ *
+ * 原生 `httpRequest` 现在有主机白名单，而自定义音源的第一步是去它自己的服务器要地址 ——
+ * 那些域名千奇百怪，出厂白名单里不可能有。所以按「谁被用户装进来了」授信：用户导入 /
+ * 启用一支音源时，脚本里出现的域名就是这支音源的出网范围，收进来交给原生登记。
+ *
+ * 为什么从脚本里扫，而不是等第一次请求再登记：等请求来才登记就退化成「任意主机登记即
+ * 放行」，那正是 C1 要堵的那条路。这里的输入只有**用户自己导入的那份脚本文本**，扫出来的
+ * 是「这支脚本自己写下的服务器」，用户装它的时候等于已经同意了。
+ */
+export const lxScriptHosts = (rawScript: string): string[] => {
+    const hosts = new Set<string>();
+    const pattern = /https?:\/\/([^\s'"`/?#<>()\\{},;|*^[\]]+)/gi;
+    const matches = rawScript.match(pattern) ?? [];
+    for (const entry of matches) {
+        const host = entry.replace(/^https?:\/\//i, '').split('/')[0]?.split(':')[0]?.toLowerCase();
+        if (!host || host.length === 0) continue;
+        // 脚本里拼模板字符串时会留下 `${...}`，那不是主机名。
+        if (host.includes('$') || host.includes('{') || host.includes('}')) continue;
+        hosts.add(host);
+    }
+    return Array.from(hosts).sort();
+};
+
+/** 本次运行期已登记给原生的音源主机（避免重复过桥）。 */
+const grantedLxHosts = new Set<string>();
+
+/**
+ * 把已装音源的出网主机登记给原生（C1）。
+ *
+ * 输入是「用户装进来的全部脚本文本」：每支脚本的域名都在里面，所以这里登记的范围等于
+ * 「用户自己装过的那几支音源可能连的服务器」。没有装任何音源时不登记任何东西。
+ */
+export const syncLxSourceHosts = async (scripts: string[]): Promise<void> => {
+    if (!hasNativeHttp()) return;
+    const hosts = new Set<string>();
+    for (const script of scripts) {
+        for (const host of lxScriptHosts(script)) hosts.add(host);
+    }
+    for (const host of hosts) {
+        if (grantedLxHosts.has(host)) continue;
+        grantedLxHosts.add(host);
+        await registerSelfHostedService(`https://${host}/`).catch(() => undefined);
+    }
+};
+
+/**
+ * 原生拒绝「主机不在白名单里」时，从错误里取出那个主机名（C1 的兜底用）。
+ *
+ * 原生回的是 `host is not allowlisted: <host>`（见 FoliaNativeAccess）；
+ * 认不出来就回 null —— 别把别的错误也当成「补登一下就重试」。
+ */
+const nativeHostOf = (error: unknown): string | null => {
+    const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error ?? '');
+    const matched = /host is not allowlisted:\s*([a-z0-9.:_-]+)/i.exec(message);
+    return matched ? matched[1].toLowerCase() : null;
+};
+
+/** 单次请求最多补登这么多次（一次跳转链 + 一次重试就够）。 */
+const MAX_GRANTS_PER_REQUEST = 2;
 
 // ---------------------------------------------------------------------------
 // HTTP 请求：复刻 lx.request(url, options, callback)
@@ -122,7 +189,31 @@ export const lxRequest = (
         });
     };
 
-    run()
+    /**
+     * 原生按主机白名单拒绝时，把那个主机补登进来再试一次（C1）。
+     *
+     * 为什么需要这一层：脚本里的地址常常是运行时拼出来的（读配置、解密串、跟随跳转），
+     * [lxScriptHosts] 扫字面量扫不到，于是第一次请求会被原生拒。补登的依据是「这支已装
+     * 音源真的在向这台服务器要东西」，比静默放行窄得多，也不会让白名单彻底形同虚设。
+     *
+     * 只对「主机不在白名单」这一种错补登，别的错原样抛；补登上限 2 次，防止被一个恶意
+     * 脚本用无限跳转拖成任意主机放行。
+     */
+    const runWithGrant = async (grantDepth = 0): Promise<Response> => {
+        try {
+            return await run();
+        } catch (error) {
+            const host = nativeHostOf(error);
+            if (!host || grantDepth >= MAX_GRANTS_PER_REQUEST) throw error;
+            if (!grantedLxHosts.has(host)) {
+                grantedLxHosts.add(host);
+                await registerSelfHostedService(`https://${host}/`).catch(() => undefined);
+            }
+            return runWithGrant(grantDepth + 1);
+        }
+    };
+
+    runWithGrant()
         .then(async (resp) => {
             const text = await resp.text();
             const respHeaders: Record<string, string> = {};
