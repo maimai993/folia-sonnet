@@ -62,6 +62,14 @@ object BackgroundThemeWorker {
     private const val MAX_PENDING = 7
     private const val MAX_GENERATIONS = 64
 
+    /**
+     * 提示词长度的告警线（issue M32）。
+     *
+     * 按字符算，12000 大致对应中文 1 万 token 上下、英文三四千 —— 过了这条线，一次主题生成的
+     * 额度消耗会明显高于普通曲目，值得在日志里留一笔。只告警不截断。
+     */
+    private const val BACKGROUND_THEME_PROMPT_WARN_CHARS = 12_000
+
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val httpClient = OkHttpClient.Builder()
@@ -558,6 +566,18 @@ object BackgroundThemeWorker {
 
         val system = config.system.ifBlank { BackgroundThemeRules.DEFAULT_SYSTEM }
         val prompt = BackgroundThemeRules.injectTemplate(config.promptTemplate, title, artist, lyricText)
+        /*
+         * 输入规模（issue M32）：歌词整份拼进提示词，双语时长曲目能到几万 token，而额度按 token 计。
+         * 超了只记一行，不截断 —— 截断会直接影响主题质量，那是产品取舍，不该在这一层悄悄做决定。
+         * 只记字数、不记正文。
+         */
+        if (prompt.length > BACKGROUND_THEME_PROMPT_WARN_CHARS) {
+            Log.w(
+                TAG,
+                "[BackgroundTheme] 提示词偏长 chars=${prompt.length}（歌词 ${lyricText.length}）" +
+                    "，超过 ${BACKGROUND_THEME_PROMPT_WARN_CHARS}，本次生成的额度消耗会明显偏高",
+            )
+        }
 
         return try {
             val text = AiCompletion.run(aiConfig, system, prompt, BackgroundThemeRules.MAX_TOKENS, true)
