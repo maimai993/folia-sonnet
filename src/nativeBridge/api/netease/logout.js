@@ -10,10 +10,10 @@
 // 清理只是登出的卫生工作：读不到结果、宿主不回包都照常放行，绝不把登出卡在等待上。
 
 import {
-  BRIDGE_COOKIE_STORAGE_KEYS,
   NETEASE_DOMAINS,
   NETEASE_KEY_NAMES,
   clearCookieCache,
+  forgetProviderCookie,
   removeBrowserCookiesForHosts,
 } from '../cookies.js';
 
@@ -24,10 +24,8 @@ export async function clearSessionOnLogout() {
   let timer = null;
   const cleanup = (async () => {
     await removeBrowserCookiesForHosts(NETEASE_DOMAINS, NETEASE_KEY_NAMES);
-    const storageKey = BRIDGE_COOKIE_STORAGE_KEYS.netease;
-    if (storageKey && chrome?.storage?.local?.remove) {
-      await chrome.storage.local.remove([storageKey]);
-    }
+    // 加密槽位和明文旧键一起抹（H5 之后桥存的那份在原生加密存储里）。
+    await forgetProviderCookie('netease');
     clearCookieCache();
   })().catch((err) => {
     console.warn('[NeteaseLogout] 清理会话失败', err);

@@ -1,3 +1,14 @@
+import {
+  clearSecureValue,
+  isSecureStoreAvailable,
+  readSecureValue,
+  writeSecureValue,
+} from './secureStore.js';
+
+// src/nativeBridge/api/cookies.js
+// chrome.cookies 兼容层的收口：各平台的 cookie 读写、平台会话的落盘（加密存储，见 secureStore.js），
+// 以及「读失败」与「确实没有」的三态（CookieReadError，见 withCookieFallback）。
+
 export const NETEASE_DOMAINS = [
   'music.163.com',
   '.music.163.com',
@@ -104,8 +115,153 @@ export function clearCookieCache() {
   cookieCache.clear();
 }
 
-export async function saveProviderCookie(provider, cookieHeader) {
+/** 一份平台会话在原生加密存储里的槽位名（见 secureStore.js）。 */
+const SECURE_SLOT_FOR_PROVIDER = {
+  netease: 'provider-netease-cookie',
+  qq: 'provider-qq-cookie',
+  kg: 'provider-kg-cookie',
+};
+
+/**
+ * 平台 cookie 原来明文存在 `chrome.storage.local` —— 在安卓上那就是页面 localStorage，
+ * 在控制台里读一下 `foliaBridgeQqCookie` 这个键就能取走长期凭据（H5）。
+ *
+ * 现在分两层：
+ *  1. **原生加密存储**（secureStore.js → FoliaSecureStore，Android Keystore 的 AES-GCM）是唯一的落盘处；
+ *  2. localStorage 里的那份只在**没有原生存储**的环境里用（网页版扩展 / 桌面 / 单测），
+ *     安卓上不再写它 —— 这是这次改动的核心。
+ *
+ * 槽位名与 localStorage 键名（BRIDGE_COOKIE_STORAGE_KEYS）都**不改名**：前者是新的，
+ * 后者是已经发布的键（AGENTS.md「已经发布的存储键不改名」），还得读出来做一次性迁移。
+ */
+
+const secureSlotOf = (provider) => SECURE_SLOT_FOR_PROVIDER[provider] || '';
+
+/** 这份 cookie 头里有没有账号凭据（不是只有设备号那几条）。迁移时据此判断值不值得搬。 */
+function hasAccountCredentialCookie(provider, header) {
+  const parsed = parseCookieString(header);
+  if (provider === 'netease') return Boolean(parsed.MUSIC_U || parsed.MUSIC_A);
+  if (provider === 'qq') return Boolean(parsed.uin || parsed.p_uin || parsed.wxuin || parsed.qm_keyst || parsed.qqmusic_key);
+  if (provider === 'kg') return Boolean(kgCookieUserId(header) && kgCookieToken(header));
+  return Object.keys(parsed).length > 0;
+}
+
+/**
+ * 把 localStorage 里残留的明文 cookie 搬进原生加密存储，然后**删掉明文**。
+ *
+ * 什么时候跑：第一次读 / 写某个平台的 cookie 时（读那条路要先知道有没有存过）。
+ * 迁移只做一次，靠"加密槽位存在"这件事判断 —— 不另起一个"已迁移"标记，
+ * 因为标记本身也可能落在半路的崩溃里，而槽位本身就是结论。
+ *
+ * 旧数据会不会丢：搬的顺序是「先加密写成功，再删明文」；写失败（Keystore 不可用）时明文
+ * 原样留着，下一次再试，绝不在写不进去的时候先删。只有一种情况读不到旧登录 —— 就是
+ * 明文本身已经损坏（JSON 解析不出）或用户在这中间清过应用数据，那本来也救不回来。
+ */
+export async function migrateLegacyCookieStorage(provider) {
+  const slot = secureSlotOf(provider);
   const storageKey = BRIDGE_COOKIE_STORAGE_KEYS[provider];
+  if (!slot || !storageKey || !isSecureStoreAvailable()) return;
+  let legacy = '';
+  try {
+    const stored = await chrome.storage?.local?.get?.([storageKey]);
+    legacy = String(stored?.[storageKey] || '');
+  } catch (_) {
+    return; // 读不到 localStorage 就下次再说，什么都不删
+  }
+  if (!hasAccountCredentialCookie(provider, legacy)) {
+    // 没有账号凭据的残留（只有设备 cookie 之类）直接清掉：它不是登录态，留着也没有用。
+    if (legacy) await dropLegacyCookieStorage(provider);
+    return;
+  }
+  let existing = null;
+  try {
+    existing = await readSecureValue(slot);
+  } catch (error) {
+    // 解不开就别再拿明文去覆盖它（覆盖等于把一份可能还能救的数据埋掉），也不删明文。
+    console.warn('[FoliaCookieStore] legacy cookie migration deferred', error);
+    return;
+  }
+  if (existing.found) {
+    // 加密那份是新的真相，明文只是残留。
+    await dropLegacyCookieStorage(provider);
+    return;
+  }
+  const written = await writeSecureValue(slot, legacy);
+  if (!written) {
+    console.warn('[FoliaCookieStore] legacy cookie could not be encrypted yet; the plaintext copy is kept for a later attempt');
+    return;
+  }
+  await dropLegacyCookieStorage(provider);
+}
+
+/** 删掉 localStorage 里那份明文。删不掉不致命，下次迁移会再试一次。 */
+async function dropLegacyCookieStorage(provider) {
+  const storageKey = BRIDGE_COOKIE_STORAGE_KEYS[provider];
+  if (!storageKey) return;
+  try {
+    await chrome.storage?.local?.remove?.([storageKey]);
+  } catch (_) {}
+}
+
+/**
+ * 读一份平台会话。三态：
+ *   - 有：原样返回；
+ *   - 确实没有：`''`；
+ *   - 读不到（原生存储解不开 / 桥没答）：抛 [CookieReadError]，上层不许当成"没登录"。
+ *
+ * 没有原生存储的环境照旧读 localStorage（那里本来就没有 Keystore 可用，行为不变）。
+ */
+async function readStoredProviderCookie(provider) {
+  const slot = secureSlotOf(provider);
+  const storageKey = BRIDGE_COOKIE_STORAGE_KEYS[provider];
+  if (!slot) return '';
+  if (!isSecureStoreAvailable()) {
+    if (!storageKey || !chrome.storage?.local) return '';
+    try {
+      const stored = await chrome.storage.local.get([storageKey]);
+      return String(stored?.[storageKey] || '');
+    } catch (_) {
+      return '';
+    }
+  }
+  await migrateLegacyCookieStorage(provider);
+  let stored;
+  try {
+    stored = await readSecureValue(slot);
+  } catch (error) {
+    // 统一成 CookieReadError：调用方只认「读失败」这一种，不该再分它是加密层还是桥层报的。
+    throw toCookieReadError(error, `stored ${provider} cookie`);
+  }
+  return stored.found ? String(stored.text || '') : '';
+}
+
+/** 把一份平台会话写下去。返回 false = 没写进去（调用方要知道这次登录没能持久化）。 */
+async function writeStoredProviderCookie(provider, cookie) {
+  const slot = secureSlotOf(provider);
+  if (!slot || !cookie) return false;
+  if (!isSecureStoreAvailable()) {
+    const storageKey = BRIDGE_COOKIE_STORAGE_KEYS[provider];
+    if (!storageKey || !chrome.storage?.local) return false;
+    try {
+      await chrome.storage.local.set({ [storageKey]: cookie });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  const written = await writeSecureValue(slot, cookie);
+  // 写成功之后顺手把明文旧键删掉：升级后第一次登录也可能先经过这里（没走过迁移那条路）。
+  if (written) await dropLegacyCookieStorage(provider);
+  return written;
+}
+
+/**
+ * 保存平台会话（合并进已有那份）。只有确认的登录才调它。
+ *
+ * 写失败（Keystore 不可用、IO 错）只记一行、不抛：这次登录在本次运行里照样有效，
+ * 只是重启之后要重新登录。**绝不回退成明文写 localStorage** —— 那正是 H5 要修的东西。
+ */
+export async function saveProviderCookie(provider, cookieHeader) {
   const cookie = typeof cookieHeader === 'string'
     ? cookieHeader.trim()
     : Array.isArray(cookieHeader)
@@ -126,24 +282,31 @@ export async function saveProviderCookie(provider, cookieHeader) {
             .filter(Boolean)
             .join('; ')
         : '';
-  if (!storageKey || !cookie || !chrome.storage?.local) return;
+  if (!secureSlotOf(provider) || !cookie) return;
+  let merged = cookie;
   try {
-    const current = await chrome.storage.local.get([storageKey]);
-    const merged = mergeCookieHeaders(current?.[storageKey] || '', cookie);
-    await chrome.storage.local.set({ [storageKey]: merged });
-  } catch (_) {}
+    const current = await withCookieFallback(
+      () => readStoredProviderCookie(provider),
+      { label: 'saveProviderCookie:previous', fallback: '' },
+    );
+    merged = mergeCookieHeaders(current || '', cookie);
+  } catch (error) {
+    // 读不回旧的那份：那就整份覆盖。宁可少存几条 cookie，也好过这次登录一条都没存下来。
+    console.warn('[FoliaCookieStore] the stored cookie could not be merged; it is replaced instead', error);
+  }
+  const written = await writeStoredProviderCookie(provider, merged);
+  if (!written) {
+    console.warn(`[FoliaCookieStore] the ${provider} cookie could not be stored; this session lasts until the app restarts`);
+  }
   clearCookieCache();
 }
 
-async function readStoredProviderCookie(provider) {
-  const storageKey = BRIDGE_COOKIE_STORAGE_KEYS[provider];
-  if (!storageKey || !chrome.storage?.local) return '';
-  try {
-    const stored = await chrome.storage.local.get([storageKey]);
-    return String(stored?.[storageKey] || '');
-  } catch (_) {
-    return '';
-  }
+/** 抹掉一份平台会话的**所有**落盘副本：加密槽位 + 明文旧键。登出时调。 */
+export async function forgetProviderCookie(provider) {
+  const slot = secureSlotOf(provider);
+  if (slot) await clearSecureValue(slot);
+  await dropLegacyCookieStorage(provider);
+  clearCookieCache();
 }
 
 function mergeCookieHeaders(...headers) {
@@ -213,22 +376,103 @@ async function withCookieCache(key, build) {
   return value;
 }
 
+/**
+ * 读 cookie 没有拿到答案。**不是**「这个人没有 cookie」。
+ *
+ * 三态在这里分开（H4）：
+ *   - `ok` / `empty`：桥答了。答出空 cookie 头就是 `empty` —— 确实没人登录、或者确实没有那几条。
+ *   - `error`：桥没答（超时 4 秒、插件抛异常、WebView 重载）。这时任何「未登录」的结论都不成立：
+ *     登录态可能就是好的，只是这一次读不到。
+ *
+ * 以前超时被压成空值，与「没登录」长得一模一样，于是桥抖一下就被读成用户没登录，
+ * 界面引导重新登录，账号读取那一路还会判成登录失效、连带把本地凭据清掉 —— 临时故障变成真登出。
+ * `withCookieFallback` 是唯一的收口点：只有明确的无 cookie 能回空值，读失败一律抛出去。
+ */
+export class CookieReadError extends Error {
+  /** 'timeout'：桥在预算内没有回包；'native-error'：桥上抛了异常；'unsupported'：这里没法读 cookie。 */
+  constructor(reason, message) {
+    super(message || `Cookie read failed (${reason})`);
+    this.name = 'CookieReadError';
+    this.reason = reason;
+  }
+}
+
+/** 是不是「读失败」，而不是「读到了，只是空的」。上层用它决定能不能说未登录。 */
+export function isCookieReadError(error) {
+  return Boolean(error) && error.name === 'CookieReadError';
+}
+
+/**
+ * 把一次 cookie 读取收敛成三态里的一个值。
+ *
+ * `read` 抛出的错误分两种：cookie 宿主不可用（`isUnsupported` 判为真，比如桌面主进程里的
+ * `chrome.cookies` 本身不存在）当作 `empty`，与改动之前一致；其余（`CookieReadError` 或别的
+ * 异常）是「读失败」，抛出 CookieReadError 让上层带上去。
+ *
+ * `fallback` 的默认值就是调用方原来的空值（`[]` / `null` / `''`），
+ * 所以上层照旧 `await`，只是现在能分清空的是哪一半。
+ *
+ * @template T
+ * @param {() => Promise<T>} read
+ * @param {{ label: string, fallback: T, isUnsupported?: (error) => boolean }} options
+ * @returns {Promise<T>}
+ */
+export async function withCookieFallback(read, { label, fallback, isUnsupported }) {
+  try {
+    return await read();
+  } catch (error) {
+    if (isUnsupported && isUnsupported(error)) return fallback;
+    throw toCookieReadError(error, label);
+  }
+}
+
+/** 把一个底层错误包成 CookieReadError：已经是原样传，加密层与桥上来的都带走原因。 */
+export function toCookieReadError(error, label) {
+  if (isCookieReadError(error)) return error;
+  const native = error && error.name === 'NativeCookieCallError';
+  const secure = error && error.name === 'SecureStoreError';
+  const reason = native || secure ? error.reason : 'native-error';
+  const detail = error && error.message ? `: ${error.message}` : '';
+  return new CookieReadError(reason, `Cookie read failed at ${label} (${reason})${detail}`);
+}
+
+/**
+ * chrome.cookies 在这里根本没有可用的宿主 —— 与「读失败」不同。
+ *
+ * 安卓 WebView 里 `contributorGlobal` 由 nativeAndroidBridge 装好；桌面主进程 / 单测里
+ * 可能压根没有 chrome.cookies。后者以前静默回空，改动前后行为要一样，所以仍然当作空。
+ */
+export function isCookieHostUnavailable(error) {
+  if (typeof chrome === 'undefined' || !chrome || !chrome.cookies) return true;
+  const message = String(error && error.message || '');
+  return /chrome\.cookies|Cannot read propert|cookies\.(get|getAll) is not a function|undefined \(reading '(get|getAll)'\)/i.test(message)
+    && typeof chrome.cookies.getAll !== 'function';
+}
+
 async function collectCookieHeader(domains, urls, keyNames, keyUrl) {
   const picked = new Map();
+  // 每一条腿的失败都记下来：全部读失败时抛出，哪怕别处读到了几条也不能当成完整凭据。
+  // 只有一部分失败时（比如某个域的超时）照旧往下走 —— 那几条读不到的键本来也常常不存在。
+  const failures = [];
+  const note = (error) => { failures.push(error); };
   await Promise.all([
     ...(domains || []).map(async (domain) => {
-      try { await mergeCookieList(picked, await chrome.cookies.getAll({ domain })); } catch (_) {}
+      try { await mergeCookieList(picked, await chrome.cookies.getAll({ domain })); } catch (error) { note(error); }
     }),
     ...(urls || []).map(async (url) => {
-      try { await mergeCookieList(picked, await chrome.cookies.getAll({ url })); } catch (_) {}
+      try { await mergeCookieList(picked, await chrome.cookies.getAll({ url })); } catch (error) { note(error); }
     }),
     ...(keyNames || []).map(async (name) => {
       try {
         const item = await chrome.cookies.get({ url: keyUrl, name });
         if (item && item.value) picked.set(name, item.value);
-      } catch (_) {}
+      } catch (error) { note(error); }
     }),
   ]);
+  const attempted = (domains || []).length + (urls || []).length + (keyNames || []).length;
+  if (attempted > 0 && failures.length === attempted) {
+    throw toCookieReadError(failures[0], 'collectCookieHeader');
+  }
   return Array.from(picked.entries())
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');
@@ -244,16 +488,19 @@ async function mergeCookieList(picked, list) {
 
 export async function getCookieHeader(domains, urls) {
   const picked = new Map();
+  const failures = [];
   for (const domain of domains || []) {
     try {
       await mergeCookieList(picked, await chrome.cookies.getAll({ domain }));
-    } catch (_) {}
+    } catch (error) { failures.push(error); }
   }
   for (const url of urls || []) {
     try {
       await mergeCookieList(picked, await chrome.cookies.getAll({ url }));
-    } catch (_) {}
+    } catch (error) { failures.push(error); }
   }
+  const attempted = (domains || []).length + (urls || []).length;
+  if (attempted > 0 && failures.length === attempted) throw toCookieReadError(failures[0], 'getCookieHeader');
   return Array.from(picked.entries())
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');
@@ -590,11 +837,15 @@ export function kgCookieAvatar(cookieHeader) {
   return url;
 }
 
+/**
+ * 读 MUSIC_U。读不到就是空串（**没登录**），桥读失败则抛 CookieReadError。
+ *
+ * 以前这里两种都回 `''`：它只服务 `getLoginInfo` 里那句「有 MUSIC_U 才算登录」，超时于是变成
+ * 「没登录」。现在 `getLoginInfo` 会把读失败带着抛出去，不会拿一次超时去判一个人的登录态。
+ */
 export async function getNeteaseMusicU() {
-  try {
+  return withCookieFallback(async () => {
     const item = await chrome.cookies.get({ url: 'https://music.163.com/', name: 'MUSIC_U' });
     return item && item.value ? item.value : '';
-  } catch (_) {
-    return '';
-  }
+  }, { label: 'MUSIC_U', fallback: '', isUnsupported: isCookieHostUnavailable });
 }

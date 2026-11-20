@@ -4,6 +4,14 @@
 // 新加的键追加进来；确实要废弃一个键（并做了迁移），从这里删掉并在提交里写明迁移。
 // 读法在 dev/dedicatus/storageKeys/scanStorageKeys.mjs，检查在 test/unit/dedicatus/contracts/storageKeys.test.ts。
 // 初始名单是 2026-11-08 的现状（297 个），同日补上渲染进程经 saveSettings 写进主进程的 12 个（扫描原先认不出）。src/stores 和 tuning 经 helper 拼出来的键由 D501（storeContract 快照）管，不在这里。
+//
+// 凭据的加密槽位不在这张表里：它们不是 localStorage / electron-store 的键，而是原生存
+// （FoliaSecureStore，Android Keystore 的 AES-GCM）里的一段加密文件，由 Web 侧经
+// src/nativeBridge/api/secureStore.js 按名字访问 —— 名字不是"存储键"，改名不受已发布键的约束。
+// 现有槽位：
+//   provider-netease-cookie / provider-qq-cookie / provider-kg-cookie —— 平台会话（H5）
+//   ai-keys        —— AI 的 API Key（H29，写入方是 settings/FoliaSettingsStore.kt）
+//   bodian-session —— 波点的 uid + token（H30）
 
 export const STORAGE_KEYS = [
     'main:AI_PROVIDER',

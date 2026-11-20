@@ -2416,6 +2416,93 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
+     * 读一条加密存储的凭据（[FoliaSecureStore]）。
+     *
+     * 平台 cookie 与账号 token 原来明文躺在页面 localStorage 里（`chrome.storage.local` 在安卓
+     * 就是 localStorage），任何能跑同源脚本的路径（已装模组、注入脚本、调试工具）一行就能取走长期
+     * 凭据（H5 / H30）。现在改由原生存：Web 侧只在真正要发请求的那一刻经这里取用，用完不回收。
+     *
+     * 答 `{ ok, found, decrypted, text }`：
+     *   - `found = false`：没存过（从没登录、或登出清掉了）；
+     *   - `found && decrypted`：`text` 是原文；
+     *   - `found && !decrypted`：文件在但解不开（换机、Keystore 重置），`text` 为 null。
+     *     调用方**不要**当成"没存过"，也不要据此写回明文 —— 让用户重新登录一次更干净。
+     */
+    @PluginMethod
+    fun readSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        // Keystore 解密要真正做一次运算，别压在桥线程上（登录 / 播放随时会来读它）。
+        BackgroundWork.bulk("secure-read") {
+            val result = JSObject()
+            try {
+                val stored = FoliaSecureStore.read(getContext(), slot)
+                result.put("ok", true)
+                result.put("found", stored.found)
+                result.put("decrypted", stored.decrypted)
+                if (stored.decrypted) result.put("text", stored.text) else result.put("text", JSObject.NULL)
+                call.resolve(result)
+            } catch (error: Exception) {
+                Log.w(TAG, "secure slot $slot could not be read", error)
+                call.reject("secure-read-failed", error)
+            }
+        }
+    }
+
+    /**
+     * 写一条加密存储的凭据。答 `{ ok }`。
+     *
+     * 写失败（Keystore 不可用、IO 错）答 `ok = false`，**绝不回退成明文**：调用方据此把这份数据
+     * 留在本次进程的内存里，并如实上报"这次没存上"，而不是偷偷落一份明文出去。
+     */
+    @PluginMethod
+    fun writeSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        val text = call.getString("text", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        BackgroundWork.bulk("secure-write") {
+            val result = JSObject()
+            result.put("ok", FoliaSecureStore.write(getContext(), slot, text))
+            call.resolve(result)
+        }
+    }
+
+    /** 抹掉一条加密存储的凭据（登出）。答 `{ ok }`；本来就没有也算抹掉了。 */
+    @PluginMethod
+    fun clearSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        BackgroundWork.bulk("secure-clear") {
+            val result = JSObject()
+            result.put("ok", FoliaSecureStore.clear(getContext(), slot))
+            call.resolve(result)
+        }
+    }
+
+    /** 这条凭据在不在（不解密）。答 `{ ok, exists }`。 */
+    @PluginMethod
+    fun hasSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        val result = JSObject()
+        result.put("ok", true)
+        result.put("exists", FoliaSecureStore.exists(getContext(), slot))
+        call.resolve(result)
+    }
+
+    /**
      * 把一个 ref 指向的音频**复制一份进 App 私有目录**，返回 `imported-xxx` 形式的新 ref。
      *
      * 为什么需要它：MediaStore 那一路（扫描设备音乐库得到的歌）是按 id **现读用户原文件**的，
