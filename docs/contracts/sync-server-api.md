@@ -10,6 +10,7 @@
 
 | 顺序 | 作用范围 | 行为 | 依据 |
 | --- | --- | --- | --- |
+| 0 | 所有路径 | 请求体超过 **2MB** → `413 {ok:false,error:'payload_too_large'}`，先看 `Content-Length`，超了连正文都不读（issue M34）。这一层在鉴权之前，所以 Bearer 那侧的 `/themes/put`、`/settings` 一样受它约束；公开接口自己的上限更严（云缓存 128KB、字体 40MB/2MB），不会被顶掉 | `app.ts:MAX_SYNC_BODY_BYTES` 与挂在它前面的 `bodyLimit` 中间件 |
 | 1 | 所有路径 | `/admin` 与 `/admin/*`：加 `Cache-Control: no-store`；管理员未配置 → `503 {ok:false,error:'admin_not_configured'}`；写操作跨源 → `403 {ok:false,error:'invalid_origin'}`。其余路径走公开 CORS：`Access-Control-Allow-Origin: *`、允许 `GET/POST/PUT/PATCH/DELETE/OPTIONS` 与 `Authorization, Content-Type, X-Folia-Cache-Token`；但**写请求**（非 GET/HEAD/OPTIONS）带外来 `Origin` 时先被 `403 {ok:false,error:'invalid_origin'}` 挡下（issue M36） | `app.ts` 的 `isAllowedPublicWriteOrigin` |
 | 2 | 所有路径 | `SYNC_TOKEN` 缺失或短于 8 字符 → `500 {ok:false,error:'SYNC_TOKEN is too weak. Must be at least 8 characters long.'}`。**公开接口也一起被拦**（它挂在 `app.use('*')`） | `app.ts:isAllowedPublicWriteOrigin` 之后的 `app.use('*', ...)` 令牌强度检查 |
 | 3 | 除 `/` 以外的所有路径 | 首次请求时建表/升级（`settings`、`themes`、`theme_buckets`、`font_market`、`font_files`、`font_previews`、`ai_cache`、`ai_cache_hits`、`ai_cache_backups`、`admin_sessions`），同一实例只做一次 | `app.ts:ensureSchema`、`app.ts:initializeSchema` |

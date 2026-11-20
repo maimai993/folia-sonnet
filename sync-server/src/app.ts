@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { cors } from 'hono/cors';
 import { bearerAuth } from 'hono/bearer-auth';
+import { bodyLimit } from 'hono/body-limit';
 import adminAuthRoutes, {
   pruneExpiredSessions,
   readAdminSession,
@@ -386,6 +387,24 @@ const isAllowedPublicWriteOrigin = (c: Context<{ Bindings: Env }>): boolean => {
   if (origin !== selfOrigin) return false;
   return c.req.header('Sec-Fetch-Site') !== 'cross-site';
 };
+
+/*
+ * 请求体上限（issue M34）：同步的 settings 与 themes 是 JSON，正常载荷是几 KB，
+ * 这里给到 2MB 是为了留足余量 —— 一次 500 条主题的批量写入也远低于它。
+ *
+ * 限制挂在公开网之前，所以 Bearer 那侧也会一起被挡住：以前 `/themes/put` 能收任意
+ * 大的数组，持令牌的人（或令牌泄漏后）可以一次把服务端的存储配额写满。
+ *
+ * 公开接口各有自己的更严上限，这里不会把它们的 413 顶掉：
+ * 云缓存 PUT 是 128KB（`aiCache.ts` 的 `MAX_REQUEST_BYTES`），字体上传是 40MB/2MB
+ * （`fonts.ts` 的 `MAX_FONT_BYTES` / `MAX_PREVIEW_BYTES`），都排在前面。
+ */
+const MAX_SYNC_BODY_BYTES = 2 * 1024 * 1024;
+
+app.use('*', bodyLimit({
+  maxSize: MAX_SYNC_BODY_BYTES,
+  onError: c => c.json({ ok: false, error: 'payload_too_large' }, 413),
+}));
 
 app.use('*', async (c, next) => {
   if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {
