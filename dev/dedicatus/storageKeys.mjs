@@ -183,8 +183,10 @@ export const STORAGE_KEYS = [
     'web:foliaAppliedMarketBackground',
     'web:foliaAppliedMarketFont',
     'web:foliaCloudSettings.v2',
-    /* v3 多了写入令牌，并且不再有内置云地址（issue H34 / C6）；v2 只作为迁移来源保留。 */
-    'web:foliaCloudSettings.v3',
+    /* v3 已废弃并从表里删掉（c3a54bb67 直接从 v3 跳到 v4）：它多了写入令牌、地址是空串，
+       而 v3 时代开关默认是关的，存下的 `false` 多半是从没动过开关的人留下的默认值。
+       升级后一律按默认打开算，不搬 v3 的任何状态，所以没有迁移、也不留登记。 */
+    'web:foliaCloudSettings.v4',
     'web:foliaFontMarketChoice',
     'web:foliaMachineCode',
     'web:foliaMarketRotation',
@@ -394,7 +396,14 @@ export const STORAGE_KEYS = [
     'web:remote_control_text_shade',
     'web:remote_video_export_preset_values',
     'web:render_pixel_ratio',
-    'web:rhine-resume',
+    /*
+     * 这里原本有 'web:rhine-resume'（RhineLab 旧页面的续播标记），随 7b4362eea
+     * 「接入 RhinE 主题骨架，撤掉 RhineLabUI 静态页」一起废弃：读写它的代码整页删了，
+     * 全仓再没有引用。按 D507「确要废弃，做好迁移后再从登记表删掉」删掉这条（issue #526）。
+     *
+     * 用户 localStorage 里可能还留着这个值 —— 没人读，无害，不必清理。将来 RhinE 若要
+     * 恢复「续播位置」，用新键，不要复用这个名字，免得和残留的旧值撞上。
+     */
     'web:rhine_card_visualizer',
     'web:scene_id',
     'web:scene_options',
