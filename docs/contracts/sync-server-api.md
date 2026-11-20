@@ -93,7 +93,8 @@ route /  (api)              /state、/settings*、/themes/*      app.ts:795
 { ok: true; accepted: true; protocol: 'settings-cas-v1'; revision: string; record: SettingsRecord }
 ```
 服务端自己生成单调的 `updatedAt`（不小于旧值 + 1ms），客户端保存前会核对回显的 `data` 与上传的一致（`syncClient.ts:102-118`）。该响应同样 `no-store`（`app.ts:540`）。
-- 不带 `expectedRevision`（旧客户端）：按时间戳 last-write-wins 写入，回 `{ ok: true }`。注意这条路径**可能什么都不写**（SQL 带 `WHERE excluded.updated_at >= settings.updated_at`，`app.ts:552-562`），旧客户端无法区分，这是已知的历史局限。
+- 不带 `expectedRevision`（旧客户端）：按时间戳 last-write-wins 写入，成功回 `{ ok: true }`。
+  - 旧的比服务端已有的更旧时**不再假装成功**：回 `409 { ok: false, error: 'settings_stale', stale: true, updatedAt: <服务端现有> }`，且不写入（`app.ts` 的 legacy 分支）。以前这条路径即使被 SQL 守卫 `WHERE excluded.updated_at >= settings.updated_at` 挡下也回 `{ok:true}`，等于静默丢数据（issue M37）。相等时间戳仍然写入。
 
 ### `GET /themes/manifest`
 依据：`app.ts:270-285`、`526`
@@ -242,6 +243,6 @@ route /  (api)              /state、/settings*、/themes/*      app.ts:795
 ## 8. 与客户端的兼容约定
 
 - 客户端解析器会**拒绝**不合规的响应，而不是猜测：设置记录要求 `schemaVersion` 为 1 或 2、`updatedAt` 可解析、`data` 是对象（`syncSchema.ts:27-28,106-116`）；每个字段再按类型逐条过滤（`syncSchema.ts:46-104`）。
-- 新服务端 + 旧客户端：旧客户端不带 `expectedRevision`，走 §4 的 LWW 路径；新服务端仍然回 `{ok:true}`。
+- 新服务端 + 旧客户端：旧客户端不带 `expectedRevision`，走 §4 的 LWW 路径；正常写入回 `{ok:true}`，时间戳比服务端旧则回 `409 settings_stale`（issue M37）。
 - 旧服务端 + 新客户端：`/settings/confirmation` 拿不到就明确失败、要求升级服务端（`syncClient.ts:87-96`），主题同步可单独继续。
 - 未知路径：没有 Bearer → 401；有 Bearer → 404。不要用 404 判断「这个服务端有没有某个接口」，先看 `/health` 的 `schemaVersion`（`app.ts:492`）。

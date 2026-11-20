@@ -622,6 +622,25 @@ api.put('/settings', async (c) => {
     if (!written) return c.json({ ok: false, error: 'settings_conflict' }, 409);
     return c.json({ ok: true, accepted: true, ...await settingsConfirmation(written) });
   }
+  /*
+   * 老客户端路径：不携带 expectedRevision，只能按时间戳做守卫（issue M37）。
+   *
+   * 这里原来不管有没有真的写进去都返回 `{ ok: true }` 并记一条「已更新」——时钟回拨、
+   * 多设备并发或网络重放下设置被静默丢掉，用户以为存上了，日志还写着成功，排查时会被误导。
+   *
+   * 判据显式查一次现有时间戳，而不是看 `run()` 的 meta.changes：本地测试用的 D1 模拟器
+   * 不返回 changes，靠它判断的话这条路径在测试里根本走不到。查询与写入都在同一条 SQL 守卫
+   * 下，但判断「会不会写」这次只需一个读，成本可以接受。
+   */
+  const existing = await readSettingsRow(c.env.FOLIA_SYNC_DB);
+  if (existing && body.updatedAt < existing.updated_at) {
+    console.log(`[Sync] Settings write skipped as stale (incoming ${body.updatedAt} < stored ${existing.updated_at})`);
+    /*
+     * 409 而不是 200：老客户端看到非 2xx 会报「同步失败」，这正是实情 —— 这次确实没存上。
+     * 同时带上 `stale: true` 与现有时间戳，新客户端能据此判断是「对方更新」而非故障。
+     */
+    return c.json({ ok: false, error: 'settings_stale', stale: true, updatedAt: existing.updated_at }, 409);
+  }
   await c.env.FOLIA_SYNC_DB
     .prepare(`
       INSERT INTO settings (key, value_json, updated_at)
@@ -633,7 +652,7 @@ api.put('/settings', async (c) => {
     `)
     .bind('visual', JSON.stringify(body), body.updatedAt)
     .run();
-  
+
   console.log(`[Sync] Updated settings (timestamp: ${body.updatedAt})`);
   return c.json({ ok: true });
 });
