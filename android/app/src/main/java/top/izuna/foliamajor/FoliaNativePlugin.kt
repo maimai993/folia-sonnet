@@ -3568,6 +3568,19 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
+     * AI 失败时回给页面的那一句：一律过脱敏（M29）。
+     *
+     * 原先只有 `AiException` 的各个抛出点自己调了 `AiEndpoints.redact`，兜底的
+     * `Exception` 分支把 `error.message` 原样拼进 reject —— 服务商在错误消息里回显
+     * 「…?key=xxx」是常见现象，那串密钥会直接进页面的错误文案。收敛到这一个入口，
+     * 以后新增失败分支也在出口被兜住，不用每个分支都记得调。
+     *
+     * 脱敏只换掉凭据值，错误类型与主机名照旧保留 —— 排查要的是那些。
+     */
+    private fun aiFailureText(error: Throwable): String =
+        top.izuna.foliamajor.ai.AiEndpoints.redact(error.message ?: "unknown")
+
+    /**
      * 原生跑一次 AI 补全。请求由原生发起：WebView 冻不冻结都与它无关。
      *
      * 返回 `{ text }`；失败 reject，错误码前缀与 Web 侧同一族
@@ -3598,9 +3611,19 @@ class FoliaNativePlugin : Plugin() {
                 out.put("text", text)
                 call.resolve(out)
             } catch (error: top.izuna.foliamajor.ai.AiCompletion.AiException) {
-                call.reject("${error.code}: ${error.message ?: ""}".trimEnd(':', ' '))
+                /*
+                 * AiException 的各个抛出点已经过了 `AiEndpoints.redact`，这里再过一遍是为了
+                 * 「所有失败路径都走同一道门」（M29）：以后新增抛出点忘了脱敏，也在出口被兜住。
+                 * redact 是幂等的，重复处理不会改坏已经是 [redacted] 的文本。
+                 */
+                call.reject("${error.code}: ${aiFailureText(error)}".trimEnd(':', ' '))
             } catch (error: Exception) {
-                call.reject("ai-request-failed: ${error.message ?: "unknown"}")
+                /*
+                 * 兜底分支原先直接把 `error.message` 拼进 reject（M29）。JSON 解析、URL 构造、
+                 * 非预期类型这些岔子的 message 常带完整 URL，而 Gemini 走代理时 key 就在
+                 * query 上 —— 不脱敏就等于把密钥原样送到页面的错误文案里，进而进日志、进截图反馈。
+                 */
+                call.reject("ai-request-failed: ${aiFailureText(error)}")
             }
         }
     }
