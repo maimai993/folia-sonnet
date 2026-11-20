@@ -25,6 +25,13 @@ object AiCompletion {
 
     private const val TAG = "AiCompletion"
 
+    /**
+     * 错误响应体最多读这么多字符（issue M31）。
+     *
+     * 诊断只需要开头那一段；自定义端点回一整页 HTML 时不该整段进内存。超出截断并打标。
+     */
+    private const val MAX_ERROR_BODY_CHARS = 8_000
+
     private val client: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
@@ -200,7 +207,13 @@ object AiCompletion {
                 return text
             }
             if (provider == "openai" || (response.code != 400 && response.code != 422)) fail(response)
-            val errorText = response.body?.string() ?: ""
+            /*
+             * 响应体只能读一次（issue M31）。这里读出来的文本必须往下传：降级判断用完它之后，
+             * 若两次降级都不成立就走 fail，而 fail 原来自己去 `response.body.string()`——
+             * 那时流已经空了，拿到的是空串。于是「参数降级链走到尽头」这条最需要诊断信息的
+             * 收尾路径上，用户和日志看到的错误详情永远是空的。
+             */
+            val errorText = readBodyText(response)
             if (requestBody.has("response_format") && rejects(response.code, errorText, "response_format")) {
                 requestBody.remove("response_format")
                 droppedFormat = true
@@ -213,7 +226,7 @@ object AiCompletion {
                 Log.i(TAG, "[ai] endpoint rejected max_tokens; retrying with max_completion_tokens")
                 continue
             }
-            fail(response)
+            fail(response, errorText)
         }
     }
 
@@ -264,8 +277,34 @@ object AiCompletion {
                         AiEndpoints.redact(error.message ?: "network error").take(300))
             }
 
-    private fun fail(response: okhttp3.Response): Nothing {
-        val body = try { response.body?.string() ?: "" } catch (error: Exception) { "" }
+    /**
+     * 把响应体读成文本（issue M31），带长度上限。
+     *
+     * 自定义端点可能回一整页 HTML；整段读进内存没有意义，诊断也只需要开头那一段。
+     * 超长按字符截断并打标，不是读到一半就失败。读完显式 close，连接不必等 GC 才归还。
+     */
+    private fun readBodyText(response: okhttp3.Response): String {
+        val body = response.body ?: return ""
+        return try {
+            val text = body.string()
+            if (text.length > MAX_ERROR_BODY_CHARS) {
+                text.take(MAX_ERROR_BODY_CHARS) + "…（已截断，原始长度 ${text.length}）"
+            } else {
+                text
+            }
+        } catch (error: Exception) {
+            ""
+        } finally {
+            runCatching { body.close() }
+        }
+    }
+
+    /** 读不到响应体时用这个：状态码还在，详情留空。 */
+    private fun fail(response: okhttp3.Response): Nothing = fail(response, "")
+
+    /** 错误详情优先用调用方已经读好的文本（响应体只能读一次）。 */
+    private fun fail(response: okhttp3.Response, preReadBody: String): Nothing {
+        val body = if (preReadBody.isNotEmpty()) preReadBody else readBodyText(response)
         val detail = try {
             val parsed = JSONObject(body)
             val error = parsed.opt("error")
