@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    android/app/src/main/res/xml/data_extraction_rules.xml
+    Android 12（API 31）及以上的备份 / 换机规则（android:dataExtractionRules）。
+
+    和 backup_rules.xml 同一个理由，只是新系统把「云备份」与「设备间直传」拆成了两节，
+    两节都要排除 —— 否则关掉了云备份、换机直传照样把凭据带过去。
+
+    为什么保留 allowBackup 而不是关掉：关掉等于连普通设置一起不备份，用户换机后所有偏好都得重设。
+    这里只排除凭据类的东西，其他照旧（不写 <include> 的项走默认：全备份）。
+
+    排除清单与 backup_rules.xml 一一对应，改一处要同时改另一处。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <!--
+            folia.settings：设置 blob。AI 的 API Key 从 H29 起已经不在里面（改存 no_backup 目录下的
+            加密文件），但 WebView 的 localStorage 镜像可能还留着旧版本写进去的一份，整份排除最稳。
+        -->
+        <exclude domain="sharedpref" path="folia.settings.xml" />
+        <exclude domain="sharedpref" path="folia.settings" />
+        <!-- WebView 的 localStorage 数据库：旧版本平台 cookie 明文的落脚点（H5） -->
+        <exclude domain="database" path="webview" />
+        <exclude domain="database" path="webview-journal" />
+        <!-- 桥的会话备份（Capacitor 的存储插件） -->
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    </cloud-backup>
+    <!--
+        换机直传一节：以上列出的项同样不跟着走。密文换个设备也解不开（Keystore 的密钥不出本机），
+        带过去只会让用户看到一条"读不出来"，不如让他重新登录一次。
+    -->
+    <device-transfer>
+        <exclude domain="sharedpref" path="folia.settings.xml" />
+        <exclude domain="sharedpref" path="folia.settings" />
+        <exclude domain="database" path="webview" />
+        <exclude domain="database" path="webview-journal" />
+        <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+    </device-transfer>
+</data-extraction-rules>
