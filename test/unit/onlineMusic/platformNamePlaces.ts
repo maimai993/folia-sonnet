@@ -1,4 +1,4 @@
-﻿// test/unit/onlineMusic/platformNamePlaces.ts
+// test/unit/onlineMusic/platformNamePlaces.ts
 // The files outside a platform's own folders that name the platform, with the number of lines
 // that do (platformNameCount.ts counts them) and why those lines may stay. The numbers only go
 // down: omniArchitecture.test.ts fails when a file names a platform more often than it says
@@ -211,12 +211,15 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/services/onlineMusic/omni/providerMethods.ts': { n: { netease: 2, kugou: 2, fnmusic: 1 }, kind: 'doc', why: 'raised by the upstream merge 2026-10-17' },   // comments only,
     'src/services/onlineMusic/onlineCoverFallback.ts': { n: { netease: 2, qq: 1, kugou: 2, fnmusic: 4, feiniu: 20 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/services/onlineMusic/providerAccountCache.ts': { n: { kugou: 1 }, kind: 'doc' },   // comments only,
-    'src/services/onlineMusic/providerRegistry.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 2, spotify: 4, qishui: 6, appleMusic: 2, fnmusic: 7, feiniu: 4, lxmusic: 3, bilibili: 3 }, kind: 'list', why: 'the list of platforms: where a platform is added. fnmusic appears only in the note explaining why this fork registers its own 飞牛 adapter instead of the upstream one' },
+    'src/services/onlineMusic/providerRegistry.ts': { n: { netease: 2, qq: 2, kugou: 2, bodian: 2, ytm: 2, spotify: 4, qishui: 4, appleMusic: 2, fnmusic: 7, feiniu: 4, lxmusic: 4, bilibili: 3 }, kind: 'list', why: 'the list of platforms: where a platform is added. fnmusic appears only in the note explaining why this fork registers its own 飞牛 adapter instead of the upstream one; the upstream 汽水 folder is gone (issue M19), so its note names it once' },
     'src/services/onlineMusic/qishuiCatalog.ts': { n: { qishui: 39 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: the catalogue and the feed' },
+    // 上游那份未注册的 `qishui/` 整份删掉以后（issue M19），它的「失败是什么意思」跟着注册的那份
+    // 留在根目录（按注册的 transport 实际交出来的错重写），接上以后界面才按运行环境 / 本地桥 / 平台码分开说。
+    'src/services/onlineMusic/qishuiFailure.ts': { n: { qishui: 6 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: what a failed request means. Moved out of the unregistered upstream `qishui/` folder when that whole folder went (issue M19), and wired into the registered adapter, which had no describeFailure before' },
     'src/services/onlineMusic/qishuiLibrary.ts': { n: { qishui: 16 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: the account library' },
     'src/services/onlineMusic/qishuiMutations.ts': { n: { qishui: 19 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: likes and playlist edits' },
-    'src/services/onlineMusic/qishuiNormalize.ts': { n: { netease: 1, qq: 1, kugou: 1, qishui: 28 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: payload normalisation' },
-    'src/services/onlineMusic/qishuiProvider.ts': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, qishui: 115 }, kind: 'doc' },
+    'src/services/onlineMusic/qishuiNormalize.ts': { n: { netease: 1, qq: 1, kugou: 1, qishui: 30 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: payload normalisation. The upstream unregistered folder is gone (issue M19), so the image helper its public-API neighbour borrows lives here now, next to the two lines that explain it' },
+    'src/services/onlineMusic/qishuiProvider.ts': { n: { netease: 1, qq: 1, kugou: 1, bodian: 1, qishui: 117 }, kind: 'doc', why: 'the registered 汽水 adapter. The header note that used to say which of two 汽水 implementations was registered now says there is only one (issue M19)' },
     'src/services/onlineMusic/qishuiTransport.ts': { n: { qishui: 33 }, kind: 'file', why: 'the flat half of this fork\'s 汽水 adapter: the bridge contract of both protocols' },
     'src/services/onlineMusic/qq/qqProvider.ts': { n: { kugou: 1 }, kind: 'doc' },   // comments only,
     'src/services/onlineMusic/qq/qqTransport.ts': { n: { netease: 1 }, kind: 'doc' },   // comments only,

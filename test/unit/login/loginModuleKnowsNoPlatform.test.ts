@@ -45,8 +45,8 @@ describe('what each platform declares for the sign-in window', () => {
             feiniu: { letter: '飞', color: '#0ea5e9' },
             ytm: { letter: 'Y', color: '#e11d48' },
             spotify: { letter: 'S', color: '#22c55e' },
-            // providerRegistry 保留的是 fork 这份 qishui（手机协议扫码），它的记号颜色是橙 #f97316；
-            // 上游 qishui/qishuiProvider 那份（桌面 electron 桥）才是青 #19a58c，未注册。
+            // providerRegistry 注册的是 `qishuiProvider.ts` 那份（手机协议扫码），它的记号颜色是橙 #f97316。
+            // 上游 `qishui/` 那份（桌面 electron 桥，青 #19a58c）已经整份删除（issue M19）。
             qishui: { letter: '汽', color: '#f97316' },
             appleMusic: { letter: 'A', color: '#fa243c' },
             // 洛雪免登录，但登录窗口仍要画出它这一行的记号（点它直接打开音源工作台）。
