@@ -392,7 +392,8 @@ export default {
         "stageTitle": "莱茵生命",
         "stageHint": "三维专辑架",
         "rotateHint": "正在切换到横屏…",
-        "play": "播放"
+        "play": "播放",
+        "assetsMissing": "图片素材包还没有下载，当前以纯色显示。下载入口随之后的版本提供。"
     },
     "libraryTui": {
         "back": "返回",

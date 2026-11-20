@@ -383,7 +383,8 @@ export default {
         "stageTitle": "Rhine Lab",
         "stageHint": "3D album shelf",
         "rotateHint": "Switching to landscape…",
-        "play": "Play"
+        "play": "Play",
+        "assetsMissing": "Gói hình ảnh chưa được tải xuống nên chủ đề hiển thị bằng màu phẳng. Tuỳ chọn tải xuống sẽ có trong bản sau."
     },
     "libraryTui": {
         "back": "Quay lại",

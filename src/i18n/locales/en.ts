@@ -383,7 +383,8 @@ export default {
         "stageTitle": "Rhine Lab",
         "stageHint": "3D album shelf",
         "rotateHint": "Switching to landscape…",
-        "play": "Play"
+        "play": "Play",
+        "assetsMissing": "The image pack is not downloaded yet, so the theme shows flat colours. A download option is coming in a later build."
     },
     "libraryTui": {
         "back": "Back",
