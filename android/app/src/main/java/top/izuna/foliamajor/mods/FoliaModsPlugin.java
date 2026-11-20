@@ -94,7 +94,19 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
     public void setModEnabled(PluginCall call) {
         JSObject args = new JSObject();
         args.put("id", call.getString("id", ""));
-        args.put("enabled", Boolean.TRUE.equals(call.getBoolean("enabled", Boolean.FALSE)));
+        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", Boolean.FALSE));
+        args.put("enabled", enabled);
+        /*
+         * 用户主动启用 = 「再给我试一次」（issue H16）。
+         *
+         * Node 运行时连崩到上限后就不再自动重启，那时候开关打开本该立刻重来一次 ——
+         * 否则用户会觉得「开关点了没反应」，真正的出路只有杀进程。这里清掉连崩计数，
+         * 并确保运行时装着：崩过的运行时 started 已经放回去了，start 会重新起线程。
+         */
+        if (enabled) {
+            FoliaNodeRuntime.resetFailure();
+            FoliaNodeRuntime.start(getContext(), null);
+        }
         /*
          * 启用时要带上用户在确认框里看到的那份内容摘要（sha256:<hex>）。
          * 宿主会拿它和当前目录重新算出来的摘要比对，对不上就拒绝启用 ——

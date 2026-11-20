@@ -67,6 +67,26 @@ public final class FoliaNodeRuntime {
     private static boolean ready = false;
     private static String failure = null;
 
+    /**
+     * 连续崩溃次数（issue H16）。
+     *
+     * 以前 `started` 一经置位就再也不会复位：Node 线程崩了、`nativeStart` 返回非零、
+     * 或者宿主脚本加载失败之后，再调 `start()` 只会因为 `started == true` 直接返回，
+     * 既不重启也不报错。用户看到的是「模组功能永久失效」，唯一出路是杀进程。
+     *
+     * 现在失败一律把 `started` 放回去，并记一次连崩；连续崩到 [MAX_CRASH_STREAK] 就不再
+     * 自动重试（防止崩溃循环把电量和日志刷爆），改由 `failure` 把原因交给界面。
+     * `notifyReady` 成功则清零——能起来就说明这不是个必然失败的配置。
+     *
+     * 没有单测：这个类的静态初始化要 `System.loadLibrary` 加载 libnode.so，纯 JVM 单测
+     * 一碰就 UnsatisfiedLinkError（试过，跑不起来），所以这条契约只能靠真机验证
+     * 「崩溃后重新启用模组能不能恢复」。
+     */
+    private static int crashStreak = 0;
+
+    /** 连续崩这么多次就不再自动重启；用户手动重新启用仍会再试一次。 */
+    private static final int MAX_CRASH_STREAK = 3;
+
     /*
      * 先 libnode 再桥接库，顺序不能反。
      *
@@ -105,6 +125,15 @@ public final class FoliaNodeRuntime {
         synchronized (LOCK) {
             if (started) {
                 if (ready && onReady != null) mainHandler.post(onReady);
+                return;
+            }
+            /*
+             * 连续崩到上限就停手（issue H16）：再起也是同样的死法，只是多刷几屏日志、
+             * 多耗几份电。原因已经躺在 [failure] 里，界面能读到「为什么用不了」。
+             * 用户主动重新启用模组会调 [resetFailure] 把这条路重新打开。
+             */
+            if (crashStreak >= MAX_CRASH_STREAK) {
+                Log.w(TAG, "Node 连续崩溃 " + crashStreak + " 次，停止自动重启：" + failure);
                 return;
             }
             started = true;
@@ -213,9 +242,27 @@ public final class FoliaNodeRuntime {
         synchronized (LOCK) {
             ready = false;
             failure = reason;
+            /*
+             * 关键的一行（issue H16）：把 `started` 放回去，否则这一次失败就等于把这道门
+             * 永久焊死了，之后任何一次 start 都只会被第一行的 `if (started)` 挡掉。
+             */
+            started = false;
+            crashStreak += 1;
         }
         Log.e(TAG, reason, error);
         pendingReadyCallbacks.clear();
+    }
+
+    /**
+     * 用户主动重新启用模组时调用（issue H16）：清掉连崩计数与失败原因，让 [start] 再试一次。
+     *
+     * 只在「人说再来一次」的时候调；不想让它在崩溃回调里自动发生，那会退化成无限重启。
+     */
+    public static void resetFailure() {
+        synchronized (LOCK) {
+            crashStreak = 0;
+            failure = null;
+        }
     }
 
     private static final CopyOnWriteArrayList<Runnable> pendingReadyCallbacks = new CopyOnWriteArrayList<>();
@@ -225,6 +272,8 @@ public final class FoliaNodeRuntime {
         synchronized (LOCK) {
             ready = true;
             failure = null;
+            // 起来了就说明这套配置能跑，连崩计数清掉（issue H16）。
+            crashStreak = 0;
         }
         for (Runnable callback : pendingReadyCallbacks) {
             if (callback != null) mainHandler.post(callback);
