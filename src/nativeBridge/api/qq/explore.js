@@ -551,16 +551,34 @@ export async function readUserCloud(params, cookieHeader) {
         hasMore = data.has_more === 1 && listOf(data.info_list).length > 0;
         if (entries.length >= offset + limit) break;
     }
-    const count = Math.max(total ?? 0, entries.length);
+    /*
+     * 总数有两种情况，不能混成一个数（issue H31）。
+     *
+     * 服务端给了 total 就用它；没给的时候以前是 `Math.max(total ?? 0, entries.length)` ——
+     * 把「已经读到的条数」当成总数交出去。于是调用方看到 count 恰好等于本页条数，判定
+     * 「没有更多了」，列表被静默截断在这一次读到的量上。
+     *
+     * 现在分成两个字段：count 是**知道的**总数（未知就是已读条数，别处拿来显示没关系），
+     * hasMore 单独按服务端的 has_more 与是否取满来判断，不再被 count 带偏。
+     */
+    const knownTotal = typeof total === 'number' && Number.isFinite(total) && total >= 0 ? total : null;
+    const count = knownTotal != null ? Math.max(knownTotal, entries.length) : entries.length;
     const slice = entries.slice(offset, offset + limit)
         .filter((entry) => entry && typeof entry === 'object')
         .map(toCloudSong);
     const end = Math.min(offset + limit, entries.length);
+    /*
+     * 还有没有更多：
+     *   · 这一页是截出来的（end 还没读到 entries 末尾）→ 有；
+     *   · 读到末尾了 → 看服务端最后一页的 has_more，**不要**跟 count 比：
+     *     总数未知时 count 就是已读条数，比一下永远「没了」，那正是列表被截断的病根。
+     */
+    const reachedEnd = end >= entries.length;
     return {
         code: 0,
         data: slice,
         count,
-        hasMore: end < count || (hasMore && end >= entries.length),
+        hasMore: reachedEnd ? Boolean(hasMore) : true,
     };
 }
 
