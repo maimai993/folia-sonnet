@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import * as pixi from 'pixi.js';
 import { AnimatedGraphics } from '@/components/visualizer/sonnet/sonnetAnimatedGraphics';
 
@@ -7,6 +7,9 @@ import { AnimatedGraphics } from '@/components/visualizer/sonnet/sonnetAnimatedG
 // unless the shared path state carries them into a neighbour (arc-led strokes). And an
 // AnimatedGraphics is not redrawn for the progress it was last drawn for: lock when it must be,
 // another progress, and another recorded command at the same progress.
+// Also locks the build-time determinism (issue M9): a circle's record is the whole circle, start
+// angle and direction included, so rebuilding a scene must record the same arc instead of
+// sampling Math.random.
 const instructions = (graphics: AnimatedGraphics) => graphics.display.context.instructions;
 
 describe('Sonnet AnimatedGraphics pending commands', () => {
@@ -78,5 +81,37 @@ describe('sonnet AnimatedGraphics.update', () => {
         graphics.moveTo(0, 5).lineTo(10, 5).stroke({ width: 1 });
         graphics.update(1);
         expect(counts).toEqual({ clears: 2, strokes: 3 });
+    });
+});
+
+describe('sonnet AnimatedGraphics records deterministic geometry (M9)', () => {
+    let randomCalls = 0;
+
+    beforeEach(() => {
+        randomCalls = 0;
+        let state = 7;
+        Math.random = () => {
+            randomCalls += 1;
+            state = (state * 16807) % 2147483647;
+            return state / 2147483647;
+        };
+    });
+
+    /** The recorded circle path, as the animation would replay it. */
+    const circlePath = () => {
+        const graphics = new AnimatedGraphics(pixi);
+        graphics.circle(20, 20, 6).fill({ color: 0xffffff });
+        graphics.update(1);
+        const [fill] = instructions(graphics);
+        const [hint, arc] = (fill.data as { path: pixi.GraphicsPath }).path.instructions;
+        return { hint: hint.data, arc: arc.data.slice(0, 3) };
+    };
+
+    it('records the same circle start angle and direction on every build', () => {
+        const first = circlePath();
+        const second = circlePath();
+
+        expect(randomCalls).toBe(0);
+        expect(second).toEqual(first);
     });
 });
