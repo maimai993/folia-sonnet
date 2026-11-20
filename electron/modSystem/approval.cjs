@@ -58,7 +58,7 @@ const TRUST_DIALOG_LOCALE = {
         permissions: '宣告的權限：',
         noPermissions: '宣告的權限：無',
         platformRead: (platforms) => `以你的帳號讀取平臺數據（實驗介面 platform.raw）：${platforms}。模組會以你在 Folia 登入的帳號讀取這些平臺上的資料，例如聽歌記錄。`,
-        processCapabilities: (capabilities) => `Node 行程能力：${capabilities}。這些能力讓它超出通常的檔案讀寫（fs / path / crypto 等），${capabilities.includes('process.run') ? '可以啟動外部程式；' : ''}${capabilities.includes('network.socket') ? '可以自己開網路連線，不經過 Folia 的連網白名單；' : ''}未宣告的能力在執行時會被拒絕。`,
+        processCapabilities: (capabilities) => `Node 程序能力：${capabilities}。這些能力讓它超出通常的檔案讀寫（fs / path / crypto 等），${capabilities.includes('process.run') ? '可以啟動外部程式；' : ''}${capabilities.includes('network.socket') ? '可以自己開網路連線，不經過 Folia 的連網白名單；' : ''}未宣告的能力在執行時會被拒絕。`,
         platformWrite: (platforms) => `以你的帳號改動平臺數據：${platforms}。模組還可以改動這些平臺帳號裡的內容，例如點贊、歌單和關注。`,
         queueReplace: '替換播放佇列（playback.queue）：模組可以一次換掉整個播放佇列，並結束私人 FM。替換後 Folia 會提示是哪個模組換的；在佇列再被改動之前，可以撤銷回替換前的佇列。',
         equalizerControl: '會改寫你的音效設定（equalizer.control）：模組可以切換你的音效預設，或換上它自己的等化器曲線。你的自定義音效不會被覆蓋，在音訊效果器裡隨時可以換回。',
