@@ -200,28 +200,6 @@ const serializeBody = async (body: BodyInit | null | undefined): Promise<{
 };
 
 /**
- * 桥的 `chrome.storage.local` 在页面 localStorage 里的键前缀（M3）。
- *
- * 不加前缀时，桥写进去的每个键都与页面自己的键**同名同域**：内置代码写的登录态备份、
- * 设备号缓存等等，页面上任何脚本 `localStorage.getItem('kgVipSession')` 就读到了；
- * 反过来，页面脚本也能往这些键里写，内置代码下一次读到的就是被替换过的值（比如把一份
- * 别人的会话塞进「已登录」那条）。
- *
- * 前缀把两侧隔开：`get` 只认带前缀的键（`keys == null` 时也只枚举这一片），`set` / `remove`
- * 都只碰这一片。已经发布过的键名本身不改 —— 变的只是它在 localStorage 里的落点。
- * 旧版本留在无前缀键上的值照原样放着，不主动搬也不删（那份数据本来就在页面上读得到，
- * 搬过来只会把「页面上看不懂的键」变成「桥会读的键」）。
- */
-const BRIDGE_STORAGE_PREFIX = 'foliaBridge:';
-
-/** 页面 localStorage 里，桥的一个逻辑键落到哪个物理键。 */
-const bridgeStorageKey = (key: string): string => `${BRIDGE_STORAGE_PREFIX}${key}`;
-
-const isBridgeStorageKey = (key: string): boolean => key.startsWith(BRIDGE_STORAGE_PREFIX);
-
-const stripBridgeStoragePrefix = (key: string): string => key.slice(BRIDGE_STORAGE_PREFIX.length);
-
-/**
  * 把 chrome.* 补齐成扩展的样子。
  *
  * 内置的 API 模块是直接从浏览器扩展里搬过来的，它们读写 cookie 走 chrome.cookies、
@@ -240,29 +218,17 @@ export const installCookieShim = (plugin: NativePlugin) => {
     id: 'folia-native-android',
     getManifest: () => ({ version: BRIDGE_VERSION }),
   };
-  /*
-   * 这个宿主有哪些能力（M3）。内置的接口代码原先靠「某个函数在不在」猜，猜错的代价是
-   * 静默失效（DNR 那条就是：桥装了它、调用方以为注入生效，其实什么都没发生）。
-   */
-  chromeObject.foliaNative = {
-    capabilities: {
-      /** 有没有可以逐跳复核的声明式请求改写（扩展才有；安卓桥没有）。 */
-      dnr: false,
-      /** 白名单主机的响应能从桥这一侧交出原始 Set-Cookie（M1）。 */
-      bridgedResponseCookies: true,
-    },
-  };
   chromeObject.storage = {
     local: {
       get: async (keys?: string | string[] | null) => {
         const result: Record<string, unknown> = {};
         const requested = keys == null
-          ? Object.keys(localStorage).filter(isBridgeStorageKey).map(stripBridgeStoragePrefix)
+          ? Object.keys(localStorage)
           : Array.isArray(keys)
             ? keys
             : [keys];
         requested.forEach((key) => {
-          const value = localStorage.getItem(bridgeStorageKey(String(key)));
+          const value = localStorage.getItem(String(key));
           if (value != null) {
             try {
               result[String(key)] = JSON.parse(value);
@@ -275,12 +241,12 @@ export const installCookieShim = (plugin: NativePlugin) => {
       },
       set: async (values: Record<string, unknown>) => {
         Object.entries(values || {}).forEach(([key, value]) => {
-          localStorage.setItem(bridgeStorageKey(key), JSON.stringify(value));
+          localStorage.setItem(key, JSON.stringify(value));
         });
       },
       remove: async (keys: string | string[]) => {
         const list = Array.isArray(keys) ? keys : [keys];
-        list.forEach((key) => localStorage.removeItem(bridgeStorageKey(key)));
+        list.forEach((key) => localStorage.removeItem(key));
       },
     },
   };
@@ -345,17 +311,10 @@ export const installCookieShim = (plugin: NativePlugin) => {
       return ok ? entries : null;
     },
   };
-  /*
-   * 扯掉 `chrome.declarativeNetRequest` 的假实现（M3）。
-   *
-   * 以前这里放的是一个「恒成功」的空壳：`updateSessionRules` 收下规则就 resolve，一条也没装。
-   * 内置的接口代码据此以为「cookie 注入已经生效」，实际发出去的请求里根本没有那个头 ——
-   * 失败被推迟到之后几步，表现成莫名其妙的空响应，而不是一句明确的错。空壳还会让
-   * `chrome.declarativeNetRequest` 这个属性存在，任何按存在性判断的代码都会走错分支。
-   *
-   * 现在有意**不定义**它（保持 undefined）：安卓桥没有声明式请求改写，需要知道这一点的
-   * 代码读 chromeObject.foliaNative.capabilities.dnr（见 installCookieShim）。
-   */
+  chromeObject.declarativeNetRequest = {
+    RuleActionType: { MODIFY_HEADERS: 'modifyHeaders' },
+    updateSessionRules: async () => undefined,
+  };
   chromeObject.tabs = {
     create: async ({ url }: { url?: string } = {}) => {
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
