@@ -263,11 +263,20 @@ const FoliaWallpaper = registerPlugin<FoliaWallpaperPlugin>('FoliaWallpaper');
 export const publishLyricsWallpaper = async (
     options: FoliaWallpaperPublishOptions,
 ): Promise<void> => {
-    if (isNativePlaybackReconciling()) return;
+    if (isNativePlaybackReconciling()) {
+        /*
+         * 对账期丢弃是**有意的**：这会儿原生还在确认「当前到底是哪首」，push 下去的
+         * 时间轴可能属于上一首。但以前它一声不响（issue H11），于是「壁纸还是上一首的词」
+         * 在日志里追不到原因 —— 记一行，带上被判丢的是哪首。
+         */
+        console.info('[wallpaper] lyrics push dropped while native playback is reconciling', options.title ?? '');
+        return;
+    }
     try {
         await FoliaWallpaper.publish(options);
-    } catch {
-        // 壁纸没启用或插件不可用时静默失败：它不该影响播放本身。
+    } catch (error) {
+        // 壁纸没启用或插件不可用时静默失败：它不该影响播放本身。但要说清楚是哪个原因。
+        console.warn('[wallpaper] lyrics publish failed', error);
     }
 };
 
