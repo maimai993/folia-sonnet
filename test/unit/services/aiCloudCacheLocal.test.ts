@@ -26,6 +26,9 @@ vi.mock('@/services/db', () => ({
 vi.mock('@/services/foliaCloud', () => ({
     isFoliaCloudCacheEnabled: () => true,
     resolveCloudApiUrl: (path: string) => `https://cloud.test/api/${path}`,
+    /* 写入准入（issue C6）：这套用例验的是本地一层，令牌只要「有」，能让推/拉照常走完。 */
+    resolveCloudWriteToken: () => 'synthetic-write-token',
+    CLOUD_WRITE_TOKEN_HEADER: 'X-Folia-Cache-Token',
     DEFAULT_CLOUD_BASE_URL: 'https://cloud.test',
 }));
 
@@ -58,18 +61,41 @@ const jsonResponse = (body: unknown, ok = true) => ({
     json: async () => body,
 }) as unknown as Response;
 
-const hitBody = { hit: true, entry: { payload: { theme: { mood: 'cloud' } } } };
+/*
+ * 两条 mock 响应：一条**带合法摘要**（会被采信），一条不带（会被当没命中）。
+ *
+ * issue C6 之后客户端会复算 `payloadDigest`，摘要绑的是 `[verifyKey, kind, key, writer, payloadJson]`。
+ * 这里照同一套规则算一份 —— 键是固定的，所以摘要也是固定的，不必每个用例现算。
+ */
+const VERIFY_KEY = 'folia-cache-digest-v1';
+const CLOUD_PAYLOAD = { theme: { mood: 'cloud' } };
+const digestFor = async (kind: 'stage' | 'theme', key: string): Promise<string> => {
+    const text = JSON.stringify([VERIFY_KEY, kind, key, 'token:synthetic', JSON.stringify(CLOUD_PAYLOAD)]);
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
 
-beforeEach(() => {
+let hitBody: unknown = { hit: false };
+
+beforeEach(async () => {
     store.clear();
     handlers.calls = 0;
+    hitBody = {
+        hit: true,
+        entry: {
+            payload: CLOUD_PAYLOAD,
+            writer: 'token:synthetic',
+            verifyKey: VERIFY_KEY,
+            payloadDigest: await digestFor('theme', KEY_LOCAL_FIRST),
+        },
+    };
     handlers.fetch = async () => jsonResponse(hitBody);
 });
 
 describe('云缓存的本地一层', () => {
     it('把云端给的答案落本地，第二次拉取不再发请求', async () => {
         const first = await pullAiCloudCache('theme', KEY_LOCAL_FIRST, { songTitle: '夜航' });
-        expect(first).toEqual({ status: 'hit', payload: { theme: { mood: 'cloud' } }, matched: 'exact' });
+        expect(first).toEqual({ status: 'hit', payload: CLOUD_PAYLOAD, matched: 'exact' });
         expect(handlers.calls).toBe(1);
 
         const second = await pullAiCloudCache('theme', KEY_LOCAL_FIRST, { songTitle: '夜航' });
