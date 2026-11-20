@@ -175,6 +175,8 @@ export const STORAGE_KEYS = [
     'web:foliaAppliedMarketBackground',
     'web:foliaAppliedMarketFont',
     'web:foliaCloudSettings.v2',
+    /* v3 多了写入令牌，并且不再有内置云地址（issue H34 / C6）；v2 只作为迁移来源保留。 */
+    'web:foliaCloudSettings.v3',
     'web:foliaFontMarketChoice',
     'web:foliaMachineCode',
     'web:foliaMarketRotation',
