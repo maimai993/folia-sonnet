@@ -362,6 +362,8 @@ export default {
             "guestBodyWithLocal": "Pilih “{{connect}}” di strip info untuk masuk, lalu playlist, radio, dan album simpanan Anda akan memenuhi dinding ini. Atau impor folder musik di tab {{local}}.",
             "reloginTitle": "Sesi {{provider}} Anda sudah kedaluwarsa",
             "reloginBody": "Pilih “{{connect}}” di strip info untuk masuk lagi, lalu playlist Anda akan kembali memenuhi dinding ini.",
+            "unreachableTitle": "Layanan online belum bisa dihubungi",
+            "unreachableBody": "Jaringan atau sistem sedang sibuk — coba lagi sebentar lagi. Anda masih masuk, dan playlist Anda akan segera kembali.",
             "localTitle": "Belum ada musik lokal yang diimpor",
             "localBody": "Pilih “{{action}}” di menu “⋯” pada strip info, lalu folder, album, dan artis Anda akan memenuhi dinding ini."
         },

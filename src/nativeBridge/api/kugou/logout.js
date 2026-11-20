@@ -1,13 +1,14 @@
 import {
-    BRIDGE_COOKIE_STORAGE_KEYS,
     KG_DOMAINS,
     KG_COOKIE_KEYS,
     clearCookieCache,
+    forgetProviderCookie,
     removeBrowserCookiesForHosts,
 } from '../cookies.js';
 
 // 酷狗登出只删除账号会话，保留设备身份；登录备份也必须删除，否则下一次请求会重新种回 cookie。
-const STORAGE_KEYS = [BRIDGE_COOKIE_STORAGE_KEYS.kg, 'kgLoginPersist', 'kgVipSession'];
+// 桥存的那份 cookie 从 H5 起在原生加密槽位里，由 forgetProviderCookie 一起抹掉（它也顺手删旧的明文键）。
+const STORAGE_KEYS = ['kgLoginPersist', 'kgVipSession'];
 const DEVICE_COOKIE_KEYS = new Set(['dfid', 'DFID', 'kg_mid', 'KUGOU_API_PLATFORM', 'KUGOU_API_GUID', 'KUGOU_API_MID', 'KUGOU_API_DEV', 'KUGOU_API_MAC', 'KUGOU_API_WEBGL']);
 const SESSION_COOKIE_KEYS = [...new Set([
     ...KG_COOKIE_KEYS.filter(name => !DEVICE_COOKIE_KEYS.has(name)),
@@ -25,10 +26,11 @@ const CLEANUP_TIMEOUT_MS = 2500;
 export async function clearSessionOnLogout() {
     clearCookieCache();
     let timer;
-    // 两项独立启动：cookie 宿主拒绝或不回包，都不能挡住本地恢复备份的删除。
+    // 三项独立启动：cookie 宿主拒绝或不回包，都不能挡住本地恢复备份与加密槽位的删除。
     const storage = Promise.resolve().then(() => globalThis.chrome?.storage?.local?.remove?.(STORAGE_KEYS));
+    const secure = Promise.resolve().then(() => forgetProviderCookie('kg'));
     const cookies = Promise.resolve().then(() => removeBrowserCookiesForHosts(COOKIE_URLS, SESSION_COOKIE_KEYS));
-    const cleanup = Promise.allSettled([storage, cookies]);
+    const cleanup = Promise.allSettled([storage, secure, cookies]);
     try {
         await Promise.race([cleanup, new Promise(resolve => { timer = setTimeout(resolve, CLEANUP_TIMEOUT_MS); })]);
     } finally {

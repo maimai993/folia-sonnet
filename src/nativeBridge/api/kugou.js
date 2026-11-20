@@ -329,6 +329,8 @@ async function clearLegacyKugouPlatformSession() {
     ))));
   } catch (_) {}
   try {
+    // 'foliaBridgeKgCookie' 是 H5 之前的明文键；加密存储之后它只在没有原生存储的环境里用，
+    // 这里仍然要清 —— 升级后的旧键得有人负责删。
     await chrome.storage.local.remove([
       KG_LOGIN_STORAGE_KEY,
       KG_DEVICE_STORAGE_KEY,

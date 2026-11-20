@@ -33,6 +33,24 @@ export const translateHomeMessage = (t: TFunction, message: LibraryHomeMessage):
 );
 
 /**
+ * 这次读账户是不是「暂时问不到」，而不是平台明确说了什么（H4）。
+ *
+ * `accountRead` 在读失败时保留原来的账户、把 `freshness` 记成 `error`、`error` 里放失败原因。
+ * 这些不算问不到：
+ *   - `auth-required`：登录过期，界面该引导重新登录；
+ *   - `platform-unavailable`：这个构建里根本没有这个平台（网页版的桌面平台），不是故障；
+ *   - 账户还在（`status: 'authenticated'`）：读失败但上一次的账户还能用，界面照旧显示它。
+ * 剩下的（网络断、桥超时、插件抛错 ⇒ `status: 'error'` / `freshness: 'error'`）就是「暂时问不到」。
+ */
+export const isProviderUnreachable = (provider?: ProviderAccountSummary): boolean => {
+    if (!provider) return false;
+    if (provider.error === 'auth-required' || provider.error === 'platform-unavailable') return false;
+    // 账户还在就别吓人：上一次读到的账户照常显示。
+    if (provider.status === 'authenticated') return false;
+    return provider.freshness === 'error' || provider.status === 'error';
+};
+
+/**
  * 当前在线来源。provider 的账户摘要优先；只有网易云在平台还没给出摘要时才退回应用传入的旧账户与歌单
  * （原先 Grid3D 的写法）。能力缺失按「全不支持」处理（provider 可能刚被 mod 移除）。
  */
@@ -58,13 +76,17 @@ export const resolveHomeOnlineSource = ({
 }): LibraryHomeOnlineSource => {
     const isNetease = providerId === 'netease';
     const user = provider?.user || (isNetease ? fallbackUser : null);
+    const accountView = resolveOnlineProviderAccountView({ provider, hasUser: Boolean(user), platformAvailable });
     return {
         providerId,
         providerLabel: provider?.shortName || provider?.displayName || fallbackLabel,
         provider,
         user,
-        accountView: resolveOnlineProviderAccountView({ provider, hasUser: Boolean(user), platformAvailable }),
+        accountView,
         needsRelogin: provider?.error === 'auth-required',
+        // 问不到平台（网络 / 桥 / 插件故障）**不是**「没登录」（H4）：只有平台确实报了别的错才算。
+        // `auth-required` 走 needsRelogin，`platform-unavailable`（这个构建里根本没有这个平台）不算故障。
+        unreachable: isProviderUnreachable(provider),
         collections: provider?.collections || (isNetease
             ? [...fallbackPlaylists, ...(fallbackCloud ? [fallbackCloud] : [])]
             : []),

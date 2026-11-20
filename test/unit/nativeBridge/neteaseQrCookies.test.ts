@@ -3,6 +3,8 @@ import { handleLoginQrCheck } from '../../../src/nativeBridge/api/netease.js';
 import { clearCookieCache } from '../../../src/nativeBridge/api/cookies.js';
 
 // #215：桥存下的扫码会话必须同时交回页面，不能只在重启之后才被读到。
+// H5 之后它不再明写 localStorage，改由原生的加密槽位存（见 secureStore.js），
+// 所以这里给的是原生插件的替身，断言的是「交回页面的 cookie 与加密槽位里那份一致」。
 const mocks = vi.hoisted(() => ({ eapiRequest: vi.fn() }));
 vi.mock('../../../src/nativeBridge/api/eapi.js', async importOriginal => ({
     ...await importOriginal<Record<string, unknown>>(),
@@ -10,11 +12,31 @@ vi.mock('../../../src/nativeBridge/api/eapi.js', async importOriginal => ({
 }));
 
 const LOGIN_COOKIE = 'MUSIC_U=fixture-qr-session; __csrf=fixture-qr-csrf';
-const STORAGE_KEY = 'foliaBridgeNeteaseCookie';
-let stored: Record<string, string>;
+/** 加密槽位：slot → 明文（测试里不做真加密，只记「存了什么」）。 */
+let slots: Map<string, string>;
+let plainStorage: Record<string, string>;
+
+const installSecureStore = () => {
+    const plugin = {
+        readSecureValue: async ({ slot }: { slot: string }) => (slots.has(slot)
+            ? { ok: true, found: true, decrypted: true, text: slots.get(slot) }
+            : { ok: true, found: false, decrypted: false, text: null }),
+        writeSecureValue: async ({ slot, text }: { slot: string; text: string }) => {
+            slots.set(slot, text);
+            return { ok: true };
+        },
+        clearSecureValue: async ({ slot }: { slot: string }) => {
+            slots.delete(slot);
+            return { ok: true };
+        },
+        hasSecureValue: async ({ slot }: { slot: string }) => ({ ok: true, exists: slots.has(slot) }),
+    };
+    vi.stubGlobal('window', { Capacitor: { Plugins: { FoliaNative: plugin } } });
+};
 
 beforeEach(() => {
-    stored = {};
+    slots = new Map();
+    plainStorage = {};
     vi.stubGlobal('chrome', {
         cookies: {
             getAll: async () => [],
@@ -23,11 +45,13 @@ beforeEach(() => {
         },
         storage: {
             local: {
-                get: async () => ({ ...stored }),
-                set: async (values: Record<string, string>) => { Object.assign(stored, values); },
+                get: async () => ({ ...plainStorage }),
+                set: async (values: Record<string, string>) => { Object.assign(plainStorage, values); },
+                remove: async (keys: string[]) => { keys.forEach(key => { delete plainStorage[key]; }); },
             },
         },
     });
+    installSecureStore();
     clearCookieCache();
     mocks.eapiRequest.mockReset();
     // 账号资料接口暂未就绪时，仍须把刚确认的会话交回页面。
@@ -54,7 +78,9 @@ describe('网易云扫码确认的 cookie 交接（#215）', () => {
         const answer = await handleLoginQrCheck('fixture-key');
 
         expect(answer).toMatchObject({ code: 803, cookie: LOGIN_COOKIE, loggedIn: true, hasCookie: true });
-        expect(stored[STORAGE_KEY]).toBe(answer.cookie);
+        // H5：桥存的那份在加密槽位里，不再明文进 localStorage。
+        expect(slots.get('provider-netease-cookie')).toContain('MUSIC_U=fixture-qr-session');
+        expect(plainStorage['foliaBridgeNeteaseCookie']).toBeUndefined();
         expect(answer.cookie).not.toMatch(/HttpOnly|Secure|Path|Max-Age/);
     });
 
@@ -68,7 +94,8 @@ describe('网易云扫码确认的 cookie 交接（#215）', () => {
         const answer = await handleLoginQrCheck('fixture-key');
 
         expect(answer.cookie).toBe(LOGIN_COOKIE);
-        expect(stored[STORAGE_KEY]).toBe(LOGIN_COOKIE);
+        expect(slots.get('provider-netease-cookie')).toContain('MUSIC_U=fixture-qr-session');
+        expect(plainStorage['foliaBridgeNeteaseCookie']).toBeUndefined();
     });
 
     it('803 没有会话时不伪造 cookie，也不把等待状态的 cookie 交回页面', async () => {
@@ -76,12 +103,12 @@ describe('网易云扫码确认的 cookie 交接（#215）', () => {
         const confirmed = await handleLoginQrCheck('fixture-key');
         expect(confirmed.cookie || '').toBe('');
         expect(confirmed.loggedIn).toBe(false);
-        expect(stored[STORAGE_KEY]).toBeUndefined();
+        expect(slots.has('provider-netease-cookie')).toBe(false);
 
         mocks.eapiRequest.mockResolvedValueOnce({ status: 200, body: { code: 802, cookie: LOGIN_COOKIE } });
         const waiting = await handleLoginQrCheck('fixture-key');
         expect(waiting.cookie).toBeUndefined();
-        expect(stored[STORAGE_KEY]).toBeUndefined();
+        expect(slots.has('provider-netease-cookie')).toBe(false);
     });
 
     it('交回 cookie 的成功路径不把凭据写进 console', async () => {

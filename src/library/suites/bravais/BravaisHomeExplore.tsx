@@ -147,7 +147,9 @@ const BravaisHomeExplore: React.FC<{
 
     const accountSeam = useBravaisHomeAccount(accountController, online);
     const status = online.accountView === 'guest'
-        ? (online.needsRelogin ? t('status.loginExpired') : undefined)
+        ? (online.unreachable
+            ? t('libraryBravaisHome.wallHint.unreachableTitle')
+            : (online.needsRelogin ? t('status.loginExpired') : undefined))
         : online.accountView === 'resolving'
             ? t('home.loadingLibrary')
             // 无账户的平台：与网格对同一状态的说法相同（OnlineProviderAccountlessPanel 的标题）。
@@ -196,10 +198,10 @@ const BravaisHomeExplore: React.FC<{
         },
     }), [accountSeam, chrome.onSelectTab, chrome.scan, chrome.search, chrome.tabs, chrome.title, entries, online.providerLabel, status, t, tools]);
     const localTab = availableLocalTabLabel(chrome.tabs);
-    const { accountView, needsRelogin, providerLabel } = online;
+    const { accountView, needsRelogin, providerLabel, unreachable } = online;
     const wallHint = useMemo(
-        () => onlineWallHint({ accountView, needsRelogin, providerLabel }, localTab, t),
-        [accountView, localTab, needsRelogin, providerLabel, t],
+        () => onlineWallHint({ accountView, needsRelogin, providerLabel, unreachable }, localTab, t),
+        [accountView, localTab, needsRelogin, providerLabel, unreachable, t],
     );
     const wallRules = useMemo(() => ({
         filterKey: 'explore',

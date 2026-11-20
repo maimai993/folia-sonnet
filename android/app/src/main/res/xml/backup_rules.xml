@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    android/app/src/main/res/xml/backup_rules.xml
+    Android 11（API 30）及更低的备份规则（android:fullBackupContent）。
+
+    为什么不直接把 android:allowBackup 关掉：关掉之后换机、重装、走云端恢复时**所有**设置都没了
+    （循环模式、均衡器、歌词样式、界面偏好……），代价太大。正确的做法是只把凭据类的东西排除掉，
+    其余照旧跟着备份走 —— H29 要的是「AI 密钥不跟着备份跑」，不是「什么都别备份」。
+
+    排除的东西：
+      - folia.settings：设置 blob。AI 的 API Key 从 H29 起已经不在里面（改存 no_backup 目录下的
+        加密文件），但 WebView 的 localStorage 镜像里可能还留着旧版本写进去的一份，整份排除最稳；
+      - webview 数据库：WebView 的 localStorage 就存在这里，旧版本的平台 cookie 与 AI Key 明文都在
+        里面（H5 / H29），整库不跟着备份；
+      - CapacitorStorage：Capacitor 存储插件的会话备份，同样是凭据性质。
+    其余（含导入的音频副本、播放历史、主题缓存）照旧备份：不写 <include> 的项走默认全备份。
+-->
+<full-backup-content>
+    <!-- 设置 blob（含旧版本可能残留的 AI Key） -->
+    <exclude domain="sharedpref" path="folia.settings.xml" />
+    <exclude domain="sharedpref" path="folia.settings" />
+    <!-- WebView 的 localStorage 数据库：旧版本明文 cookie / API Key 的落脚点 -->
+    <exclude domain="database" path="webview" />
+    <exclude domain="database" path="webview-journal" />
+    <!-- 桥的会话备份 -->
+    <exclude domain="sharedpref" path="CapacitorStorage.xml" />
+</full-backup-content>

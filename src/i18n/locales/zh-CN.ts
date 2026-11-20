@@ -371,6 +371,8 @@ export default {
             "guestBodyWithLocal": "点信息条里的「{{connect}}」登录，你的歌单、电台和收藏的专辑会铺满这面墙；也可以到「{{local}}」页签导入音乐文件夹。",
             "reloginTitle": "{{provider}} 的登录已过期",
             "reloginBody": "点信息条里的「{{connect}}」重新登录，你的歌单会重新铺满这面墙。",
+            "unreachableTitle": "暂时连不上在线平台",
+            "unreachableBody": "网络或系统繁忙，稍后再试。登录没有失效，歌单一会儿就回来。",
             "localTitle": "还没有导入本地音乐",
             "localBody": "在信息条的「⋯」里选「{{action}}」，文件夹、专辑和歌手会铺满这面墙。"
         },

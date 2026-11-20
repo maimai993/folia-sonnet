@@ -428,6 +428,8 @@ function classifyNeteasePlaybackRestriction(lastData, loginInfo) {
   return playbackRestriction('netease', 'url_unavailable', '网易云没有返回可播放地址，可能是版权、会员或地区限制', loggedIn ? 'switch_source' : 'login', { code, fee });
 }
 
+// 传入的 cookie 头里没有 MUSIC_U 时补读一次。读失败会抛 CookieReadError（见 cookies.js），
+// 不在这里吞掉 —— 吞掉的下场就是「桥超时」被当成「没登录」（H4）。
 async function ensureNeteaseCookieHeader(cookie) {
   let header = String(cookie || '');
   if (!parseCookieString(header).MUSIC_U) {
@@ -465,6 +467,10 @@ export async function getLoginInfo(cookie) {
    *   · 刚装好就凭空多出一个网易云账号；
    *   · 首页再也不是未登录那一屏（登录入口那圈高亮引导因此一直不出）。
    * 真登录（扫码 803）存下来的 cookie 里是有 MUSIC_U 的，下面那条兜底同理只认 MUSIC_U。
+   *
+   * 读失败（桥超时、插件异常）**必须**往外抛：以前它被吞成空串，于是桥抖一下就成了
+   * 「没登录」，accountRead 会把登录态判成失效并清掉本地凭据（H4）。空串在这里只剩
+   * 一个意思 —— 真的没有 MUSIC_U。
    */
   cookie = await ensureNeteaseCookieHeader(cookie);
   if (!hasNeteaseMusicU(cookie)) {

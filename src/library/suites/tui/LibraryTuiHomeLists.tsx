@@ -113,9 +113,13 @@ export const LibraryTuiOnlineList: React.FC<LibraryTuiListCommonProps & {
 
     if (showAccounts) {
         // 未登录：原因 + 「选一个平台登录或切换」；F2 打开的：标题 + 关上的提示。
+        // H4：问不到平台（网络 / 桥故障）与「没登录」分开说，别再催用户去登录。
+        const guestReason = online.unreachable
+            ? t('libraryBravaisHome.wallHint.unreachableTitle')
+            : (online.needsRelogin ? t('status.loginExpired') : t('home.guestTitle'));
         const heading = isGuest ? (
             <div data-tui-home-status="guest" className="flex flex-col gap-0.5">
-                <span>{online.needsRelogin ? t('status.loginExpired') : t('home.guestTitle')}</span>
+                <span>{guestReason}</span>
                 <span className="opacity-60">{t('libraryTui.accountsGuest', { provider: online.providerLabel })}</span>
             </div>
         ) : (
