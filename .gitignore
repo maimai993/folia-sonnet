@@ -53,6 +53,7 @@ commit.md
 .codebuff-ai/reasson/conf.jsonc
 scripts/*
 !scripts/generate-android-assets.mjs
+!scripts/buildProviderBadges.mjs
 docs/TODO.md
 design/
 plan/
