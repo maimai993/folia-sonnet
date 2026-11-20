@@ -493,6 +493,16 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                         onToggleExpand={() => selectMod(selectedModId === mod.id ? null : mod.id)}
                         onToggleEnabled={() => { void requestToggleEnabled(mod, !mod.enabled); }}
                         onToggleSelected={() => toggleSelected(mod.id)}
+                        /*
+                         * 无响应模组的第二个出路（issue M15）：先停用它，再重载其余的，
+                         * 让它从这次的进程里真的下掉。两边都是已有的入口（toggleMod / reloadAll）。
+                         */
+                        onReload={() => {
+                            void (async () => {
+                                await handleToggleEnabled(mod.id, false);
+                                await reloadAll();
+                            })();
+                        }}
                         onDelete={() => setPendingDelete({ id: mod.id, name: mod.name })}
                         onNotice={setNotice}
                     />

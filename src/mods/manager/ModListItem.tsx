@@ -9,8 +9,8 @@ import type { ModRuntimeInfo } from '../types';
 import { ModSurfaceRenderer } from './ModSurfaceRenderer';
 import { modSettingsRowId } from '../useModsStore';
 import { setFoliumFaultNoticeMuted, useFoliumStatusStore } from '../runtime/status';
-import { ModCostLines, ModSlowMark } from './ModCostLines';
-import { isModSlow, type ModCost } from './modCost';
+import { ModCostLines, ModHungMark, ModSlowMark } from './ModCostLines';
+import { isModHung, isModSlow, type ModCost } from './modCost';
 import type { ModManagerClasses } from './modManagerClasses';
 import { translateModError } from './modErrors';
 import { MOD_FILES_PERMISSION, ModStorageUsage, type ModNotice } from './ModStorageUsage';
@@ -153,6 +153,8 @@ type ModListItemProps = {
     onToggleExpand: () => void;
     onToggleEnabled: () => void;
     onToggleSelected: () => void;
+    /** Reloads the rest of the mods without this one: what a frozen mod's mark offers (issue M15). */
+    onReload?: () => void;
     /** Uninstall (delete) this mod. */
     onDelete: () => void;
     /** Reports an outcome in the manager's notice line (the storage section's "clear cache"). */
@@ -162,7 +164,8 @@ type ModListItemProps = {
 const NO_OLD_NAMES: readonly string[] = [];
 
 export const ModListItem: React.FC<ModListItemProps> = ({
-    mod, cost, expanded, selected, selectionMode, isLast, isDaylight, theme, classes, onToggleExpand, onToggleEnabled, onToggleSelected, onDelete, onNotice,
+    mod, cost, expanded, selected, selectionMode, isLast, isDaylight, theme, classes, onToggleExpand, onToggleEnabled,
+    onToggleSelected, onReload, onDelete, onNotice,
 }) => {
     // Only a running mod has a cost to show.
     const runningCost = mod.status === 'loaded' ? cost : undefined;
@@ -213,7 +216,14 @@ export const ModListItem: React.FC<ModListItemProps> = ({
                     <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{mod.name}</span>
                         <SignatureBadge mod={mod} isDaylight={isDaylight} />
-                        {isModSlow(runningCost) ? <ModSlowMark isDaylight={isDaylight} /> : null}
+                        {isModHung(runningCost) ? (
+                            <ModHungMark
+                                isDaylight={isDaylight}
+                                where={runningCost?.hungWhere}
+                                onRelease={() => { if (mod.enabled) onToggleEnabled(); }}
+                                onReloadWithout={() => { if (mod.enabled) onToggleEnabled(); else onReload?.(); }}
+                            />
+                        ) : isModSlow(runningCost) ? <ModSlowMark isDaylight={isDaylight} /> : null}
                     </div>
                     <div className="text-[11px] opacity-50 truncate" style={{ color: 'var(--text-secondary)' }}>{meta}</div>
                 </div>

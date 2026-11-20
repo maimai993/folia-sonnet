@@ -2754,6 +2754,10 @@ export interface FoliumStorage {
  * file, and never logs them. Where the system has no such store (Linux falling back to `basic_text`), it
  * keeps them in memory only, for this run, and the settings form says so. No permission is needed.
  *
+ * On Android there is no system credential store, so values are kept in memory only, for this run of
+ * Folia: a saved value reads back in the same run, and reads as null after a restart (`state().persistent`
+ * is then false and the settings form says so). Everything else works the same way as on the desktop.
+ *
  * In the export window `get`, `has` and `set` reject with `secrets-unavailable-in-export-context`, and
  * `subscribe` never fires.
  */

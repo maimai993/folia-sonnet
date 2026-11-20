@@ -3011,7 +3011,12 @@ export default {
             "noFailures": "No failures",
             "main": "Background part: {{total}} ms in total, longest call {{longest}} ms",
             "slow": "Slow",
-            "slowHint": "This mod starts slowly or takes a lot of time while running. Folia does not switch it off for that."
+            "slowHint": "This mod starts slowly or takes a lot of time while running. Folia does not switch it off for that.",
+            "hung": "Not responding",
+            "hungHint": "One of this mod's background calls never came back; it holds up every other mod's too. Its calls are refused until it is stopped.",
+            "hungHintWhere": "Stuck in: {{where}}. It holds up every other mod's calls until it is stopped.",
+            "hungRelease": "Stop it",
+            "hungReload": "Stop and reload"
         },
         "commandUnavailable": "This mod command is no longer available.",
         "cancelExport": "Cancel",
