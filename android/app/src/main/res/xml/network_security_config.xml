@@ -7,26 +7,42 @@
   `networkState=3 / mediaErrorCode=4 (MEDIA_ERR_SRC_NOT_SUPPORTED)`，
   看起来像「格式不支持」—— 很容易误判成 vkey 失效或音频坏了。
 
-  为什么 base 现在是「放开」：
-  飞牛这类「用户自建服务」的地址是**运行时手填**的（典型是 http://192.168.x.x:端口 的
-  局域网 NAS），而 Android 的网络安全配置只认**字面量域名**，既不支持 CIDR 也不支持 IP
-  段通配 —— 这类地址根本没法预先写进白名单。之前那种「只放行已知域名」的白名单写法对新
-  增的自建服务是死路：登录请求都会被拦在明文这一关上，表现是「点了登录没反应」。
-  所以这里改成 base 放开：放行只意味着「允许」，WebView 仍然 https 优先，且只有用户自己
-  明确填了 http:// 地址时才会真的走明文。
+  ## 这一份配置**就是**本应用关于明文的全部声明（本文件与 Manifest 不再互相矛盾）
 
-  下面那段 domain-config 现在不再起拦截作用（base 已放开），保留是为了记录「已知确实需要
-  明文、且不能换 https 的几个源」，日后若想重新收紧，把 base 改回 false 即可恢复白名单。
-  · 酷狗 fs CDN：换成 https 会被拒或返回无效音频，只能走明文。
-  · QQ 音乐媒体：接口返回的是 http 地址（aqqmusic.tc.qq.com / *.stream.qqmusic.qq.com）。
-    代码里会把这些升级成 https，但部分地址只有 http 版本，留着放行兜底。
+  Manifest 里 `android:usesCleartextTraffic="false"` + 这一份 network security config：
+  按 Android 的规则，**只要声明了 networkSecurityConfig，usesCleartextTraffic 就被完全忽略**
+  —— 实际生效的是本文件。原先 base-config 写 `true`、Manifest 写 `false`，两者说的
+  是相反的事，审计时读哪一份都会得出错误结论。现在两处一致：**明文默认禁止，
+  只对下面逐条列出的域放行**。
+
+  ## 为什么 base 是「禁止」而不是「放开」
+
+  早先 base 放开（`true`）的理由是：飞牛这类「用户自建服务」的地址是运行时手填的
+  （典型是 http://192.168.x.x:端口 的局域网 NAS），而 Android 的网络安全配置只认
+  **字面量域名**，既不支持 CIDR 也不支持 IP 段通配 —— 没法预先写进白名单。
+
+  这条理由现在不成立，或者说它只对**原生网关**成立：
+
+  · 自建服务（飞牛 / Navidrome）在安卓上根本不用 WebView 直连。页面跑在
+    `https://localhost` 上，向 http 地址发请求既是混合内容、又过不了 CORS，
+    所以 `src/services/onlineMusic/UPSTREAMS.md` 里记着的结论是「整条 HTTP 都改用
+    原生 OkHttp 代发（没有同源策略这回事）」。原生这一侧的明文不受本文件影响，
+    它由 OkHttp 自己决定，见 FoliaNativeAccess 的域名白名单。
+  · WebView 真正直连的明文地址只有一类：**本机回环**（下面的 LocalAudioServer、
+    视频代理、汽水音乐那条），它们的域名是定死的 `127.0.0.1` / `localhost`。
+  · 其余已知需要明文的源（酷狗 fs CDN、QQ 音乐媒体）同样是定死的域名。
+
+  所以 base 收回 `false`：任意 http 域名（包括任意局域网 IP）在 WebView 里会被拒，
+  而上面这几类照常工作。放行清单只许加「确知必须明文、且不能换 https」的域，
+  加之前先确认它在 WebView 里真的会被直连（走原生 OkHttp 的不需要写在这里）。
 -->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
+    <base-config cleartextTrafficPermitted="false" />
     <!--
       本地音频服务（LocalAudioServer）：安卓本地音乐走原生扫描/挑选，而 WebView 的 <audio>
       播不了 content://，也不认 App 私有目录 —— 原生起一个只监听 127.0.0.1 的小服务把音频
       以 http 喂回去。它是本机回环，明文是唯一选择，放行它不涉及任何外部流量。
+      VideoStreamProxy、QishuiAudioServer 同属这一类，也落在这两个域上。
     -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">127.0.0.1</domain>
@@ -35,9 +51,11 @@
     <domain-config cleartextTrafficPermitted="true">
         <!-- 自托管 API -->
         <domain includeSubdomains="true">folia.tangbot.xyz</domain>
-        <!-- 酷狗 fs CDN -->
+        <!-- 酷狗 fs CDN：换成 https 会被拒或返回无效音频，只能走明文。 -->
         <domain includeSubdomains="true">kugou.com</domain>
-        <!-- QQ 音乐媒体 CDN -->
+        <!-- QQ 音乐媒体：接口返回的是 http 地址（aqqmusic.tc.qq.com /
+             *.stream.qqmusic.qq.com）。代码里会把这些升级成 https，但部分地址只有
+             http 版本，留着放行兜底。 -->
         <domain includeSubdomains="true">tc.qq.com</domain>
         <domain includeSubdomains="true">qqmusic.qq.com</domain>
     </domain-config>
