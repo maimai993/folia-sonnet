@@ -63,11 +63,11 @@ beforeEach(() => {
     capacitorState.native = true;
     capacitorState.platform = 'android';
     installBridge();
+    const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {
-        store: new Map<string, string>(),
-        getItem(key: string) { return this.store.get(key) ?? null; },
-        setItem(key: string, value: string) { this.store.set(key, value); },
-        removeItem(key: string) { this.store.delete(key); },
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: (key: string, value: string) => { store.set(key, value); },
+        removeItem: (key: string) => { store.delete(key); },
     });
 });
 
@@ -135,7 +135,7 @@ describe('lanCast 租约与收回路径', () => {
             })),
             lanCastRelease: release,
         };
-        const play = vi.fn(async () => ({ ok: true }));
+        const play = vi.fn(async (_options: { url: string }) => ({ ok: true }));
         plugins.FoliaLanCast = { play };
         const lanCast = await load();
         await lanCast.castTrackToSpeaker(
