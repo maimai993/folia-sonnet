@@ -65,7 +65,7 @@ export const SourceTab = <K extends string>({
     rawSong,
 }: SourceTabProps<K>): React.ReactElement => {
     const { t } = useTranslation();
-    // 背景不是 MV 时，MV 来源这一行摆出来也没有意义：点进去照样去搜 B 站视频，
+    // 背景不是 MV 时，MV 来源这一行摆出来也没有意义：点进去照样去搜视频平台，
     // 选完却对当前背景没有任何影响（#444）。按当前生效的背景模式判断，
     // 与可视化设置面板解析 backgroundEntry 用的是同一条路径。
     const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
