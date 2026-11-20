@@ -3,6 +3,10 @@
 // - 音源的「元信息 + 原始脚本」存 IndexedDB（db.ts 的 cache），进程重启后还在；
 // - 加载后的脚本（request 回调）放在内存里，用来实时续歌；
 // - 提供 resolveMusicUrl / resolveLyric 给 lxmusicProvider 调用。
+//
+// 执行脚本一律经 lxScriptApprovalFlow.ensureApproved：启动加载、手动启用、重新加载都算「要跑这一版
+// 脚本」，没有它的确认记录就先停下来问用户（见该文件开头）。升级前就装着的音源也是这条路 ——
+// 以前它们是被直接执行的，现在第一次会要求确认一次。
 
 import { getFromCache, saveToCache } from '../../../services/db';
 import type { LxLoadedSource, LxPlatformKey, LxSource } from './lxTypes';
@@ -10,6 +14,8 @@ import { loadLxSource } from './lxRuntime';
 import { parseLxHeader } from './lxSourceParser';
 import { raceCandidates, withTimeout, type LxRaceTask } from './lxRace';
 import { cooldownLeftMs, noteSourceFailure, noteSourceSuccess, resetSourceHealth, sourceRank } from './lxSourceHealth';
+import { lxScriptApprovalFlow } from './lxScriptApprovalFlow';
+import { forgetScriptApproval } from './lxScriptApproval';
 
 const STORAGE_KEY = 'lxmusic_sources_v1';
 
@@ -64,10 +70,18 @@ class LxSourceStore {
      * sources / error；否则会把好好的音源判成「未声明任何平台」。
      */
     private async reloadAll(): Promise<void> {
-        this.loaded.clear();
+        // 旧的沙箱 worker 先收掉：脚本已经换过一轮，别让它们继续在后台跑（C2 之后每条音源一个 worker）。
+        this.disposeLoaded();
         const pending = this.sources
             .filter((src) => src.enabled)
             .map(async (src) => {
+                // 没确认过这一版脚本就先别执行：等用户点，界面会弹确认框。
+                const approved = await lxScriptApprovalFlow.ensureApproved(src.id, src.rawScript, src.meta, src.sourceUrl);
+                if (!approved) {
+                    src.sources = {};
+                    src.error = '等待确认：这份脚本还没被同意执行。';
+                    return;
+                }
                 try {
                     const loaded = await this.loadOne(src.rawScript, src.meta);
                     this.loaded.set(src.id, { ...loaded, id: src.id });
@@ -87,11 +101,31 @@ class LxSourceStore {
         await Promise.all(pending);
     }
 
+    /** 把已加载的音源逐个卸掉（worker 终止、定时器清掉）。 */
+    private disposeLoaded(): void {
+        this.loaded.forEach((loaded) => {
+            try {
+                loaded.dispose?.();
+            } catch {
+                // 卸不掉也要继续，不能挡住重新加载。
+            }
+        });
+        this.loaded.clear();
+    }
+
     /** 加载并等初始化完成。 */
     private async loadOne(rawScript: string, meta: LxSource['meta']): Promise<LxLoadedSource> {
         const loaded = loadLxSource(rawScript, meta);
         await loaded.ready;
         return loaded;
+    }
+
+    /**
+     * 取消等待中的确认（界面关掉确认框时）。这一份脚本不会被记录成已确认，
+     * 下次要跑还会再问。
+     */
+    cancelPendingApproval(): void {
+        lxScriptApprovalFlow.cancel();
     }
 
     private notify(): void {
@@ -112,9 +146,9 @@ class LxSourceStore {
     }
 
     /** 新增一个音源（来自在线导入或本地文件）。已存在同名则覆盖。 */
-    async addSource(input: { rawScript: string; sourceUrl?: string }): Promise<LxSource> {
+    async addSource(input: { rawScript: string; sourceUrl?: string; id?: string }): Promise<LxSource> {
         const meta = parseLxHeader(input.rawScript);
-        const id = (globalThis.crypto?.randomUUID?.() ?? `lx_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+        const id = input.id ?? (globalThis.crypto?.randomUUID?.() ?? `lx_${Date.now()}_${Math.random().toString(36).slice(2)}`);
         // 等初始化结束，才知道这个源到底支持哪些平台、能不能用。
         const loaded = await this.loadOne(input.rawScript, meta);
         const source: LxSource = {
@@ -128,8 +162,15 @@ class LxSourceStore {
             error: loaded.error,
         };
         const idx = this.sources.findIndex((s) => s.meta.name === meta.name);
-        if (idx >= 0) this.sources[idx] = source;
-        else this.sources.push(source);
+        if (idx >= 0) {
+            // 同名的是替换，旧那条的 worker 要收掉，否则两个版本的脚本同时在后台请求。
+            const replaced = this.sources[idx].id;
+            this.disposeOne(replaced);
+            forgetScriptApproval(replaced);
+            this.sources[idx] = source;
+        } else {
+            this.sources.push(source);
+        }
         this.loaded.set(id, { ...loaded, id });
         // 重新导入的脚本多半是修过的版本，旧的失败记录不该继续压着它。
         resetSourceHealth(id);
@@ -141,6 +182,15 @@ class LxSourceStore {
     async setEnabled(id: string, enabled: boolean): Promise<void> {
         const src = this.sources.find((s) => s.id === id);
         if (!src) return;
+        if (enabled) {
+            // 先问再跑：启用等于要执行这一版脚本。
+            const approved = await lxScriptApprovalFlow.ensureApproved(id, src.rawScript, src.meta, src.sourceUrl);
+            if (!approved) {
+                src.error = '等待确认：这份脚本还没被同意执行。';
+                this.notify();
+                return;
+            }
+        }
         src.enabled = enabled;
         if (enabled) {
             const loaded = await this.loadOne(src.rawScript, src.meta);
@@ -148,7 +198,7 @@ class LxSourceStore {
             src.error = loaded.error;
             this.loaded.set(id, { ...loaded, id });
         } else {
-            this.loaded.delete(id);
+            this.disposeOne(id);
         }
         await this.persist();
         this.notify();
@@ -156,7 +206,9 @@ class LxSourceStore {
 
     async removeSource(id: string): Promise<void> {
         this.sources = this.sources.filter((s) => s.id !== id);
-        this.loaded.delete(id);
+        this.disposeOne(id);
+        // 音源都删了，它的确认记录也没有意义了。
+        forgetScriptApproval(id);
         await this.persist();
         this.notify();
     }
@@ -165,13 +217,39 @@ class LxSourceStore {
     async reload(id: string): Promise<void> {
         const src = this.sources.find((s) => s.id === id);
         if (!src) return;
+        const approved = await lxScriptApprovalFlow.ensureApproved(id, src.rawScript, src.meta, src.sourceUrl);
+        if (!approved) {
+            src.error = '等待确认：这份脚本还没被同意执行。';
+            this.notify();
+            return;
+        }
+        const previous = this.loaded.get(id);
         const loaded = await this.loadOne(src.rawScript, src.meta);
+        // 新的加载成功之后再收旧的：逐一失败时旧 worker 还留着干活。
+        if (previous && previous !== loaded) {
+            try {
+                previous.dispose?.();
+            } catch {
+                // 同上：卸不掉不影响新的那份。
+            }
+        }
         src.sources = loaded.sources;
         src.error = loaded.error;
         if (src.enabled) this.loaded.set(id, { ...loaded, id });
         resetSourceHealth(id);
         await this.persist();
         this.notify();
+    }
+
+    /** 卸掉一条音源的 worker（关掉、删除、重新导入时都要收尾）。 */
+    private disposeOne(id: string): void {
+        const loaded = this.loaded.get(id);
+        try {
+            loaded?.dispose?.();
+        } catch {
+            // 卸不掉不妨碍把记录删掉。
+        }
+        this.loaded.delete(id);
     }
 
     /**

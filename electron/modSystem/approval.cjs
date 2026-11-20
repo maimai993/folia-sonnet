@@ -23,6 +23,7 @@ const TRUST_DIALOG_LOCALE = {
         permissions: '声明的权限：',
         noPermissions: '声明的权限：无',
         platformRead: (platforms) => `以你的账号读取平台数据（实验接口 platform.raw）：${platforms}。模组会以你在 Folia 登录的账号读取这些平台上的数据，例如听歌记录。`,
+        processCapabilities: (capabilities) => `Node 进程能力：${capabilities}。这些能力让它超出通常的文件读写（fs / path / crypto 等），${capabilities.includes('process.run') ? '可以启动外部程序；' : ''}${capabilities.includes('network.socket') ? '可以自己开网络连接，不经过 Folia 的联网白名单；' : ''}未声明的能力在运行时会被拒绝。`,
         platformWrite: (platforms) => `以你的账号改动平台数据：${platforms}。模组还可以改动这些平台账号里的内容，例如点赞、歌单和关注。`,
         queueReplace: '替换播放队列（playback.queue）：模组可以一次换掉整个播放队列，并结束私人 FM。替换后 Folia 会提示是哪个模组换的；在队列再被改动之前，可以撤销回替换前的队列。',
         equalizerControl: '会改写你的音效设置（equalizer.control）：模组可以切换你的音效预设，或换上它自己的均衡器曲线。你的自定义音效不会被覆盖，在音频效果器里随时可以换回。',
@@ -57,6 +58,7 @@ const TRUST_DIALOG_LOCALE = {
         permissions: '宣告的權限：',
         noPermissions: '宣告的權限：無',
         platformRead: (platforms) => `以你的帳號讀取平臺數據（實驗介面 platform.raw）：${platforms}。模組會以你在 Folia 登入的帳號讀取這些平臺上的資料，例如聽歌記錄。`,
+        processCapabilities: (capabilities) => `Node 行程能力：${capabilities}。這些能力讓它超出通常的檔案讀寫（fs / path / crypto 等），${capabilities.includes('process.run') ? '可以啟動外部程式；' : ''}${capabilities.includes('network.socket') ? '可以自己開網路連線，不經過 Folia 的連網白名單；' : ''}未宣告的能力在執行時會被拒絕。`,
         platformWrite: (platforms) => `以你的帳號改動平臺數據：${platforms}。模組還可以改動這些平臺帳號裡的內容，例如點贊、歌單和關注。`,
         queueReplace: '替換播放佇列（playback.queue）：模組可以一次換掉整個播放佇列，並結束私人 FM。替換後 Folia 會提示是哪個模組換的；在佇列再被改動之前，可以撤銷回替換前的佇列。',
         equalizerControl: '會改寫你的音效設定（equalizer.control）：模組可以切換你的音效預設，或換上它自己的等化器曲線。你的自定義音效不會被覆蓋，在音訊效果器裡隨時可以換回。',
@@ -92,6 +94,7 @@ const TRUST_DIALOG_LOCALE = {
         noPermissions: 'Declared permissions: none',
         platformRead: (platforms) => `Reads platform data as you (experimental platform.raw): ${platforms}. The mod can read data on these platforms with the account you signed in to Folia with, such as your listening records.`,
         platformWrite: (platforms) => `Changes platform data as you: ${platforms}. The mod can also change what these platform accounts hold, such as likes, playlists and follows.`,
+        processCapabilities: (capabilities) => `Node process capabilities: ${capabilities}. These go beyond the ordinary file, path and crypto modules: ${capabilities.includes('process.run') ? 'it can launch external programs; ' : ''}${capabilities.includes('network.socket') ? 'it can open network connections of its own, outside the hosts Folia otherwise allows; ' : ''}a capability it did not declare is refused at run time.`,
         queueReplace: 'Replaces the play queue (playback.queue): the mod can swap out the whole play queue in one go, which also ends Personal FM. Folia then says which mod replaced it; until the queue changes again, you can undo that and get the queue from before back.',
         equalizerControl: 'Changes your sound settings (equalizer.control): the mod can switch your sound preset, or put its own equalizer curve in place. Your custom sounds are never overwritten, and you can switch back in Audio effects at any time.',
         renderQuality: 'Changes the lyric canvas render quality (visualizer.renderQuality): the mod can change the lyric canvas resolution and anti-aliasing in Performance & motion, which lyric styles drawn with canvas or WebGL follow. What you set in the settings of a style itself is left as it is, and you can change it back in Performance & motion at any time.',
@@ -126,6 +129,7 @@ const TRUST_DIALOG_LOCALE = {
         noPermissions: 'Izin yang dideklarasikan: tidak ada',
         platformRead: (platforms) => `Membaca data platform atas nama Anda (API eksperimental platform.raw): ${platforms}. Mod dapat membaca data di platform ini dengan akun yang Anda pakai untuk masuk ke Folia, misalnya riwayat mendengarkan.`,
         platformWrite: (platforms) => `Mengubah data platform atas nama Anda: ${platforms}. Mod juga dapat mengubah isi akun platform ini, misalnya suka, playlist, dan yang diikuti.`,
+        processCapabilities: (capabilities) => `Kemampuan proses Node: ${capabilities}. Ini melampaui modul berkas, path, dan kripto biasa: ${capabilities.includes('process.run') ? 'dapat menjalankan program eksternal; ' : ''}${capabilities.includes('network.socket') ? 'dapat membuka koneksi jaringan sendiri di luar daftar host yang biasanya diizinkan Folia; ' : ''}kemampuan yang tidak dideklarasikan ditolak saat berjalan.`,
         queueReplace: 'Mengganti antrean putar (playback.queue): mod dapat mengganti seluruh antrean putar sekaligus, sekaligus mengakhiri FM Pribadi. Setelah itu Folia memberi tahu mod mana yang menggantinya; selama antrean belum diubah lagi, Anda dapat mengurungkannya untuk kembali ke antrean sebelumnya.',
         equalizerControl: 'Mengubah pengaturan suara Anda (equalizer.control): mod dapat mengganti preset suara Anda, atau memasang kurva equalizer miliknya sendiri. Suara kustom Anda tidak pernah ditimpa, dan Anda dapat kembali kapan saja di Efek audio.',
         renderQuality: 'Mengubah kualitas render kanvas lirik (visualizer.renderQuality): mod dapat mengubah resolusi dan anti-aliasing kanvas lirik di Performa & gerakan, yang diikuti gaya lirik yang digambar dengan canvas atau WebGL. Pengaturan milik masing-masing gaya tidak diubah, dan Anda dapat mengembalikannya kapan saja di Performa & gerakan.',
@@ -160,6 +164,7 @@ const TRUST_DIALOG_LOCALE = {
         noPermissions: 'Các quyền khai báo: không có',
         platformRead: (platforms) => `Đọc dữ liệu nền tảng dưới danh nghĩa tài khoản của bạn (giao diện thử nghiệm platform.raw): ${platforms}. Mod có thể đọc dữ liệu trên các nền tảng này bằng tài khoản bạn đã đăng nhập vào Folia, chẳng hạn như lịch sử nghe.`,
         platformWrite: (platforms) => `Đổi dữ liệu nền tảng dưới danh nghĩa bạn: ${platforms}. Mod có thể thay đổi nội dung trong các tài khoản này, như lượt thích, danh sách phát và theo dõi.`,
+        processCapabilities: (capabilities) => `Năng lực tiến trình Node: ${capabilities}. Những năng lực này vượt ra ngoài các mô-đun tệp, đường dẫn và mã hoá thông thường: ${capabilities.includes('process.run') ? 'có thể khởi chạy chương trình bên ngoài; ' : ''}${capabilities.includes('network.socket') ? 'có thể tự mở kết nối mạng, nằm ngoài danh sách máy chủ mà Folia thường cho phép; ' : ''}năng lực không khai báo sẽ bị từ chối khi chạy.`,
         queueReplace: 'Thay thế hàng đợi phát (playback.queue): mod có thể hoán đổi toàn bộ hàng đợi phát cùng một lúc, thao tác này cũng kết thúc Radio cá nhân. Folia sẽ cho biết mod nào đã thay thế; cho đến khi hàng đợi thay đổi lại, bạn có thể hoàn tác để lấy lại hàng đợi trước đó.',
         equalizerControl: 'Thay đổi cài đặt âm thanh của bạn (equalizer.control): mod có thể chuyển đổi cấu hình âm thanh đặt sẵn hoặc áp dụng đường cong bộ chỉnh âm riêng. Âm thanh tùy chỉnh của bạn sẽ không bao giờ bị ghi đè và bạn có thể chuyển lại trong Hiệu ứng âm thanh bất kỳ lúc nào.',
         renderQuality: 'Thay đổi chất lượng kết xuất khung lời bài hát (visualizer.renderQuality): mod có thể thay đổi độ phân giải và khử răng cưa của khung lời bài hát trong Hiệu năng & Hoạt họa, mà các kiểu lời bài hát vẽ bằng canvas hoặc WebGL sẽ theo. Cài đặt riêng của từng kiểu không bị ảnh hưởng và bạn có thể đổi lại trong Hiệu năng & Hoạt họa bất kỳ lúc nào.',
@@ -295,6 +300,9 @@ const createModApproval = ({ app, store, enabledKey, getMainWindowSafe, getLocal
                     ? locale.signatureInvalid(signature.reason ?? 'invalid')
                     : locale.signatureUnsigned;
         const permissions = Array.isArray(runtime.manifest.permissions) ? runtime.manifest.permissions : [];
+        // Process capabilities (manifest `processes`): what the mod's Node entry may require beyond
+        // the core modules; the Android host's module fence refuses the rest.
+        const capabilities = Array.isArray(runtime.manifest.processes) ? runtime.manifest.processes : [];
         const { client, experimental = [], embedOrigins = [], folia } = runtime.manifest;
         // Folium 1.7: the platforms the mod may call as the user (platform.<id>.read / .write), said in words.
         const platformsWith = (access) => permissions
@@ -308,6 +316,7 @@ const createModApproval = ({ app, store, enabledKey, getMainWindowSafe, getLocal
             '',
             signatureLine,
             permissions.length > 0 ? `${locale.permissions}${permissions.join(', ')}` : locale.noPermissions,
+            ...(capabilities.length > 0 ? [locale.processCapabilities(capabilities.join(', '))] : []),
             ...(readPlatforms.length > 0 ? [locale.platformRead(readPlatforms.join(', '))] : []),
             ...(writePlatforms.length > 0 ? [locale.platformWrite(writePlatforms.join(', '))] : []),
             ...(permissions.includes('playback.queue') ? [locale.queueReplace] : []),

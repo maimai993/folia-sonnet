@@ -392,7 +392,7 @@ contextBridge.exposeInMainWorld('electron', {
     debugGetRenderedFonts: (selector) => ipcRenderer.invoke('debug-get-rendered-fonts', selector),
     mods: {
         listMods: () => ipcRenderer.invoke('folia-mods:list'),
-        setModEnabled: (modId, enabled) => ipcRenderer.invoke('folia-mods:set-enabled', modId, enabled),
+        setModEnabled: (modId, enabled, digest) => ipcRenderer.invoke('folia-mods:set-enabled', modId, enabled, digest),
         reloadMods: () => ipcRenderer.invoke('folia-mods:reload'),
         invokeModRpc: (modId, name, args) => ipcRenderer.invoke('folia-mods:rpc', modId, name, args),
         invokeModStorage: (modId, operation, key, value) => ipcRenderer.invoke('folia-mods:storage', modId, operation, key, value),

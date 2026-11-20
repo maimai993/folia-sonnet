@@ -43,6 +43,24 @@ const NET_EMBED_PERMISSION = permissionGuarding('folium.ui.embed');
 const KNOWN_EXPERIMENTAL = new Set(Object.values(shared.experimental));
 
 /*
+ * Process capabilities. `mod.json`'s `processes` names the Node modules a mod's main entry may
+ * require beyond the read-only core set the loader always hands out (fs, path, crypto, …), which
+ * is written once in foliumShared.json and enforced by the Android Node host's module fence
+ * (assets/folia-node/moduleFence.js). Declaring one is what the trust dialog shows before a mod
+ * runs: "process.run" lets it launch programs, "network.socket" open raw connections. Both are
+ * refused where the host has no way to give them (the Android sandbox has no exec at all), and
+ * the manifest is validated here so a misspelt capability is an error rather than silence.
+ */
+const KNOWN_PROCESS_CAPABILITIES = new Set(Object.keys(shared.capabilities));
+const PROCESS_CAPABILITY_MODULES = {};
+Object.keys(shared.capabilities).forEach((id) => {
+    PROCESS_CAPABILITY_MODULES[id] = new Set(shared.capabilities[id].modules);
+});
+
+/** Modules a mod may require with no `processes` declared: the host's own line. */
+const CORE_MODULES = new Set(shared.coreModules);
+
+/*
  * Folium 1.7: the permissions of the experimental platform.raw, `platform.<id>.read` and
  * `platform.<id>.write` (one pair per platform that can be called through it, listed in
  * foliumShared.json). They unlock nothing without the opt-in, and writing goes with reading: a manifest
@@ -211,6 +229,7 @@ const validateManifest = (raw) => {
         embedOrigins: Array.isArray(raw.embedOrigins) ? raw.embedOrigins : [],
         folia: raw.folia ?? null,
         preview: raw.preview ?? null,
+        processes: Array.isArray(raw.processes) ? raw.processes : [],
     };
     // Folium 1.6 only (deprecated.cjs): an old permission id is read as its new one, and a field
     // mod.json does not have is a warning, not the error below.
@@ -282,6 +301,23 @@ const validateManifest = (raw) => {
             errors.push(`unknown experimental feature ${String(feature)}`);
         }
     });
+
+    // Process capabilities: each one has to exist, may appear once, and only a mod with a Node
+    // entry has anything to require the modules with.
+    const capabilityIds = new Set();
+    manifest.processes.forEach((capability) => {
+        if (typeof capability !== 'string' || !KNOWN_PROCESS_CAPABILITIES.has(capability)) {
+            errors.push(`unknown process capability ${String(capability)}; mod.json can have: ${[...KNOWN_PROCESS_CAPABILITIES].join(', ')}`);
+            return;
+        }
+        if (capabilityIds.has(capability)) {
+            errors.push(`duplicate process capability "${capability}"`);
+        }
+        capabilityIds.add(capability);
+    });
+    if (capabilityIds.size > 0 && manifest.main === null) {
+        errors.push('processes requires a "main" (Node) entry to run in');
+    }
 
     permissionIds.forEach((permission) => {
         const platform = PLATFORM_PERMISSION.exec(permission);
@@ -431,6 +467,9 @@ module.exports = {
     KNOWN_PERMISSIONS,
     permissionGuarding,
     KNOWN_EXPERIMENTAL,
+    KNOWN_PROCESS_CAPABILITIES,
+    PROCESS_CAPABILITY_MODULES,
+    CORE_MODULES,
     MOD_ID_PATTERN,
     parseDependency,
     satisfiesRange,

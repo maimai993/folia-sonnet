@@ -95,6 +95,15 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         JSObject args = new JSObject();
         args.put("id", call.getString("id", ""));
         args.put("enabled", Boolean.TRUE.equals(call.getBoolean("enabled", Boolean.FALSE)));
+        /*
+         * 启用时要带上用户在确认框里看到的那份内容摘要（sha256:<hex>）。
+         * 宿主会拿它和当前目录重新算出来的摘要比对，对不上就拒绝启用 ——
+         * 确认过的内容和实际要跑的必须是同一份字节。
+         */
+        String digest = call.getString("digest");
+        if (digest != null && !digest.isEmpty()) {
+            args.put("digest", digest);
+        }
         forward(call, "set-enabled", args);
     }
 

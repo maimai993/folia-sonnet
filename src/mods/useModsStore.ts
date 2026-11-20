@@ -52,7 +52,7 @@ interface ModsStoreState {
     refresh: () => Promise<void>;
     refreshFfmpeg: () => Promise<void>;
     reloadAll: () => Promise<void>;
-    toggleMod: (modId: string, enabled: boolean) => Promise<ModSetEnabledResult>;
+    toggleMod: (modId: string, enabled: boolean, digest?: string) => Promise<ModSetEnabledResult>;
     selectMod: (modId: string | null) => void;
     cancelActiveExport: () => Promise<void>;
     openModsDirectory: () => Promise<{ ok: boolean; directory?: string; error?: string }>;
@@ -105,8 +105,11 @@ export const useModsStore = create<ModsStoreState>((set, get) => ({
     // Enabling is confirmed in a main-process dialog, so the result carries an
     // outcome the panel surfaces; the mod list is only replaced when the call
     // actually returned one (a declined confirmation returns the current list).
-    toggleMod: async (modId, enabled) => {
-        const result = await setModEnabled(modId, enabled);
+    //
+    // 安卓没有主进程对话框，确认在面板里画（AndroidModApprovalDialog）；用户确认之后
+    // 由调用方把当时展示的摘要作为 `digest` 传进来，宿主复核过才写授权。
+    toggleMod: async (modId, enabled, digest) => {
+        const result = await setModEnabled(modId, enabled, digest);
         /*
          * 只有真的拿到清单才替换。
          *

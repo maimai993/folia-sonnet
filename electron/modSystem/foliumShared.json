@@ -1,5 +1,5 @@
 {
-    "version": { "major": 1, "minor": 10 },
+    "version": { "major": 1, "minor": 11 },
     "permissions": {
         "filesystem.data": { "guards": ["folium.storage", "api.storage"] },
         "playback.read": { "guards": ["api.runtime.getPlaybackSnapshot"] },
@@ -45,6 +45,38 @@
         "playerLayout": "player.layout",
         "remoteActions": "remote.actions",
         "platformRaw": "platform.raw"
+    },
+    "coreModules": [
+        "assert",
+        "buffer",
+        "crypto",
+        "events",
+        "fs",
+        "module",
+        "os",
+        "path",
+        "punycode",
+        "querystring",
+        "stream",
+        "string_decoder",
+        "timers",
+        "url",
+        "util",
+        "zlib"
+    ],
+    "capabilities": {
+        "worker-threads": {
+            "modules": ["worker_threads"],
+            "note": "在后台线程跑自己的统计（听歌档案的 analytics.cjs）"
+        },
+        "process.run": {
+            "modules": ["child_process"],
+            "note": "启动外部程序：child_process"
+        },
+        "network.socket": {
+            "modules": ["net", "dgram", "tls", "dns", "http", "https", "http2"],
+            "note": "直接开网络连接：net / dgram / tls / dns / http / https / http2"
+        }
     },
     "channels": {
         "list": "folia-mods:list",

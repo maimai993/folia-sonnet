@@ -78,6 +78,7 @@ const { verifyModSignature } = require(path.join(MODS, 'modSignature.cjs'));
 const { createModSecrets } = require(path.join(MODS, 'modSecrets.cjs'));
 const { createNetFetch } = require(path.join(MODS, 'netFetch.cjs'));
 const { createZipInstall } = require(path.join(MODS, 'zipInstall.cjs'));
+const { createModuleFence, makeChildProcessFacade, resolveRequested } = require('./moduleFence.js');
 const shared = require(path.join(MODS, 'foliumShared.json'));
 
 const FOLIUM_VERSION = shared.version;
@@ -145,24 +146,52 @@ const emitLog = (level, message, details) => {
 
 // --------------------------------------------------------------------- 设置
 
-const readSettings = () => {
+/*
+ * 信任根：启用状态与内容摘要记在这里。
+ *
+ * 为什么不在 userDataDir 下：模组目录（mods/）和它是同一棵树，而且整棵树落在外部存储
+ * （Java 的 getExternalFilesDir）。模组的 fs 能直接写这份文件 —— 那样「授权绑定到内容摘要」
+ * 就完全可以由被授权的一方自己伪造：改一行 enabled:true 配上刚算好的 digest，重启即生效。
+ * 所以 Java 把应用数据目录（/data/user/0/<包名>/mod-trust）单独传进来（环境变量
+ * FOLIA_TRUST_DIR），模组写不到那里。设置里只放模组系统总开关这类不构成授权的状态。
+ */
+const trustDir = (() => {
+    const fromEnv = process.env.FOLIA_TRUST_DIR;
+    if (typeof fromEnv === 'string' && fromEnv.length > 0) return fromEnv;
+    return path.join(userDataDir, 'mod-trust');
+})();
+const trustPath = path.join(trustDir, 'mod-trust.json');
+
+/** 记录格式：每个模组一条 { enabled, digest }。别的形状一律当没有记录（见 readTrustFile）。 */
+const TRUST_SCHEMA_VERSION = 1;
+
+const readJsonFile = (file) => {
     try {
-        const text = fs.readFileSync(settingsPath, 'utf8');
+        const text = fs.readFileSync(file, 'utf8');
         // 别的工具写出来的 JSON 可能带 BOM，先剥掉再解析。
         const parsed = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return parsed;
-        }
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
     } catch {
-        // 首次启动或文件损坏：都当空设置，不影响启动。
+        return null;
     }
-    return { mods: {} };
+};
+
+const writeJsonFile = (file, value) => {
+    const temp = `${file}.tmp`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(temp, JSON.stringify(value, null, 2), 'utf8');
+    fs.renameSync(temp, file);
+};
+
+const readSettings = () => {
+    const parsed = readJsonFile(settingsPath) ?? {};
+    if (!parsed.mods || typeof parsed.mods !== 'object' || Array.isArray(parsed.mods)) {
+        parsed.mods = {};
+    }
+    return parsed;
 };
 
 const settings = readSettings();
-if (!settings.mods || typeof settings.mods !== 'object') {
-    settings.mods = {};
-}
 // 模组系统总开关。桌面端由主进程持有（settings 里的 MOD_SYSTEM_ENABLED），
 // 这里跟着存一份，好让宿主自己知道「该不该跑模组」——UI 关掉总开关时下面那个
 // isEnabled 会连带把每个模组都判成未启用，loadAll() 于是真的把运行时卸掉。
@@ -172,11 +201,117 @@ if (typeof settings.systemEnabled !== 'boolean') {
 
 const writeSettings = () => {
     try {
-        const temp = `${settingsPath}.tmp`;
-        fs.writeFileSync(temp, JSON.stringify(settings, null, 2), 'utf8');
-        fs.renameSync(temp, settingsPath);
+        writeJsonFile(settingsPath, settings);
     } catch (error) {
         emitLog('warn', `写入模组设置失败：${serializeError(error)}`);
+    }
+};
+
+/*
+ * 一条信任记录合不合规。摘要必须是 `sha256:<64 位十六进制>`，少一位都算坏记录 ——
+ * 「摘要写错」和「摘要对不上」是两回事：前者说明文件被谁动过，按未启用处理并记日志。
+ */
+const isTrustDigest = (value) => typeof value === 'string' && /^sha256:[0-9a-f]{64}$/.test(value);
+
+const isTrustRecord = (record) => (
+    record !== null
+    && typeof record === 'object'
+    && !Array.isArray(record)
+    && typeof record.enabled === 'boolean'
+    // enabled 为真必须带摘要；为假时 digest 只能是 null。
+    && (record.enabled ? isTrustDigest(record.digest) : record.digest === null || record.digest === undefined)
+);
+
+/*
+ * 读信任文件。文件损坏、版本不认识、某条记录形状不对：都按「没有这条授权」处理并记一行日志，
+ * 绝不让一段读不懂的 JSON 变成授权（fail closed）。
+ */
+const readTrustFile = () => {
+    const trust = { version: TRUST_SCHEMA_VERSION, mods: {} };
+    if (!fs.existsSync(trustPath)) {
+        return trust;
+    }
+    const parsed = readJsonFile(trustPath);
+    if (parsed === null) {
+        emitLog('error', `信任记录 ${trustPath} 损坏或不可读，全部模组按未启用处理`);
+        return trust;
+    }
+    if (parsed.version !== TRUST_SCHEMA_VERSION) {
+        emitLog('error', `信任记录版本 ${String(parsed.version)} 不认识（期望 ${TRUST_SCHEMA_VERSION}），全部模组按未启用处理`);
+        return trust;
+    }
+    const records = parsed.mods;
+    if (!records || typeof records !== 'object' || Array.isArray(records)) {
+        emitLog('error', '信任记录缺少 mods 表，全部模组按未启用处理');
+        return trust;
+    }
+    Object.entries(records).forEach(([modId, record]) => {
+        if (isTrustRecord(record)) {
+            trust.mods[modId] = {
+                enabled: record.enabled,
+                digest: record.enabled ? record.digest : null,
+                confirmedAt: typeof record.confirmedAt === 'string' ? record.confirmedAt : null,
+            };
+            return;
+        }
+        emitLog('error', `信任记录里的模组 ${modId} 形状不对，按未启用处理`);
+    });
+    return trust;
+};
+
+const trust = readTrustFile();
+
+/*
+ * 从旧位置迁移：0.7.30 之前的版本把启用状态写在 userDataDir/mod-system.json 的 mods 表里，
+ * 和模组目录同一棵树。那份记录本身不可信（模组能改），所以不搬「授权」，只搬两样东西：
+ *   · 用户明确关掉的模组（enabled:false）—— 这是「拒绝」，搬过去不让模组借迁移复活；
+ *   · 内置模组的启用记录 —— 它们随包发布，没有第三方代码可伪造。
+ * 第三方模组的「启用」一律不搬，升级后按未确认处理，由用户在确认框里看一遍内容再开。
+ * 迁移只做一次：写一个标记文件，旧字段随后从 mod-system.json 里删掉。
+ */
+const MIGRATION_MARKER = path.join(trustDir, 'migrated-from-userdata');
+
+const migrateLegacyTrust = () => {
+    if (fs.existsSync(MIGRATION_MARKER)) return;
+    const legacy = settings.mods;
+    let moved = 0;
+    Object.entries(legacy).forEach(([modId, record]) => {
+        if (!record || typeof record !== 'object') return;
+        if (trust.mods[modId] !== undefined) return;
+        if (record.enabled === false) {
+            trust.mods[modId] = { enabled: false, digest: null, confirmedAt: null };
+            moved += 1;
+            return;
+        }
+        if (record.enabled === true && BUILTIN_MOD_IDS.has(modId)) {
+            // 没有旧摘要就用空摘要占位：内置模组按「随包内容」重新算（见 ensureBuiltinTrust）。
+            trust.mods[modId] = { enabled: true, digest: isTrustDigest(record.digest) ? record.digest : null, confirmedAt: null };
+            moved += 1;
+        }
+    });
+    try {
+        if (moved > 0) writeJsonFile(trustPath, trust);
+        fs.mkdirSync(trustDir, { recursive: true });
+        fs.writeFileSync(MIGRATION_MARKER, new Date().toISOString(), 'utf8');
+    } catch (error) {
+        emitLog('warn', `迁移旧启用记录失败：${serializeError(error)}`);
+        return;
+    }
+    if (Object.keys(legacy).length > 0) {
+        // 旧字段留在 mod-system.json 里只会让人以为它还算数，迁移完就删掉。
+        settings.mods = {};
+        writeSettings();
+    }
+    if (moved > 0) {
+        emitLog('info', `已从 userData 迁移 ${moved} 条模组启用记录到 ${trustPath}`);
+    }
+};
+
+const writeTrust = () => {
+    try {
+        writeJsonFile(trustPath, trust);
+    } catch (error) {
+        emitLog('error', `写入信任记录失败（模组启用状态可能不生效）：${serializeError(error)}`);
     }
 };
 
@@ -193,23 +328,60 @@ const BUILTIN_MOD_IDS = new Set(['mod-market', 'vinyl-disc', 'visualizer-jump', 
  * 随包内置、且管理面板里对用户隐藏的「资源型」模组（LIZI 68 个歌词舞台）。
  * 用户没有关闭入口，历史上又可能因为没有默认启用而被记过一次 enabled:false ——
  * 那种记录是 bug 的产物，不是用户的选择，必须无条件恢复，否则 68 款样式永远出不来。
- * 模组系统总开关仍然尊重（见下面 systemEnabled 那条）。
+ * 模组系统总开关仍然尊重（见下面 isEnabled 里 systemEnabled 那条）。
  */
 const FORCED_BUILTIN_IDS = new Set(['lizi-stages']);
 
-const isEnabled = (modId) => {
-    // 总开关关着的时候，单个模组的开关是「关是关，开也是关」—— 桌面端同理：
-    // 总开关决定「要不要加载模组系统」，单个开关只在系统开着时才有意义。
-    if (settings.systemEnabled !== true) return false;
-    if (FORCED_BUILTIN_IDS.has(modId)) return true;
-    const record = settings.mods[modId];
-    if (record) return record.enabled === true;
-    return BUILTIN_MOD_IDS.has(modId);
+/*
+ * 信任判定，与桌面端 electron/modSystem/approval.cjs 的 resolveTrust 同一套语义：
+ *
+ *   · 授权是一条记录（enabled + digest），digest 是用户确认那一刻模组目录的内容摘要；
+ *   · 每次启动重新算摘要，和记录里的对不上（文件被改过 / 被换过）就是撤销授权：
+ *     enabled 置为 false、trustStale 置真，界面提示「文件已变化，需要重新确认」；
+ *   · 内置模组随包发布、没有第三方代码可伪造，默认启用；但用户手动关掉之后照样尊重。
+ *
+ * 返回 { enabled, stale }。stale 只说明「曾经授权过、现在对不上了」。
+ */
+const trustStateOf = (modId, digest) => {
+    if (settings.systemEnabled !== true) {
+        return { enabled: false, stale: false };
+    }
+    const record = trust.mods[modId];
+    if (record === undefined) {
+        if (FORCED_BUILTIN_IDS.has(modId)) return { enabled: true, stale: false };
+        if (BUILTIN_MOD_IDS.has(modId)) {
+            // 内置模组第一次跑：把这一份内容本身记成用户已确认的内容（它随包来，没有第三方代码）。
+            trust.mods[modId] = { enabled: true, digest, confirmedAt: null };
+            writeTrust();
+            return { enabled: true, stale: false };
+        }
+        return { enabled: false, stale: false };
+    }
+    if (record.enabled !== true) {
+        return { enabled: false, stale: false };
+    }
+    if (digest !== null && record.digest === digest) {
+        return { enabled: true, stale: false };
+    }
+    // 摘要对不上（或者算不出摘要）：撤销授权，下次要用户再看一遍内容。
+    trust.mods[modId] = { enabled: false, digest: null, confirmedAt: null };
+    writeTrust();
+    return { enabled: false, stale: true };
 };
 
+/** 用户确认或关掉一个模组：只有带摘要才能记成启用。 */
 const writeEnabled = (modId, enabled, digest) => {
-    settings.mods[modId] = { enabled: enabled === true, digest: digest ?? null };
-    writeSettings();
+    if (enabled === true && !isTrustDigest(digest)) {
+        // 没有可信摘要就没有可授权的对象：拒绝对它写入「启用」。
+        return false;
+    }
+    trust.mods[modId] = {
+        enabled: enabled === true,
+        digest: enabled === true ? digest : null,
+        confirmedAt: enabled === true ? new Date().toISOString() : null,
+    };
+    writeTrust();
+    return true;
 };
 
 // --------------------------------------------------------------------- 桌面端 app 替身
@@ -240,6 +412,8 @@ const getDeviceMetricsSnapshot = () => deviceMetrics;
  * 只替换 `nvidia-smi` 这一条命令，别的 execFile 原样放行。拿不到指标时照常回 ENOENT，
  * 模组会退到「只显示 —」，和桌面无 N 卡时的表现一致。
  */
+// 宿主装好的替身副本：围栏把这个交给声明了 process.run 的模组，见 installNvidiaShim。
+const childProcessFacades = new Map();
 const installNvidiaShim = () => {
     try {
         const childProcess = require('child_process');
@@ -269,10 +443,66 @@ const installNvidiaShim = () => {
         };
         patched.__foliaShim = true;
         childProcess.execFile = patched;
+        /*
+         * 声明了 process.run 的模组拿到的是一份只读外观（moduleFence.makeChildProcessFacade）：
+         * 交给它的是绑在原生实现上的副本，所以它没法
+         *   · 把 execFile 改回原生实现，绕过上面那条 nvidia-smi 替身；
+         *   · 在自己的模块作用域里把 require('child_process') 的结果当成可写通道。
+         * 真正的限制仍是围栏（没声明 process.run 直接 require 失败）。
+         */
+        const facade = makeChildProcessFacade(childProcess);
+        childProcessFacades.set('child_process', facade);
     } catch (error) {
         emitLog('warn', `nvidia-smi 替身安装失败：${serializeError(error)}`);
     }
 };
+
+/*
+ * 模块级围栏（见 moduleFence.js）。
+ *
+ * 以前这里只特判 `'electron'`，别的一律转给原始 `Module._load` —— 模组随手一句
+ * `require('child_process')` 就能起子进程、`require('net')` 就能绕过 folium.net.fetch 的
+ * 白名单直连任意主机，权限等于宿主自己。现在按调用者是「宿主还是某个模组」决定：
+ * 模组只能拿 foliumShared.json 的 coreModules（fs / path / crypto / zlib …，内置模组就用到这几个），
+ * 其余要 mod.json 的 `processes` 里声明过对应能力。
+ *
+ * `resolveRequester` 只认模组目录（mods/<id>/）与随包解的宿主目录以外的文件：
+ * 之前 require 进来的、或者模组自己目录里的文件，都算那个模组的代码。
+ */
+const modRootsByPrefix = new Map();
+
+const rememberModRoot = (modId, dirPath) => {
+    const resolved = path.resolve(dirPath);
+    modRootsByPrefix.set(resolved.endsWith(path.sep) ? resolved : resolved + path.sep, modId);
+};
+
+/** 一个文件属于哪个模组；不属于任何模组时返回 null（= 宿主，不受限）。 */
+const modIdForFile = (filename) => {
+    if (typeof filename !== 'string' || filename.length === 0) return null;
+    const resolved = path.resolve(filename);
+    // 最长前缀优先：模组目录不会互相嵌套，但按前缀长度取最稳。
+    let best = null;
+    let bestLength = -1;
+    modRootsByPrefix.forEach((modId, root) => {
+        if (resolved.startsWith(root) && root.length > bestLength) {
+            best = modId;
+            bestLength = root.length;
+        }
+    });
+    return best;
+};
+
+const moduleFence = createModuleFence({
+    coreModules: Array.isArray(shared.coreModules) ? shared.coreModules : [],
+    capabilities: shared.capabilities || {},
+    // 内置模组与宿主一起签名发布，放行全部模块：它们的 mod.json 一改官方签名就失效
+    // （面板会显示「签名不匹配」），因此不能靠给它们加 processes 来放行 worker_threads。
+    builtinModIds: [...BUILTIN_MOD_IDS],
+    hostRoots: [__dirname],
+    onDenied: (modId, moduleName, reason) => {
+        emitLog('warn', `[${modId}] require('${moduleName}') 被拒绝：${reason}`);
+    },
+});
 
 /*
  * `require('electron')` 的替身。
@@ -287,16 +517,18 @@ const installNvidiaShim = () => {
  */
 const installElectronShim = (shim) => {
     try {
-        const Module = require('module');
-        if (Module.__foliaElectronShim) return;
-        const originalLoad = Module._load;
-        Module._load = function load(request, parent, isMain) {
-            if (request === 'electron') return shim;
-            return originalLoad.call(this, request, parent, isMain);
-        };
-        Module.__foliaElectronShim = true;
+        moduleFence.install({
+            onElectron: () => shim,
+            facades: childProcessFacades,
+            resolveRequester: (parent) => {
+                const modId = modIdForFile(parent && parent.filename);
+                if (modId === null) return null;
+                const runtime = runtimes.get(modId);
+                return { modId, capabilities: runtime ? runtime.capabilities : [] };
+            },
+        });
     } catch (error) {
-        emitLog('warn', `electron 替身安装失败：${serializeError(error)}`);
+        emitLog('warn', `electron 替身 / 模块围栏安装失败：${serializeError(error)}`);
     }
 };
 
@@ -362,7 +594,13 @@ const buildElectronModule = () => {
 };
 
 const app = {
-    getPath: (name) => {        switch (name) {
+    getPath: (name) => {
+        // trust：信任根（见文件开头 trustDir）。桌面端把启用记录放在 userData 下的 settings 里，
+        // 安卓必须分开，所以这里单独给一个名字，任何要求「模组写不到」的代码都从这里取。
+        if (name === 'trust') {
+            return trustDir;
+        }
+        switch (name) {
             case 'userData':
                 return userDataDir;
             case 'temp':
@@ -551,6 +789,8 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
     const disposers = [];
     const rpcHandlers = new Map();
     let unloaded = false;
+    // 围栏按目录认人：先登记，模组 activate 时 require 才知道自己是哪个模组。
+    rememberModRoot(id, dirPath);
 
     const context = {
         modId: id,
@@ -662,6 +902,8 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
     return {
         manifest,
         dirPath,
+        // 模组声明过的进程能力：围栏据此放行 child_process / net 这些模块。
+        capabilities: Array.isArray(manifest.processes) ? manifest.processes.slice() : [],
         load,
         unload,
         rpcHandler: (name) => rpcHandlers.get(name),
@@ -670,7 +912,7 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
 
 // --------------------------------------------------------------------- 列表
 
-const publicState = (item, status, error, digest) => {
+const publicState = (item, status, error, digest, trustState = { enabled: false, stale: false }) => {
     const manifest = item.manifest ?? null;
     return {
         id: item.id,
@@ -679,10 +921,13 @@ const publicState = (item, status, error, digest) => {
         author: manifest ? manifest.author ?? '' : '',
         description: manifest ? manifest.description ?? '' : '',
         permissions: manifest && Array.isArray(manifest.permissions) ? manifest.permissions : [],
+        // 声明过的进程能力（mod.json 的 processes）：界面据此在确认框里说明「这个模组能起子进程 / 直连网络」。
+        processes: manifest && Array.isArray(manifest.processes) ? manifest.processes : [],
         status,
         error: error ?? null,
-        enabled: isEnabled(item.id),
-        trustStale: false,
+        enabled: trustState.enabled,
+        // 曾经确认过、但文件已经变了：界面据此提示要重新确认（桌面端同名语义）。
+        trustStale: trustState.stale,
         signature: manifest
             ? verifyModSignature(item.dirPath, manifest)
             : { status: 'unsigned', keyId: '', keyLabel: '', reason: null },
@@ -691,6 +936,8 @@ const publicState = (item, status, error, digest) => {
         embedOrigins: manifest && Array.isArray(manifest.embedOrigins) ? manifest.embedOrigins : [],
         folia: manifest ? manifest.folia ?? null : null,
         hasMain: Boolean(manifest && manifest.main),
+        // 内容摘要：确认框把它写给用户看，用户确认后又原样交回来复核（set-enabled 的 digest）。
+        digest: digest ?? null,
         // 客户端入口走同源虚拟路径，由原生 ModRouteProcessor 映射到私有目录里的真实文件。
         // 路径里带摘要前 12 位，改完代码不会命中 WebView 的 ES 模块表。
         clientUrl: status === 'loaded' && manifest && manifest.client
@@ -705,22 +952,25 @@ const buildList = () => {
     discoveredCache = discoverMods();
     const mods = [];
     discoveredCache.entries.forEach((item) => {
-        if (item.manifest && item.manifest.client && !item.manifest.main && !isEnabled(item.id)) {
-            // 纯客户端模组：没有 Node 入口，桌面端也把它当「已安装、待启用」。
-            mods.push(publicState(item, 'disabled', null, null));
-            return;
-        }
-        if (!isEnabled(item.id)) {
-            mods.push(publicState(item, 'disabled', null, null));
-            return;
-        }
+        // 授权是「这个 id + 这一份内容」：先算摘要，再拿摘要去比对信任记录
+        // （摘要对不上就当场撤销授权，见 trustStateOf）。算不出摘要的目录永远按未授权处理。
         const digest = computeModDigest(item.dirPath);
+        const trustState = trustStateOf(item.id, digest);
+        if (item.manifest && item.manifest.client && !item.manifest.main && !trustState.enabled) {
+            // 纯客户端模组：没有 Node 入口，桌面端也把它当「已安装、待启用」。
+            mods.push(publicState(item, 'disabled', null, null, trustState));
+            return;
+        }
+        if (!trustState.enabled) {
+            mods.push(publicState(item, 'disabled', null, null, trustState));
+            return;
+        }
         const runtime = runtimes.get(item.id);
         if (!runtime) {
-            mods.push(publicState(item, 'error', 'mod-not-loaded', digest));
+            mods.push(publicState(item, 'error', 'mod-not-loaded', digest, trustState));
             return;
         }
-        mods.push(publicState(item, 'loaded', null, digest));
+        mods.push(publicState(item, 'loaded', null, digest, trustState));
     });
     discoveredCache.broken.forEach((item) => {
         mods.push(publicState({ id: item.id, dirPath: item.dirPath, manifest: null }, 'error', item.error, null));
@@ -816,16 +1066,28 @@ const loadAll = () => {
     discoveredCache = discoverMods();
     const { entries } = discoveredCache;
 
+    /*
+     * 每个模组先按「id + 这一份内容」判一次授权，再把结果交给依赖规划。
+     *
+     * 这里必须重新算摘要：进程起来之后模组文件仍可能被换掉（模组的 fs、外部存储里的
+     * 文件管理器、备份恢复），拿上次列表里的结论会放过一次「确认之后被替换」。
+     */
+    const trustById = new Map();
+    entries.forEach((item, id) => {
+        trustById.set(id, trustStateOf(id, computeModDigest(item.dirPath)));
+    });
+    const isTrusted = (id) => trustById.get(id)?.enabled === true;
+
     // 依赖顺序、循环依赖、未启用依赖都由桌面端同一份 manifest.cjs 判定。
     const enabledManifests = new Map();
     entries.forEach((item, id) => {
-        if (isEnabled(id)) {
+        if (isTrusted(id)) {
             enabledManifests.set(id, item.manifest);
         }
     });
     const plan = resolveLoadPlan(enabledManifests, {
         source: 'android',
-        isEnabled: (id) => isEnabled(id),
+        isEnabled: isTrusted,
     });
 
     plan.order.forEach((id) => {
@@ -902,27 +1164,54 @@ const operations = {
 
     reload: () => loadAll(),
 
-    'set-enabled': ({ id, enabled }) => {
+    /*
+     * 用户确认启用 / 关掉一个模组。
+     *
+     * 安卓没有桌面端那种原生确认框，确认在渲染端做（模组面板的确认框，见
+     * src/mods/android/androidModApproval.ts）：界面先算好这一份内容的摘要给用户看，
+     * 用户点了「仍要启用」之后才调这里，并把同一个 digest 带回来。宿主再算一遍当前摘要，
+     * 和界面确认的那一份对不上就拒掉（ENABLE_DIGEST_MISMATCH）—— 确认框里写的和实际要
+     * 跑的必须是同一份字节，否则「看一眼再启用」就没有意义。
+     *
+     * 不带 digest 就启用一律拒绝：授权必须绑定到具体内容。
+     */
+    'set-enabled': ({ id, enabled, digest }) => {
         const item = discoveredCache.entries.get(id);
         if (!item) {
             return { ok: false, error: `mod-not-found:${id}` };
         }
-        writeEnabled(id, enabled === true, computeModDigest(item.dirPath));
+        if (enabled === true) {
+            const current = computeModDigest(item.dirPath);
+            if (current === null) {
+                return { ok: false, error: 'mod-content-unverifiable', list: buildList() };
+            }
+            if (digest !== undefined && digest !== null && digest !== current) {
+                return { ok: false, error: 'enable-digest-mismatch', list: buildList() };
+            }
+            if (!writeEnabled(id, true, current)) {
+                return { ok: false, error: 'mod-content-unverifiable', list: buildList() };
+            }
+        } else {
+            writeEnabled(id, false, null);
+        }
         const list = loadAll();
         send('event', { type: 'state-changed', list });
         return { ok: true, list };
     },
 
+    /*
+     * 装一个 zip。**只装不启用**：装包只是把文件放到模组目录，用户真正同意「跑这份代码」
+     * 要经过和手动放进目录的模组同一条确认流程（刷新列表 → 点启用 → 确认框 → set-enabled
+     * 带摘要）。以前这里装完直接 writeEnabled(id, true)，等于把「下载了一个包」当成
+     * 「确认过这份代码」，装上就能以完整 Node 权限跑。
+     */
     'install-zip': async ({ zipPath }) => {
         const result = await zipInstall.installModFromZip(zipPath);
         if (result && result.ok) {
-            // 安卓上没有桌面端那套原生确认框；用户主动装包即为明确意图，直接启用。
-            const item = discoverMods().entries.get(result.id);
-            if (item) {
-                writeEnabled(result.id, true, computeModDigest(item.dirPath));
-            }
             loadAll();
-            send('event', { type: 'state-changed', list: buildList() });
+            const list = buildList();
+            send('event', { type: 'state-changed', list });
+            return { ...result, enabled: false, needsConfirmation: true };
         }
         return result;
     },
@@ -1121,7 +1410,9 @@ const handleRequest = async (raw) => {
 };
 
 const main = () => {
-    emitLog('info', `Node 宿主启动：node ${process.version}，数据目录 ${userDataDir}`);
+    emitLog('info', `Node 宿主启动：node ${process.version}，数据目录 ${userDataDir}，信任根 ${trustDir}`);
+    // 旧版本把启用状态写在 userData 里，先搬一次（只搬「拒绝」与内置模组，理由见 migrateLegacyTrust）。
+    migrateLegacyTrust();
     // 回调必须立刻返回；重活丢进微任务，别堵住 uv 循环。
     foliaNode.registerChannel('host', (payload) => {
         Promise.resolve().then(() => handleRequest(payload));
