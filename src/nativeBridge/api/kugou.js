@@ -136,6 +136,21 @@ export async function ensureKGCookie() {
 async function persistKGLoginCookies(patch) {
   const generation = kgSessionGeneration;
   const kuGoo = buildKuGooCookieValue(patch);
+  /*
+   * 解除登出闩锁（issue H23）。
+   *
+   * 以前这一步放在 `generation !== kgSessionGeneration` 的过期检查**之后**，而
+   * `kgSignedOut = false` 全仓只有这一处。于是「登录落盘跑到一半、用户点了登出」这一单
+   * 会在过期检查里直接 return，闩锁留在 true 没人解 —— 而 ensureKGCookie 见到 true 就回空串。
+   *
+   * 扫码那条路（handleKGLoginQrCheck）读答复后有 generation 检查，走不到这里；
+   * 手动贴 cookie 那条（handleKGLoginCookie）直接调本函数、没有前置守护，
+   * 是真正可能卡住的路径。
+   *
+   * 能走到这里就说明确实有一次登录要落盘，闩锁的使命（挡住登出之后的自动恢复）已经完成。
+   * 真正要防的是「旧的一单晚回来把新会话覆盖掉」，那是下面 generation 检查的事，与闩锁无关。
+   */
+  kgSignedOut = false;
   const cookiePatch = Object.assign(
     {},
     buildKGDeviceCookiePatch(await getKGDeviceIdentity()),
@@ -143,7 +158,6 @@ async function persistKGLoginCookies(patch) {
   );
   if (kuGoo && !cookiePatch.KuGoo) cookiePatch.KuGoo = kuGoo;
   if (generation !== kgSessionGeneration) return false;
-  kgSignedOut = false;
   try {
     await setBrowserCookies('https://www.kugou.com/', cookiePatch);
     if (generation !== kgSessionGeneration) return false;

@@ -184,6 +184,34 @@ describe('酷狗桥登出清会话（#208）', () => {
         expect(cookies.kgCookieToken(await bridge.ensureKGCookie())).toBe('fixture-new-token');
     });
 
+    /*
+     * #H23：闩锁的两条判据 —— 登出后「自动恢复」必须被挡住，「用户主动登录」必须还能进。
+     *
+     * 核实记录：审查意见说「kgSignedOut = false 只有一个复位点，走到那行以外就再也登不回来」。
+     * 扫码那条路（handleKGLoginQrCheck）拿到答复后另有一次 generation 检查，登出后根本走不到
+     * persistKGLoginCookies，所以那条路上并不成立；真正没有前置守护的是手动贴 cookie 这条路
+     * （handleKGLoginCookie）。对它的处置是把闩锁复位提到过期检查之前（见 kugou.js 注释），
+     * 属防御性收敛 —— 那个竞态窗口在测试里插不稳，所以这里不假装能复现它。
+     */
+    it('登出后自动恢复被挡住，但用户主动登录仍然进得去', async () => {
+        installHost({ batch: true });
+        const bridge = await import('../../../src/nativeBridge/api/kugou.js');
+        await logout();
+        // 自动恢复被挡住：ensureKGCookie 在闩锁处直接回空串，不去读 cookie。
+        expect(await bridge.ensureKGCookie()).toBe('');
+
+        /*
+         * 用户主动登录必须还得进去。
+         *
+         * 用扫码这条路观察：它会走 handleKGLoginQrCheck → persistKGLoginCookies（闩锁唯一
+         * 复位点）。贴 cookie 那条（handleKGLoginCookie）落盘后还要 getKGLoginStatus 走真实
+         * 用户信息接口，测试环境里不好合成，换这条同样经过复位点的路径来钉。
+         */
+        vi.mocked(fetch).mockResolvedValue(Response.json({ status: 1, data: { status: 4, userid: '99', token: 'fixture-recovered' } }));
+        const recovered = await bridge.handleKGLoginQrCheck('recover-key');
+        expect(recovered.loggedIn).toBe(true);
+    });
+
     it('登出后迟到的二维码答复不重新保存登录', async () => {
         const host = installHost({ batch: true });
         let answer!: (value: Response) => void;
