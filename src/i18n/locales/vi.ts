@@ -9422,6 +9422,7 @@ export default {
     "lanCastNoDevice": "Không tìm thấy loa. Hãy đảm bảo điện thoại và loa dùng chung Wi-Fi và DLNA đã bật trên loa.",
     "lanCastSkippedDevices_other": "{{count}} thiết bị đã trả lời nhưng không được nhận ra là loa",
     "lanCastSkippedShort_other": "{{count}} không nhận ra",
+    "lanCastCoverTrimmed": "Ảnh bìa của bài này không phải ảnh mạng nên loa sẽ không hiển thị ảnh bìa",
     "lanCastPlaying": "Âm thanh phát trên {{name}}, điện thoại đã tắt tiếng",
     "lanCastFollowed": "Đã gửi bài hát mới tới {{name}}",
     "lanCastLocalHint": "Điện thoại đã tắt tiếng nhưng thanh tiến độ và lời bài hát vẫn chạy; đổi bài sẽ tự động phát trên loa.",

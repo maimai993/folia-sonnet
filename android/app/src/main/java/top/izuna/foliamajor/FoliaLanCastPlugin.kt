@@ -140,10 +140,13 @@ class FoliaLanCastPlugin : Plugin() {
         val artist = call.getString("artist") ?: ""
         val album = call.getString("album") ?: ""
         val coverUrl = call.getString("coverUrl") ?: ""
-        val durationMs = call.getInt("durationMs", 0) ?: 0
+        // 时长用 Long 读：Int 毫秒在 24 天以上的音频上会溢出成负数（issue M23 第 2 点）。
+        val durationMs = call.getLong("durationMs") ?: 0L
+        // Web 侧认出来的格式（可选）：给了就用它，没给就由原生按地址再认一次。
+        val declaredFormat = call.getString("audioFormat")
         Thread {
             try {
-                val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs)
+                val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs, declaredFormat)
                 // 有些老设备解析不了 DIDL-Lite，正文送不进去就退成 NOT_IMPLEMENTED 再试一次：
                 // 地址照样能播，只是音响上不显示歌名（issue M22 的两次尝试见 LanCastFailures.dispatchUri）。
                 val dispatch = LanCastFailures.dispatchUri(
@@ -175,6 +178,11 @@ class FoliaLanCastPlugin : Plugin() {
                 } else {
                     val payload = JSObject()
                     payload.put("ok", true)
+                    // 哪些元数据被裁掉了：封面不是 http(s) 时整段不发，音响侧就只有歌名没有图。
+                    // 过去这一步是静默的，前端收不到任何「元数据被裁剪」的信号（issue M23 第 3 点）。
+                    payload.put("trimmed", trimmedFields(coverUrl, title, artist, album).joinToString(","))
+                    // 实际声明的格式：排查「为什么这台音响不认无损」时要用它。
+                    payload.put("protocolInfo", LanCastMetadata.protocolInfo(audioUrl))
                     deliver(call) { call.resolve(payload) }
                 }
             } catch (error: Exception) {
@@ -828,16 +836,22 @@ class FoliaLanCastPlugin : Plugin() {
         artist: String,
         album: String,
         coverUrl: String,
-        durationMs: Int,
+        durationMs: Long,
+        declaredFormat: String? = null,
     ): String {
-        val duration = if (durationMs > 0) {
-            val total = durationMs / 1000
-            String.format("%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-        } else "00:00:00"
-        val art = if (coverUrl.startsWith("http", true)) {
+        val duration = LanCastMetadata.duration(durationMs)
+        val art = if (isStreamableCover(coverUrl)) {
             "<upnp:albumArtURI>${escapeXml(coverUrl)}</upnp:albumArtURI>"
         } else ""
         val albumPart = if (album.isNotEmpty()) "<upnp:album>${escapeXml(album)}</upnp:album>" else ""
+        // 格式按实际地址声明：写死 MP3 会让按 protocolInfo 选解码器的音响拒播无损源（issue M23）。
+        val format = if (!declaredFormat.isNullOrEmpty()) {
+            LanCastMetadata.Format.entries.firstOrNull { it.name.equals(declaredFormat, ignoreCase = true) }
+                ?: LanCastMetadata.formatOf(audioUrl)
+        } else {
+            LanCastMetadata.formatOf(audioUrl)
+        }
+        val protocolInfo = LanCastMetadata.protocolInfoFor(format)
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
             "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
@@ -847,8 +861,22 @@ class FoliaLanCastPlugin : Plugin() {
             albumPart +
             "<upnp:class>object.item.audioItem.musicTrack</upnp:class>" +
             art +
-            "<res duration=\"$duration\" protocolInfo=\"http-get:*:audio/mpeg:DLNA.ORG_PN=MP3\">${escapeXml(audioUrl)}</res>" +
+            "<res duration=\"$duration\" protocolInfo=\"$protocolInfo\">${escapeXml(audioUrl)}</res>" +
             "</item></DIDL-Lite>"
+    }
+
+    /** 封面只有 http(s) 地址音响才拿得到；blob: / data: / 本地路径发了也只是个死链。 */
+    private fun isStreamableCover(coverUrl: String): Boolean = coverUrl.startsWith("http://", true) ||
+        coverUrl.startsWith("https://", true)
+
+    /** 被裁掉的元数据字段，与 didlMetadata 的规则一一对应。 */
+    private fun trimmedFields(coverUrl: String, title: String, artist: String, album: String): List<String> {
+        val trimmed = ArrayList<String>(4)
+        if (!isStreamableCover(coverUrl.trim())) trimmed.add("cover")
+        if (title.isBlank()) trimmed.add("title")
+        if (artist.isBlank()) trimmed.add("artist")
+        if (album.isBlank()) trimmed.add("album")
+        return trimmed
     }
 
     private fun escapeXml(value: String): String = value

@@ -83,6 +83,8 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
     const [devices, setDevices] = React.useState<LanSpeaker[]>([]);
     // 应答了但没读成设备的数量：过去这些设备静默消失，用户只知道「少了一台」（issue M22）。
     const [skipped, setSkipped] = React.useState(0);
+    // 这台音响拿不到封面（封面不是 http 地址时原生不发 albumArtURI，issue M23）。
+    const [coverTrimmed, setCoverTrimmed] = React.useState(false);
     const [scanning, setScanning] = React.useState(false);
     const [castingUrl, setCastingUrl] = React.useState<string | null>(null);
     const [active, setActive] = React.useState<LanSpeaker | null>(() => getCastingSpeaker());
@@ -200,8 +202,9 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         pushedSrcRef.current = audioSrc;
         setPanel('closed');
         void castTrackToSpeaker(speaker, buildTrack())
-            .then(() => {
+            .then(info => {
                 setNotice(t('lanCastFollowed', { name: speaker.name }));
+                setCoverTrimmed(info.trimmed.includes('cover'));
                 setError('');
             })
             .catch(followError => setError(lanCastErrorText(followError)));
@@ -212,10 +215,12 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         setError('');
         setNotice('');
         try {
-            await castTrackToSpeaker(device, buildTrack());
+            const info = await castTrackToSpeaker(device, buildTrack());
             pushedSongRef.current = trackKey;
             pushedSrcRef.current = audioSrc;
             setNotice(t('lanCastPlaying', { name: device.name }));
+            // 音响拿不到封面时把这句话说在遥控器上：过去是静默的，用户只会觉得「投送不对劲」（issue M23）。
+            setCoverTrimmed(info.trimmed.includes('cover'));
             // 选完设备直接在同一张卡里换成遥控器，不再另开浮层。
             setPanel('remote');
         } catch (castError) {
@@ -508,7 +513,8 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                                 artist={getSongArtistLabel(song)}
                                 coverUrl={coverUrl}
                                 isDaylight={isDaylight}
-                                onMinimize={() => setPanel('closed')}
+                                // 音响侧拿不到封面时说一声，别让用户以为是投送出了问题（issue M23）。
+                                coverNote={coverTrimmed ? t('lanCastCoverTrimmed') : ''}                                onMinimize={() => setPanel('closed')}
                                 onSwitch={() => setPanel('devices')}
                                 onStop={() => void stop()}
                             />

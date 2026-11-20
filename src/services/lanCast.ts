@@ -5,6 +5,7 @@
 
 import { isCapacitorAndroid } from '../platform/runtime';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { describeLanCastMedia, describeLanCastTrimming } from './lanCastMetadata';
 
 export type LanSpeaker = {
     id: string;
@@ -23,6 +24,21 @@ export type LanCastTrack = {
     album?: string;
     coverUrl?: string;
     durationMs?: number;
+    /**
+     * 实际音频格式，与 `describeLanCastMedia()` 认出来的那个一致（issue M23）。
+     *
+     * 不给也不要紧：原生会按投送地址再认一次。给它的意义是地址换了 host 之后（回环 → 局域网）
+     * 仍按 Web 侧认定的格式声明，两边不会各说各的。
+     */
+    audioFormat?: string;
+};
+
+/** 投送成功时原生回报的信息。 */
+export type LanCastPlaybackInfo = {
+    /** 被裁掉的元数据字段：`cover` 表示音响侧拿不到封面。 */
+    trimmed: string[];
+    /** 实际声明的 `protocolInfo`，排查「为什么这台音响不认无损」时用。 */
+    protocolInfo: string;
 };
 
 type RelayPlugin = {
@@ -38,7 +54,12 @@ type CastPlugin = {
         /** 一共几台应答了。 */
         attempted?: number;
     }>;
-    play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{ ok?: boolean }>;
+    play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{
+        ok?: boolean;
+        /** 逗号分隔的被裁字段（`cover` / `title` …），旧版本插件不给。 */
+        trimmed?: string;
+        protocolInfo?: string;
+    }>;
     stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean; reason?: string }>;
     getVolume?: (options: { volumeControlUrl: string }) => Promise<{ volume?: number }>;
     setVolume?: (options: { volumeControlUrl: string; volume: number }) => Promise<{ ok?: boolean }>;
@@ -419,12 +440,29 @@ export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[
     (await discoverLanSpeakersDetailed(timeoutMs)).devices
 );
 
-export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrack): Promise<void> => {
+/**
+ * 把一首歌推到音响上。返回这次投送实际声明的媒体信息（格式 / protocolInfo / 被裁掉的字段）。
+ *
+ * 返回值是给界面用的：过去音响侧没有封面时前端一无所知（issue M23），现在能说了。
+ */
+export const castTrackToSpeaker = async (
+    speaker: LanSpeaker,
+    track: LanCastTrack,
+): Promise<LanCastPlaybackInfo> => {
     const plugin = cast();
     if (!plugin?.play) throw new Error('当前设备不支持局域网投送');
     const url = await toCastableUrl(track.url);
+    // 格式按**投送地址**认（本地文件与直链都带扩展名），并把结论一起交给原生：
+    // 原生换掉 host 之后仍按这里的判定声明 protocolInfo，两边不会各说各的（issue M23）。
+    const media = describeLanCastMedia(url);
+    let result: { trimmed?: string; protocolInfo?: string } | undefined;
     try {
-        await plugin.play({ ...track, url, controlUrl: speaker.controlUrl });
+        result = await plugin.play({
+            ...track,
+            url,
+            controlUrl: speaker.controlUrl,
+            ...(media.format ? { audioFormat: media.format } : {}),
+        });
     } catch (error) {
         throw new Error(errorText(error));
     }
@@ -446,6 +484,15 @@ export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrac
     notifyCasting();
     applyCastingMute();
     rememberSpeaker(speaker);
+    const trimmed = String(result?.trimmed ?? '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    // 原生没回 protocolInfo（旧版本插件）时用 Web 侧算的那份，界面拿到的永远是这次实际声明的东西。
+    return {
+        trimmed: trimmed.length > 0 ? trimmed : describeLanCastTrimming(track),
+        protocolInfo: result?.protocolInfo || media.protocolInfo,
+    };
 };
 
 /** 停止音响播放、关掉对局域网开放的转发入口、把手机声音还原。 */

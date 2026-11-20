@@ -9475,6 +9475,7 @@ export default {
     "lanCastSkippedDevices_other": "{{count}} devices answered but were not recognised as speakers",
     "lanCastSkippedShort_one": "{{count}} not recognised",
     "lanCastSkippedShort_other": "{{count}} not recognised",
+    "lanCastCoverTrimmed": "This track's cover is not a web image, so the speaker shows no artwork",
     "lanCastPlaying": "Sound is on {{name}}; the phone is muted",
     "lanCastFollowed": "Track change sent to {{name}}",
     "lanCastLocalHint": "The phone is muted, but the progress bar and lyrics keep running. Changing tracks follows on the speaker.",
