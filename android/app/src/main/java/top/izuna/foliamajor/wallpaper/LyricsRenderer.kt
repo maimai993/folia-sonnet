@@ -907,7 +907,32 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
     }
 
 
+    /*
+     * GL 上下文代次（#M6）。
+     *
+     * 每次 onSurfaceCreated 加一。所有持有 GL 对象的缓存都挂在这一代上，
+     * 判据是「代次变了」而不是「字体变没变」—— 后者只是以前恰好在用的巧合。
+     */
+    private var glGeneration = GlContextGeneration.NO_GENERATION
+
+    /** 文本纹理 LRU 属于哪一代上下文：与 glGeneration 不一致就一律不命中。 */
+    private var texturesGeneration = GlContextGeneration.NO_GENERATION
+
     override fun onSurfaceCreated(gl: GL10, config: EGLConfig) {
+        /*
+         * 先换代次，再重建 program / buffer / 纹理。
+         *
+         * 顺序有讲究：代次只看前后两代的差，与重建是否成功无关 ——
+         * 哪怕下面某个 buildProgram 返回 0，旧代次的缓存也已经不能用了。
+         */
+        val previousGeneration = glGeneration
+        glGeneration += 1
+        // 正常情况下恒为 true（每次进来都换了一代）；false 只可能是代次没加的错误，
+        // 下面按保守分支处理。留着这个判定是为了让「新上下文」这件事有一处显式的依据。
+        val newContext = GlContextGeneration.startsNewGeneration(previousGeneration, glGeneration)
+        if (!newContext) {
+            Log.w(TAG, "onSurfaceCreated did not advance the GL generation")
+        }
         backgroundProgram = buildProgram(BACKGROUND_VERTEX, BACKGROUND_FRAGMENT)
         quadProgram = buildProgram(QUAD_VERTEX, QUAD_FRAGMENT)
         videoProgram = buildProgram(VIDEO_VERTEX, VIDEO_FRAGMENT)
@@ -929,6 +954,34 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
         loadedCoverKey = null
         imageTexture = 0
         loadedImageKey = null
+        /*
+         * 歌词行的文本纹理同样没了（#M6）。
+         *
+         * 这一段上面的封面 / 图片 / 视频都逐项复位了，唯独 `textures` 这个 LRU 与
+         * `loadedFontKey` 没复位 —— 于是 GL 上下文重建、而字体不变时，`syncFont` 里
+         * 「key 一样就返回」那条守卫把唯一一次 clearTextures() 也挡掉了，
+         * 下一帧 `textureFor` 直接命中旧 LRU，返回一个在**旧上下文**里合法、
+         * 在新上下文里非法（或已被别的对象复用）的 textureId。glBindTexture 对非法 id
+         * 不报错、日志无痕，表现成「歌词整行不显示」或「采样到别的行 / 别的图」。
+         *
+         * 注意**不能在 GL 线程上删这些旧 id**：它们属于已经销毁的上下文，在新上下文里
+         * glDeleteTextures 作用不到它们（旧上下文里的纹理是随上下文一起没的），
+         * 这里只需要把引用与 key 丢掉 —— TextTexture 里除了 textureId 还有位图尺寸与
+         * 逐字边界，重传一次即可，不必也不该去动 GL。
+         *
+         * loadedFontKey 一并清掉是必须的：不清的话 syncFont 会以为字体已经加载过，
+         * 直接带开关一样跳过；清了之后它会把 activeTypeface 重新装一遍并再走一次
+         * clearTextures()（此时表已空，是空操作），两条路都安全。
+         */
+        if (!newContext) {
+            // 正常情况下走不到：每次 onSurfaceCreated 都换了一代。真走到这里说明代次没加，
+            // 那就按「上下文还活着」保守处理 —— 删纹理再清表，至少不会留下非法引用。
+            Log.w(TAG, "onSurfaceCreated without a new generation; clearing text textures defensively")
+            clearTextures()
+        } else {
+            // 新上下文：旧 id 属于已销毁的上下文，删不掉也不该删，只丢引用。
+            forgetTextTextures()
+        }
         GLES20.glDisable(GLES20.GL_DEPTH_TEST)
         GLES20.glEnable(GLES20.GL_BLEND)
         // 位图纹理是预乘 alpha 的（Android Bitmap 的存储格式如此），
@@ -940,7 +993,15 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
         surfaceWidth = Math.max(1, width)
         surfaceHeight = Math.max(1, height)
         GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
-        textures.clear()
+        /*
+         * 尺寸变了就把文本纹理全部作废（行是按字号栅格化的，尺寸变了要按新字号重排）。
+         *
+         * 原来这里是一句裸的 `textures.clear()`：只丢引用、**不删 GL 纹理**，
+         * 于是每次转屏 / 尺寸变化都漏掉最多 24 张整行文本纹理（#M6 同一处所有权问题）。
+         * 上下文还活着，所以这里应当走会删纹理的 clearTextures()。
+         * 上下文刚重建过时表已空，那句是空操作。
+         */
+        clearTextures()
     }
 
     private var lastFrameNanos = 0L
@@ -2175,6 +2236,15 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
     // ---- 纹理 ----
 
     private fun textureFor(text: String, fontPx: Int): TextTexture? {
+        /*
+         * 代次闸门（#M6）：表里那些 textureId 只在它们被创建的那一代上下文里合法。
+         * 清除路径已经做了（onSurfaceCreated → forgetTextTextures），这里是第二道 ——
+         * 万一将来又有人加了一条「只清 key 不清表」的复位，也不会把非法 id 绑上去。
+         */
+        if (!GlContextGeneration.isCacheUsable(texturesGeneration, glGeneration)) {
+            textures.clear()
+            texturesGeneration = glGeneration
+        }
         val key = text + '@' + fontPx
         val cached = textures[key]
         if (cached != null) {
@@ -2245,6 +2315,24 @@ class LyricsRenderer(context: Context?) : GLSurfaceView.Renderer {
             GLES20.glDeleteTextures(1, intArrayOf(texture.textureId), 0)
         }
         textures.clear()
+        // 表清了，它「属于」的就是当前这一代（见 textureFor 里的代次闸门）。
+        texturesGeneration = glGeneration
+    }
+
+    /**
+     * 丢掉所有文本纹理的**引用**，不碰 GL（#M6）。
+     *
+     * 与 [clearTextures] 的区别只有一条：那个会 glDeleteTextures，这个不会。
+     * 上下文重建时旧 id 属于已经销毁的上下文，删不掉也不该删（它们随上下文一起没了），
+     * 真正要做的是让下一次 `textureFor` 不再命中它们。顺带把 `loadedFontKey` 清掉，
+     * 否则 `syncFont` 会因为「key 没变」而跳过重新装配字体。
+     *
+     * 代次也要跟着对齐：表被清空之后，它「属于」的就是当前这一代。
+     */
+    private fun forgetTextTextures() {
+        textures.clear()
+        loadedFontKey = null
+        texturesGeneration = glGeneration
     }
 
     private fun syncCover(coverBase64: String?) {
