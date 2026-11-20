@@ -652,3 +652,86 @@ describe('withAiCloudCache 把按内容捞到的那条回填', () => {
     expect(JSON.parse(puts[0]).payload).toEqual(payload);
   });
 });
+
+/*
+ * 内容摘要（issue C6）：云端回来的条目要能核对「是不是服务端当初写的那一份」。
+ *
+ * 这几条钉的是**读侧**的防守 —— 写侧准入在服务端（见
+ * `test/unit/sync-server/aiCacheWriteAdmission.test.ts`）。两边任何一边松了，
+ * 「谁都能往全局共享表里塞内容」就会从另一个口子回来。
+ */
+describe('内容摘要（issue C6）', () => {
+  const KEY_DIGEST = 'aa11bb22'.repeat(4);
+  const KEY_DIGEST_2 = 'bb22cc33'.repeat(4);
+  const KEY_DIGEST_3 = 'cc33dd44'.repeat(4);
+  const KEY_DIGEST_4 = 'dd44ee55'.repeat(4);
+
+  const serveEntry = (key: string, entry: Record<string, unknown>) => {
+    handlers.fetch = async (url) => (url.includes(key) ? json({ hit: true, entry }) : json({ hit: false }, false));
+  };
+
+  /* 对不上就当没有 —— 不是「用着可疑的那份」，而是**根本不用**。 */
+  it('摘要对不上就当没命中', async () => {
+    serveEntry(KEY_DIGEST, await entryFor('stage', KEY_DIGEST, payload, { payloadDigest: 'f'.repeat(64) }));
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 内容被改过（摘要还是原来那份）正是「库被人动了」的样子。 */
+  it('内容被换掉、摘要没跟着换，就丢弃', async () => {
+    const honest = await entryFor('stage', KEY_DIGEST_2, payload);
+    serveEntry(KEY_DIGEST_2, { ...honest, payload: secondPayload });
+    expect((await pullAiCloudCache('stage', KEY_DIGEST_2, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 把 A 歌的答案挪到 B 歌的键下：摘要绑了 key，挪过去就对不上。 */
+  it('把别的键上那条搬过来会被识破（摘要绑了 kind 与 key）', async () => {
+    const elsewhere = await entryFor('stage', KEY_DIGEST_3, payload);
+    serveEntry(KEY_DIGEST_4, elsewhere);
+    expect((await pullAiCloudCache('stage', KEY_DIGEST_4, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /*
+   * 老条目（没有摘要）也一并丢：从这次改动之前的库里分不出「正常写入」和
+   * 「早年那段谁都能写时写进来的」，采信它等于把漏洞留在读侧。代价只是重新生成一次。
+   */
+  it('没有摘要的老条目同样不采信', async () => {
+    serveEntry(KEY_DIGEST, { payload, writer: 'token:synthetic', verifyKey: 'folia-cache-digest-v1' });
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 换了算法（verifyKey 不一致）也当没命中：宁可重新生成，也不按老规则认。 */
+  it('verifyKey 不认识时当没命中', async () => {
+    serveEntry(
+      KEY_DIGEST,
+      await entryFor('stage', KEY_DIGEST, payload, { verifyKey: 'folia-cache-digest-v0' }),
+    );
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 对照：摘要对得上的那份必须照旧拿回来 —— 否则上面几条「丢弃」可能只是全都没命中。 */
+  it('摘要对得上就照旧拿回来', async () => {
+    const KEY_OK = 'ff66aa77'.repeat(4);
+    serveEntry(KEY_OK, await entryFor('stage', KEY_OK, payload));
+    const result = await pullAiCloudCache('stage', KEY_OK, { songTitle: '晴天' });
+    expect(result.status).toBe('hit');
+    if (result.status === 'hit') expect(result.payload).toEqual(payload);
+  });
+
+  /*
+   * 走「按歌名捞候选」那条路时同样要验：候选条目是从**别的键**取回来的，
+   * 正是最容易被换成别首歌内容的一路。
+   */
+  it('按候选捞回来的那条也要过摘要', async () => {
+    const KEY_TARGET = 'ee55ff66'.repeat(4);
+    handlers.fetch = async (url) => {
+      if (url.includes('/ai-cache/resolve')) {
+        return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
+      }
+      /* 内容是 KEY_A 的，但摘要算在另一把键上 —— 相当于被人搬过。 */
+      if (url.includes(KEY_A)) return await hit('stage', KEY_B, payload);
+      return json({ hit: false }, false);
+    };
+    const result = await pullAiCloudCache('stage', KEY_TARGET, { songTitle: '晴天', lyricText: '故事的小黄花' });
+    expect(result.status).toBe('miss');
+  });
+});
