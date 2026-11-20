@@ -117,6 +117,9 @@ class FoliaNativePlugin : Plugin() {
         /** 更新包下载进度事件名。 */
         const val UPDATE_PROGRESS_EVENT = "updateDownloadProgress"
 
+        /** 跳转被白名单拦下时交回 JS 的错误前缀（M16）；后面拼上目标主机。 */
+        const val REDIRECT_NOT_ALLOWED_PREFIX = "redirect not allowed: "
+
         /**
          * 安全区变化事件名。
          *
@@ -1240,30 +1243,40 @@ class FoliaNativePlugin : Plugin() {
             }
 
             /*
-             * 重定向（C1）：
+             * 重定向（C1 / M16）：
              *
              * 原来默认 `follow`（OkHttp 默认跟随），上游只要回一个 302 到攻击者的域，请求
-             * 连同凭据就跟着离开设备了。现在两种取舍都做了：
-             *   · 默认改成 `manual` —— 不跟随，把第一跳的响应原样交回去，由调用方自己决定；
-             *   · 调用方显式要 `follow` 时，跟随的跳转由 [AllowlistedRedirects] 逐跳复核：
-             *     目标 host 必须仍在白名单里、内网判定同样生效，否则在这一跳停下（把 3xx
-             *     响应交回 JS，而不是抛错）。
+             * 连同凭据就跟着离开设备了。现在三种取舍：
+             *   · `manual` —— 不跟随，把第一跳的响应原样交回去，由调用方自己决定；
+             *   · `follow` —— OkHttp 自己跟随，每一跳由 [AllowlistedRedirects] 复核，越界那一跳
+             *     停下、把 3xx 原样交回 JS（**不报错**）；
+             *   · `follow-strict`（默认）—— 同样逐跳复核，但越界不是「悄悄回一个没跟的 3xx」：
+             *     调用方拿到的是一条明确的 `redirect not allowed: <host>` 错误。缺省必须是这一档：
+             *     悄悄回 3xx 的话，白名单主机上一个可控的 302 就能让上游把请求带到任意主机，
+             *     而 JS 这一侧完全看不出「这次没有按白名单走」（M16 的验收标准）。
+             *
+             * 为什么默认变了：页面上的 fetch shim 与 nativeHttpRequest 过去都显式传 follow，
+             * 于是 M16 描述的那个洞一直在。现在 JS 侧不再传 follow，缺省就该是「越界即报错」。
              */
+            val followMode = when {
+                "manual" == redirect -> "manual"
+                "follow" == redirect -> "follow"
+                else -> "follow-strict"
+            }
             var requestClient = client
-            if ("manual" == redirect) {
+            if (followMode == "manual") {
                 requestClient = requestClient.newBuilder()
                     .followRedirects(false)
                     .followSslRedirects(false)
                     .build()
             } else {
                 // 跟随的每一跳都要重新过一遍白名单：OkHttp 的 followUpRequest 决定了下一跳去哪，
-                // 这里拒掉它，请求就停在当前这一跳。
+                // 这里拒掉它（strict 时还让整条请求以明确的错误收场）。
                 requestClient = requestClient.newBuilder()
                     .followRedirects(true)
                     .followSslRedirects(true)
-                    .addInterceptor(AllowlistedRedirects(gate))
-                    .build()
-            }
+                    .addInterceptor(AllowlistedRedirects(gate, followMode == "follow-strict"))
+                    .build()            }
             // AI 请求可能远超默认的 45s 读超时，调用方可以按需放宽。
             val timeoutMs = call.getInt("timeoutMs")
             if (timeoutMs != null && timeoutMs > 0) {
@@ -1372,36 +1385,52 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
-     * 跟随跳转时的逐跳白名单复核（C1 的 SSRF / 凭据外流那一半）。
+     * 跟随跳转时的逐跳白名单复核（C1 / M16）。
      *
      * 拦截器排在 OkHttp 自己的 RedirectInterceptor **之后**（addInterceptor 加进来的应用
      * 拦截器在最外层），但那一层只负责跟着 3xx 建下一条请求、并不发出去 —— 真正的发送发生在
      * 内层的 BridgeInterceptor / ConnectInterceptor。所以这里 `chain.proceed` 返回一个 3xx
      * 时，读一下 `chain.request()`（OkHttp 已经把下一跳写进它自己的请求状态）就能知道
-     * 目标是谁；不在白名单里就在这一跳停下，把 3xx 响应原样交回去 —— 调用方看到的是一个
-     * 不跟的跳转，而不是一个凭空出现的异常。
+     * 目标是谁；不在白名单里就在这一跳停下。
+     *
+     * 停下有两种收场（M16）：
+     *   · `strict = false`（调用方显式传了 `follow`）：把 3xx 响应原样交回去，调用方看到的是
+     *     一个没跟的跳转，而不是一个凭空出现的异常；
+     *   · `strict = true`（缺省）：整条请求以 [RedirectNotAllowed] 收场，host 放在异常的
+     *     message 里（`redirect not allowed: <host>`），于是 JS 侧读得到「白名单外的目标」，
+     *     也就不会把这次结果当成「白名单内正常拿到了数据」。
      *
      * 为什么不直接改 followRedirects=false 再自己循环：那要把 307/308 的 body 重放、
      * 认证头剥离、跨域 Authorization 清理全抄一遍，抄漏一条就是新的洞。这里只做一件事：
      * 判断「下一跳能不能去」。
      */
-    private class AllowlistedRedirects(private val access: FoliaNativeAccess) : okhttp3.Interceptor {
+    private class AllowlistedRedirects(
+        private val access: FoliaNativeAccess,
+        private val strict: Boolean,
+    ) : okhttp3.Interceptor {
         override fun intercept(chain: okhttp3.Interceptor.Chain): Response {
             val response = chain.proceed(chain.request())
-            if (response.code !in 300..399) return response
-            // chain.request() 此时带的是 OkHttp 自己算出来的**下一跳**（它在建下一跳的请求时
-            // 就把 url 写进了这条链的请求状态），所以这里判的正是「接下来要去哪」。
+            // 3xx 能不能继续跟、越界时该不该报错，全在 redirectDenial 里；它也是 JVM 单测的口子。
             val next = chain.request().url
-            return try {
-                access.requireAllowedTarget(Uri.parse(next.toString()), "httpRequest")
-                response
-            } catch (error: FoliaNativeAccessDenied) {
-                Log.w(TAG, "httpRequest redirect blocked: host " + next.host + " is not an allowlisted target")
+            val denial = redirectDenial(response.code, next.toString(), access)
+            if (denial == null) return response
+            Log.w(TAG, "httpRequest redirect blocked: host " + next.host + " is not an allowlisted target")
+            if (!strict) {
                 // 不能跟的跳转：把这一跳的响应原样交回去（3xx + Location），由调用方决定。
-                response
+                return response
             }
+            response.close()
+            throw RedirectNotAllowed(denial)
         }
     }
+
+    /**
+     * 跳转被白名单拦下时抛的异常：message 直接交回 JS，形如 `redirect not allowed: <host>`。
+     *
+     * 继承 IOException 是因为插件的 httpRequest 就 catch 这一档、把 message 原样交回 JS；
+     * 网络层自己不会产生这句话，读到它只可能是跳转复核拦下来的。
+     */
+    class RedirectNotAllowed(reason: String) : java.io.IOException(reason)
 
     /**
      * 读 APK 的签名证书，和当前应用比对（H3）。
@@ -1631,7 +1660,7 @@ class FoliaNativePlugin : Plugin() {
             // 跳转也要过白名单（H3）：GitHub 的下载地址会 302 到产物 CDN，那几台主机在
             // FoliaNativeAccess 的更新域名表里；除此之外的跳转在这一跳停下。
             val updateClient = client.newBuilder()
-                .addInterceptor(AllowlistedRedirects(gate))
+                .addInterceptor(AllowlistedRedirects(gate, strict = true))
                 .build()
             updateClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {

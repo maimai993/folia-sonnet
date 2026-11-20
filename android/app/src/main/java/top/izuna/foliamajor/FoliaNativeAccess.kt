@@ -205,7 +205,10 @@ object FoliaPlatformHosts {
  *   3. **本次会话的自建服务**（C1）：用户这次主动填进登录表单的地址另记一份，只对
  *      host + 端口都对得上的目标放行，进程重启即失效。
  */
-class FoliaNativeAccess(context: android.content.Context) {
+class FoliaNativeAccess(
+    context: android.content.Context? = null,
+    testAllowlist: FoliaHostAllowlist? = null,
+) {
 
     companion object {
         private const val TAG = "FoliaNativeAccess"
@@ -234,12 +237,23 @@ class FoliaNativeAccess(context: android.content.Context) {
         private val UPDATE_HOSTS: Set<String> = setOf("github.com", "api.github.com", "objects.githubusercontent.com")
 
         private val UPDATE_HOST_SUFFIXES: List<String> = listOf("githubusercontent.com")
+
+        /**
+         * 只带一份出厂白名单的授权层，给 JVM 单测用（M16 的跳转逐跳复核）。
+         *
+         * 它不读 Context、不读 WebView、不读用户配置 —— [isAllowedHost] 只做字符串与白名单比对，
+         * 于是「白名单主机 302 到非白名单主机不跟」这条判定可以在纯 JVM 上逐条验，
+         * 不必等真机（真机的 Cookie 附带另有验收）。
+         */
+        fun testGate(allowlist: FoliaHostAllowlist): FoliaNativeAccess = FoliaNativeAccess(
+            testAllowlist = allowlist,
+        )
     }
 
-    private val appContext = context.applicationContext
+    private val appContext = context?.applicationContext
 
-    /** 出厂白名单：平台域。 */
-    private val platformList: FoliaHostAllowlist = buildPlatformList()
+    /** 出厂白名单：平台域。JVM 单测用 [testAllowlist] 替掉，不碰 Context。 */
+    private val platformList: FoliaHostAllowlist = testAllowlist ?: buildPlatformList()
 
     /**
      * cookie 域的出厂白名单（H2 真机回归后补）。
@@ -360,7 +374,8 @@ class FoliaNativeAccess(context: android.content.Context) {
 
     private fun readUiStatePrefs(): SharedPreferences? {
         return try {
-            appContext.getSharedPreferences(UI_STATE_PREFS, android.content.Context.MODE_PRIVATE)
+            val context = appContext ?: return null
+            context.getSharedPreferences(UI_STATE_PREFS, android.content.Context.MODE_PRIVATE)
         } catch (error: Exception) {
             Log.w(TAG, "cannot open UI state preferences", error)
             null
@@ -712,7 +727,7 @@ class FoliaNativeAccess(context: android.content.Context) {
     fun resolveCacheSourceFile(rawPath: String?): java.io.File? {
         val raw = rawPath?.trim().orEmpty()
         if (raw.isEmpty()) return null
-        val cacheDir = appContext.cacheDir
+        val cacheDir = appContext?.cacheDir ?: return null
         if (raw.startsWith("file://", ignoreCase = true)) {
             val decoded = try {
                 Uri.parse(raw).path

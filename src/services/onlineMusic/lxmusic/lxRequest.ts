@@ -65,14 +65,17 @@ export const syncLxSourceHosts = async (scripts: string[]): Promise<void> => {
 };
 
 /**
- * 原生拒绝「主机不在白名单里」时，从错误里取出那个主机名（C1 的兜底用）。
+ * 原生拒绝一台主机时，从错误里取出那个主机名（C1 的补登、M16 的跳转逐跳复核共用）。
  *
- * 原生回的是 `host is not allowlisted: <host>`（见 FoliaNativeAccess）；
+ * 原生会回两种：
+ *   - `host is not allowlisted: <host>`：请求的第一跳就不在白名单里（见 FoliaNativeAccess）；
+ *   - `redirect not allowed: <host>`：跳转要去的下一台主机不在授权集合里（M16 的逐跳复核）。
+ *
  * 认不出来就回 null —— 别把别的错误也当成「补登一下就重试」。
  */
-const nativeHostOf = (error: unknown): string | null => {
+const nativeDeniedHostOf = (error: unknown): string | null => {
     const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error ?? '');
-    const matched = /host is not allowlisted:\s*([a-z0-9.:_-]+)/i.exec(message);
+    const matched = /(?:host is not allowlisted|redirect not allowed):\s*([a-z0-9.:_-]+)/i.exec(message);
     return matched ? matched[1].toLowerCase() : null;
 };
 
@@ -178,6 +181,9 @@ export const lxRequest = (
                 bodyBase64,
                 // 音源的服务器有时很慢（要先回源、要签名），给足预算；底下还有脚本自己的 timeout。
                 timeoutMs: Math.max(options.timeout ?? 0, 20000),
+                // 跳转逐跳复核（M16）：原生那边一旦被跳到授权集合以外的主机就直接报错（带
+                // `redirect not allowed:`），由下面的补登那一层决定要不要把这台主机收进白名单。
+                redirect: 'follow-strict',
             });
         }
         return fetch(resolveProxiedUrl(url), {
@@ -190,20 +196,23 @@ export const lxRequest = (
     };
 
     /**
-     * 原生按主机白名单拒绝时，把那个主机补登进来再试一次（C1）。
+     * 原生拒绝一跳时，把那个主机补登进来再试一次（C1 / M16）。
      *
      * 为什么需要这一层：脚本里的地址常常是运行时拼出来的（读配置、解密串、跟随跳转），
      * [lxScriptHosts] 扫字面量扫不到，于是第一次请求会被原生拒。补登的依据是「这支已装
      * 音源真的在向这台服务器要东西」，比静默放行窄得多，也不会让白名单彻底形同虚设。
      *
-     * 只对「主机不在白名单」这一种错补登，别的错原样抛；补登上限 2 次，防止被一个恶意
-     * 脚本用无限跳转拖成任意主机放行。
+     * M16 之后跳转也走这里：原生对每一跳复核目标主机，越界那一跳回自己「不在集合里」，
+     * 于是「跳转去 CDN」这种正常用法照样能用，而跳去哪台主机仍然是被这里记下来的一台。
+     *
+     * 只对这两种错补登，别的错原样抛；补登上限 2 次，防止被一个恶意脚本用无限跳转拖成
+     * 任意主机放行。
      */
     const runWithGrant = async (grantDepth = 0): Promise<Response> => {
         try {
             return await run();
         } catch (error) {
-            const host = nativeHostOf(error);
+            const host = nativeDeniedHostOf(error);
             if (!host || grantDepth >= MAX_GRANTS_PER_REQUEST) throw error;
             if (!grantedLxHosts.has(host)) {
                 grantedLxHosts.add(host);
