@@ -56,6 +56,20 @@ export const lowerRenderScale = (chosen: LyricRenderScale, steps: number): Lyric
 };
 
 /**
+ * 降级时该换成哪个倍数。
+ *
+ * 基准必须是**用户选的那个倍数**，不是当前生效的：`setRenderScale` 会就地改生效值，
+ * 每帧都拿生效值当基准的话，降一次之后基准跟着降，于是自己一格接一格往下走，直到压到底。
+ *
+ * `maxSteps` 只做说明用 —— `lowerRenderScale` 自己会把格数钳到阶梯底部。
+ */
+export const resolveSonnetAdaptiveTarget = (
+    base: LyricRenderScale,
+    steps: number,
+    maxSteps: number,
+): LyricRenderScale => resolveSonnetRenderScale(base, Math.min(steps, maxSteps), true, false);
+
+/**
  * 这次该用哪个倍数。
  *
  * @param chosen      用户在设置里选的倍数（预览模式下调用方传 1）。

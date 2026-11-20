@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     lowerRenderScale,
+    resolveSonnetAdaptiveTarget,
     resolveSonnetRenderScale,
     SONNET_DEGRADE_LADDER,
 } from '@/components/visualizer/sonnet/adaptiveRenderScale';
@@ -71,5 +72,23 @@ describe('Sonnet 降级阶梯（H12）', () => {
 
     it('开了自动降级就按格数降', () => {
         expect(resolveSonnetRenderScale(2, 2, true, false)).toBe(1);
+    });
+});
+
+describe('降级的基准倍数（H12 接线时发现）', () => {
+    /*
+     * setRenderScale 会就地改生效倍数。每帧都拿生效值当基准，降一次之后基准跟着降，
+     * 于是自己一格接一格往下走、直到压到 0.5 —— 用户选 2 倍，最后看到的却是最糊那一档。
+     *
+     * 这里钉的是「每一步都从用户选的值算出来」这个结果。真正的状态机在
+     * createSonnetPixiRuntime.sampleAdaptiveQuality 里（每帧刷新基准），那部分要真机看行为：
+     * 纯函数这一层没法证明它没在滚 —— 这一条只是把期望的映射关系写死。
+     */
+    it('每一步都从用户选的倍数算，不会自己滚下去', () => {
+        const base = 2 as const;
+        const ladder = [2, 1.5, 1, 0.75, 0.5];
+        for (let steps = 0; steps < ladder.length; steps += 1) {
+            expect(resolveSonnetAdaptiveTarget(base, steps, ladder.length - 1)).toBe(ladder[steps]);
+        }
     });
 });

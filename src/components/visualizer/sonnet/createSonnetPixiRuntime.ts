@@ -1,6 +1,7 @@
 import type { MotionValue } from 'framer-motion';
 import type { AudioBands, LyricAntialias, LyricRenderScale, SonnetTuning, Theme } from '../../../types';
 import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
+import { SONNET_DEGRADE_LADDER, SonnetAdaptiveQuality, resolveSonnetAdaptiveTarget } from './adaptiveRenderScale';
 import type { SonnetProgram } from './types';
 import { findSonnetParagraphIndexAtTime } from './sonnetProgram';
 import { buildSonnetScene, type SceneView } from './sonnetSceneBuilder';
@@ -436,8 +437,44 @@ export class SonnetPixiRuntime {
         };
     }
 
+    /*
+     * 自动降级（issue H12）：低端机上把用户选的 2 倍压下来，而不是让人自己去设置里找。
+     * 判定与节流都在 SonnetAdaptiveQuality 里（那部分有单测），这里只负责每帧喂一个
+     * 时间戳、降级了就按新倍数重设分辨率。
+     */
+    private readonly adaptiveQuality = new SonnetAdaptiveQuality();
+
+    /** 用户选的那个倍数，降级时以它为基准（见 sampleAdaptiveQuality）。 */
+    private adaptiveBaseScale: LyricRenderScale = 1;
+
+    /**
+     * 每帧记一次帧时；判定该降级时按降后的倍数重设分辨率。
+     *
+     * 暂停时不采样：paused 下画面本来就不动，帧时也没有意义。
+     */
+    private sampleAdaptiveQuality() {
+        if (this.options.paused || this.options.staticMode) return;
+        /*
+         * 基准是**用户选的那个倍数**，不是当前生效的。
+         *
+         * setRenderScale 会就地改 options.renderScale，降过一次之后它就是降后的值了；
+         * 每帧都拿它当基准，降级就会一格接一格地自己往下走，直到压到底。
+         * 只有还没降过时才跟着 options 走，这样用户换档（外壳推新倍数）仍然生效。
+         */
+        if (this.adaptiveQuality.steps === 0) this.adaptiveBaseScale = this.options.renderScale;
+        /* 阶梯长度 - 1 就是最多能降几格。 */
+        const maxSteps = SONNET_DEGRADE_LADDER.length - 1;
+        if (!this.adaptiveQuality.sample(performance.now(), maxSteps)) return;
+        const base = this.adaptiveBaseScale;
+        const next = resolveSonnetAdaptiveTarget(base, this.adaptiveQuality.steps, maxSteps);
+        if (next === this.options.renderScale) return;
+        console.info(`[Sonnet] frame time too high, render scale ${base} -> ${next} (step ${this.adaptiveQuality.steps})`);
+        this.setRenderScale(next);
+    }
+
     private renderFrame = () => {
         if (this.destroyed) return;
+        this.sampleAdaptiveQuality();
         // Advanced before the paragraph lookup so a commit lands on this frame's scene selection
         // instead of leaving one frame of the outgoing program on the incoming one.
         this.advanceSongSwap();
