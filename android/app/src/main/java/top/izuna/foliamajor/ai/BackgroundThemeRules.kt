@@ -103,16 +103,23 @@ internal object BackgroundThemeBackoff {
     fun kindOf(name: String?): Kind = Kind.entries.firstOrNull { it.name == name } ?: Kind.TRANSIENT
 
     /**
-     * 从一次失败的 HTTP 状态码 / 错误文本判类别。
+     * 从一次失败的码 / 错误文本判类别。
      *
      * 401、403 与「未配置」是配置错误；429 是限流；其余（超时、5xx、空结果）算临时失败。
      * 只认状态码与前缀，不去解析各家模型的错误正文 —— 那东西会变，判错了代价是白试一次。
+     *
+     * `code` 收字符串是因为 `AiCompletion.AiException.code` 本身就是个字符串码（有的是
+     * `401`，有的是 `http_429` 这类），统一按「码里有没有这几个数」判即可。
      */
-    fun kindOfFailure(status: Int?, message: String?): Kind {
-        if (status == 401 || status == 403) return Kind.CONFIG
-        if (status == 429) return Kind.RATE_LIMITED
-        val text = (message ?: "").lowercase()
+    fun kindOfFailure(code: String?, message: String?): Kind {
+        val raw = (code ?: "").trim()
+        val text = "$raw ${message ?: ""}".lowercase()
+        if (raw == "401" || raw == "403") return Kind.CONFIG
+        if (raw == "429") return Kind.RATE_LIMITED
         if (text.contains("not_configured") || text.contains("not configured") || text.contains("未配置")) {
+            return Kind.CONFIG
+        }
+        if (text.contains("unauthorized") || text.contains("forbidden") || text.contains("invalid_api_key")) {
             return Kind.CONFIG
         }
         if (text.contains("rate_limit") || text.contains("too many requests") || text.contains("429")) {

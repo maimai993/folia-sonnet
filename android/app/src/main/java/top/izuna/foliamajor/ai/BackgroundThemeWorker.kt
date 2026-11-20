@@ -407,7 +407,12 @@ object BackgroundThemeWorker {
 
         // 云端未命中后再验一次，之后才会花付费 AI。
         val fresh = validConfig(store, job) ?: return
-        val generated = generate(fresh, store, title, artist, lyricText)
+        /*
+         * 生成失败的原因分类由 generate 带回来（out 参数），不放进共享字段：worker 是单线程，
+         * 但 request 会在主线程提前读，一个可变的「上次失败类别」迟早对不上号。
+         */
+        val failureKind = arrayOf(BackgroundThemeBackoff.Kind.TRANSIENT)
+        val generated = generate(fresh, store, title, artist, lyricText, failureKind)
         if (generated != null) {
             if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
                 applyToOverlay(context, store, job, generated)
@@ -423,7 +428,7 @@ object BackgroundThemeWorker {
          * 后台就是一轮云端往返加一次付费生成。`retryHeader` 带回了这次是谁发起的：用户主动
          * 那次记成 0，表示「不增加连续次数」，退避只由自动触发的失败驱动。
          */
-        recordFailure(job.memoryKey, retryHeader, lastFailureKind)
+        recordFailure(job.memoryKey, retryHeader, failureKind[0])
     }
 
     /**
@@ -543,13 +548,20 @@ object BackgroundThemeWorker {
         }
     }
 
-    /** 用已有 AiCompletion.run；模板只在本机拼，密钥只从 ai.* 设置读。 */
+    /**
+     * 用已有 AiCompletion.run；模板只在本机拼，密钥只从 ai.* 设置读。
+     *
+     * `failureKind` 是出参：失败时把「这一趟为什么没成」写回去（配置错误 / 限流 / 临时），
+     * 退避按它决定冷却多长 —— 401 重试一万次也不会好，那类要多等一会儿并让用户去改配置。
+     */
     private fun generate(
         config: BackgroundThemeConfig, store: FoliaSettingsStore, title: String, artist: String, lyricText: String,
+        failureKind: Array<BackgroundThemeBackoff.Kind>,
     ): JSONObject? {
         val aiConfig = readAiConfig(store)
         if (!aiConfig.configured) {
             Log.i(TAG, "[BackgroundTheme] AI 未配置，跳过生成")
+            failureKind[0] = BackgroundThemeBackoff.Kind.CONFIG
             return null
         }
 
@@ -565,9 +577,11 @@ object BackgroundThemeWorker {
             payload
         } catch (error: AiCompletion.AiException) {
             Log.w(TAG, "[BackgroundTheme] AI 调用失败 code=${error.code}")
+            failureKind[0] = BackgroundThemeBackoff.kindOfFailure(error.code, error.message)
             null
         } catch (error: Exception) {
             Log.w(TAG, "[BackgroundTheme] AI 调用异常 ${error.javaClass.simpleName}")
+            failureKind[0] = BackgroundThemeBackoff.kindOfFailure(null, error.message)
             null
         }
     }
@@ -660,7 +674,6 @@ object BackgroundThemeWorker {
                 if (failures.remove(key) != null) {
                     Log.i(TAG, "[BackgroundTheme] 用户主动重试，清掉失败退避")
                 }
-                lastFailureKind = BackgroundThemeBackoff.Kind.TRANSIENT
                 return 0L
             }
             val failure = failures[key]
