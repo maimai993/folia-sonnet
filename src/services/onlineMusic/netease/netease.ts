@@ -4,6 +4,7 @@ import { OnlineProviderError } from '../../../types/onlineMusic';
 import type { PersonalFmRequestOptions, ProviderSongAvailability } from '../../../types/onlineMusic';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
+import { bridgeErrorCodeOf, bridgeFailureError } from '../omni/bridgeFailure';
 import { errorFields } from '../../../utils/errorText';
 import {
   isFoliaExtensionBridgeAvailable,
@@ -259,8 +260,12 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}, limit
         body: options.body,
         headers: Object.fromEntries(new Headers(options.headers || {}).entries()),
       });
-      if (response?.__foliaBridgeError) {
-        throw new Error(response.message || response.__foliaBridgeError);
+      if (bridgeErrorCodeOf(response) !== undefined) {
+        // 种类要留着（issue M20）：原先这里抛的是裸 `Error`，于是桥答的「要登录」
+        // 到上层已经和「连不上」分不开了，界面只能给一句泛化失败。
+        // 超时那条路的同一种失败仍是 `NeteaseLoginHttpError`，判据见 neteaseFailure.ts 的
+        // `isNeteaseBridgeFailure`。
+        throw bridgeFailureError(response, 'netease', `The NetEase bridge refused ${target.pathname}`);
       }
       // 用了游客会话还被判没登录＝那份游客会话过期了：丢掉，下一次请求重新注册。
       // （登录态失效是另一回事，不在这里动。）

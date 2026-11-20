@@ -3,6 +3,7 @@ import { readProviderSessionValue, removeProviderSessionValue, writeProviderSess
 import { announceProviderSessionExpired } from '../providerSessionEvents';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
 import { withOnlineRequestLimit } from '../failure/onlineRequestLimit';
+import { bridgeFailureError } from '../omni/bridgeFailure';
 import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../../foliaExtensionBridge';
 import { lyricProxyWebUrl } from '../../lyricProxy';
 import { errorMessage } from '../../../utils/errorText';
@@ -634,13 +635,9 @@ export const requestQq = async <T = unknown>(
                 ...(payload === undefined ? {} : { body: payload }),
             });
             if (bridged?.__foliaBridgeError) {
-                if (bridged.__foliaBridgeError === 'AUTH_REQUIRED') {
-                    throw new OnlineProviderError('auth-required', bridged.message || 'QQMusicApi login required', 'qq', bridged);
-                }
-                if (bridged.__foliaBridgeError === 'UNSUPPORTED') {
-                    throw new OnlineProviderError('unsupported', bridged.message || `QQMusicApi has no ${operation} route`, 'qq', bridged);
-                }
-                throw new OnlineProviderError('network', bridged.message || bridged.__foliaBridgeError, 'qq', bridged);
+                // 取值到种类的对应只有一份（omni/bridgeFailure.ts，issue M20）：原先这里按字面量
+                // 各判一次，桥新增一种失败时没人保证这里跟着改。
+                throw bridgeFailureError(bridged, 'qq', `QQMusicApi has no ${operation} route`);
             }
             persistConfirmedSession(operation, bridged);
             return bridged as T;
