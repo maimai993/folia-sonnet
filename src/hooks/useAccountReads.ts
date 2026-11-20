@@ -44,6 +44,14 @@ export const useAccountReads = () => {
             // The platform refused the sign-in and named nobody: the account has left the screen.
             // Said once, with that platform's mark.
             if (playlists === 'ran out') setStatusMessage({ type: 'error', text: i18n.t('login.signInRanOut'), providerId });
+            /*
+             * 问不到平台（网络断、桥超时、插件抛错）：**不是**登录失效（H4）。
+             *
+             * 以前这一路什么也不说：账户被保留、标记为 error，界面却停在「未登录」那一屏，
+             * 用户以为登录掉了，去重新扫码 —— 其实登录态好得很。现在明说「稍后再试」，
+             * 并把平台标成那位用户自己的平台（providerId），别让人以为是别人的问题。
+             */
+            if (playlists === 'not read') setStatusMessage({ type: 'error', text: i18n.t('home.wallHint.unreachableTitle'), providerId });
         });
     }, [atHome]);
 

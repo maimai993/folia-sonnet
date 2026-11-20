@@ -48,6 +48,13 @@ export type LibraryHomeOnlineSource = {
     accountView: LibraryHomeAccountView;
     /** 账户登录过期（provider 报 auth-required）。 */
     needsRelogin: boolean;
+    /**
+     * 暂时问不到平台是谁登录着（网络断了、桥超时、插件抛错），**不是**没登录（H4）。
+     *
+     * 以前这种情况被压成「未登录」：首页引导用户重新扫码，账号读取那一路还会判成登录失效。
+     * 现在单独一个状态，界面说「网络或系统繁忙，稍后再试」，并在下一次进首页 / 恢复网络后再问一次。
+     */
+    unreachable: boolean;
     /** 账户歌单页签的条目（含云盘）。 */
     collections: ProviderCollection[];
     canUsePlaylists: boolean;

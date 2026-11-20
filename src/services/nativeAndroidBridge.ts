@@ -18,6 +18,30 @@ const BRIDGED_REQUEST_TIMEOUT_MS = 15000;
 // 二维码弹窗却因为没等到回包一直停在「等待扫码」。所以每个 cookie 调用都必须在预算内结束。
 const COOKIE_CALL_TIMEOUT_MS = 4000;
 
+/**
+ * cookie 调用没拿到答案（超时 / 桥抛错）时抛的错误。
+ *
+ * 为什么不能像以前那样在这时回空值：`[]` / `null` 在上层和「确实没有这条 cookie」是同一个样子，
+ * 于是桥抖一下（登录时原生线程争用、插件异常、WebView 重载）就被读成「用户没登录」，
+ * 界面引导重新登录，`accountRead` 那一路还会把登录状态判成失效、连带清掉本地凭据 ——
+ * 一次临时故障变成持久的登出（H4，见 nativeAndroidBridge 的 cookie 前缀说明）。
+ *
+ * 上层的用法是 `withCookieFallback`：只有确实读不到时才回空，这里抛出来的一律当作
+ * 「暂时读不到」往上带，由 `cookies.js` 的 `CookieReadError` 说清是哪一种。
+ */
+export class NativeCookieCallError extends Error {
+  readonly reason: 'timeout' | 'native-error';
+  /** 超时是这么久没回包；其余是桥上抛的原始错误。 */
+  readonly cause?: unknown;
+
+  constructor(reason: 'timeout' | 'native-error', label: string, cause?: unknown) {
+    super(`[FoliaNativeBridge] ${label} ${reason === 'timeout' ? `timed out after ${COOKIE_CALL_TIMEOUT_MS}ms` : 'failed'}`);
+    this.name = 'NativeCookieCallError';
+    this.reason = reason;
+    this.cause = cause;
+  }
+}
+
 const API_HOSTS = [
   'music.163.com',
   'interface.music.163.com',
@@ -139,7 +163,13 @@ const serializeBody = async (body: BodyInit | null | undefined): Promise<{
  * 存登录态走 chrome.storage.local。这里把它们分别接到 Android CookieManager 与 localStorage，
  * 于是那份代码一行都不用改就能在 App 里跑。
  */
-const installCookieShim = (plugin: NativePlugin) => {
+/**
+ * 把 chrome.cookies / chrome.storage.local 的兼容层装到 `globalThis.chrome` 上。
+ *
+ * 导出是为了让单测能直接驱动这一层（尤其是 4 秒预算与三态）：正常路径只由
+ * `installNativeAndroidBridge` 调。
+ */
+export const installCookieShim = (plugin: NativePlugin) => {
   const chromeObject = ((globalThis as any).chrome ??= {});
   chromeObject.runtime = {
     id: 'folia-native-android',
@@ -177,57 +207,66 @@ const installCookieShim = (plugin: NativePlugin) => {
       },
     },
   };
-  /** 每个 cookie 调用都在预算内收敛：丢包时退回空结果，不能把登录永远挂在等待里。 */
-  const callPlugin = <T,>(label: string, fallback: T, run: () => Promise<T>): Promise<T> => {
+  /**
+   * 每个 cookie 调用都在预算内收敛：丢包时抛 NativeCookieCallError，不能把登录永远挂在等待里。
+   *
+   * 以前这里超时和异常都 `resolve(fallback)`，把「读不到」压成了「没有」。现在只负责在预算内结束，
+   * 成功与失败的区分交给返回的 `{ ok }`，由 `cookies.js` 的 `withCookieFallback` 决定哪种能回空。
+   */
+  const callPlugin = <T,>(label: string, run: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: NativeCookieCallError }> => {
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-    const work = (async () => {
+    const work = (async (): Promise<{ ok: true; value: T } | { ok: false; error: NativeCookieCallError }> => {
       try {
-        return await run();
+        return { ok: true, value: await run() };
       } catch (error) {
         console.warn(`[FoliaNativeBridge] ${label} failed`, error);
-        return fallback;
+        return { ok: false, error: new NativeCookieCallError('native-error', label, error) };
       }
     })();
-    const deadline = new Promise<T>((resolve) => {
+    const deadline = new Promise<{ ok: false; error: NativeCookieCallError }>((resolve) => {
       timeoutHandle = setTimeout(() => {
         console.warn(`[FoliaNativeBridge] ${label} timed out after ${COOKIE_CALL_TIMEOUT_MS}ms`);
-        resolve(fallback);
+        resolve({ ok: false, error: new NativeCookieCallError('timeout', label) });
       }, COOKIE_CALL_TIMEOUT_MS);
     });
     return Promise.race([work, deadline]).finally(() => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
     });
   };
+  /** 读：拿不到答案一律抛出，绝不回空值 —— 空值只能表示「确实没有这条 cookie」。 */
+  const readOrThrow = async <T,>(label: string, read: () => Promise<T>): Promise<T> => {
+    const result = await callPlugin(label, read);
+    if (!result.ok) throw result.error;
+    return result.value;
+  };
+  /** 写 / 删：失败照旧只记一行、照旧半路返回，调用方本来就不靠它的返回值判断成败。 */
+  const writeTolerantly = async (label: string, write: () => Promise<unknown>): Promise<boolean> => {
+    const result = await callPlugin(label, write);
+    return result.ok;
+  };
   chromeObject.cookies = {
-    getAll: async (details: Record<string, unknown> = {}) => callPlugin(
+    getAll: async (details: Record<string, unknown> = {}) => readOrThrow(
       'cookies.getAll',
-      [] as unknown[],
       async () => (await plugin.cookiesGetAll(details)).cookies || [],
     ),
-    get: async (details: Record<string, unknown>) => callPlugin(
+    get: async (details: Record<string, unknown>) => readOrThrow(
       'cookies.get',
-      null,
       async () => (await plugin.cookiesGet(details)).cookie || null,
     ),
     set: async (details: Record<string, unknown>) => {
-      await callPlugin('cookies.set', { ok: false }, () => plugin.cookiesSet(details));
+      await writeTolerantly('cookies.set', () => plugin.cookiesSet(details));
       return details;
     },
-    remove: async (details: Record<string, unknown>) => callPlugin(
-      'cookies.remove',
-      null,
-      async () => ((await plugin.cookiesRemove(details)).ok ? details : null),
-    ),
+    remove: async (details: Record<string, unknown>) => {
+      const ok = await writeTolerantly('cookies.remove', () => plugin.cookiesRemove(details));
+      return ok ? details : null;
+    },
     // 非标准扩展：一次删一批 cookie。切换登录通道要清几十条，逐条过桥会拖过调用方的
     // 截止时间、结果只清掉一半。失败或超时返回 null，调用方会退回逐条删除。
-    removeBatch: async (entries: Array<{ url: string; name: string }>) => callPlugin(
-      'cookies.removeBatch',
-      null,
-      async () => {
-        await plugin.cookiesRemoveBatch({ entries });
-        return entries;
-      },
-    ),
+    removeBatch: async (entries: Array<{ url: string; name: string }>) => {
+      const ok = await writeTolerantly('cookies.removeBatch', () => plugin.cookiesRemoveBatch({ entries }));
+      return ok ? entries : null;
+    },
   };
   chromeObject.declarativeNetRequest = {
     RuleActionType: { MODIFY_HEADERS: 'modifyHeaders' },

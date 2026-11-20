@@ -362,6 +362,8 @@ export default {
             "guestBodyWithLocal": "Choose “{{connect}}” in the info strip to sign in, and your playlists, radio and saved albums will fill this wall. Or import a music folder on the {{local}} tab.",
             "reloginTitle": "Your {{provider}} sign-in has expired",
             "reloginBody": "Choose “{{connect}}” in the info strip to sign in again, and your playlists will fill this wall again.",
+            "unreachableTitle": "Can't reach the online service right now",
+            "unreachableBody": "The network or the system is busy — try again in a moment. You are still signed in, and your playlists will be back shortly.",
             "localTitle": "No local music imported yet",
             "localBody": "Choose “{{action}}” under “⋯” in the info strip, and your folders, albums and artists will fill this wall."
         },

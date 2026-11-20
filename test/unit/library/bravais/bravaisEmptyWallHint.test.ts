@@ -12,7 +12,7 @@ const t = ((key: string, options?: Record<string, unknown>) => (
     options ? `${key} ${JSON.stringify(options)}` : key
 )) as unknown as TFunction;
 
-const guest = { accountView: 'guest' as const, needsRelogin: false, providerLabel: 'Netease' };
+const guest = { accountView: 'guest' as const, needsRelogin: false, providerLabel: 'Netease', unreachable: false };
 
 describe('onlineWallHint', () => {
     it('explains how to connect a guest and points at the local tab when there is one', () => {
@@ -26,6 +26,20 @@ describe('onlineWallHint', () => {
         const hint = onlineWallHint({ ...guest, needsRelogin: true }, 'Local', t);
         expect(hint?.title).toBe('libraryBravaisHome.wallHint.reloginTitle {"provider":"Netease"}');
         expect(hint?.body).toBe('libraryBravaisHome.wallHint.reloginBody {"connect":"libraryBravaisHome.connect"}');
+    });
+
+    // H4：问不到平台与「没登录」分开说 —— 桥超时 / 网络断的时候用户其实还登录着，
+    // 让他去扫码既没用、还会把好好的登录态换掉。
+    it('says the platform cannot be reached right now, and asks for no sign-in', () => {
+        const hint = onlineWallHint({ ...guest, unreachable: true }, 'Local', t);
+        expect(hint?.title).toBe('libraryBravaisHome.wallHint.unreachableTitle');
+        expect(hint?.body).toBe('libraryBravaisHome.wallHint.unreachableBody');
+        expect(JSON.stringify(hint)).not.toContain('libraryBravaisHome.connect');
+    });
+
+    it('puts unreachable before an expired sign-in', () => {
+        const hint = onlineWallHint({ ...guest, unreachable: true, needsRelogin: true }, 'Local', t);
+        expect(hint?.title).toBe('libraryBravaisHome.wallHint.unreachableTitle');
     });
 
     it('gives no hint once there is an account (or while it resolves)', () => {

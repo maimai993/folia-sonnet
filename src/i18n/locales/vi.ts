@@ -362,6 +362,8 @@ export default {
             "guestBodyWithLocal": "Chọn “{{connect}}” trên thanh thông tin để đăng nhập; danh sách phát, radio và album đã lưu của bạn sẽ lấp đầy bức tường này. Hoặc nhập thư mục nhạc trên tab {{local}}.",
             "reloginTitle": "Phiên đăng nhập {{provider}} đã hết hạn",
             "reloginBody": "Chọn “{{connect}}” trên thanh thông tin để đăng nhập lại; danh sách phát của bạn sẽ hiển thị trở lại trên tường.",
+            "unreachableTitle": "Tạm thời không kết nối được dịch vụ trực tuyến",
+            "unreachableBody": "Mạng hoặc hệ thống đang bận — hãy thử lại sau. Bạn vẫn đang đăng nhập và danh sách phát sẽ sớm trở lại.",
             "localTitle": "Chưa nhập nhạc cục bộ",
             "localBody": "Chọn “{{action}}” dưới mục “⋯” trên thanh thông tin; thư mục, album và nghệ sĩ của bạn sẽ lấp đầy bức tường này."
         },

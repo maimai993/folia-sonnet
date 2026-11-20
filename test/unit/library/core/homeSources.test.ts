@@ -94,6 +94,24 @@ describe('resolveHomeOnlineSource', () => {
         expect(source({ provider: summary({ requiresAccount: false } as Partial<ProviderAccountSummary>) }).accountView).toBe('accountless');
         expect(source({ provider: summary({ error: 'auth-required' } as Partial<ProviderAccountSummary>) }).needsRelogin).toBe(true);
     });
+
+    // H4：平台问不到（网络 / 桥超时 / 插件抛错）要说成「暂时问不到」，不能当成「没登录」。
+    it('tells an unreachable platform apart from nobody being signed in', () => {
+        const failed = summary({ status: 'error', freshness: 'error', error: 'network' } as Partial<ProviderAccountSummary>);
+        expect(source({ provider: failed })).toMatchObject({ unreachable: true });
+        // 登录过期是平台说的，不是问不到。
+        const expired = summary({ status: 'anonymous', freshness: 'error', error: 'auth-required' } as Partial<ProviderAccountSummary>);
+        expect(source({ provider: expired })).toMatchObject({ unreachable: false, needsRelogin: true });
+        // 账户还在：上一次读到的账户照常显示，不吓人。
+        const kept = summary({ status: 'authenticated', freshness: 'error', error: 'network' } as Partial<ProviderAccountSummary>);
+        expect(source({ provider: kept })).toMatchObject({ unreachable: false });
+        // 这个构建里没有这个平台：不是故障。
+        const away = summary({ status: 'error', error: 'platform-unavailable' } as Partial<ProviderAccountSummary>);
+        expect(source({ provider: away })).toMatchObject({ unreachable: false });
+        // 什么都没读过的游客：也不是故障。
+        expect(source({ provider: summary({ status: 'anonymous' }) })).toMatchObject({ unreachable: false });
+        expect(source({})).toMatchObject({ unreachable: false });
+    });
 });
 
 describe('home tabs', () => {

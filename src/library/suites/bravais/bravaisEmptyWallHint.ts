@@ -8,13 +8,26 @@ import type { BravaisWallHint } from './bravaisSeamModels';
 // 还没导入文件夹时，说这面墙会铺什么、从缝里哪个按钮开始。按钮名取它们自己的文案（缝里的「连接在线平台」、「⋯」里的
 // 「导入文件夹」、本地页签名），按钮改名说明跟着变。别的空墙（空歌单、过滤没有匹配、读取中）不给说明，只在缝的状态行说。
 
-/** 在线来源没登录时的说明（登录过期另说一句）；已登录、解析中、无账户的平台不给。localTab 是能去的本地页签名，没有就不提本地。 */
+/**
+ * 在线来源没登录时的说明（登录过期、暂时问不到平台各另说一句）；已登录、解析中、无账户的平台不给。
+ * localTab 是能去的本地页签名，没有就不提本地。
+ *
+ * 「暂时问不到」必须与「没登录」分开说（H4）：桥超时 / 网络断掉的时候，用户其实还登录着，
+ * 让他去扫一次码既没有用、还会把好好的登录态换掉。所以那一句只说「稍后再试」，不提连接按钮。
+ */
 export const onlineWallHint = (
-    online: Pick<LibraryHomeOnlineSource, 'accountView' | 'needsRelogin' | 'providerLabel'>,
+    online: Pick<LibraryHomeOnlineSource, 'accountView' | 'needsRelogin' | 'providerLabel' | 'unreachable'>,
     localTab: string | null,
     t: TFunction,
 ): BravaisWallHint | undefined => {
     if (online.accountView !== 'guest') return undefined;
+    // 问不到平台优先于「登录过期」：过期是平台说的，问不到是我们自己没拿到答案。
+    if (online.unreachable) {
+        return {
+            title: t('libraryBravaisHome.wallHint.unreachableTitle'),
+            body: t('libraryBravaisHome.wallHint.unreachableBody'),
+        };
+    }
     const connect = t('libraryBravaisHome.connect');
     if (online.needsRelogin) {
         return {
