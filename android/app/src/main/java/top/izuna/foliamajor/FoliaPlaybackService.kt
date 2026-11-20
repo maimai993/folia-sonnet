@@ -29,6 +29,7 @@ import top.izuna.foliamajor.player.NativeLyricsCache
 import top.izuna.foliamajor.player.NativeMirrorGuard
 import top.izuna.foliamajor.player.NativePlayQueue
 import top.izuna.foliamajor.player.NativeQueueEntry
+import top.izuna.foliamajor.player.PlaybackAuthority
 import top.izuna.foliamajor.player.SessionSnapshotStore
 
 /**
@@ -655,33 +656,74 @@ class FoliaPlaybackService : android.app.Service() {
                         val incomingIndex = staged?.second ?: intent.getIntExtra(EXTRA_QUEUE_MIRROR_INDEX, -1)
                         /*
                          * 队列状态机用 syncEntries 跟上（replace 会把下标重置到队首）。
-                         * 原生有明确媒体身份时游标只按它定位；没有才认前台下标（冷启动）。
+                         *
+                         * 「谁是当前权威歌」只问一次 PlaybackAuthority，落盘决定只由
+                         * NativeMirrorGuard.resolveQueueMirrorWrite 给（#H10）：派发在途那一档
+                         * 以前被 `pendingDispatchSongKey ?: nativeKey` 混成了「原生手上是新歌」，
+                         * 新歌又还不在新队列里时 target 为 -1，直接走进下面的清盘分支 ——
+                         * 用户点了一首尚未解析出地址的歌，盘上「上次听到哪儿」就被抹掉。
                          */
+                        val authority = PlaybackAuthority.resolve(
+                                top.izuna.foliamajor.player.FoliaNativePlayerPlugin
+                                        .mediaSnapshot()?.songKey,
+                                pendingDispatchSongKey)
                         val entries = NativeQueueEntry.fromArray(incomingQueue)
-                        if (entries.isNotEmpty()) {
-                            // 引擎没带 songKey（Web 装源没给身份）时为空串：那一档不拦前台下标。
-                            val nativeKey = top.izuna.foliamajor.player.FoliaNativePlayerPlugin
-                                    .mediaSnapshot()?.songKey ?: ""
-                            val mirrorKey = pendingDispatchSongKey ?: nativeKey
-                            val target = NativeMirrorGuard.mirrorIndex(entries.map { it.songKey }, mirrorKey,
-                                    mirrorKey.isNotEmpty(), incomingIndex)
-                            // 旧队列连当前媒体都没有时拒绝整份同步；显式点歌仍走 playFromQueue。
-                            if (nativeKey.isEmpty() || target >= 0) {
+                        // 空队列 + 原生空手 + 没有在途派发才是「用户把队列清掉了」；其余按非空处理，
+                        // 免得一条空的中间态推送把盘上那份会话当成用户意图作废。
+                        val clearedByUser = entries.isEmpty() && !authority.hasMedia && !authority.pending
+                        val entryKeys = entries.map { it.songKey }
+                        val decision = if (clearedByUser) {
+                            NativeMirrorGuard.QueueMirrorWrite.CLEAR_SNAPSHOT
+                        } else {
+                            NativeMirrorGuard.resolveQueueMirrorWrite(authority, entryKeys, incomingIndex)
+                        }
+                        Log.i(TAG, "队列镜像 authority=${authority.cursorKey}/pending=${authority.pendingKey}" +
+                                " entries=${entries.size} decision=$decision")
+                        when (decision) {
+                            // 权威歌就在新队列里：整份同步，游标钉在它那一格。
+                            NativeMirrorGuard.QueueMirrorWrite.APPLY -> {
+                                val nativeKey = authority.nativeKey
+                                val target = if (nativeKey != null) {
+                                    NativeMirrorGuard.indexOf(entryKeys, nativeKey)
+                                } else {
+                                    incomingIndex
+                                }
                                 val hadCurrent = playQueue.current() != null
                                 playQueue.syncEntries(entries)
-                                if (target >= 0 && (nativeKey.isNotEmpty() || !hadCurrent)) playQueue.seekTo(target)
+                                if (target in entryKeys.indices && (nativeKey != null || !hadCurrent)) {
+                                    playQueue.seekTo(target)
+                                }
                                 mirroredQueueJson = incomingQueue
                                 mirroredIndex = playQueue.currentIndex()
                                 playQueue.bumpRevision()
                                 // 换队列/换游标这一刻就把会话抄到磁盘：之后进程随时可能被
                                 // 系统收走，等不到下一次心跳。
                                 persistQueueSnapshot()
-                            } else if (incomingQueue != null) {
-                                /*
-                                 * 前台推来一份空队列：用户清掉了播放列表（或者退出登录把
-                                 * 队列撤了）。盘上那份会话跟着作废 —— 不然下次启动会把
-                                 * 一批用户明确删掉的歌装回来。
-                                 */
+                            }
+                            // 派发在途、装着的那首不在新队列里：只换 entries，游标与磁盘都不碰。
+                            NativeMirrorGuard.QueueMirrorWrite.ENTRIES_ONLY -> {
+                                playQueue.syncEntries(entries)
+                                mirroredQueueJson = incomingQueue
+                                mirroredIndex = playQueue.currentIndex()
+                                playQueue.bumpRevision()
+                            }
+                            /*
+                             * DEFER：派发在途，装着的那首已经在队列里（两个候选都成立）。
+                             * IGNORE：原生装着的那首不在新队列里，或原生空手又没有可认的下标。
+                             *
+                             * 两种都不动游标、**都不动磁盘**。entries 还是照收：它只是「前台眼里
+                             * 的队列」，原生推进用 playQueue，之前就不同步、这次也不必补。
+                             */
+                            NativeMirrorGuard.QueueMirrorWrite.DEFER,
+                            NativeMirrorGuard.QueueMirrorWrite.IGNORE -> {
+                                Log.i(TAG, "队列镜像不落盘 decision=$decision（游标与快照保持原样）")
+                            }
+                            /*
+                             * 前台推来空队列：用户清掉了播放列表（或者退出登录把队列撤了）。
+                             * 盘上那份会话跟着作废 —— 不然下次启动会把一批用户明确删掉的歌装回来。
+                             * 这是 SessionSnapshotStore.clear 唯一的合法用途，必须三态都空。
+                             */
+                            NativeMirrorGuard.QueueMirrorWrite.CLEAR_SNAPSHOT -> {
                                 sessionQueueSignature = ""
                                 SessionSnapshotStore.clear(this)
                             }
