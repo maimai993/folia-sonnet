@@ -41,7 +41,7 @@ class FoliaLanCastPlugin : Plugin() {
         private const val SSDP_PORT = 1900
         private const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport:1"
         private const val RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1"
-        private const val MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1"
+        // 发现用的 ST 统一放在 LanCastDiscovery 里（策略与报文同源），这里不再各存一份。
         private val SOAP_XML = "text/xml; charset=\"utf-8\"".toMediaType()
     }
 
@@ -55,6 +55,21 @@ class FoliaLanCastPlugin : Plugin() {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
+    /**
+     * 只给「回取设备描述」用的 client（issue M21）。
+     *
+     * 设备描述通常几 KB，2.5s 已经非常宽；把一个不响应的设备绑满 10s 才是「搜音响很慢」的
+     * 真正原因。它与 [httpClient] 共用连接池之外的部分各自独立，投送 / 音量那几条仍然用
+     * 上面那套更宽松的超时。
+     */
+    private val fetchClient = OkHttpClient.Builder()
+        .connectTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
+        .callTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
         .followRedirects(false)
         .followSslRedirects(false)
         .build()
@@ -142,7 +157,7 @@ class FoliaLanCastPlugin : Plugin() {
         val coverUrl = call.getString("coverUrl") ?: ""
         // 时长用 Long 读：Int 毫秒在 24 天以上的音频上会溢出成负数（issue M23 第 2 点）。
         val durationMs = call.getLong("durationMs") ?: 0L
-        // Web 侧认出来的格式（可选）：给了就用它，没给就由原生按地址再认一次。
+        // Web 侧认出来的格式（可选）：给了就用它，没给就由原生按 host 已经被 validate 过的地址再认一次。
         val declaredFormat = call.getString("audioFormat")
         Thread {
             try {
@@ -181,7 +196,7 @@ class FoliaLanCastPlugin : Plugin() {
                     // 哪些元数据被裁掉了：封面不是 http(s) 时整段不发，音响侧就只有歌名没有图。
                     // 过去这一步是静默的，前端收不到任何「元数据被裁剪」的信号（issue M23 第 3 点）。
                     payload.put("trimmed", trimmedFields(coverUrl, title, artist, album).joinToString(","))
-                    // 实际声明的格式：排查「为什么这台音响不认无损」时要用它。
+                    // 实际声明的格式：日志与排查要用它解释「为什么这台音响不认无损」。
                     payload.put("protocolInfo", LanCastMetadata.protocolInfo(audioUrl))
                     deliver(call) { call.resolve(payload) }
                 }
@@ -370,6 +385,10 @@ class FoliaLanCastPlugin : Plugin() {
             httpClient.dispatcher.cancelAll()
             httpClient.connectionPool.evictAll()
             httpClient.dispatcher.executorService.shutdown()
+            // 回取描述那个 client 也要收：它有自己的线程池与连接池（issue M21）。
+            fetchClient.dispatcher.cancelAll()
+            fetchClient.connectionPool.evictAll()
+            fetchClient.dispatcher.executorService.shutdown()
         } catch (error: Exception) {
             Log.w(TAG, "release http client failed", error)
         }
@@ -511,26 +530,42 @@ class FoliaLanCastPlugin : Plugin() {
             socket.reuseAddress = true
             socket.bind(InetSocketAddress(0))
             socket.soTimeout = 350
+            // 收缓冲显式设大：2048 装不下某些设备的长 USN + 多个头，截断后变成畸形应答，
+            // 设备就静默丢了（issue M21）。缓冲数组也只建一次，不再每轮新建。
+            socket.receiveBufferSize = LanCastDiscovery.RECEIVE_BUFFER_BYTES
+            val receiveBuffer = ByteArray(
+                maxOf(socket.receiveBufferSize, LanCastDiscovery.RECEIVE_BUFFER_BYTES),
+            )
+            // 记在 socket 块外：回取预算与日志要用「抓包花了多久、发了几轮」（issue M21）。
+            val started = System.currentTimeMillis()
+            var rounds = 0
             socket.use {
                 val target = InetSocketAddress(InetAddress.getByName(SSDP_ADDRESS), SSDP_PORT)
-                val searches = listOf(MEDIA_RENDERER, "urn:schemas-upnp-org:service:AVTransport:1", "ssdp:all")
-                val started = System.currentTimeMillis()
-                var round = 0
-                while (System.currentTimeMillis() - started < timeoutMs) {
-                    // 多播包本身不保证送达，隔一小会儿重发一次，比只发一轮稳得多。
-                    val search = searches[round % searches.size].toByteArray(Charsets.UTF_8)
-                    val probe = buildSearch(search)
-                    val packet = DatagramPacket(probe, probe.size, target.address, target.port)
+                var preciseRoundsWithoutResult = 0
+                while (true) {
+                    val elapsed = System.currentTimeMillis() - started
+                    // 先精准、零结果才补 ssdp:all（策略见 LanCastDiscovery）：过去无条件轮转，
+                    // 网络里只有一台音响时也在反复把全网段叫醒（issue M21）。
+                    val probe = LanCastDiscovery.nextProbe(
+                        elapsedMs = elapsed,
+                        timeoutMs = timeoutMs,
+                        found = replies.size,
+                        rounds = rounds,
+                        preciseRoundsWithoutResult = preciseRoundsWithoutResult,
+                    ) ?: break
+                    val request = LanCastDiscovery.searchRequest(probe.searchTarget, SSDP_ADDRESS, SSDP_PORT)
+                    val packet = DatagramPacket(request, request.size, target.address, target.port)
                     try {
                         it.send(packet)
                     } catch (error: Exception) {
                         Log.w(TAG, "SSDP send failed", error)
                     }
-                    round += 1
-                    val until = System.currentTimeMillis() + 400
+                    rounds += 1
+                    // 等待窗口与报文里的 MX 同源：声明 2 秒就等满 2 秒，否则按协议应答的慢设备反被丢掉。
+                    val until = System.currentTimeMillis() + probe.windowMs
+                    val before = replies.size
                     while (System.currentTimeMillis() < until) {
-                        val buffer = ByteArray(2048)
-                        val incoming = DatagramPacket(buffer, buffer.size)
+                        val incoming = DatagramPacket(receiveBuffer, receiveBuffer.size)
                         try {
                             it.receive(incoming)
                             val text = String(incoming.data, 0, incoming.length, Charsets.UTF_8)
@@ -547,10 +582,15 @@ class FoliaLanCastPlugin : Plugin() {
                             val usn = headers["usn"] ?: location
                             if (!replies.containsKey(usn)) replies[usn] = location
                         } catch (timeout: java.net.SocketTimeoutException) {
-                            // 本轮没有更多回复，继续等下一轮重发。
+                            // 本轮没有更多回复，继续等到窗口结束。
                         } catch (error: Exception) {
                             Log.w(TAG, "SSDP receive failed", error)
                         }
+                    }
+                    if (replies.size == before) {
+                        if (probe.searchTarget != LanCastDiscovery.ALL) preciseRoundsWithoutResult += 1
+                    } else {
+                        preciseRoundsWithoutResult = 0
                     }
                 }
             }
@@ -560,20 +600,19 @@ class FoliaLanCastPlugin : Plugin() {
              * 用户分不清是设备问题还是网络问题。
              */
             val candidates = replies.entries.distinctBy { it.value }
-            val speakers = ArrayList<Speaker>(candidates.size)
-            val skipReasons = ArrayList<String>()
-            for ((usn, location) in candidates) {
-                val read = readSpeaker(usn, location)
-                if (read.speaker != null) {
-                    speakers.add(read.speaker)
-                } else {
-                    skipReasons.add(read.failure)
-                }
-            }
+            // 回取描述要受预算约束：一台不响应的设备过去能把「搜音响」拖到十几秒（issue M21）。
+            val budgetMs = LanCastDiscovery.fetchBudgetMs(
+                timeoutMs = timeoutMs,
+                elapsedMs = System.currentTimeMillis() - started,
+            )
+            val reads = fetchDescriptions(candidates, budgetMs)
+            val speakers = reads.mapNotNull { it.speaker }
+            val skipReasons = reads.filter { it.speaker == null }.map { it.failure }
             Log.i(
                 TAG,
                 "discovery: answered=" + candidates.size + " listed=" + speakers.size +
-                    " skipped=" + skipReasons.size +
+                    " skipped=" + skipReasons.size + " found=" + speakers.size +
+                    " rounds=" + rounds +
                     (if (skipReasons.isEmpty()) "" else " reasons=" + skipReasons.distinct().joinToString(",")),
             )
             return DiscoveryResult(
@@ -589,17 +628,6 @@ class FoliaLanCastPlugin : Plugin() {
                 Log.w(TAG, "release multicast lock failed", error)
             }
         }
-    }
-
-    private fun buildSearch(target: ByteArray): ByteArray {
-        val head = "M-SEARCH * HTTP/1.1\r\n" +
-            "HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n" +
-            "MAN: \"ssdp:discover\"\r\n" +
-            "MX: 2\r\n" +
-            "ST: "
-        val headBytes = head.toByteArray(Charsets.UTF_8)
-        val tail = "\r\n\r\n".toByteArray(Charsets.UTF_8)
-        return headBytes + target + tail
     }
 
     /** 应答里的 LOCATION 是否落在局域网内（判据见 LanCastTargetPolicy）。 */
@@ -624,6 +652,58 @@ class FoliaLanCastPlugin : Plugin() {
     }
 
     /**
+     * 有并发上限、有整体预算地把设备描述取回来（issue M21）。
+     *
+     * 过去这里是串行的 `mapNotNull { readSpeaker(...) }`：每台设备连接 4s / 读 6s，一台不响应
+     * 就能让整次发现拖十几秒。现在按 [LanCastDiscovery.fetchConcurrency] 并发，超过预算的设备
+     * 直接按「超时」跳过 —— 宁可少列一台，也不让用户盯着转圈。
+     *
+     * 返回顺序与 [candidates] 一致（并发不改变列表顺序，免得设备列表每次刷新都重排）。
+     */
+    private fun fetchDescriptions(
+        candidates: List<Map.Entry<String, String>>,
+        budgetMs: Long,
+    ): List<ReadResult> {
+        if (candidates.isEmpty()) return emptyList()
+        val results = arrayOfNulls<ReadResult>(candidates.size)
+        val deadline = System.currentTimeMillis() + budgetMs
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(
+            LanCastDiscovery.fetchConcurrency(candidates.size),
+        ) { runnable ->
+            Thread(runnable, "foliaLanCast-fetch").apply { isDaemon = true }
+        }
+        try {
+            val futures = candidates.mapIndexed { index, (usn, location) ->
+                pool.submit {
+                    results[index] = if (System.currentTimeMillis() >= deadline) {
+                        // 预算已经用光：没轮到的设备按超时处理，不再排一次连接。
+                        ReadResult(null, "budget-exhausted")
+                    } else {
+                        readSpeaker(usn, location)
+                    }
+                }
+            }
+            futures.forEach { future ->
+                // 单台设备的等待也不能超过总预算。
+                val waitMs = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                try {
+                    future.get(waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } catch (timeout: java.util.concurrent.TimeoutException) {
+                    future.cancel(true)
+                } catch (error: Exception) {
+                    Log.w(TAG, "description fetch interrupted", error)
+                }
+            }
+        } finally {
+            pool.shutdownNow()
+        }
+        return candidates.indices.map { index ->
+            // 被取消或抛错的槽位补一个「超时」，保证与 candidates 一一对应。
+            results[index] ?: ReadResult(null, "budget-exhausted")
+        }
+    }
+
+    /**
      * 一台设备读设备描述的结论。
      *
      * 为什么不是 `Speaker?`：没读成的原因要分开记（连不上 / 答了但不是 MediaRenderer /
@@ -636,7 +716,13 @@ class FoliaLanCastPlugin : Plugin() {
         return try {
             val deviceUrl = LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
             val request = Request.Builder().url(deviceUrl).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
-            httpClient.newCall(request).execute().use { response ->
+            /*
+             * 回取描述用自己的超时，而不是共享 client 那套 4s / 6s。
+             *
+             * 设备描述通常几 KB，2.5s 已经非常宽；把一个不响应的设备绑满 10s 才是「搜音响很慢」
+             * 的真正原因（issue M21）。共享 client 的超时对播放 / 音量那几条调用仍然合适。
+             */
+            fetchClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location) + " http=" + response.code)
                     return ReadResult(null, "http-" + response.code)
