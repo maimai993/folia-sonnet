@@ -421,6 +421,16 @@ class LocalAudioServer(context: Context) {
         allowLanClients = allowed
     }
 
+    /**
+     * 关掉投送租约，回到「只服务本机回环」。
+     *
+     * 与 setLanClientsAllowed(false) 的区别在调用方是原生的销毁路径：那里不该假设
+     * Web 层还活着，也不该依赖任何单点调用，所以单独留一个语义明确的方法。
+     */
+    fun releaseLanCastLeases() {
+        allowLanClients = false
+    }
+
     @Synchronized
     @Throws(IOException::class)
     fun start(): Int {

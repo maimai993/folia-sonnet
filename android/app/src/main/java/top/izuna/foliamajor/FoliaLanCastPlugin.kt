@@ -90,10 +90,10 @@ class FoliaLanCastPlugin : Plugin() {
                 }
                 val payload = JSObject()
                 payload.put("devices", devices)
-                call.resolve(payload)
+                deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "discover failed", error)
-                call.reject("发现失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("发现失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -144,15 +144,15 @@ class FoliaLanCastPlugin : Plugin() {
                     listOf("InstanceID" to "0", "Speed" to "1"),
                 )
                 if (!started) {
-                    call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放")
+                    deliver(call) { call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放") }
                 } else {
                     val payload = JSObject()
                     payload.put("ok", true)
-                    call.resolve(payload)
+                    deliver(call) { call.resolve(payload) }
                 }
             } catch (error: Exception) {
                 Log.w(TAG, "play failed", error)
-                call.reject("推送失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("推送失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -177,10 +177,10 @@ class FoliaLanCastPlugin : Plugin() {
                 val stopped = soap(target, "Stop", listOf("InstanceID" to "0"))
                 val payload = JSObject()
                 payload.put("ok", stopped)
-                call.resolve(payload)
+                deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "stop failed", error)
-                call.reject("停止失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("停止失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -200,11 +200,13 @@ class FoliaLanCastPlugin : Plugin() {
         Thread {
             try {
                 val value = soapNumber(target, "GetVolume", listOf("InstanceID" to "0", "Channel" to "Master"), "CurrentVolume")
-                if (value == null) call.reject("音响没有返回音量")
-                else call.resolve(JSObject().put("volume", value))
+                deliver(call) {
+                    if (value == null) call.reject("音响没有返回音量")
+                    else call.resolve(JSObject().put("volume", value))
+                }
             } catch (error: Exception) {
                 Log.w(TAG, "getVolume failed", error)
-                call.reject("读取音量失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("读取音量失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -229,10 +231,10 @@ class FoliaLanCastPlugin : Plugin() {
                     "SetVolume",
                     listOf("InstanceID" to "0", "Channel" to "Master", "DesiredVolume" to volume.toString()),
                 )
-                call.resolve(JSObject().put("ok", ok))
+                deliver(call) { call.resolve(JSObject().put("ok", ok)) }
             } catch (error: Exception) {
                 Log.w(TAG, "setVolume failed", error)
-                call.reject("设置音量失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("设置音量失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -257,10 +259,10 @@ class FoliaLanCastPlugin : Plugin() {
                     "SetMute",
                     listOf("InstanceID" to "0", "Channel" to "Master", "DesiredMute" to (if (muted) "1" else "0")),
                 )
-                call.resolve(JSObject().put("ok", ok))
+                deliver(call) { call.resolve(JSObject().put("ok", ok)) }
             } catch (error: Exception) {
                 Log.w(TAG, "setMute failed", error)
-                call.reject("设置静音失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("设置静音失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -277,18 +279,79 @@ class FoliaLanCastPlugin : Plugin() {
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    /**
+     * 插件是否已被销毁。
+     *
+     * 这个插件持有两类跨调用常驻资源：OkHttpClient（连接池 + dispatcher 线程）和由
+     * ConnectivityManager 持有的 NetworkCallback。它们都比插件活得久，Activity 重建之后
+     * 旧的回调还会继续往已经销毁的 Bridge 发事件。置真之后所有调用直接 reject，
+     * 后台线程也会在 `deliver` 里被静默丢弃，不再碰已失效的 Bridge。
+     */
+    @Volatile
+    private var destroyed = false
+
+    /**
+     * 插件实例上线。
+     *
+     * `destroyed` 是实例字段：Activity 重建时 Capacitor 会新建一个插件实例，
+     * 新实例的 load() 必须把标志归零，否则新建的这个一上来就「已销毁」，
+     * 所有投送调用都会被静默丢掉。
+     */
+    override fun load() {
+        destroyed = false
+        super.load()
+    }
+
+    /**
+     * 插件销毁时调用的收尾：注销网络监听、断开在途连接、关掉 OkHttp。
+     *
+     * 为什么要在这里收：这个插件持有两类跨调用常驻资源。NetworkCallback 由系统持有，
+     * 过去唯一的注销点是 setWifiAutoCast(false)（只能等 Web 层主动下发）；OkHttpClient
+     * 的连接池与 dispatcher 线程则是进程级对象，过去完全没有关闭点。Activity 销毁后
+     * 两者都还活着，旧回调继续往已销毁的 Bridge 发事件。
+     */
+    override fun handleOnDestroy() {
+        destroyed = true
+        // 先停监听：unregisterNetworkCallback 会对 callback 合成一次 onLost，
+        // stopWifiWatch 里的 enabled 标志保证这次合成事件不会继续下发。
+        stopWifiWatch()
+        try {
+            httpClient.dispatcher.cancelAll()
+            httpClient.connectionPool.evictAll()
+            httpClient.dispatcher.executorService.shutdown()
+        } catch (error: Exception) {
+            Log.w(TAG, "release http client failed", error)
+        }
+        super.handleOnDestroy()
+    }
+
+    /**
+     * 把结果交回 Web 层，但插件已销毁时什么都不做。
+     *
+     * 这些 resolve/reject 大多跑在自己起的后台线程上（发现、推送各有 4~6 秒），
+     * Activity 在这期间销毁就会碰到已失效的 Bridge —— 逐处判断太容易漏，统一收在这里。
+     */
+    private fun deliver(call: PluginCall, action: () -> Unit) {
+        if (destroyed) return
+        try {
+            action()
+        } catch (error: Exception) {
+            Log.w(TAG, "deliver to web failed", error)
+        }
+    }
+
     /** 打开/关闭「连上 WiFi 自动投送」的原生网络监听。 */
     @PluginMethod
     fun setWifiAutoCast(call: PluginCall) {
         val enabled = call.getBoolean("enabled") ?: false
         if (enabled) startWifiWatch() else stopWifiWatch()
-        call.resolve()
+        deliver(call) { call.resolve() }
     }
 
     /** 前端刚挂载时用它确认当前是不是已经在 WiFi 上。 */
     @PluginMethod
     fun getWifiState(call: PluginCall) {
-        call.resolve(JSObject().put("wifi", isOnWifi()))
+        deliver(call) { call.resolve(JSObject().put("wifi", isOnWifi())) }
     }
 
     private fun isOnWifi(): Boolean {
@@ -300,7 +363,7 @@ class FoliaLanCastPlugin : Plugin() {
     }
 
     private fun startWifiWatch() {
-        if (networkCallback != null) return
+        if (destroyed || networkCallback != null) return
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return
         val request = NetworkRequest.Builder()

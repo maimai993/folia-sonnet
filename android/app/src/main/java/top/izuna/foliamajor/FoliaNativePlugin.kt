@@ -688,6 +688,14 @@ class FoliaNativePlugin : Plugin() {
 
     override fun handleOnDestroy() {
         if (instance === this) instance = null
+        /*
+         * 投送租约也要在这里收口。
+         *
+         * 过去只有 Web 层调 lanCastRelease 这一个收回点，而投送中途异常、WebView 被冻死、
+         * 页面没来得及走完收回流程时，LocalAudioServer 会一直对局域网开放 /remote-audio/。
+         * 插件销毁（Activity 重建 / 进程退出前）是最后一个能确定执行的时机，在这里补一刀。
+         */
+        localAudioServer?.releaseLanCastLeases()
         super.handleOnDestroy()
     }
 
