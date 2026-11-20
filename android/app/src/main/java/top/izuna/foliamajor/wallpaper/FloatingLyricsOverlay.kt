@@ -433,10 +433,18 @@ class FloatingLyricsOverlay private constructor(context: Context) {
         evaluate()
     }
 
+    /**
+     * 收掉这一层：停巡检、摘窗口、**把屏态 Receiver 一并注销**。
+     *
+     * `stop()` 是"这一层不挂了"的唯一出口（叠加模式关掉、壁纸自己在画时都调它），
+     * 所以它必须把 [start] 打开的东西全部关掉 —— 包括那个屏态广播。漏掉注销的话，
+     * 小窗已经不显示了，亮一次屏仍然会唤醒这个进程跑一遍 `evaluate()`。
+     */
     fun stop() {
         polling = false
         handler.removeCallbacks(pollTask)
         detach()
+        unregisterScreenReceiver()
     }
 
     /**
@@ -492,7 +500,6 @@ class FloatingLyricsOverlay private constructor(context: Context) {
 
     private fun registerScreenReceiver() {
         if (receiverRegistered) return
-        receiverRegistered = true
         val filter = IntentFilter()
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
@@ -503,8 +510,35 @@ class FloatingLyricsOverlay private constructor(context: Context) {
             } else {
                 context.registerReceiver(screenReceiver, filter)
             }
+            /*
+             * 标志位只在**真的注册成功之后**才置上。
+             *
+             * 早先是先 `receiverRegistered = true` 再注册：一旦这一次被 ROM 拒绝（异常进
+             * catch），标志位就已经是 true，于是这个实例**再也不会**重新注册屏态 —— 亮屏
+             * 不恢复（`screenOn` 停在息屏那一帧的值上），小窗再也挂不回来，而且没有任何
+             * 日志之外的线索。注册与标志位必须同生。
+             */
+            receiverRegistered = true
         } catch (error: Throwable) {
             Log.w(TAG, "register screen receiver failed", error)
+        }
+    }
+
+    /**
+     * 与 [registerScreenReceiver] 成对的注销。
+     *
+     * 它原来是不存在的：`receiverRegistered` 只挡重复注册，没有任何一条路径把它摘掉 ——
+     * `stop()` 只停巡检、摘窗口，Receiver 留在系统里活到进程结束。它收的是
+     * ACTION_SCREEN_ON / OFF / USER_PRESENT，每亮一次屏就把进程唤醒一回，而桌面歌词那时
+     * 根本没在显示（`stop()` 刚把它关掉）。以后要真正"关掉这一层省电"，这是唯一出口。
+     */
+    private fun unregisterScreenReceiver() {
+        if (!receiverRegistered) return
+        receiverRegistered = false
+        try {
+            context.unregisterReceiver(screenReceiver)
+        } catch (error: Throwable) {
+            Log.w(TAG, "unregister screen receiver failed", error)
         }
     }
 
