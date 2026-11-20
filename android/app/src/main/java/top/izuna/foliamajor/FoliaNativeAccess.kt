@@ -2,10 +2,14 @@ package top.izuna.foliamajor
 
 import android.content.SharedPreferences
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 import java.net.URI
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 // 当前文件：FoliaNativePlugin 的授权层 —— 谁可以调（origin）、可以调到哪里（域名白名单）、
 // 本次会话登记的自建服务、以及几条出口（openUrl / 更新包 / 导出路径）的准入判定。
@@ -237,6 +241,66 @@ class FoliaNativeAccess(context: android.content.Context) {
     /** 出厂白名单：平台域。 */
     private val platformList: FoliaHostAllowlist = buildPlatformList()
 
+    /**
+     * cookie 域的出厂白名单（H2 真机回归后补）。
+     *
+     * **为什么要和 [platformList] 分开**：这两件事的粒度不一样。
+     *   · `httpRequest` 只该连具体接口主机（`music.163.com`、`y.qq.com`），范围窄是对的；
+     *   · cookie 是按**域**存的 —— 登录态躺在 `163.com`、`qq.com`、`126.net` 这些主域上，
+     *     前端 `chrome.cookies` 兼容层（src/nativeBridge/api/cookies.js 的 NETEASE_DOMAINS /
+     *     QQ_DOMAINS / KG_DOMAINS）本来就按主域读写。
+     *
+     * 一开始沿用了 [platformList]，结果真机上 QQ 与网易云的登录态**全部读不出来**：
+     * `denied cookiesGetAll: cookie domain qq.com is not allowlisted` 刷了 218 条。
+     * 那是把「能不能连这台主机」和「能不能读这个域的 cookie」混成了一件事。
+     *
+     * 这里只放登录态真正会落的主域，仍然是个封闭列表 —— 不是「任意域都放」。
+     */
+    private fun buildCookieDomainList(): FoliaHostAllowlist {
+        val list = FoliaHostAllowlist()
+        list.addAll(
+            listOf(
+                // 网易云：主域 + 图床/接口所在的 126.net
+                // 126.net 的图床子域是动态的（p1/p2/p3…），登录态与封面都可能落在上面，
+                // 所以按后缀登记；其余按精确主机。
+                "163.com",
+                "*.163.com",
+                "126.net",
+                "*.126.net",
+                "music.163.com",
+                "www.music.163.com",
+                "interface.music.163.com",
+                "interface3.music.163.com",
+                // QQ 音乐与 QQ / 微信登录通道
+                "qq.com",
+                "*.qq.com",
+                "y.qq.com",
+                "i.y.qq.com",
+                "u.y.qq.com",
+                "c.y.qq.com",
+                "graph.qq.com",
+                "ptlogin2.qq.com",
+                "ssl.ptlogin2.qq.com",
+                "xui.ptlogin2.qq.com",
+                "tencent.com",
+                "weixin.qq.com",
+                // 酷狗
+                "kugou.com",
+                "www.kugou.com",
+                "m.kugou.com",
+                "kugou.net",
+            ),
+        )
+        // App 自己的页面宿主：页面自身的 cookie。
+        list.add("localhost")
+        list.add("127.0.0.1")
+        return list
+    }
+
+    /** cookie 域白名单：出厂的那份 + 用户登记的自建服务（后者由 [rebuildAllowlist] 补进来）。 */
+    @Volatile
+    private var cookieDomains: FoliaHostAllowlist = buildCookieDomainList()
+
     /** 平台域 + 用户设置里登记的自建服务。 */
     @Volatile
     private var allowlist: FoliaHostAllowlist = platformList.copy()
@@ -276,7 +340,6 @@ class FoliaNativeAccess(context: android.content.Context) {
         }
         allowlist = next
     }
-
     /** 读用户设置里的自建服务地址 → 域名（不带端口）。 */
     private fun readConfiguredServerHosts(): List<String> {
         val prefs = readUiStatePrefs() ?: return emptyList()
@@ -337,7 +400,15 @@ class FoliaNativeAccess(context: android.content.Context) {
             null
         }
         val currentUrl = try {
-            webView?.url
+            /*
+             * WebView 的方法只许在 UI 线程上调。
+             *
+             * Capacitor 把插件方法派发到 `CapacitorPlugins` 线程，那里读 `webView.url`
+             * 会被系统记一条 "A WebView method was called on thread ..." 警告（真机上抓到过），
+             * 部分 ROM 直接抛异常 —— 那样每个带来源校验的调用都会 fail closed，等于全废。
+             * 切到 UI 线程读、同步等结果：调用方本来就在等这一次检查。
+             */
+            readUrlOnUiThread(webView)
         } catch (error: Exception) {
             Log.w(TAG, "cannot read webview url", error)
             null
@@ -349,8 +420,34 @@ class FoliaNativeAccess(context: android.content.Context) {
         }
     }
 
-    private fun trustedOrigins(bridge: com.getcapacitor.Bridge): Set<String> {
-        val origins = LinkedHashSet<String>()
+    /**
+     * 在 UI 线程上读 WebView 当前的 url 并同步等结果。
+     *
+     * Capacitor 的插件方法跑在 `CapacitorPlugins` 线程；`WebView.getUrl()` 只安全于 UI 线程，
+     * 在别的线程上调用会被系统记警告（真机上抓到 `requireMainDocument` 就是这一条），
+     * 个别 ROM 直接抛。这里切过去读、最多等 1 秒，超时就当读不到 —— 调用方会 fail closed。
+     *
+     * 已经在 UI 线程时直接读，不经 Handler（否则自己等自己，必然超时）。
+     */
+    private fun readUrlOnUiThread(webView: android.webkit.WebView?): String? {
+        if (webView == null) return null
+        if (Looper.myLooper() == Looper.getMainLooper()) return webView.url
+        var result: String? = null
+        val latch = CountDownLatch(1)
+        val posted = Handler(Looper.getMainLooper()).post {
+            try {
+                result = webView.url
+            } catch (error: Exception) {
+                Log.w(TAG, "cannot read webview url (ui thread)", error)
+            } finally {
+                latch.countDown()
+            }
+        }
+        if (!posted) return null
+        return if (latch.await(1, TimeUnit.SECONDS)) result else null
+    }
+
+    private fun trustedOrigins(bridge: com.getcapacitor.Bridge): Set<String> {        val origins = LinkedHashSet<String>()
         try {
             originOf(bridge.localUrl)?.let { origins.add(it) }
         } catch (error: Exception) {
@@ -456,7 +553,7 @@ class FoliaNativeAccess(context: android.content.Context) {
             ?.removePrefix(".")?.removeSuffix(".")
             .orEmpty()
         if (explicitDomain.isNotEmpty()) {
-            if (!isAllowedHost(explicitDomain)) {
+            if (!isAllowedCookieDomain(explicitDomain)) {
                 Log.w(TAG, "denied " + method + ": cookie domain " + explicitDomain + " is not allowlisted")
                 throw FoliaNativeAccessDenied("cookie domain is not allowlisted: " + explicitDomain)
             }
@@ -465,7 +562,7 @@ class FoliaNativeAccess(context: android.content.Context) {
             }
             // 落在登记项里就取登记的那一个（`*.qq.com` → `qq.com`），否则用域名本身
             // （用户自己填的 `nas.local` 这类整台机器就是它自己的域）。
-            return domainOfAllowedHost(explicitDomain) ?: explicitDomain
+            return cookieDomainOf(explicitDomain)
         }
         val rawUrl = url?.trim().orEmpty()
         if (rawUrl.isEmpty()) {
@@ -477,13 +574,34 @@ class FoliaNativeAccess(context: android.content.Context) {
         } catch (error: Exception) {
             null
         }
-        if (host.isNullOrEmpty() || !isAllowedHost(host)) {
-            Log.w(TAG, "denied " + method + ": cookie host is not allowlisted")
+        if (host.isNullOrEmpty() || !isAllowedCookieDomain(host)) {
+            Log.w(TAG, "denied " + method + ": cookie host " + (host ?: "<unknown>") + " is not allowlisted")
             throw FoliaNativeAccessDenied("cookie host is not allowlisted")
         }
         if (isPrivate(host) && !isSessionHost(host, 0)) {
             throw FoliaNativeAccessDenied("cookie host is not the configured service")
         }
+        return cookieDomainOf(host)
+    }
+
+    /**
+     * 这个域能不能读 cookie（H2 真机回归后补）。
+     *
+     * 走的是 [cookieDomains] 而不是 http 那套 [allowlist]：登录态按主域存
+     * （`163.com` / `qq.com` / `126.net`），和「能连哪些接口主机」不是一回事。
+     * 自建服务两边都认 —— 用户自己填的那台机器，登录态也该能读写。
+     */
+    private fun isAllowedCookieDomain(host: String): Boolean {
+        if (cookieDomains.matches(host)) return true
+        return isAllowedHost(host)
+    }
+
+    /**
+     * 认出的域归一：命中 cookie 白名单的登记项就取登记的那个，否则退到 http 白名单的规则，
+     * 都没有就用域名本身（自建服务）。
+     */
+    private fun cookieDomainOf(host: String): String {
+        cookieDomains.domainOf(host)?.let { return it }
         return domainOfAllowedHost(host) ?: host
     }
 
