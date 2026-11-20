@@ -1,5 +1,6 @@
 import type { AiCompletionRequest } from './aiCompletion';
 import { readAiSettings, resolveAiApiKey, resolveAiBaseUrl, resolveAiModel } from './aiSettings';
+import { getNativePlugin as getNativePluginFromBridge, isCapacitorAndroidPlatform } from './nativePluginAccess';
 
 // src/services/aiNativeCompletion.ts
 // AI 补全的原生路径：请求由原生拼装并发送，WebView 冻不冻结都与它无关。
@@ -22,18 +23,7 @@ type NativeAiFullPlugin = {
     }) => Promise<{ text?: string }>;
 };
 
-const getPlugin = (): NativeAiFullPlugin | null => {
-    if (typeof window === 'undefined') return null;
-    const capacitor = (window as unknown as {
-        Capacitor?: {
-            isNativePlatform?: () => boolean;
-            getPlatform?: () => string;
-            Plugins?: { FoliaNative?: NativeAiFullPlugin };
-        };
-    }).Capacitor;
-    if (capacitor?.isNativePlatform?.() !== true && capacitor?.getPlatform?.() !== 'android') return null;
-    return capacitor?.Plugins?.FoliaNative ?? null;
-};
+const getPlugin = (): NativeAiFullPlugin | null => getNativePluginFromBridge<NativeAiFullPlugin>('FoliaNative', () => isCapacitorAndroidPlatform());
 
 /** 当前设置整份推给原生。设置变化与启动时各调一次。 */
 export const pushAiConfigToNative = async (): Promise<boolean> => {

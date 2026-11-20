@@ -5,6 +5,7 @@
 // 这里是 AI 这个**用法**：更宽的超时 + 云缓存那条旁路。
 
 import { createNativeFetch, isNativeHttpFetchAvailable, type NativeHttpPlugin } from './nativeHttpFetch';
+import { getNativePlugin as getNativePluginFromBridge, isCapacitorAndroidPlatform } from './nativePluginAccess';
 
 /** AI 请求通常比接口调用慢，给一个比默认 45s 更宽的上限。 */
 export const AI_REQUEST_TIMEOUT_MS = 180_000;
@@ -33,21 +34,7 @@ type NativeAiPlugin = NativeHttpPlugin & {
     }) => Promise<{ ok?: boolean; status?: number; body?: string } | null>;
 };
 
-const getNativePlugin = (): NativeAiPlugin | null => {
-    if (typeof window === 'undefined') return null;
-    const capacitor = (window as unknown as {
-        Capacitor?: {
-            isPluginAvailable?: (name: string) => boolean;
-            isNativePlatform?: () => boolean;
-            getPlatform?: () => string;
-            Plugins?: { FoliaNative?: NativeAiPlugin };
-        };
-    }).Capacitor;
-    if (!capacitor) return null;
-    if (capacitor.isNativePlatform?.() !== true && capacitor.getPlatform?.() !== 'android') return null;
-    if (typeof capacitor.isPluginAvailable === 'function' && !capacitor.isPluginAvailable('FoliaNative')) return null;
-    return capacitor.Plugins?.FoliaNative ?? null;
-};
+const getNativePlugin = (): NativeAiPlugin | null => getNativePluginFromBridge<NativeAiPlugin>('FoliaNative', () => isCapacitorAndroidPlatform());
 
 export const isAiBridgeFetchAvailable = (): boolean => isNativeHttpFetchAvailable();
 

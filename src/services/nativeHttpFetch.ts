@@ -14,6 +14,7 @@
 // 这里是那条路本身。两边共用一份实现，免得第二处要用时再抄一遍。
 
 import { nativePayloadBytes } from '../platform/foliaNative';
+import { getNativePlugin as getNativePluginFromBridge, isCapacitorAndroidPlatform } from './nativePluginAccess';
 
 type NativeHeaderEntry = { name?: string; value?: string };
 
@@ -59,22 +60,11 @@ export const NATIVE_HTTP_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
  * `registerPlugin()` 给回来的是一个**代理**，任何方法名问过去都是 function，原生侧一行
  * 没写时这一句也返回 true（真出过一次：于是凭空点亮平台入口，报「未登录却有账号」）。
  * 同步的 `Capacitor.isPluginAvailable()` 查的是原生上报的 pluginHeaders，那才是真的。
+ *
+ * 判据本身搬到 `nativePluginAccess`（issue M35）：那个文件收着「怎么问桥」，
+ * 这里只说明「本模块要哪一条」—— 这条一定在桥起来之后才被调用，所以用最严格的 Capacitor 判据。
  */
-const getNativePlugin = (): NativeHttpPlugin | null => {
-    if (typeof window === 'undefined') return null;
-    const capacitor = (window as unknown as {
-        Capacitor?: {
-            isPluginAvailable?: (name: string) => boolean;
-            isNativePlatform?: () => boolean;
-            getPlatform?: () => string;
-            Plugins?: { FoliaNative?: NativeHttpPlugin };
-        };
-    }).Capacitor;
-    if (!capacitor) return null;
-    if (capacitor.isNativePlatform?.() !== true && capacitor.getPlatform?.() !== 'android') return null;
-    if (typeof capacitor.isPluginAvailable === 'function' && !capacitor.isPluginAvailable('FoliaNative')) return null;
-    return capacitor.Plugins?.FoliaNative ?? null;
-};
+const getNativePlugin = (): NativeHttpPlugin | null => getNativePluginFromBridge<NativeHttpPlugin>('FoliaNative', () => isCapacitorAndroidPlatform());
 
 /** 这条原生路现在能不能用（决定要不要把平台入口点亮）。 */
 export const isNativeHttpFetchAvailable = (): boolean => getNativePlugin() !== null;
