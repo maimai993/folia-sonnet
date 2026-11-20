@@ -11,7 +11,7 @@ import { useAudioSettingsStore } from '../../stores/useAudioSettingsStore';
 import { getSongArtistLabel } from '../../services/onlineMusic/songMetadata';
 import {
     castTrackToSpeaker,
-    discoverLanSpeakers,
+    discoverLanSpeakersDetailed,
     ensureCastingMute,
     getCastingSpeaker,
     getLastSpeaker,
@@ -81,6 +81,10 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
     const { t } = useTranslation();
     const [panel, setPanel] = React.useState<Panel>('closed');
     const [devices, setDevices] = React.useState<LanSpeaker[]>([]);
+    // 应答了但没读成设备的数量：过去这些设备静默消失，用户只知道「少了一台」（issue M22）。
+    const [skipped, setSkipped] = React.useState(0);
+    // 这台音响拿不到封面（封面不是 http 地址时原生不发 albumArtURI，issue M23）。
+    const [coverTrimmed, setCoverTrimmed] = React.useState(false);
     const [scanning, setScanning] = React.useState(false);
     const [castingUrl, setCastingUrl] = React.useState<string | null>(null);
     const [active, setActive] = React.useState<LanSpeaker | null>(() => getCastingSpeaker());
@@ -155,9 +159,13 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         setError('');
         setNotice('');
         try {
-            const found = await discoverLanSpeakers();
-            setDevices(found);
-            if (found.length === 0) setNotice(t('lanCastNoDevice'));
+            const found = await discoverLanSpeakersDetailed();
+            setDevices(found.devices);
+            setSkipped(found.skipped);
+            if (found.devices.length === 0) setNotice(t('lanCastNoDevice'));
+            // 有设备应答、却一台都没读成：这不是「没搜到」，而是「搜到了但认不出」，
+            // 两句提示指的排查方向不同（issue M22）。
+            else if (found.skipped > 0) setNotice(t('lanCastSkippedDevices', { count: found.skipped }));
         } catch (scanError) {
             setError(lanCastErrorText(scanError));
         } finally {
@@ -194,8 +202,9 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         pushedSrcRef.current = audioSrc;
         setPanel('closed');
         void castTrackToSpeaker(speaker, buildTrack())
-            .then(() => {
+            .then(info => {
                 setNotice(t('lanCastFollowed', { name: speaker.name }));
+                setCoverTrimmed(info.trimmed.includes('cover'));
                 setError('');
             })
             .catch(followError => setError(lanCastErrorText(followError)));
@@ -206,10 +215,12 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
         setError('');
         setNotice('');
         try {
-            await castTrackToSpeaker(device, buildTrack());
+            const info = await castTrackToSpeaker(device, buildTrack());
             pushedSongRef.current = trackKey;
             pushedSrcRef.current = audioSrc;
             setNotice(t('lanCastPlaying', { name: device.name }));
+            // 音响拿不到封面时把这句话说在遥控器上：过去是静默的，用户只会觉得「投送不对劲」（issue M23）。
+            setCoverTrimmed(info.trimmed.includes('cover'));
             // 选完设备直接在同一张卡里换成遥控器，不再另开浮层。
             setPanel('remote');
         } catch (castError) {
@@ -252,7 +263,7 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                 autoCastingRef.current = true;
                 void (async () => {
                     try {
-                        const found = await discoverLanSpeakers(2200);
+                        const found = (await discoverLanSpeakersDetailed(2200)).devices;
                         const target = found.find(item => item.controlUrl === remembered.controlUrl)
                             ?? found.find(item => item.name === remembered.name);
                         if (target) {
@@ -441,8 +452,14 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                                 )}
 
                                 <div className="flex items-center justify-between gap-2">
-                                    <span className={`text-xs ${soft}`}>
+                                    <span className={`min-w-0 truncate text-xs ${soft}`}>
                                         {scanning ? t('lanCastScanning') : t('lanCastDevices', { count: devices.length })}
+                                        {/* 应答了但没读成的那几台也报出来，别让它们静默消失（issue M22）。 */}
+                                        {!scanning && skipped > 0 && (
+                                            <span className="ml-1 text-amber-400">
+                                                {t('lanCastSkippedShort', { count: skipped })}
+                                            </span>
+                                        )}
                                     </span>
                                     <Button
                                         onClick={() => void scan()}
@@ -496,7 +513,8 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                                 artist={getSongArtistLabel(song)}
                                 coverUrl={coverUrl}
                                 isDaylight={isDaylight}
-                                onMinimize={() => setPanel('closed')}
+                                // 音响侧拿不到封面时说一声，别让用户以为是投送出了问题（issue M23）。
+                                coverNote={coverTrimmed ? t('lanCastCoverTrimmed') : ''}                                onMinimize={() => setPanel('closed')}
                                 onSwitch={() => setPanel('devices')}
                                 onStop={() => void stop()}
                             />

@@ -602,7 +602,8 @@ class LocalAudioServer(context: Context) {
     private fun admitsLanRequest(remoteHost: String?, headers: Map<String, String>, token: String?): Boolean {
         if (token == null) return false
         if (!isLanClientAddress(remoteHost)) {
-            Log.w(TAG, "lan cast request from non-LAN client: " + remoteHost)
+            // 来源地址只记网段：完整 IP 能拼出用户的局域网拓扑（issue M24）。
+            Log.w(TAG, "lan cast request from non-LAN client: " + LanCastLogText.hostHint(remoteHost))
             return false
         }
         // 浏览器跨源请求一定带 Origin（同源 iframe 除外，那也已经不是「任意网页」）；
@@ -619,6 +620,13 @@ class LocalAudioServer(context: Context) {
     }
 
     /** 来源是不是局域网单播地址：与本机同段，或至少在一个私有段里。 */
+    /**
+     * 被拒绝的局域网请求，路径该怎么进日志：`/remote-audio/…` 那一路的后面就是本次签发的令牌，
+     * 只记路径前缀；别的路径原样记（本地曲库 / 缓存那些不是凭证，排查要靠它）。
+     */
+    private fun pathHintOf(path: String): String =
+        if (path.startsWith(REMOTE_AUDIO_PATH_PREFIX)) REMOTE_AUDIO_PATH_PREFIX + "…" else path
+
     private fun isLanClientAddress(host: String?): Boolean {
         if (host.isNullOrEmpty()) return false
         val address = try {
@@ -686,7 +694,8 @@ class LocalAudioServer(context: Context) {
                             } else null
                             if (!admitsLanRequest(client.inetAddress.hostAddress, headers, lanToken)
                                 || requestParts[0] == "OPTIONS") {
-                                Log.w(TAG, "rejected lan cast request: " + path + " from " + client.inetAddress.hostAddress)
+                                Log.w(TAG, "rejected lan cast request: " + pathHintOf(path) + " from " +
+                                    LanCastLogText.hostHint(client.inetAddress.hostAddress))
                                 val denied = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                                 output.write(denied.toByteArray(StandardCharsets.US_ASCII))
                                 output.flush()
@@ -925,7 +934,8 @@ class LocalAudioServer(context: Context) {
     ) {
         val entry = remoteAudioRegistry.get(token)
         if (entry == null) {
-            Log.w(TAG, "remote audio token unknown: " + token)
+            // 令牌是投送音频的通路凭证：日志里只记它的形态（长度 / 前缀 / 字符集），不记原文（issue M24）。
+            Log.w(TAG, "remote audio token unknown: " + LanCastLogText.tokenHint(token))
             writeStatus(output, 404, "Not Found")
             return
         }
@@ -957,7 +967,8 @@ class LocalAudioServer(context: Context) {
         try {
             val body = upstream.body
             if (!upstream.isSuccessful || body == null) {
-                Log.w(TAG, "remote audio upstream " + upstream.code + " for " + target)
+                // 上游音频地址只记网段与资源名：地址里可能带 CDN 的临时签名，也是用户的网络信息（issue M24）。
+                Log.w(TAG, "remote audio upstream " + upstream.code + " for " + LanCastLogText.deviceHint(target))
                 writeStatus(output, 502, "Upstream Error")
                 return
             }
@@ -970,7 +981,7 @@ class LocalAudioServer(context: Context) {
             val size = body.contentLength()
             val partial = upstream.code == 206 || contentRange != null
 
-            Log.i(TAG, "remote " + target + " -> " + upstream.code +
+            Log.i(TAG, "remote " + LanCastLogText.deviceHint(target) + " -> " + upstream.code +
                 " type=" + contentType + " size=" + size + " range=" + (if (contentRange == null) "-" else contentRange))
 
             val response = StringBuilder()

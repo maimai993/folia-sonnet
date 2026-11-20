@@ -37,11 +37,9 @@ class FoliaLanCastPlugin : Plugin() {
 
     companion object {
         private const val TAG = "FoliaLanCast"
-        private const val SSDP_ADDRESS = "239.255.255.250"
-        private const val SSDP_PORT = 1900
         private const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport:1"
         private const val RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1"
-        private const val MEDIA_RENDERER = "urn:schemas-upnp-org:device:MediaRenderer:1"
+        // 发现用的 ST 统一放在 LanCastDiscovery 里（策略与报文同源），这里不再各存一份。
         private val SOAP_XML = "text/xml; charset=\"utf-8\"".toMediaType()
     }
 
@@ -59,6 +57,21 @@ class FoliaLanCastPlugin : Plugin() {
         .followSslRedirects(false)
         .build()
 
+    /**
+     * 只给「回取设备描述」用的 client（issue M21）。
+     *
+     * 设备描述通常几 KB，2.5s 已经非常宽；把一个不响应的设备绑满 10s 才是「搜音响很慢」的
+     * 真正原因。它与 [httpClient] 共用连接池之外的部分各自独立，投送 / 音量那几条仍然用
+     * 上面那套更宽松的超时。
+     */
+    private val fetchClient = OkHttpClient.Builder()
+        .connectTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
+        .readTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
+        .callTimeout(LanCastDiscovery.PER_DEVICE_FETCH_BUDGET_MS.toLong(), TimeUnit.MILLISECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
+        .build()
+
     /** 一次发现的结果。controlUrl 已经是绝对地址，Web 层不必再解析设备描述。 */
     private data class Speaker(
         val id: String,
@@ -70,15 +83,29 @@ class FoliaLanCastPlugin : Plugin() {
         val volumeControlUrl: String? = null,
     )
 
+    /**
+     * 一次发现的完整结果：列表 + 「有几台应答了但没读成设备」。
+     *
+     * 过去没读成的那几台直接从列表里消失，用户只知道「少了一台」，分不清是设备问题还是网络问题
+     * （issue M22）。现在至少把被跳过的数量带回界面，日志里另有每台的结论。
+     */
+    private data class DiscoveryResult(
+        val speakers: List<Speaker>,
+        val attempted: Int,
+        val skipped: Int,
+        /** 跳过原因的去重归类（`io/no_answer`、`malformed` …），只用于日志，不含地址。 */
+        val skipReasons: List<String>,
+    )
+
     /** 扫一遍局域网里能当播放器的 UPnP 设备。网络操作全部放到后台线程。 */
     @PluginMethod
     fun discover(call: PluginCall) {
         val timeoutMs = call.getInt("timeoutMs", 3200)?.coerceIn(800, 10000) ?: 3200
         Thread {
             try {
-                val speakers = discoverSpeakers(timeoutMs)
+                val result = discoverSpeakers(timeoutMs)
                 val devices = JSArray()
-                for (speaker in speakers) {
+                for (speaker in result.speakers) {
                     devices.put(JSObject().apply {
                         put("id", speaker.id)
                         put("name", speaker.name)
@@ -90,6 +117,9 @@ class FoliaLanCastPlugin : Plugin() {
                 }
                 val payload = JSObject()
                 payload.put("devices", devices)
+                // 应答了但没读成设备的数量：界面据此提示「还有几台没认出来」，而不是静默少几台。
+                payload.put("attempted", result.attempted)
+                payload.put("skipped", result.skipped)
                 deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "discover failed", error)
@@ -123,31 +153,49 @@ class FoliaLanCastPlugin : Plugin() {
         val artist = call.getString("artist") ?: ""
         val album = call.getString("album") ?: ""
         val coverUrl = call.getString("coverUrl") ?: ""
-        val durationMs = call.getInt("durationMs", 0) ?: 0
+        // 时长用 Long 读：Int 毫秒在 24 天以上的音频上会溢出成负数（issue M23 第 2 点）。
+        val durationMs = call.getLong("durationMs") ?: 0L
+        // Web 侧认出来的格式（可选）：给了就用它，没给就由原生按 host 已经被 validate 过的地址再认一次。
+        val declaredFormat = call.getString("audioFormat")
         Thread {
             try {
-                val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs)
+                val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs, declaredFormat)
                 // 有些老设备解析不了 DIDL-Lite，正文送不进去就退成 NOT_IMPLEMENTED 再试一次：
-                // 地址照样能播，只是音响上不显示歌名。
-                val sent = soap(
-                    target,
-                    "SetAVTransportURI",
-                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to metadata),
-                ) || soap(
-                    target,
-                    "SetAVTransportURI",
-                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to "NOT_IMPLEMENTED"),
+                // 地址照样能播，只是音响上不显示歌名（issue M22 的两次尝试见 LanCastFailures.dispatchUri）。
+                val dispatch = LanCastFailures.dispatchUri(
+                    setWithMetadata = {
+                        soapRaw(
+                            target,
+                            "SetAVTransportURI",
+                            listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to metadata),
+                        )
+                    },
+                    setWithoutMetadata = {
+                        soapRaw(
+                            target,
+                            "SetAVTransportURI",
+                            listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to "NOT_IMPLEMENTED"),
+                        )
+                    },
                 )
-                val started = sent && soap(
-                    target,
-                    "Play",
-                    listOf("InstanceID" to "0", "Speed" to "1"),
-                )
-                if (!started) {
-                    deliver(call) { call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放") }
+                val report = LanCastFailures.playReport(dispatch) {
+                    soapRaw(target, "Play", listOf("InstanceID" to "0", "Speed" to "1"))
+                }
+                if (!report.started) {
+                    // 失败原因分四种说（连不上 / 设备拒绝 / 响应异常 / 送进去了没起来），
+                    // 别把「连不上」也说成「不支持 DLNA」（issue M22）。
+                    val message = LanCastFailures.failedReportMessage(report)
+                    // 这句已经是脱敏过的话（不含主机与端口），原样进日志供用户反馈时对照。
+                    Log.w(TAG, "play did not start: " + message)
+                    deliver(call) { call.reject(message) }
                 } else {
                     val payload = JSObject()
                     payload.put("ok", true)
+                    // 哪些元数据被裁掉了：封面不是 http(s) 时整段不发，音响侧就只有歌名没有图。
+                    // 过去这一步是静默的，前端收不到任何「元数据被裁剪」的信号（issue M23 第 3 点）。
+                    payload.put("trimmed", trimmedFields(coverUrl, title, artist, album).joinToString(","))
+                    // 实际声明的格式：日志与排查要用它解释「为什么这台音响不认无损」。
+                    payload.put("protocolInfo", LanCastMetadata.protocolInfo(audioUrl))
                     deliver(call) { call.resolve(payload) }
                 }
             } catch (error: Exception) {
@@ -174,9 +222,11 @@ class FoliaLanCastPlugin : Plugin() {
         }
         Thread {
             try {
-                val stopped = soap(target, "Stop", listOf("InstanceID" to "0"))
+                val outcome = soapRaw(target, "Stop", listOf("InstanceID" to "0"))
                 val payload = JSObject()
-                payload.put("ok", stopped)
+                payload.put("ok", outcome is SoapOutcome.Ok)
+                // 没停成时把原因带回去：音响可能已经离线，界面据此说「连不上」而不是「没反应」。
+                if (outcome !is SoapOutcome.Ok) payload.put("reason", LanCastFailures.message(outcome))
                 deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "stop failed", error)
@@ -333,6 +383,10 @@ class FoliaLanCastPlugin : Plugin() {
             httpClient.dispatcher.cancelAll()
             httpClient.connectionPool.evictAll()
             httpClient.dispatcher.executorService.shutdown()
+            // 回取描述那个 client 也要收：它有自己的线程池与连接池（issue M21）。
+            fetchClient.dispatcher.cancelAll()
+            fetchClient.connectionPool.evictAll()
+            fetchClient.dispatcher.executorService.shutdown()
         } catch (error: Exception) {
             Log.w(TAG, "release http client failed", error)
         }
@@ -463,63 +517,57 @@ class FoliaLanCastPlugin : Plugin() {
     // ------------------------------------------------------------------ SSDP
 
     /** 拿住 MulticastLock，否则不少 ROM 会直接把组播包丢掉，表现为「一台都搜不到」。 */
-    private fun discoverSpeakers(timeoutMs: Int): List<Speaker> {
+    private fun discoverSpeakers(timeoutMs: Int): DiscoveryResult {
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         val lock = wifi?.createMulticastLock("foliaLanCast")
         lock?.setReferenceCounted(false)
         try {
             lock?.acquire()
-            val replies = Collections.synchronizedMap(LinkedHashMap<String, String>())
             val socket = DatagramSocket(null as java.net.SocketAddress?)
             socket.reuseAddress = true
             socket.bind(InetSocketAddress(0))
             socket.soTimeout = 350
-            socket.use {
-                val target = InetSocketAddress(InetAddress.getByName(SSDP_ADDRESS), SSDP_PORT)
-                val searches = listOf(MEDIA_RENDERER, "urn:schemas-upnp-org:service:AVTransport:1", "ssdp:all")
-                val started = System.currentTimeMillis()
-                var round = 0
-                while (System.currentTimeMillis() - started < timeoutMs) {
-                    // 多播包本身不保证送达，隔一小会儿重发一次，比只发一轮稳得多。
-                    val search = searches[round % searches.size].toByteArray(Charsets.UTF_8)
-                    val probe = buildSearch(search)
-                    val packet = DatagramPacket(probe, probe.size, target.address, target.port)
-                    try {
-                        it.send(packet)
-                    } catch (error: Exception) {
-                        Log.w(TAG, "SSDP send failed", error)
-                    }
-                    round += 1
-                    val until = System.currentTimeMillis() + 400
-                    while (System.currentTimeMillis() < until) {
-                        val buffer = ByteArray(2048)
-                        val incoming = DatagramPacket(buffer, buffer.size)
-                        try {
-                            it.receive(incoming)
-                            val text = String(incoming.data, 0, incoming.length, Charsets.UTF_8)
-                            val headers = parseHeaders(text)
-                            val location = headers["location"] ?: continue
-                            /*
-                             * LOCATION 先过一次准入再拿去 GET。
-                             *
-                             * SSDP 应答是明文 UDP、没有认证：同网段任何设备都能回一份把
-                             * LOCATION 指向公网地址的假应答。照着它去 GET 就已经是一次出站请求
-                             * （SSRF 的第一跳），所以在发出任何请求之前就挡掉。
-                             */
-                            if (!isAllowedLocation(location)) continue
-                            val usn = headers["usn"] ?: location
-                            if (!replies.containsKey(usn)) replies[usn] = location
-                        } catch (timeout: java.net.SocketTimeoutException) {
-                            // 本轮没有更多回复，继续等下一轮重发。
-                        } catch (error: Exception) {
-                            Log.w(TAG, "SSDP receive failed", error)
-                        }
-                    }
-                }
+            // 收缓冲显式设大：2048 装不下某些设备的长 USN + 多个头，截断后变成畸形应答，
+            // 设备就静默丢了（issue M21）。缓冲数组也只建一次，不再每轮新建。
+            socket.receiveBufferSize = LanCastDiscovery.RECEIVE_BUFFER_BYTES
+            val started = System.currentTimeMillis()
+            val capture = socket.use {
+                // 发什么、等多久、什么时候停都在 LanCastDiscovery 里（issue M21）。
+                LanCastDiscovery.capture(
+                    socket = it,
+                    timeoutMs = timeoutMs,
+                    onAllowedLocation = ::isAllowedLocation,
+                    logWarn = { message, error -> if (error == null) Log.w(TAG, message) else Log.w(TAG, message, error) },
+                )
             }
-            return replies.entries.distinctBy { it.value }.mapNotNull { (usn, location) ->
-                readSpeaker(usn, location)
-            }.distinctBy { it.controlUrl }
+            val replies = capture.replies
+            /*
+             * 每台应答的设备单独给结论：读成了就进列表，没读成也记下原因（issue M22）。
+             * 过去是一句 mapNotNull，没读成的设备从列表里消失、日志里只有异常，
+             * 用户分不清是设备问题还是网络问题。
+             */
+            val candidates = replies.entries.distinctBy { it.value }
+            // 回取描述要受预算约束：一台不响应的设备过去能把「搜音响」拖到十几秒（issue M21）。
+            val budgetMs = LanCastDiscovery.fetchBudgetMs(
+                timeoutMs = timeoutMs,
+                elapsedMs = System.currentTimeMillis() - started,
+            )
+            val reads = fetchDescriptions(candidates, budgetMs)
+            val speakers = reads.mapNotNull { it.speaker }
+            val skipReasons = reads.filter { it.speaker == null }.map { it.failure }
+            Log.i(
+                TAG,
+                "discovery: answered=" + candidates.size + " listed=" + speakers.size +
+                    " skipped=" + skipReasons.size +
+                    " rounds=" + capture.rounds +
+                    (if (skipReasons.isEmpty()) "" else " reasons=" + skipReasons.distinct().joinToString(",")),
+            )
+            return DiscoveryResult(
+                speakers = speakers.distinctBy { it.controlUrl },
+                attempted = candidates.size,
+                skipped = skipReasons.size,
+                skipReasons = skipReasons.distinct(),
+            )
         } finally {
             try {
                 lock?.release()
@@ -529,142 +577,127 @@ class FoliaLanCastPlugin : Plugin() {
         }
     }
 
-    private fun buildSearch(target: ByteArray): ByteArray {
-        val head = "M-SEARCH * HTTP/1.1\r\n" +
-            "HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n" +
-            "MAN: \"ssdp:discover\"\r\n" +
-            "MX: 2\r\n" +
-            "ST: "
-        val headBytes = head.toByteArray(Charsets.UTF_8)
-        val tail = "\r\n\r\n".toByteArray(Charsets.UTF_8)
-        return headBytes + target + tail
-    }
-
     /** 应答里的 LOCATION 是否落在局域网内（判据见 LanCastTargetPolicy）。 */
     private fun isAllowedLocation(location: String): Boolean = try {
         LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
         true
     } catch (error: java.io.IOException) {
-        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + error.message)
+        // 应答地址只记网段：完整地址含局域网 IP 与端口（issue M24）。
+        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + LanCastLogText.deviceHint(location) + " " + error.message)
         false
     }
 
-    /** SSDP 回复是 HTTP 风格的头，键统一小写。 */
-    private fun parseHeaders(text: String): Map<String, String> {
-        val headers = HashMap<String, String>()
-        for (line in text.split("\r\n")) {
-            val colon = line.indexOf(':')
-            if (colon <= 0) continue
-            headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
+    /**
+     * 有并发上限、有整体预算地把设备描述取回来（issue M21）。
+     *
+     * 过去这里是串行的 `mapNotNull { readSpeaker(...) }`：每台设备连接 4s / 读 6s，一台不响应
+     * 就能让整次发现拖十几秒。现在按 [LanCastDiscovery.fetchConcurrency] 并发，超过预算的设备
+     * 直接按「超时」跳过 —— 宁可少列一台，也不让用户盯着转圈。
+     *
+     * 返回顺序与 [candidates] 一致（并发不改变列表顺序，免得设备列表每次刷新都重排）。
+     */
+    private fun fetchDescriptions(
+        candidates: List<Map.Entry<String, String>>,
+        budgetMs: Long,
+    ): List<ReadResult> {
+        if (candidates.isEmpty()) return emptyList()
+        val results = arrayOfNulls<ReadResult>(candidates.size)
+        val deadline = System.currentTimeMillis() + budgetMs
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(
+            LanCastDiscovery.fetchConcurrency(candidates.size),
+        ) { runnable ->
+            Thread(runnable, "foliaLanCast-fetch").apply { isDaemon = true }
         }
-        return headers
-    }
-
-    /** GET 设备描述，确认它真的是 MediaRenderer 并取出 AVTransport 的 controlURL。 */
-    private fun readSpeaker(usn: String, location: String): Speaker? {
-        return try {
-            val deviceUrl = LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
-            val request = Request.Builder().url(deviceUrl).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use null
-                val body = response.body?.string() ?: return@use null
-                val parsed = parseDescription(body)
-                val controlPath = parsed.controlUrl ?: return@use null
-                val absolute = resolveControlUrl(deviceUrl, controlPath, parsed.urlBase) ?: return@use null
-                Speaker(
-                    id = usn,
-                    name = parsed.name.ifEmpty { hostOf(location) },
-                    location = location,
-                    controlUrl = absolute.toString(),
-                    manufacturer = parsed.manufacturer,
-                    volumeControlUrl = parsed.volumeControlUrl
-                        ?.let { resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
-                )
-            }
-        } catch (error: Exception) {
-            Log.w(TAG, "read description failed: $location", error)
-            null
-        }
-    }
-
-    private data class Description(
-        var name: String = "",
-        var manufacturer: String = "",
-        var deviceType: String = "",
-        var urlBase: String = "",
-        var controlUrl: String? = null,
-        var volumeControlUrl: String? = null,
-    )
-
-    /** 只挑需要的几个元素；嵌套的 embedded device 也一起扫，有些音响把服务挂在子设备下。 */
-    private fun parseDescription(xml: String): Description {
-        val result = Description()
-        val parser = Xml.newPullParser()
-        parser.setInput(StringReader(xml))
-        var inService = false
-        var serviceType = ""
-        var eventType = parser.eventType
-        while (eventType != XmlPullParser.END_DOCUMENT) {
-            if (eventType == XmlPullParser.START_TAG) {
-                when (parser.name) {
-                    "friendlyName" -> result.name = parser.nextText().trim()
-                    "manufacturer" -> result.manufacturer = parser.nextText().trim()
-                    "deviceType" -> result.deviceType = parser.nextText().trim()
-                    "URLBase" -> result.urlBase = parser.nextText().trim()
-                    "service" -> { inService = true; serviceType = "" }
-                    "serviceType" -> if (inService) serviceType = parser.nextText().trim()
-                    "controlURL" -> {
-                        val path = parser.nextText().trim()
-                        if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:AVTransport") && result.controlUrl == null) {
-                            result.controlUrl = path
-                        }
-                        if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:RenderingControl") && result.volumeControlUrl == null) {
-                            result.volumeControlUrl = path
-                        }
+        try {
+            val futures = candidates.mapIndexed { index, (usn, location) ->
+                pool.submit {
+                    results[index] = if (System.currentTimeMillis() >= deadline) {
+                        // 预算已经用光：没轮到的设备按超时处理，不再排一次连接。
+                        ReadResult(null, "budget-exhausted")
+                    } else {
+                        readSpeaker(usn, location)
                     }
                 }
-            } else if (eventType == XmlPullParser.END_TAG && parser.name == "service") {
-                inService = false
             }
-            eventType = parser.next()
+            futures.forEach { future ->
+                // 单台设备的等待也不能超过总预算。
+                val waitMs = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                try {
+                    future.get(waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+                } catch (timeout: java.util.concurrent.TimeoutException) {
+                    future.cancel(true)
+                } catch (error: Exception) {
+                    Log.w(TAG, "description fetch interrupted", error)
+                }
+            }
+        } finally {
+            pool.shutdownNow()
         }
-        // MediaServer（比如 NAS）也会回 ssdp:all，但它没有 AVTransport；
-        // readSpeaker 会因为没有 controlURL 直接把它丢掉。
-        return result
+        return candidates.indices.map { index ->
+            // 被取消或抛错的槽位补一个「超时」，保证与 candidates 一一对应。
+            results[index] ?: ReadResult(null, "budget-exhausted")
+        }
     }
 
     /**
-     * 设备描述里的 controlURL 拼成绝对地址，并做准入。
+     * 一台设备读设备描述的结论。
      *
-     * 过去绝对 URL 原样接受：一份伪造的设备描述就能把后续所有 SOAP 指向任意主机。
-     * 现在相对路径以设备描述自己的地址（或它声明的 URLBase）为基准，拼完统一过
-     * [LanCastTargetPolicy]：局域网、允许端口、且绝对 URL 必须与设备同段。
-     * 不合格返回 null，那台设备直接被丢弃（发现列表里不出现）。
+     * 为什么不是 `Speaker?`：没读成的原因要分开记（连不上 / 答了但不是 MediaRenderer /
+     * 描述畸形），否则「少了一台」在界面上与「网络问题」混成同一件事（issue M22）。
      */
-    private fun resolveControlUrl(deviceUrl: URL, controlPath: String, urlBase: String): URL? {
+    private data class ReadResult(val speaker: Speaker?, val failure: String)
+
+    /** GET 设备描述，确认它真的是 MediaRenderer 并取出 AVTransport 的 controlURL。 */
+    private fun readSpeaker(usn: String, location: String): ReadResult {
         return try {
-            val raw = if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) {
-                controlPath
-            } else {
-                val base = if (urlBase.isNotEmpty()) urlBase else {
-                    "${deviceUrl.protocol}://${deviceUrl.host}${if (deviceUrl.port > 0) ":${deviceUrl.port}" else ""}/"
+            val deviceUrl = LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
+            val request = Request.Builder().url(deviceUrl).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
+            /*
+             * 回取描述用自己的超时，而不是共享 client 那套 4s / 6s。
+             *
+             * 设备描述通常几 KB，2.5s 已经非常宽；把一个不响应的设备绑满 10s 才是「搜音响很慢」
+             * 的真正原因（issue M21）。共享 client 的超时对播放 / 音量那几条调用仍然合适。
+             */
+            fetchClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location) + " http=" + response.code)
+                    return ReadResult(null, "http-" + response.code)
                 }
-                base.trimEnd('/') + "/" + controlPath.trimStart('/')
+                val body = response.body?.string()
+                if (body.isNullOrBlank()) {
+                    Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location) + " empty body")
+                    return ReadResult(null, "empty-body")
+                }
+                val parsed = LanCastDeviceDescription.parse(body)
+                val controlPath = parsed.controlUrl
+                if (controlPath == null) {
+                    // 每台 NAS / 打印机也会回 ssdp:all，它们没有 AVTransport：这不算错误，单独记。
+                    Log.i(TAG, "skip device without AVTransport: " + LanCastLogText.deviceHint(location))
+                    return ReadResult(null, "no-avtransport")
+                }
+                val absolute = LanCastDeviceDescription.resolveControlUrl(deviceUrl, controlPath, parsed.urlBase)
+                if (absolute == null) return ReadResult(null, "control-url-rejected")
+                ReadResult(
+                    Speaker(
+                        id = usn,
+                        name = parsed.name.ifEmpty { LanCastDeviceDescription.hostOf(location) },
+                        location = location,
+                        controlUrl = absolute.toString(),
+                        manufacturer = parsed.manufacturer,
+                        volumeControlUrl = parsed.volumeControlUrl
+                            ?.let { LanCastDeviceDescription.resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
+                    ),
+                    failure = "",
+                )
             }
-            val target = LanCastTargetPolicy.requireAllowedTarget(raw, "控制地址")
-            LanCastTargetPolicy.requireSameLanAs(target, deviceUrl)
-            target
         } catch (error: Exception) {
-            Log.w(TAG, "rejected control url $controlPath: " + error.message)
-            null
+            // 只记网段与资源名：完整地址含局域网 IP 与端口，能拼出用户的网络拓扑（issue M24）。
+            // 异常本身照原样交出去（调用栈要靠它），首行之外仍是能定位的那点信息。
+            Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location), error)
+            ReadResult(null, LanCastFailures.discoveryFailureLabel(error))
         }
     }
 
-    private fun hostOf(location: String): String = try {
-        URL(location).host
-    } catch (error: Exception) {
-        location
-    }
 
     // ------------------------------------------------------------------ SOAP
 
@@ -680,7 +713,7 @@ class FoliaLanCastPlugin : Plugin() {
         action: String,
         args: List<Pair<String, String>>,
         service: String = AV_TRANSPORT,
-    ): String? {
+    ): SoapOutcome {
         val body = StringBuilder("<u:").append(action).append(" xmlns:u=\"").append(service).append("\">")
         for ((key, value) in args) {
             body.append('<').append(key).append('>')
@@ -698,23 +731,43 @@ class FoliaLanCastPlugin : Plugin() {
             .header("User-Agent", "Folia/1.0 UPnP/1.0")
             .post(envelope.toByteArray(Charsets.UTF_8).toRequestBody(SOAP_XML))
             .build()
-        return httpClient.newCall(request).execute().use { response ->
-            val text = response.body?.string() ?: ""
-            // UPnP 的错误用 500 + SOAP Fault 回，别把「设备收到了但拒绝」当成成功。
-            if (response.isSuccessful && !text.contains("<s:Fault", true) && !text.contains("UPnPError", true)) text else null
+        /*
+         * 三种失败在这里分开，交给调用方与界面（issue M22）：连不上、设备明确拒绝、响应异常。
+         * 过去它们全折成一个 null，界面于是只有一句「请确认它支持 DLNA」。
+         */
+        var status = 0
+        var responseBody = ""
+        val outcome = try {
+            httpClient.newCall(request).execute().use { response ->
+                status = response.code
+                responseBody = response.body?.string() ?: ""
+                LanCastFailures.classify(response.code, responseBody)
+            }
+        } catch (error: Exception) {
+            // 网络层的问题（超时、拒绝连接、DNS）不是「设备拒绝」，如实归类。
+            LanCastFailures.classify(0, "", error)
         }
+        if (outcome !is SoapOutcome.Ok) {
+            // 不成功的那一路，正文是设备自己的错误说明（UPnP 错误码 / 认证页），记下来才能对照音响手册排查。
+            // 成功的正文不记：RenderingControl 的回包里是音量值。
+            Log.w(TAG, "soap " + action + " -> " + LanCastFailures.label(outcome) + " http=" + status +
+                " body=" + LanCastLogText.bodySnippet(responseBody))
+        }
+        return outcome
     }
 
+    /** 只回答「成没成」的调用方：判据是设备接受（Ok）。 */
     private fun soap(
         controlUrl: URL,
         action: String,
         args: List<Pair<String, String>>,
         service: String = AV_TRANSPORT,
-    ): Boolean = soapRaw(controlUrl, action, args, service) != null
+    ): Boolean = soapRaw(controlUrl, action, args, service) is SoapOutcome.Ok
 
     /** GetVolume 的响应形如 <CurrentVolume>42</CurrentVolume>，命名空间前缀各家不一样。 */
     private fun soapNumber(controlUrl: URL, action: String, args: List<Pair<String, String>>, tag: String): Int? {
-        val text = soapRaw(controlUrl, action, args, RENDERING_CONTROL) ?: return null
+        val outcome = soapRaw(controlUrl, action, args, RENDERING_CONTROL)
+        val text = (outcome as? SoapOutcome.Ok)?.body ?: return null
         val pattern = Regex("<(?:[A-Za-z0-9_]+:)?$tag[^>]*>\\s*([0-9]+)\\s*</", RegexOption.IGNORE_CASE)
         return pattern.find(text)?.groupValues?.get(1)?.toIntOrNull()
     }
@@ -726,16 +779,22 @@ class FoliaLanCastPlugin : Plugin() {
         artist: String,
         album: String,
         coverUrl: String,
-        durationMs: Int,
+        durationMs: Long,
+        declaredFormat: String? = null,
     ): String {
-        val duration = if (durationMs > 0) {
-            val total = durationMs / 1000
-            String.format("%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-        } else "00:00:00"
-        val art = if (coverUrl.startsWith("http", true)) {
+        val duration = LanCastMetadata.duration(durationMs)
+        val art = if (isStreamableCover(coverUrl)) {
             "<upnp:albumArtURI>${escapeXml(coverUrl)}</upnp:albumArtURI>"
         } else ""
         val albumPart = if (album.isNotEmpty()) "<upnp:album>${escapeXml(album)}</upnp:album>" else ""
+        // 格式按实际地址声明：写死 MP3 会让按 protocolInfo 选解码器的音响拒播无损源（issue M23）。
+        val format = if (!declaredFormat.isNullOrEmpty()) {
+            LanCastMetadata.Format.entries.firstOrNull { it.name.equals(declaredFormat, ignoreCase = true) }
+                ?: LanCastMetadata.formatOf(audioUrl)
+        } else {
+            LanCastMetadata.formatOf(audioUrl)
+        }
+        val protocolInfo = LanCastMetadata.protocolInfoFor(format)
         return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
             "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
             "xmlns:upnp=\"urn:schemas-upnp-org:metadata-1-0/upnp/\">" +
@@ -745,8 +804,22 @@ class FoliaLanCastPlugin : Plugin() {
             albumPart +
             "<upnp:class>object.item.audioItem.musicTrack</upnp:class>" +
             art +
-            "<res duration=\"$duration\" protocolInfo=\"http-get:*:audio/mpeg:DLNA.ORG_PN=MP3\">${escapeXml(audioUrl)}</res>" +
+            "<res duration=\"$duration\" protocolInfo=\"$protocolInfo\">${escapeXml(audioUrl)}</res>" +
             "</item></DIDL-Lite>"
+    }
+
+    /** 封面只有 http(s) 地址音响才拿得到；blob: / data: / 本地路径发了也只是个死链。 */
+    private fun isStreamableCover(coverUrl: String): Boolean = coverUrl.startsWith("http://", true) ||
+        coverUrl.startsWith("https://", true)
+
+    /** 被裁掉的元数据字段，与 didlMetadata 的规则一一对应。 */
+    private fun trimmedFields(coverUrl: String, title: String, artist: String, album: String): List<String> {
+        val trimmed = ArrayList<String>(4)
+        if (!isStreamableCover(coverUrl.trim())) trimmed.add("cover")
+        if (title.isBlank()) trimmed.add("title")
+        if (artist.isBlank()) trimmed.add("artist")
+        if (album.isBlank()) trimmed.add("album")
+        return trimmed
     }
 
     private fun escapeXml(value: String): String = value
