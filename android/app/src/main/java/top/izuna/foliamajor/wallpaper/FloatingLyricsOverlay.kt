@@ -561,8 +561,18 @@ class FloatingLyricsOverlay private constructor(context: Context) {
         if (_appForeground() && !preview) return false
 
         val snapshot = WallpaperLyricsState.get()
-        // 只有「精简」样式挂这一层：跟随样式走的是 WebView 叠层（那一层不挂是另一套逻辑）。
-        if (!"minimal".equals(snapshot.visualizerMode)) return false
+        /*
+         * 这一层由它自己的开关决定，不再跟着壁纸样式走。
+         *
+         * 以前这里是 `if (!"minimal".equals(snapshot.visualizerMode)) return false`：
+         * 选了「精简」就一定挂上，不想挂只能连精简样式一起换掉。两件事本来不该绑在一起 ——
+         * 精简样式说的是「壁纸那层只画两行、要安静」，小窗说的是「桌面上还要一个能拖的窗口」，
+         * 有人要前者不要后者。
+         *
+         * 默认关：这个键是新加的，老用户升级后读不到它，fallback 给 false ——
+         * 不该因为升级就突然多出一颗盖在应用上的窗口（那还要悬浮窗权限）。
+         */
+        if (!tuningFlag("wp.floatingLyricsEnabled", false)) return false
 
         /*
          * 预览只看**摆成什么样**，不看该不该出现 —— 暂停中、唱完了、甚至压根没放歌

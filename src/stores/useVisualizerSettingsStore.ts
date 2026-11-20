@@ -26,7 +26,7 @@ import { RENDER_PIXEL_RATIO_STORAGE_KEY, readStoredRenderPixelRatio, setGlobalRe
 import { GLOW_BLUR_QUANTIZE_STORAGE_KEY, readStoredGlowBlurQuantize, setGlowBlurQuantized } from '../utils/glowBlurQuantize';
 import i18n from '../i18n/config';
 import { setStatusMessage } from './useStatusMessageStore';
-import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress, WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, readStoredWallpaperVideoRotation } from './visualizerSettingsPersistence';
+import { SMART_BEAT_STORAGE_KEY, type SmartBeatPatch, VISUALIZER_OPACITY_STORAGE_KEY, readStoredBackgroundOpacity, readStoredLyricRenderQuality, readStoredSmartBeatSettings, resolveSmartBeatSettings, readStoredTuning, readStoredVisualizerBackgroundMode, readStoredVisualizerFrameRate, readStoredVisualizerMode, readStoredVisualizerOpacity, toStoredSmartBeat, writeStoredTuning, WALLPAPER_OVERLAY_OPACITY_STORAGE_KEY, readStoredWallpaperOverlayOpacity, WALLPAPER_FLOATING_OPACITY_STORAGE_KEY, readStoredWallpaperFloatingOpacity, WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingOverSafeArea, WALLPAPER_FLOATING_LYRICS_STORAGE_KEY, readStoredWallpaperFloatingLyricsEnabled, WALLPAPER_FLOATING_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingOffsetX, WALLPAPER_FLOATING_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingWidth, WALLPAPER_LYRICS_FONT_MODE_STORAGE_KEY, readStoredWallpaperLyricsFontMode, WALLPAPER_FLOATING_FILL_SAFE_AREA_STORAGE_KEY, readStoredWallpaperFloatingFillSafeArea, WALLPAPER_FLOATING_AVOID_WIDTH_STORAGE_KEY, readStoredWallpaperFloatingAvoidWidth, WALLPAPER_FLOATING_AVOID_OFFSET_X_STORAGE_KEY, readStoredWallpaperFloatingAvoidOffsetX, WALLPAPER_FLOATING_FONT_SIZE_MODE_STORAGE_KEY, readStoredWallpaperFloatingFontSizeMode, WALLPAPER_FLOATING_FONT_SIZE_STORAGE_KEY, readStoredWallpaperFloatingFontSize, WALLPAPER_OVERLAY_ENABLED_STORAGE_KEY, readStoredWallpaperOverlayEnabled, WALLPAPER_OVERLAY_LOCK_SCREEN_STORAGE_KEY, readStoredWallpaperOverlayLockScreen, WALLPAPER_OVERLAY_LOCK_SCREEN_ONLY_STORAGE_KEY, readStoredWallpaperOverlayLockScreenOnly, WALLPAPER_OVERLAY_ALL_APPS_STORAGE_KEY, readStoredWallpaperOverlayAllApps, WALLPAPER_OVERLAY_HIDE_NATIVE_LYRICS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeLyrics, WALLPAPER_OVERLAY_HIDE_COVER_ART_STORAGE_KEY, readStoredWallpaperOverlayHideCoverArt, WALLPAPER_OVERLAY_HIDE_AFTER_LYRICS_END_STORAGE_KEY, readStoredWallpaperOverlayHideAfterLyricsEnd, WALLPAPER_OVERLAY_SKIP_INSTRUMENTAL_STORAGE_KEY, WALLPAPER_OVERLAY_HIDE_WHEN_PAUSED_STORAGE_KEY, readStoredWallpaperOverlayHideWhenPaused, readStoredWallpaperOverlaySkipInstrumental, WALLPAPER_OVERLAY_HIDE_NATIVE_PROGRESS_STORAGE_KEY, readStoredWallpaperOverlayHideNativeProgress, WALLPAPER_VIDEO_ROTATION_STORAGE_KEY, readStoredWallpaperVideoRotation } from './visualizerSettingsPersistence';
 import { getStoredBoolean, getStoredString, setStoredBoolean, setStoredString } from './storagePrimitives';
 import { RANDOM_VISUALIZER_MODES_STORAGE_KEY, readStoredRandomVisualizerModes } from './visualizerSettingsPersistence';
 import { normalizeRandomVisualizerModes, normalizeRandomVisualizerModesWith } from '../utils/randomVisualizerModes';
@@ -156,6 +156,19 @@ type OwnSettingsState = {
      * 所以默认关。
      */
     wallpaperFloatingOverSafeArea: boolean;
+    /**
+     * 「精简」样式那颗悬浮歌词小窗的独立开关。
+     *
+     * 以前它跟着「壁纸样式 = 精简」走，选了精简就一定挂上，不想挂只能连样式一起换掉。
+     * 拆出来之后：精简样式管「壁纸那层画几行、要不要安静」，这颗开关管「桌面上要不要
+     * 一个能拖的窗口」，两件事各管各的。
+     *
+     * 默认关 —— 键是新加的，老用户升级后读不到它，不该突然多出一颗要悬浮窗权限、
+     * 还会盖在应用上面的窗口。
+     */
+    wallpaperFloatingLyricsEnabled: boolean;
+    /** 开关小窗。见 wallpaperFloatingLyricsEnabled 的说明。 */
+    handleToggleWallpaperFloatingLyricsEnabled: (enable: boolean) => void;
     /**
      * 叠加安全区时小窗的左右位置，0 = 贴左，1 = 贴右。
      *
@@ -336,6 +349,7 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
     wallpaperLyricsFontMode: readStoredWallpaperLyricsFontMode(),
     wallpaperFloatingOpacity: readStoredWallpaperFloatingOpacity(),
     wallpaperFloatingOverSafeArea: readStoredWallpaperFloatingOverSafeArea(),
+    wallpaperFloatingLyricsEnabled: readStoredWallpaperFloatingLyricsEnabled(),
     wallpaperFloatingOffsetX: readStoredWallpaperFloatingOffsetX(),
     wallpaperFloatingWidth: readStoredWallpaperFloatingWidth(),
     wallpaperFloatingFillSafeArea: readStoredWallpaperFloatingFillSafeArea(),
@@ -568,6 +582,10 @@ export const useVisualizerSettingsStore = create<VisualizerSettingsState>((set, 
         localStorage.setItem(
             WALLPAPER_FLOATING_OVER_SAFE_AREA_STORAGE_KEY, enable ? 'true' : 'false');
         set({ wallpaperFloatingOverSafeArea: enable });
+    },
+    handleToggleWallpaperFloatingLyricsEnabled: (enable) => {
+        localStorage.setItem(WALLPAPER_FLOATING_LYRICS_STORAGE_KEY, enable ? 'true' : 'false');
+        set({ wallpaperFloatingLyricsEnabled: enable });
     },
     handleSetWallpaperFloatingOffsetX: (value) => {
         const clamped = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.5;

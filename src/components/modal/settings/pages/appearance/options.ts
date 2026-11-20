@@ -48,6 +48,7 @@ export const VIEW: SettingsGroupDef = { id: 'surfaceView', titleKey: 'options.se
 export const WALLPAPER = {
     apply: option(LYRICS_WALLPAPER, 'lyricsWallpaperApply', 'options.lyricsWallpaperApply', { noteKey: 'options.lyricsWallpaperApplyDesc' }),
     style: option(LYRICS_WALLPAPER, 'lyricsWallpaperStyle', 'options.lyricsWallpaperStyle'),
+    floatingEnabled: option(LYRICS_WALLPAPER, 'floatingLyricsEnabled', 'options.floatingLyricsEnabled', { noteKey: 'options.floatingLyricsEnabledDesc' }),
     floatingOpacity: option(LYRICS_WALLPAPER, 'floatingLyricsOpacity', 'options.floatingLyricsOpacity', { noteKey: 'options.floatingLyricsOpacityDesc' }),
     floatingOverSafeArea: option(LYRICS_WALLPAPER, 'floatingLyricsOverSafeArea', 'options.floatingLyricsOverSafeArea', { noteKey: 'options.floatingLyricsOverSafeAreaDesc' }),
     floatingOffsetX: option(LYRICS_WALLPAPER, 'floatingLyricsOffsetX', 'options.floatingLyricsOffsetX', { noteKey: 'options.floatingLyricsOffsetXDesc' }),

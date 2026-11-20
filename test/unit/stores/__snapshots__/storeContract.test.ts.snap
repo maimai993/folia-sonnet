@@ -41,6 +41,7 @@ exports[`store contract > keeps every localStorage key the stores read or write 
   "folia.wallpaperFloatingFillSafeArea",
   "folia.wallpaperFloatingFontSize",
   "folia.wallpaperFloatingFontSizeMode",
+  "folia.wallpaperFloatingLyricsEnabled",
   "folia.wallpaperFloatingOffsetX",
   "folia.wallpaperFloatingOpacity",
   "folia.wallpaperFloatingOverSafeArea",
