@@ -1,4 +1,4 @@
-import type { PersonalFmCatalog, PersonalFmLaunch } from './personalFm';
+﻿import type { PersonalFmCatalog, PersonalFmLaunch } from './personalFm';
 import type { LyricData, ReplayGainInfo, SongResult, UnifiedSong } from '../types';
 
 // src/types/onlineMusic.ts
@@ -664,7 +664,7 @@ export interface OnlineSongMetadataProvider {
 export interface LoginMethod {
     id: string;          // 传给后端的识别值（QQ: 'qq' | 'wechat'）
     labelKey: string;    // i18n key，由 UI 层翻译
-    iconKey: string;     // 图标的名字：UI 层按它取 src/assets/providers/ 里同名的文件（svg / png / webp）
+    iconKey: string;     // 图标的名字：UI 层按它到 src/components/shared/platformIcons/ 里找同一家的自绘图形
     // 选中这种方式时那一行说明（i18n key）：浏览器登录的几种方式靠它说清楚彼此差在哪。不给就用平台的登录说明。
     noteKey?: string;
     // 在浏览器里确认的几种方式里，开始时先替用的人选上的那一种（例如此刻在用的那一种）；都不标就是第一种。

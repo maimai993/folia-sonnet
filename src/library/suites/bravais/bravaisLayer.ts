@@ -59,11 +59,12 @@ export type BravaisItem = {
      */
     special?: LibraryHomeSpecialKind;
     /**
-     * 「全部」视图里封面右下角的来源图标（哪家平台的歌单）。图是 assets/providers/appIcons 的
-     * getProviderAppIcon —— 与窄缝的账户徽章、网格的切换器、登录弹窗同一份来源，别在这里另写一张
-     * providerId → 文件的对照表。单平台视图里没有（整屏都是同一家，标了是噪音）。
+     * 「全部」视图里封面右下角的来源图形（哪家平台的歌单）。这里只存平台 id，图形由
+     * components/shared/platformIcons 的 PlatformIcon 按 id 现画 —— 与窄缝的账户徽章、网格的
+     * 切换器、登录弹窗同一套自绘图形；项目里已经没有任何平台位图，别在这里再存图片地址。
+     * 单平台视图里没有（整屏都是同一家，标了是噪音）。
      */
-    sourceIcon?: string;
+    sourceProviderId?: string;
 };
 
 /** 首页缝里的页签（只有首页层有）。 */

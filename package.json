@@ -21,6 +21,7 @@
         "build": "npm run build:vercel-api && vite build",
         "build:capacitor": "cross-env FOLIA_BUILD_TARGET=capacitor vite build",
         "build:vercel-api": "tsc -p api-ts/tsconfig.json",
+        "build:provider-badges": "node scripts/buildProviderBadges.mjs",
         "preview": "vite preview",
         "cap:sync:android": "npm run build:capacitor && npm run models:android && cap sync android",
         "cap:assets:android": "node scripts/generate-android-assets.mjs",

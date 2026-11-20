@@ -2,7 +2,6 @@ import type { SongResult, UnifiedSong } from '../../../types';
 import type { LibraryHomeCard } from '../../core/home/homeModel.contract';
 import type { BravaisItem, BravaisItemKind } from './bravaisLayer';
 import { formatCollectionBadge, resolveBravaisTileForm, resolveCollectionTrackCount } from './bravaisTileForm';
-import { getProviderAppIcon } from '../../../assets/providers/appIcons';
 
 // src/library/suites/bravais/bravaisProjection.ts
 // core 数据 → 磁贴条目（BravaisItem）的纯投影，surface 用它们拼层描述。曲目的展示字段（歌手、封面、时长、
@@ -55,10 +54,9 @@ export const projectHomeCardItem = (
         badge: formatCollectionBadge(labels.kindLabel(kind), collectionCount),
     };
     if (collectionCount !== undefined) item.trackCountLabel = labels.trackCount(collectionCount);
-    // 「全部」视图：这张卡标了自己来自哪家 → 封面右下角的来源图标（图只有一份来源，见 bravaisLayer 的注释）。
-    // 上游重写投影时丢了这一行：数据侧（homeCards.ts）仍在写 sourceProviderId，
-    // 消费侧（BravaisTile）仍在读 sourceIcon，中间这一句没了 → 图标永远不出现，且不报错。
-    if (card.sourceProviderId) item.sourceIcon = getProviderAppIcon(card.sourceProviderId);
+    // 「全部」视图：这张卡标了自己来自哪家 → 封面右下角的来源图形。这里只存平台 id（不带图片地址：
+    // 项目里已经没有任何第三方平台位图，图形由 components/shared/platformIcons 按 id 现画）。
+    if (card.sourceProviderId) item.sourceProviderId = card.sourceProviderId;
     return item;
 };
 

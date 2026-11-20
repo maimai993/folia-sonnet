@@ -1,21 +1,22 @@
 import React from 'react';
-import { getProviderAppIcon, PROVIDER_APP_ICONS } from '../../../assets/providers/appIcons';
+import { hasPlatformIcon } from '../../../components/shared/platformIcons/registry';
+import { PlatformIcon } from '../../../components/shared/platformIcons/PlatformIcon';
 import { platformMarkOf } from '../../../components/login/PlatformMark';
 import type { OnlineProviderId } from '../../../types/onlineMusic';
 
 // src/library/suites/bravais/BravaisProviderAvatar.tsx
-// 已登录的账户显示头像，没有头像时退回平台**本尊的 App 图标**（有图的平台：netease/qq/kugou/bodian/feiniu/qishui），
-// 再没有才退回平台的记号（字和颜色）。记号是平台自己声明的，和登录窗口、grid 的切换器同一个来源
-// （components/login/PlatformMark 的 platformMarkOf）；mod 加的平台没有声明就取名称首字、中性的颜色。
-// 图与映射都在 src/assets/providers/appIcons.ts（共享的静态资源模块，不是 suite 之间的互相 import），
-// 两边改图标时一起改，别在组件里再抄一份 providerId → 文件的对照表。
+// 已登录的账户显示头像，没有头像时退回平台**自绘的图标**，再没有才退回平台的记号（字和颜色）。
+// 记号是平台自己声明的，和登录窗口、grid 的切换器同一个来源（components/login/PlatformMark 的
+// platformMarkOf）；mod 加的平台没有声明就取名称首字、中性的颜色。
+// 图形来自 components/shared/platformIcons（与登录窗口、通知栏角标同一套自绘图形），
+// 这里不另抄一份 providerId → 图形的对照表。
 
 /** 网页版把 http 的头像换成 https（与 grid 的切换器一致，避免混合内容被拦）；桌面版原样。 */
 const resolveAvatarSrc = (url: string) => (typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? url : url.replace(/^http:/, 'https:'));
 
 /**
  * 头像、平台图标或平台徽章（圆形，尺寸由 className 定）。装饰性的：可访问名由外面的按钮给，这里 aria-hidden。
- * `data-bravais-account-avatar` 标出画的是哪一种（image 是用户头像 / icon 是平台 App 图标 / badge 是文字徽章 /
+ * `data-bravais-account-avatar` 标出画的是哪一种（image 是用户头像 / icon 是平台图形 / badge 是文字徽章 /
  * connect 是「连接在线平台」的插头），用例按它判断。
  */
 const BravaisProviderAvatar: React.FC<{ providerId: string; name: string; avatarUrl: string | null; className?: string }> = ({
@@ -28,10 +29,15 @@ const BravaisProviderAvatar: React.FC<{ providerId: string; name: string; avatar
         return <img className={`bravais-account-avatar${className ? ` ${className}` : ''}`} src={resolveAvatarSrc(avatarUrl)} alt="" aria-hidden
             draggable={false} data-bravais-account-avatar="image" />;
     }
-    // 有 App 本尊图的平台直接亮那颗图标（圆形裁切）：认的是「这是哪个平台的歌」，不是 logo 上的字。
-    if (providerId in PROVIDER_APP_ICONS) {
-        return <img className={`bravais-account-avatar is-icon${className ? ` ${className}` : ''}`} src={getProviderAppIcon(providerId)} alt="" aria-hidden
-            draggable={false} data-bravais-account-avatar="icon" />;
+    // 有自绘图形的平台直接亮那颗图形（圆形裁切，尺寸跟着 .bravais-account-avatar 走）：
+    // 认的是「这是哪个平台的歌」，不是图上的字。
+    if (hasPlatformIcon(providerId)) {
+        return (
+            <span className={`bravais-account-avatar is-icon${className ? ` ${className}` : ''}`} aria-hidden
+                data-bravais-account-avatar="icon">
+                <PlatformIcon platformId={providerId} size={32} round className="h-full w-full" />
+            </span>
+        );
     }
     const mark = platformMarkOf(providerId as OnlineProviderId, name);
     return (
