@@ -480,6 +480,39 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         forward(call, "storage", args);
     }
 
+    /**
+     * 模组的 `secret` 设置值（issue M13）：渲染端 `window.electron.mods.invokeModSecrets` 的安卓实现。
+     *
+     * 以前没有这个方法，渲染端的 shim 恒回 `unsupported-on-android`，`folium.secrets` 的每次调用
+     * 都在安卓上抛错。能力其实早就在：宿主 host.js 的 `secrets` op 接的就是同一份
+     * modSystem/modSecrets.cjs（安卓上 safeStorage 不可用，值只活在本次运行的内存里，
+     * `state().persistent` 为 false）。
+     *
+     * 参数名与桌面端 preload 一致：`modId`、`operation`，以及 `key`。`declare` 的键在 `key` 里
+     * 是字符串数组（也接受放在 `value` 里的那一份，兼容按位置传参的调用方）。
+     * 转成宿主认的 `{ modId, op, key, value }`，与 `invokeModStorage` 同一条路。
+     */
+    @PluginMethod
+    public void invokeModSecrets(PluginCall call) {
+        JSObject args = new JSObject();
+        args.put("modId", call.getString("modId", ""));
+        String operation = call.getString("operation", "");
+        args.put("op", operation);
+        // declare 的键放在 key / value 里都可能出现，谁是数组就用谁（两个都是时 key 优先）。
+        Object keyValue = call.getData().opt("key");
+        Object keys = keyValue instanceof com.getcapacitor.JSArray ? keyValue : call.getData().opt("value");
+        if ("declare".equals(operation) && keys instanceof com.getcapacitor.JSArray) {
+            args.put("key", "");
+            args.put("value", keys);
+        } else {
+            args.put("key", keyValue == null ? "" : String.valueOf(keyValue));
+            if (call.getData().has("value")) {
+                args.put("value", call.getData().opt("value"));
+            }
+        }
+        forward(call, "secrets", args);
+    }
+
     @PluginMethod
     public void getFfmpegStatus(PluginCall call) {
         forward(call, "ffmpeg-status", new JSObject());

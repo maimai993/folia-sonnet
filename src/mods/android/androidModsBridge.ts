@@ -39,6 +39,13 @@ interface FoliaModsPluginShape {
     invokeModNetFetch(options: { modId: string; url: string; init?: Record<string, unknown> }): Promise<{ ok?: boolean; result?: unknown; error?: string }>;
     invokeModRpc(options: { modId: string; name: string; args?: unknown[] }): Promise<{ ok?: boolean; result?: unknown; error?: string }>;
     invokeModStorage(options: { modId: string; operation: string; key?: string; value?: unknown }): Promise<{ ok?: boolean; result?: unknown; error?: string }>;
+    /**
+     * Folium 1.7 `secret` 设置值（issue M13）。
+     *
+     * 参数名刻意与 `invokeModStorage` 一致（`operation` / `key`），原生那一边的
+     * `invokeModSecrets` 用同一套键取值，转成宿主 `secrets` op 认的 `{ op, key }`。
+     */
+    invokeModSecrets(options: { modId: string; operation: string; key?: string | readonly string[]; value?: string | null }): Promise<{ ok?: boolean; result?: unknown; error?: string }>;
     getFfmpegStatus(): Promise<{ ffmpeg?: ModFfmpegStatus }>;
     getModCallStats(options?: { modId?: string }): Promise<{ stats?: Record<string, ModMainCallStats> }>;
     getModStorageUsage(options: { modId: string }): Promise<ModStorageUsageResult>;
@@ -125,6 +132,15 @@ const waitForNode = async (attempts = 40): Promise<void> => {
         }
         await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    /*
+     * 等满了还没就绪，必须抛 —— 否则这个函数会「成功返回」，上层的 ready() 缓存住那个成功的
+     * Promise，之后每一次调用都直接放行，去敲一个永远没起来的宿主。
+     *
+     * 以前这里是空的结尾：Node 一直起不来时，所有调用不是等 180 秒超时，就是落进
+     * `node-error` 这种跟真实原因无关的话里；ready() 里那句「失败就清空缓存，下次重新等」
+     * 也就永远轮不上。issue M13 顺着 `invokeModSecrets` 量到它，这里一并按它的原意补上。
+     */
+    throw new Error('node-not-ready');
 };
 
 /** 桌面端 preload 那一份 `window.electron.mods` 的安卓等价物。 */
@@ -451,8 +467,26 @@ export const createAndroidModsBridge = () => {
             }
         },
 
-        // 这三个桌面端是原生文件选择框，安卓端形态不同，形状先留着。
-        invokeModSecrets: async () => ({ ok: false, error: 'unsupported-on-android' }),
+        /*
+         * 模组的 `secret` 设置值（issue M13）。
+         *
+         * 以前这里恒回 `{ ok: false, error: 'unsupported-on-android' }`，而 `folium/secrets.ts` 的调用
+         * 信封把每个失败都转成异常 —— 于是安卓上 `folium.secrets.get()` 每次都抛，且被那个文件
+         * 的告警白名单当成「没有桌面桥」静默吞掉：模组文档写着的接口在安卓上完全不可用且没有线索。
+         *
+         * 能力本来就有：宿主的 `secrets` op 早就实现了（modSystem/modSecrets.cjs，安卓侧不落盘、
+         * 只活在本次运行的内存里），缺的只是一条从渲染端过去的转发。现在按 storage 那样转过去，
+         * 内存态的语义由宿主那层给（`state().persistent` 为 false，设置表单据此标注「仅本次运行」）。
+         *
+         * 不挂 guarded：它走的是与 storage 同一条 runModCall，失败原因（例如 `secret-undeclared:key`）
+         * 必须原样回到调用方，不能被兜成 node-unavailable。
+         */
+        invokeModSecrets: (modId: string, operation: string, key?: string | readonly string[], value?: string | null) => runModCall(
+            () => FoliaMods.invokeModSecrets({ modId, operation, key, value: value ?? null }),
+            'secrets-failed',
+        ),
+
+        // 这两个桌面端是原生文件选择框，安卓端形态不同，形状先留着。
         /*
          * `folium.net.fetch`：桌面端在主进程里发（不受渲染进程 CORS 限制），
          * 安卓上同一套 netFetch.cjs 已经在 Node 宿主里，转过去就行。

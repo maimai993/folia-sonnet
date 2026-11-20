@@ -1368,6 +1368,14 @@ const operations = {
                 case 'declare':
                     secrets.declare(modId, Array.isArray(value) ? value : []);
                     return { ok: true, result: null };
+                /*
+                 * 设置表单靠它判断「哪些键有值、这些值能不能跨运行」（issue M13）。
+                 *
+                 * 安卓上 safeStorage 不可用，`persistent` 恒为 false，表单据此标注「仅本次运行」。
+                 * 漏了这一支的话，安卓上的密钥行永远画不出已设置状态 —— 与桌面端的形状也不一致。
+                 */
+                case 'state':
+                    return { ok: true, result: await secrets.state(modId) };
                 default:
                     return { ok: false, error: `secrets-unknown-operation:${op}` };
             }

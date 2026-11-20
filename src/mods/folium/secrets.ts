@@ -18,11 +18,26 @@ type SecretOperation = 'get' | 'has' | 'set' | 'declare' | 'state';
 // right after the section registered never reaches the main process before the keys it uses.
 const declarations = new Map<string, Promise<unknown>>();
 
+/**
+ * `no-electron-bridge` 从这个告警里排除，只有在**真的没有模组通道**时才成立（Web 预览）。
+ * 安卓在支持 `invokeModSecrets` 之前，这一步同样回它，而 `folium.secrets` 的每次调用
+ * 都因此抛错 —— 一个已经声明在文档里的接口静默失效（issue M13）。现在安卓转发到宿主的
+ * `secrets` op，所以这个排除只留给「通道根本没有」那一种，别的原因一律照常上报。
+ */
+const NO_BRIDGE = 'no-electron-bridge';
+
 const call = async <T>(modId: string, operation: SecretOperation, key?: string | readonly string[], value?: string | null): Promise<T> => {
     await declarations.get(modId);
     const settled = await invokeModSecrets(modId, operation, key, value);
     if (!settled.ok) {
-        throw new Error(settled.error ?? 'folium-call-failed');
+        // The reason goes to the log as well as the throw: a mod that catches its own `folium.secrets`
+        // calls would otherwise make a broken channel look like "no value set" (issue M13). The key and
+        // the reason only, never the value. No bridge at all (the web preview) stays quiet, as before.
+        const reason = settled.error ?? 'folium-call-failed';
+        if (reason !== NO_BRIDGE) {
+            console.warn(`[Folium:${modId}] secrets.${operation} failed: ${reason}`);
+        }
+        throw new Error(reason);
     }
     return settled.result as T;
 };
@@ -39,7 +54,7 @@ export const declareFoliumSecretKeys = (modId: string, keys: readonly string[]) 
     // for `declarations`) reaches the main process after these keys.
     const sent = invokeModSecrets(modId, 'declare', [...keys])
         .then((settled) => {
-            if (!settled.ok && settled.error !== 'no-electron-bridge') {
+            if (!settled.ok && settled.error !== NO_BRIDGE) {
                 console.warn(`[Folium:${modId}] secret fields could not be declared: ${settled.error}`);
             }
         })
