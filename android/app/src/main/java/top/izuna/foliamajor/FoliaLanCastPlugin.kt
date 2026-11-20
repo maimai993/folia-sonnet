@@ -280,6 +280,20 @@ class FoliaLanCastPlugin : Plugin() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     /**
+     * 「监听是否启用」与「网络是否连通」是两件事，必须分开记。
+     *
+     * 过去两者共用一个事件：unregisterNetworkCallback 会给 callback 合成一次 onLost，
+     * 于是「用户关掉自动投送开关」和「WiFi 真断了」走同一条分支，Web 层收到
+     * wifi:false 就把正在进行中的投送停掉。现在停监听只清这个标志，不下发任何状态。
+     */
+    @Volatile
+    private var wifiWatchEnabled = false
+
+    /** 上一次推给 Web 层的值；null 表示还没推过。只在 [publishWifiState] 所在的调用里读写。 */
+    @Volatile
+    private var lastPublishedWifi: Boolean? = null
+
+    /**
      * 插件是否已被销毁。
      *
      * 这个插件持有两类跨调用常驻资源：OkHttpClient（连接池 + dispatcher 线程）和由
@@ -354,6 +368,13 @@ class FoliaLanCastPlugin : Plugin() {
         deliver(call) { call.resolve(JSObject().put("wifi", isOnWifi())) }
     }
 
+    /**
+     * 当前「是不是在 WiFi 上」的真相来源。
+     *
+     * 只问 activeNetwork 的 transport 与连通性，不看 Wi-Fi 开关：关掉开关但设备已经切到
+     * 别的可用网络（例如有线 / 另一个 WiFi）时，interface 列表里并没有「断网」这件事，
+     * 投送该不该断由「还有没有可用网络」决定，不由开关状态决定。
+     */
     private fun isOnWifi(): Boolean {
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
@@ -363,7 +384,9 @@ class FoliaLanCastPlugin : Plugin() {
     }
 
     private fun startWifiWatch() {
-        if (destroyed || networkCallback != null) return
+        if (destroyed) return
+        wifiWatchEnabled = true
+        if (networkCallback != null) return
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return
         val request = NetworkRequest.Builder()
@@ -371,25 +394,36 @@ class FoliaLanCastPlugin : Plugin() {
             .build()
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                val data = JSObject()
-                data.put("wifi", true)
-                notifyListeners("wifiCastChange", data)
+                publishWifiState()
             }
+
             override fun onLost(network: Network) {
-                val data = JSObject()
-                data.put("wifi", false)
-                notifyListeners("wifiCastChange", data)
+                // onLost 的语义只是「这个 network 不再匹配请求」，网络迁移、重建、active
+                // network 切换都会触发它，此时设备可能仍在 WiFi 上。所以这里同样现查
+                // isOnWifi() 取真相，而不是照着回调类型下发布尔值。
+                publishWifiState()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                publishWifiState()
             }
         }
         try {
             cm.registerNetworkCallback(request, callback)
             networkCallback = callback
+            // 注册后立刻同步一次：冷启动时页面挂载晚于网络就绪，不主动推一次的话
+            // Web 层要等到下一次网络变化才收到事件（表现为「开了自动投送但连上 WiFi 没反应」）。
+            publishWifiState()
         } catch (error: Exception) {
             Log.w(TAG, "register network callback failed", error)
         }
     }
 
     private fun stopWifiWatch() {
+        // 先关闸：unregisterNetworkCallback 会给 callback 合成一次 onLost，
+        // 若不加这个标志，用户关掉开关就会被当成「断网」下发一次 wifi:false，
+        // Web 层收到立刻终止正在进行中的投送 —— 与用户意图相反。
+        wifiWatchEnabled = false
         val callback = networkCallback ?: return
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         try {
@@ -398,6 +432,32 @@ class FoliaLanCastPlugin : Plugin() {
             Log.w(TAG, "unregister network callback failed", error)
         }
         networkCallback = null
+    }
+
+    /**
+     * 把当前的 WiFi 连通状态推给 Web 层。
+     *
+     * 判据统一是 isOnWifi()，而不是回调类型：回调只是「有事发生了」的提示，
+     * 真相要现查。另外只在状态真的变了才下发 —— 网络在 WiFi 之间迁移时
+     * onLost/onAvailable 会连着来，逐条转发的做法会让 Web 层重复触发自动投送。
+     */
+    private fun publishWifiState() {
+        if (!wifiWatchEnabled || destroyed) return
+        val current = isOnWifi()
+        val previous = lastPublishedWifi ?: run {
+            // 冷启动第一次同步：无论值是什么都要报，让 Web 层拿到初值。
+            lastPublishedWifi = current
+            emitWifiState(current)
+            return
+        }
+        if (current == previous) return
+        lastPublishedWifi = current
+        emitWifiState(current)
+    }
+
+    private fun emitWifiState(onWifi: Boolean) {
+        Log.i(TAG, "wifi cast state -> " + onWifi)
+        notifyListeners("wifiCastChange", JSObject().put("wifi", onWifi))
     }
 
     // ------------------------------------------------------------------ SSDP

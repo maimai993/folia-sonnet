@@ -18,6 +18,7 @@ import {
     getWifiAutoCastEnabled,
     isLanCastAvailable,
     lanCastErrorText,
+    queryWifiState,
     setWifiAutoCastEnabled,
     stopCastingToSpeaker,
     subscribeCasting,
@@ -232,8 +233,13 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
     const buildTrackRef = React.useRef(buildTrack);
     buildTrackRef.current = buildTrack;
 
-    // 连上 WiFi 时自动投送到上次那台音响；离开 WiFi 时收口并恢复手机声音。
+    // 连上 WiFi 时自动投送到上次那台音响；离开局域网时才收口并恢复手机声音。
     // 网络事件可能连着来好几次，用一个 ref 挡住重复推送。
+    //
+    // 这里的 wifi:false 现在只代表「连通性真的变了」（原生侧用 isOnWifi() 现查，
+    // 不再是回调类型直译）。即便如此也不要直接停：先问一次当前真实状态，
+    // 网络在 WiFi 之间迁移时设备可能已经切到另一个可用网络上了 ——
+    // 关掉 Wi-Fi 开关不等于断网，投送不该因此被打断。
     const autoCastingRef = React.useRef(false);
     React.useEffect(() => {
         if (!available) return undefined;
@@ -257,7 +263,18 @@ const LanCastControl: React.FC<LanCastControlProps> = ({
                     finally { autoCastingRef.current = false; }
                 })();
             } else if (getCastingSpeaker()) {
-                void stopCastingToSpeaker().catch(() => {});
+                const casting = getCastingSpeaker();
+                void (async () => {
+                    // 拿到真实状态再决定：仍在一个可用局域网上就什么也不做。
+                    const stillOnWifi = await queryWifiState();
+                    if (stillOnWifi !== false) return;
+                    // 自查期间用户可能已经手动停掉或换到别的音响。
+                    if (getCastingSpeaker() !== casting) return;
+                    try {
+                        await stopCastingToSpeaker();
+                        setNotice(t('lanCastInterrupted'));
+                    } catch { /* 收口失败已经由内部保证本机状态还原，不再打扰。 */ }
+                })();
             }
         });
     }, [available, t]);
