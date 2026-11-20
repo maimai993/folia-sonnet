@@ -1,6 +1,8 @@
 // src/components/visualizer/sonnet/sonnetAnimatedGraphics.ts
 // Records Graphics commands so strokes/fills can grow with the shared stagger
 // schedule during playback instead of appearing fully drawn at scene build.
+import { hashSonnetSeed, sonnetHash01 } from './sonnetRandom';
+
 type PixiModule = typeof import('pixi.js');
 
 // Whether replaying `cmd` starts a fresh polygon: fills always lead with moveTo(0, 0), strokes only when
@@ -11,6 +13,13 @@ const opensOwnPath = (cmd: any) => {
     const first = cmd.path.find((p: any) => p.type !== 'rect_hint');
     return first?.type === 'moveTo';
 };
+
+// What a recorded circle's start angle and direction are drawn from (issue M9): the circle's own
+// centre and radius, quantised, so the same circle in a rebuilt scene is drawn the same way.
+const CIRCLE_SEED_SALT = 0x9e37;
+const circleSeed = (x: number, y: number, r: number) => hashSonnetSeed(
+    `${Math.round(x * 100)}:${Math.round(y * 100)}:${Math.round(r * 100)}`,
+);
 
 export class AnimatedGraphics {
     public display: import('pixi.js').Graphics;
@@ -82,9 +91,12 @@ export class AnimatedGraphics {
     }
 
     circle(x: number, y: number, r: number) {
-        // Randomize the start angle and direction to give organic variance (avoiding uniform "drawn from the right" look)
-        const start = Math.random() * Math.PI * 2;
-        const anticlockwise = Math.random() > 0.5;
+        // Organic variance (avoiding the uniform "drawn from the right" look) that is decided by
+        // the circle itself, not by Math.random: the record is replayed by update(), and a scene is
+        // rebuilt whenever the tuning or the viewport moves, so a random start angle would draw the
+        // same song differently each time (issue M9).
+        const start = sonnetHash01(circleSeed(x, y, r), 0, CIRCLE_SEED_SALT) * Math.PI * 2;
+        const anticlockwise = sonnetHash01(circleSeed(x, y, r), 1, CIRCLE_SEED_SALT) > 0.5;
         const diff = anticlockwise ? -Math.PI * 2 : Math.PI * 2;
         const len = Math.PI * 2 * r;
         const startX = x + Math.cos(start) * r;

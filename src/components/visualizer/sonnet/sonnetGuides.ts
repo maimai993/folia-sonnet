@@ -1,5 +1,6 @@
 import type { Theme } from '../../../types';
 import type { SonnetSemanticSegment } from './types';
+import { hashSonnetSeed, sonnetHash01 } from './sonnetRandom';
 import { isSonnetEmphasisRole, type SonnetTypographyPlacement } from './sonnetTypographyLayout';
 
 // src/components/visualizer/sonnet/sonnetGuides.ts
@@ -12,6 +13,35 @@ export interface SonnetGuideView {
     endTime: number;
     maxAlpha: number;
 }
+
+/**
+ * How much randomness one guide is built with (issue M9): inside this salt, element index and the
+ * kind of draw decide one value, so the same segment lays out the same guide on every rebuild and
+ * the same moment of the song looks the same after a seek. These are the draws the build made with
+ * `Math.random` before; the ranges are unchanged.
+ */
+const GUIDE_SEED_SALT = 0x5eed;
+const SHAPE_TYPE = 0;
+const SHAPE_SIZE = 1;
+const SHAPE_ANGLE = 2;
+const SHAPE_SPEED = 3;
+const SHAPE_SPIN = 4;
+/** The chance of each optional thread, then the element that draws it. */
+const TRAIL_ONE_SHOWN = 5;
+const TRAIL_ONE_DIRECTION = 6;
+const TRAIL_ONE_OFFSET = 7;
+const TRAIL_ONE_DELAY = 8;
+const TRAIL_TWO_SHOWN = 9;
+const TRAIL_TWO_DIRECTION = 10;
+const TRAIL_TWO_DELAY = 11;
+const SPLINE_SHOWN = 12;
+const SPLINE_LENGTH = 13;
+const SPLINE_THICKNESS = 14;
+const SPLINE_ANGLE = 15;
+const SPLINE_X = 16;
+const SPLINE_Y = 17;
+const SPLINE_DELAY = 18;
+const SPLINE_DURATION = 19;
 
 const colorNumber = (pixi: PixiModule, color: string) => pixi.Color.shared.setValue(color).toNumber();
 
@@ -39,6 +69,10 @@ export const createSonnetGuide = (
 ): SonnetGuideView & { update?: (progress: number) => void; } => {
     const container = new pixi.Container();
     const graphics = new pixi.Graphics();
+    // A guide follows one semantic segment, so its text is what has to stay stable across a
+    // rebuild of the same paragraph; the placement's x/y is jittered per scene and is not.
+    const guideSeed = hashSonnetSeed(`${segment.text}:${segment.startOffset}:${segment.endOffset}`);
+    const guideRandom = (element: number) => sonnetHash01(guideSeed, element, GUIDE_SEED_SALT);
 
     // Container for geometric decorations
     const shapesContainer = new pixi.Container();
@@ -79,8 +113,8 @@ export const createSonnetGuide = (
 
     for (let i = 0; i < numShapes; i++) {
         const shape = new pixi.Graphics();
-        const type = Math.floor(Math.random() * 4);
-        const size = (isHero ? 3 : 1.5) + Math.random() * 3.5;
+        const type = Math.floor(guideRandom(SHAPE_TYPE + i) * 4);
+        const size = (isHero ? 3 : 1.5) + guideRandom(SHAPE_SIZE + i) * 3.5;
         const sAlpha = isHero ? 0.8 : 0.6;
 
         if (type === 0) {
@@ -96,52 +130,52 @@ export const createSonnetGuide = (
         shapesContainer.addChild(shape);
         shapeData.push({
             obj: shape,
-            angle: Math.random() * Math.PI * 2,
-            speed: (15 + Math.random() * 45) * (isHero ? 1 : 0.7),
-            rotSpeed: (Math.random() - 0.5) * 8,
+            angle: guideRandom(SHAPE_ANGLE + i) * Math.PI * 2,
+            speed: (15 + guideRandom(SHAPE_SPEED + i) * 45) * (isHero ? 1 : 0.7),
+            rotSpeed: (guideRandom(SHAPE_SPIN + i) - 0.5) * 8,
         });
     }
 
     // Create elegant close-range silk threads weaving around the text
     const trackingTrails: any[] = [];
-    if (isHero || Math.random() > 0.4) {
+    if (isHero || guideRandom(TRAIL_ONE_SHOWN) > 0.4) {
         // Thread 1: Tight S-Curve weaving through the text
-        const d = Math.random() > 0.5 ? 1 : -1;
-        const yOffset = (Math.random() - 0.5) * fontSize * 0.8;
+        const d = guideRandom(TRAIL_ONE_DIRECTION) > 0.5 ? 1 : -1;
+        const yOffset = (guideRandom(TRAIL_ONE_OFFSET) - 0.5) * fontSize * 0.8;
         trackingTrails.push({
             p0: { x: -d * fontSize * 2.5, y: yOffset + fontSize * 1.5 },
             p1: { x: -d * fontSize * 0.8, y: yOffset - fontSize * 2.0 },
             p2: { x: d * fontSize * 0.8, y: yOffset + fontSize * 2.0 },
             p3: { x: d * fontSize * 2.5, y: yOffset - fontSize * 1.5 },
-            delay: Math.random() * 0.15
+            delay: guideRandom(TRAIL_ONE_DELAY) * 0.15
         });
     }
-    if (isHero || Math.random() > 0.6) {
+    if (isHero || guideRandom(TRAIL_TWO_SHOWN) > 0.6) {
         // Thread 2: Tight Intersecting Loop (Ribbon) wrapping the text
-        const d = Math.random() > 0.5 ? 1 : -1;
+        const d = guideRandom(TRAIL_TWO_DIRECTION) > 0.5 ? 1 : -1;
         trackingTrails.push({
             p0: { x: -fontSize * 2.0, y: -d * fontSize * 1.8 },
             p1: { x: fontSize * 2.0, y: d * fontSize * 1.8 },
             p2: { x: -fontSize * 2.0, y: d * fontSize * 1.8 },
             p3: { x: fontSize * 2.0, y: -d * fontSize * 1.8 },
-            delay: Math.random() * 0.1
+            delay: guideRandom(TRAIL_TWO_DELAY) * 0.1
         });
     }
     // Create growing rectangular spline (modern HUD style)
     let rectSpline: any = null;
-    if (Math.random() > 0.4) {
-        const length = fontSize * (1.2 + Math.random() * 1.5);
-        const thickness = (isHero ? 6 : 3) + Math.random() * 8;
-        const angle = (Math.random() - 0.5) * Math.PI; // Random angle
+    if (guideRandom(SPLINE_SHOWN) > 0.4) {
+        const length = fontSize * (1.2 + guideRandom(SPLINE_LENGTH) * 1.5);
+        const thickness = (isHero ? 6 : 3) + guideRandom(SPLINE_THICKNESS) * 8;
+        const angle = (guideRandom(SPLINE_ANGLE) - 0.5) * Math.PI; // Random angle
         // Start somewhere near the text
-        const rx = (Math.random() - 0.5) * fontSize * 1.2;
-        const ry = (Math.random() - 0.5) * fontSize * 1.2;
+        const rx = (guideRandom(SPLINE_X) - 0.5) * fontSize * 1.2;
+        const ry = (guideRandom(SPLINE_Y) - 0.5) * fontSize * 1.2;
         rectSpline = {
             p0: { x: rx, y: ry },
             p1: { x: rx + Math.cos(angle) * length, y: ry + Math.sin(angle) * length },
             thickness,
-            delay: Math.random() * 0.15,
-            duration: 0.25 + Math.random() * 0.2
+            delay: guideRandom(SPLINE_DELAY) * 0.15,
+            duration: 0.25 + guideRandom(SPLINE_DURATION) * 0.2
         };
     }
 
