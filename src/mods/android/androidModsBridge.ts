@@ -32,7 +32,7 @@ interface FoliaModsPluginShape {
     call(options: { op: string; args?: Record<string, unknown> }): Promise<Record<string, unknown>>;
     listMods(): Promise<ModsListPayload>;
     reloadMods(): Promise<{ mods?: ModRuntimeInfo[] }>;
-    setModEnabled(options: { id: string; enabled: boolean }): Promise<{ ok?: boolean; error?: string; mods?: ModRuntimeInfo[] }>;
+    setModEnabled(options: { id: string; enabled: boolean; digest?: string }): Promise<{ ok?: boolean; error?: string; mods?: ModRuntimeInfo[] }>;
     installModFromZip(options: { zipPath: string }): Promise<{ ok?: boolean; id?: string; error?: string }>;
     installModFromZipFile(options: { name: string; base64: string }): Promise<{ ok?: boolean; id?: string; error?: string }>;
     deleteMod(options: { modId: string }): Promise<{ ok?: boolean; error?: string; mods?: ModRuntimeInfo[] }>;
@@ -248,13 +248,16 @@ export const createAndroidModsBridge = () => {
                 mods: Array.isArray(response?.list?.mods) ? response.list.mods : [],
             };
         }, { ok: false, mods: [] }),
-        setModEnabled: (modId: string, enabled: boolean) => guarded<ModSetEnabledResult>(async () => {
+        setModEnabled: (modId: string, enabled: boolean, digest?: string) => guarded<ModSetEnabledResult>(async () => {
             /*
              * 宿主的应答是 { ok, list }，list 才是整份清单（与 listMods 同形）。
              * 之前读 response.mods 所以永远是空数组，而 ok 也跟着变 false。
+             *
+             * digest 是确认框里给用户看的那一份内容摘要：宿主会重新算一遍当前目录比对，
+             * 对不上就回 enable-digest-mismatch（文件在确认之后被换掉了）。
              */
             const response = unwrap<{ ok?: boolean; list?: { mods?: ModRuntimeInfo[] }; error?: string }>(
-                await FoliaMods.setModEnabled({ id: modId, enabled }),
+                await FoliaMods.setModEnabled({ id: modId, enabled, digest }),
             );
             return {
                 ok: response?.ok !== false,

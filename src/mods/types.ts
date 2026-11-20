@@ -87,11 +87,22 @@ export interface ModRuntimeInfo {
     devSource: boolean;
     /** Opted-in experimental surfaces (manifest `experimental`). */
     experimental: string[];
+    /**
+     * Process capabilities the mod declared (manifest `processes`, e.g. `process.run`): the Node
+     * modules its entry may require beyond the host's core set. The Android Node host enforces
+     * them (assets/folia-node/moduleFence.js); the enable confirmation shows them.
+     */
+    processes?: string[];
     /** Origins `folium.ui.embed` may load (manifest `embedOrigins`). */
     embedOrigins: string[];
     /** The Folia versions this mod needs (manifest `folia`); null when it names none. */
     folia: string | null;
     hasMain: boolean;
+    /**
+     * 模组目录的内容摘要（`sha256:<hex>`），与信任记录里存的是同一个值；算不出来时是 null。
+     * 安卓的启用确认框把它写给用户看，并原样交回宿主复核。
+     */
+    digest?: string | null;
     /** folia-mod:// URL of the client entry, versioned by content digest; null unless loaded. */
     clientUrl: string | null;
     /** Position in the main process's dependency-resolved load plan; null when not in the plan. */

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import type { Theme } from '@/types';
 import { DEFAULT_THEME } from '@/services/baseThemes';
 import { useModsStore } from '../useModsStore';
+import type { ModRuntimeInfo } from '../types';
 import { FOLIUM_HOST_VERSION } from '../folium/shared';
 import { useDesktopSettingsStore } from '../../stores/useDesktopSettingsStore';
 import { openOutsideLink, opensThroughDesktopApp } from '../../utils/system/outsideLink';
@@ -14,6 +15,8 @@ import type { ModManagerClasses } from './modManagerClasses';
 import { Button, FilePicker, type FilePickerHandle } from '../../components/ui';
 import ThemedDialog from '../../components/shared/ThemedDialog';
 import { SheetButton } from '../../components/shared/Sheet';
+import { AndroidModApprovalDialog } from '../android/AndroidModApprovalDialog';
+import { hasAndroidModsPlugin } from '../android/androidModsBridge';
 
 // src/mods/manager/ModManager.tsx
 // The mod list and everything that acts on it: toolbar, zip drop install, batch selection, ffmpeg
@@ -45,6 +48,15 @@ const openLinkExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     void openOutsideLink(event.currentTarget.href);
 };
+
+/**
+ * 启用前要不要在这里弹确认框。
+ *
+ * 桌面端不要：主进程会弹原生对话框，那里点了「仍要启用」才算数。
+ * 安卓要：宿主没有原生弹窗，不弹就等于「点一下开关就以完整权限跑起来」。这是本轮
+ * 安全修复的核心一条 —— 判据用「有没有原生确认」而不是平台名，将来别的平台接上来也不会漏。
+ */
+const needsApprovalDialog = (): boolean => hasAndroidModsPlugin();
 
 export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, theme }) => {
     const { t } = useTranslation();
@@ -209,17 +221,41 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
     };
 
     /*
-     * Enabling a mod opens a confirmation dialog in the main process (the
-     * renderer cannot be trusted to gate code that runs with full privileges),
-     * so a toggle can come back declined. A decline is a normal user choice and
-     * stays silent; anything else is reported.
+     * Enabling a mod is confirmed, because the code then runs with the app's own privileges.
+     *
+     * 桌面端由主进程弹原生确认框（渲染进程伪造不了），一个 toggle 也可能回 enable-declined。
+     * 安卓没有主进程窗口，确认框在这里画：先记下要确认的模组与那一刻它的内容摘要，用户点了
+     * 「仍要启用」才把摘要交给宿主复核后启用。取消是正常选择，安静地回去，别的失败才提示。
      */
-    const handleToggleEnabled = async (modId: string, enabled: boolean) => {
-        const result = await toggleMod(modId, enabled);
+    const [pendingApprove, setPendingApprove] = useState<ModRuntimeInfo | null>(null);
+    const [approving, setApproving] = useState(false);
+
+    const handleToggleEnabled = async (modId: string, enabled: boolean, digest?: string) => {
+        const result = await toggleMod(modId, enabled, digest);
         if (result.ok || result.error === 'enable-declined') {
             return;
         }
         setNotice({ kind: 'error', text: translateModError(t, result.error, 'enable-failed') });
+    };
+
+    const requestToggleEnabled = async (mod: ModRuntimeInfo, enabled: boolean) => {
+        if (!enabled || !needsApprovalDialog()) {
+            await handleToggleEnabled(mod.id, enabled);
+            return;
+        }
+        setPendingApprove(mod);
+    };
+
+    const confirmApprove = async () => {
+        const mod = pendingApprove;
+        if (!mod) return;
+        setApproving(true);
+        try {
+            await handleToggleEnabled(mod.id, true, mod.digest ?? undefined);
+        } finally {
+            setApproving(false);
+            setPendingApprove(null);
+        }
     };
 
     const toggleSelected = (modId: string) => {
@@ -455,7 +491,7 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                         theme={theme ?? DEFAULT_THEME}
                         classes={classes}
                         onToggleExpand={() => selectMod(selectedModId === mod.id ? null : mod.id)}
-                        onToggleEnabled={() => { void handleToggleEnabled(mod.id, !mod.enabled); }}
+                        onToggleEnabled={() => { void requestToggleEnabled(mod, !mod.enabled); }}
                         onToggleSelected={() => toggleSelected(mod.id)}
                         onDelete={() => setPendingDelete({ id: mod.id, name: mod.name })}
                         onNotice={setNotice}
@@ -510,6 +546,16 @@ export const ModManager: React.FC<ModManagerProps> = ({ classes, isDaylight, the
                     </>
                 )}
             />
+            {/* 安卓的启用确认框：桌面端由主进程弹原生框，这里代替它（见 handleToggleEnabled）。 */}
+            {needsApprovalDialog() && (
+                <AndroidModApprovalDialog
+                    mod={pendingApprove}
+                    isDaylight={isDaylight}
+                    pending={approving}
+                    onCancel={() => { if (!approving) setPendingApprove(null); }}
+                    onConfirm={() => { void confirmApprove(); }}
+                />
+            )}
         </div>
     );
 };
