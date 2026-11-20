@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
-import { requireAdmin } from './admin.js';
+import { requireAdmin, requireCacheWriter } from './admin.js';
+import type { CacheWriterEnv } from './admin.js';
 import type { D1Database, D1PreparedStatement, Env } from './app.js';
 import { MAX_CACHE_BACKUPS } from './aiCacheBackups.js';
+import { cacheDigest, CACHE_VERIFY_KEY } from './aiCacheDigest.js';
 import { invalidateSongTotalCache, readSongTotal } from './aiCacheSongTotal.js';
 import {
   deleteTitleTokens,
@@ -19,12 +21,28 @@ import { readHighlightWords, verifyStageUpload } from './stageVerifier.js';
 // who has not filled in an API key still gets a hit, which is the whole point
 // of shipping the switch on by default.
 //
+// Pushing is **not** open (issue C6). The shelf is global: one forged write
+// repaints the theme of every player that pulls it. So a write needs an
+// admission ticket (`requireCacheWriter`: an admin session or
+// `AI_CACHE_WRITE_TOKEN`), the upload must pass lyric verification, and every
+// stored version carries a digest that binds source + key + payload together
+// (`aiCacheDigest.ts`), so a tampered row reads as "no digest" on the client
+// instead of being served as somebody else's answer.
+//
 // Pulling stays keyed by MD5 alone, even though pushing now carries a platform
 // name: an entry written before that field existed must still be reachable.
 //
 // Only the payload is stored. No prompt, no lyric text, no credential.
 
 const MAX_PAYLOAD_BYTES = 64 * 1024;
+/*
+ * 整个请求体的硬上限。
+ *
+ * payload 本身另有一道 64KB 的检查，但那是**解析之后**才量的 —— 一个 50MB 的
+ * `{"payload": ...}` 在 `c.req.json()` 里就已经被读进来了。公开读、鉴权写之后剩下的
+ * 浪费存储那条路也一并在这里堵死：先看 Content-Length，再在没带长度时按文本长度兜一次。
+ */
+const MAX_REQUEST_BYTES = 128 * 1024;
 const MAX_TITLE_CHARS = 200;
 const MAX_LIST_LIMIT = 500;
 const DEFAULT_LIST_LIMIT = 200;
@@ -57,6 +75,16 @@ export interface AiCacheEntry {
   hits: number;
   createdAt: string;
   updatedAt: string;
+  /**
+   * 写这一版的是谁（`admin:<用户名>` 或 `token:<令牌指纹>`）。老条目是空串。
+   *
+   * 追责用：被冒名覆盖时，至少看得出这一次不是正常客户端写进来的。
+   */
+  writer: string;
+  /** 内容摘要，见 `aiCacheDigest.ts`。客户端拿它复查内容有没有被改过；老条目是空串。 */
+  payloadDigest: string;
+  /** 算摘要时用的公钥标识；客户端只认自己认识的那一把。 */
+  verifyKey: string;
 }
 
 type AiCacheRow = {
@@ -71,6 +99,8 @@ type AiCacheRow = {
   hits: number;
   created_at: string;
   updated_at: string;
+  writer?: string | null;
+  payload_digest?: string | null;
 };
 
 const mapRow = (row: AiCacheRow): AiCacheEntry => {
@@ -92,6 +122,9 @@ const mapRow = (row: AiCacheRow): AiCacheEntry => {
     hits: Number(row.hits ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    writer: row.writer ?? '',
+    payloadDigest: row.payload_digest ?? '',
+    verifyKey: CACHE_VERIFY_KEY,
   };
 };
 
@@ -177,7 +210,7 @@ export const pruneHitLog = async (db: D1Database): Promise<void> => {
 /** GET /api/ai-cache/:kind/:key — the pull. Never fails hard; a miss is data. */
 const handleGet = async (db: D1Database, kind: string, key: string) => {
   const row = await db
-    .prepare('SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at FROM ai_cache WHERE kind = ? AND cache_key = ?')
+    .prepare('SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at, writer, payload_digest FROM ai_cache WHERE kind = ? AND cache_key = ?')
     .bind(kind, key)
     .first<AiCacheRow>();
 
@@ -210,10 +243,11 @@ const archiveExistingEntry = (
   now: string,
 ): D1PreparedStatement[] => [
   // Read the current version inside the same transaction as its replacement.
+  // 来源与摘要一并留档：被覆盖之后还要看得出这一版是谁写的。
   db.prepare(`
     INSERT INTO ai_cache_backups
-      (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at)
-    SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, ?
+      (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at, writer, payload_digest)
+    SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, ?, writer, payload_digest
     FROM ai_cache WHERE kind = ? AND cache_key = ?
   `).bind(now, kind, key),
   db.prepare(`
@@ -237,13 +271,16 @@ const archiveExistingEntry = (
  *
  * 但覆盖前先过一遍校验：空数据一律拒，形状不合规一律拒，能拿平台上的歌词原文件
  * 重算哈希的再对一遍。通过了才把旧版存进备份、再写入新的一版。
+ *
+ * `writer` 是准入凭证的标识（`admin:<用户名>` / `token:<指纹>`），落库并绑进摘要 ——
+ * 它同时是「谁写的」和「内容是这一版」的证据。
  */
 const handlePut = async (
   db: D1Database,
   kind: string,
   key: string,
   body: unknown,
-  options: { strict: boolean },
+  writer: string,
 ) => {
   const source = (body ?? {}) as {
     payload?: unknown;
@@ -252,7 +289,7 @@ const handlePut = async (
     model?: unknown;
     /** 这首歌来自哪个平台；老客户端没有，那就是空串，走「按顺序试各平台」。 */
     platform?: unknown;
-    /** 歌词正文的 MD5。老客户端也没有，那就无从校验、按未验证放行。 */
+    /** 歌词正文的 MD5。没有它就无从核验来源 —— 现在一律拒写。 */
     lyricHash?: unknown;
     isPureMusic?: unknown;
   };
@@ -263,13 +300,19 @@ const handlePut = async (
   const platform = readMetaText(source.platform, MAX_PLATFORM_CHARS);
   const lyricHash = readMetaText(source.lyricHash, 64);
 
+  /*
+   * 核验结果是**准入条件**，不是参考意见（issue C6）。
+   *
+   * 以前这里有三条降级路径把核验绕过去：`AI_CACHE_VERIFY=off` 一键关闭、没带 lyricHash
+   * 一律放行、平台取不到歌词也放行。三条加起来的实际效果是「谁都能写」—— 而这是一张
+   * 全局共享的表，一条冒名写入会影响所有拉到它的播放器。现在核验不通过就不写。
+   */
   const verification = await verifyStageUpload({
     payload: parsed.payload,
     songTitle,
     platform,
     lyricHash,
     isPureMusic: source.isPureMusic === true,
-    strict: options.strict,
   });
   if (!verification.ok) {
     return { ok: false, error: verification.error, stored: false, note: verification.note };
@@ -278,13 +321,16 @@ const handlePut = async (
   const now = new Date().toISOString();
   const provider = readMetaText(source.provider, 64);
   const model = readMetaText(source.model, 128);
+  const payloadJson = JSON.stringify(parsed.payload);
+  /* 摘要绑定「写在哪 + 谁写的 + 内容」，客户端读的时候照着复算一遍。 */
+  const payloadDigest = await cacheDigest({ kind, key, writer, payloadJson });
 
   /* 先把旧版存好，再覆盖 —— 顺序反了就什么都没留下。 */
   await db.batch([
     ...archiveExistingEntry(db, kind, key, now),
     db.prepare(`
-      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at, writer, payload_digest)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
       ON CONFLICT(kind, cache_key) DO UPDATE SET
         payload_json = excluded.payload_json,
         payload_bytes = excluded.payload_bytes,
@@ -292,9 +338,11 @@ const handlePut = async (
         provider = excluded.provider,
         model = excluded.model,
         platform = excluded.platform,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        writer = excluded.writer,
+        payload_digest = excluded.payload_digest
     `)
-    .bind(kind, key, JSON.stringify(parsed.payload), parsed.bytes, songTitle, provider, model, platform, now, now),
+    .bind(kind, key, payloadJson, parsed.bytes, songTitle, provider, model, platform, now, now, writer, payloadDigest),
     /* 倒排索引跟主表在同一个事务里更新：不会出现「主表改了、索引还指着旧歌名」。 */
     ...writeTitleTokens(db, kind, key, songTitle, now),
   ]);
@@ -309,6 +357,11 @@ const handlePut = async (
       platform: verification.platform,
       source: verification.source,
       note: verification.note,
+    },
+    entry: {
+      writer,
+      payloadDigest,
+      verifyKey: CACHE_VERIFY_KEY,
     },
   };
 };
@@ -349,7 +402,7 @@ export const hydrateCacheRows = async (
       const placeholders = chunk.map(() => '?').join(',');
       const rows = await db
         .prepare(
-          `SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at
+          `SELECT kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at, writer, payload_digest
            FROM ai_cache WHERE kind = ? AND cache_key IN (${placeholders})`,
         )
         .bind(kind, ...chunk)
@@ -364,7 +417,12 @@ export const hydrateCacheRows = async (
 
 
 const buildRoutes = (options: { admin: boolean }) => {
-  const routes = new Hono<{ Bindings: Env }>();
+  /*
+   * 公开那一面带一个变量 `cacheWriter`：写路由要把准入凭证的标识记进库。
+   * 管理那一面挂的是 requireAdmin（自带 `requireCacheWriter` 的两种准入之一），
+   * 变量同样由 `requireCacheWriter` 填上，两条路径写出来的条目一样带来源。
+   */
+  const routes = new Hono<CacheWriterEnv & { Bindings: Env }>();
   if (options.admin) routes.use('*', requireAdmin);
 
   /*
@@ -490,26 +548,51 @@ const buildRoutes = (options: { admin: boolean }) => {
     return c.json(result);
   });
 
-  routes.put('/:kind/:key', async (c) => {
+  /*
+   * 写缓存三道门，缺一不可（issue C6）：
+   *
+   *  1. **准入**：`requireCacheWriter` —— 管理员会话或写入令牌。以前这条路由对公网敞开，
+   *     谁知道接口谁就能覆盖任何人的条目。
+   *  2. **体积**：先看 Content-Length，超了直接 413，连读都不读。
+   *  3. **核验**：`handlePut` 里的 `verifyStageUpload` 不通过就 400（不再有降级放行，
+   *     也没有能关掉它的开关）。
+   */
+  routes.put('/:kind/:key', requireCacheWriter, async (c) => {
+    const declared = Number.parseInt(String(c.req.header('Content-Length') ?? ''), 10);
+    if (Number.isFinite(declared) && declared > MAX_REQUEST_BYTES) {
+      return c.json({ ok: false, error: 'payload_too_large' }, 413);
+    }
     const kind = String(c.req.param('kind') || '').toLowerCase();
     const key = String(c.req.param('key') || '').toLowerCase();
     if (!KIND_PATTERN.test(kind) || !KEY_PATTERN.test(key)) {
       return c.json({ ok: false, error: 'invalid_key' }, 400);
     }
-    const body = await c.req.json<unknown>().catch(() => null);
-    /*
-     * `AI_CACHE_VERIFY=off` 是上游抖动时的退路：只留空数据与合规那两道，不再拿
-     * 平台上的歌词对哈希。默认开着。
-     */
-    const strict = String(c.env.AI_CACHE_VERIFY ?? '').trim().toLowerCase() !== 'off';
-    const result = await handlePut(c.env.FOLIA_SYNC_DB, kind, key, body, { strict });
+    /* 没带 Content-Length（分块传输）时按原文长度兜一次，读之前就拦下。 */
+    const raw = await c.req.text().catch(() => null);
+    if (raw === null) return c.json({ ok: false, error: 'invalid_payload' }, 400);
+    if (new TextEncoder().encode(raw).byteLength > MAX_REQUEST_BYTES) {
+      return c.json({ ok: false, error: 'payload_too_large' }, 413);
+    }
+    let body: unknown = null;
+    try {
+      body = raw ? JSON.parse(raw) : null;
+    } catch {
+      body = null;
+    }
+    const writer = c.get('cacheWriter') || 'unknown';
+    const result = await handlePut(c.env.FOLIA_SYNC_DB, kind, key, body, writer);
     return c.json(result, result.ok ? 200 : 400);
   });
 
   return routes;
 };
 
-/** Public read/write: `/api/ai-cache/...`. */
+/**
+ * 公开面：`/api/ai-cache/...` —— **读公开，写要准入**。
+ *
+ * 拉取必须公开：没填 Key 的人本来一个主题都生成不出来，能命中别人的结果就是他的全部所得。
+ * 写入不公开：这张表是全局共享的，一条冒名写入会改掉所有人的主题。
+ */
 export const aiCacheRoutes = buildRoutes({ admin: false });
 
 /** Admin list/delete: `/admin/api/ai-cache/...`. */

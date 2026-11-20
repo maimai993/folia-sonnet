@@ -135,6 +135,75 @@ export const requireAdmin: MiddlewareHandler<AdminEnv> = async (c, next: Next) =
     await next();
 };
 
+/** 常量时间比较：按长度先短路会让攻击者从耗时里逐位试出凭证。 */
+const equalsConstantTime = (left: string, right: string): boolean => {
+    const a = new TextEncoder().encode(left);
+    const b = new TextEncoder().encode(right);
+    let diff = a.length ^ b.length;
+    for (let index = 0; index < a.length; index += 1) {
+        diff |= a[index] ^ (b[index] ?? 0);
+    }
+    return diff === 0;
+};
+
+/** 写缓存用的独立令牌（环境变量 `AI_CACHE_WRITE_TOKEN`），带头 `X-Folia-Cache-Token`。 */
+export const CACHE_WRITE_TOKEN_HEADER = 'X-Folia-Cache-Token';
+
+/**
+ * 写缓存的准入门（issue C6）。
+ *
+ * 云缓存是**全局共享**的一张表：一条写入会影响所有人拿到的主题。所以写入不能对公网开放 ——
+ * 谁能写、写的是谁的条目，必须有依据。两种准入，都代表「这台机器被记录在案」：
+ *
+ *  1. **管理员会话**：自己在面板里看得到、捞得回、删得掉那些条目的人，当然也能写。
+ *  2. **写入令牌**（`AI_CACHE_WRITE_TOKEN`）：给客户端签发的独立凭证。它和 `SYNC_TOKEN`
+ *     分开，是因为读缓存的人本来就没有 token；写和读用两把钥匙，泄露一把不至于两边都失守。
+ *     没配这个变量时只有管理员能写（安全默认：不配就不开）。
+ *
+ * 不在这里做同源校验：客户端是原生 App（OkHttp），没有 Origin，服务端也不该因此拒绝它。
+ */
+/**
+ * 写缓存这道门认定之后，把「是谁」放进上下文，写库时记进 `ai_cache.writer`。
+ *
+ * 记的是凭证的标识而不是凭证本身：令牌只记它的指纹前缀（够对上是哪把钥匙，又不至于
+ * 把钥匙抄进库和日志）；管理员记用户名。追责与吊销靠的就是这一列。
+ */
+export type CacheWriterEnv = { Bindings: Env; Variables: { cacheWriter: string } };
+
+/** 令牌的标识：SHA-256 前 12 位。同一个令牌每次算出来都一样，反推不出令牌。 */
+const tokenTag = async (token: string): Promise<string> => (
+    (await credentialTag({ username: 'cache-write-token', password: token })).slice(0, 12)
+);
+
+/** 见 `requireCacheWriter`：管理员会话或 `AI_CACHE_WRITE_TOKEN`，两种准入都代表「被记录在案」。 */
+export const requireCacheWriter: MiddlewareHandler<CacheWriterEnv> = async (c, next: Next) => {
+    c.header('Cache-Control', 'no-store');
+    const configured = String(c.env.AI_CACHE_WRITE_TOKEN ?? '').trim();
+    if (configured) {
+        const supplied = String(c.req.header(CACHE_WRITE_TOKEN_HEADER) ?? '');
+        if (supplied && equalsConstantTime(supplied, configured)) {
+            c.set('cacheWriter', `token:${await tokenTag(configured)}`);
+            await next();
+            return;
+        }
+    }
+    /* 令牌没给或不对，再看管理员会话：面板登录期间用 curl 写也照样放行。 */
+    const username = readAdminCredentials(c.env) ? await readAdminSession(c) : null;
+    if (username) {
+        c.set('cacheWriter', `admin:${username}`);
+        await next();
+        return;
+    }
+    /*
+     * 两种准入都没配（连管理员都没有）：这是部署方没开门，不是请求方的错 —— 回 503 而不是
+     * 401，否则运维看了只会一直怀疑客户端的 token 写错了。
+     */
+    if (!configured && !readAdminCredentials(c.env)) {
+        return c.json({ ok: false, error: 'cache_write_not_configured' }, 503);
+    }
+    return c.json({ ok: false, error: 'unauthorized' }, 401);
+};
+
 /** Cheap housekeeping: expired rows are swept whenever the panel is opened. */
 export const pruneExpiredSessions = async (db: Env['FOLIA_SYNC_DB']): Promise<void> => {
     await db.prepare('DELETE FROM admin_sessions WHERE expires_at <= ?')

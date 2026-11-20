@@ -45,10 +45,13 @@ export type Env = {
   /** Where the font bytes go. Absent means "fall back to D1". See src/fontBlobs.ts. */
   FONT_BLOBS?: FontBlobStore;
   /**
-   * 上传时拿平台上的歌词原文件重算哈希这道校验的开关。设成 `off` 就只留空数据与
-   * 合规那两道 —— 第三方接口整片不通时的退路。默认开着。
+   * 写 AI 云缓存的独立令牌（请求头 `X-Folia-Cache-Token`）。没配时只有管理员会话能写 ——
+   * 安全默认是「不配就不开」。见 admin.ts 的 `requireCacheWriter`。
+   *
+   * 这里**不再有** `AI_CACHE_VERIFY` 这类「关掉核验」的开关：核验不可用就拒写，
+   * 关闭开关等于让任何人绕过它（issue C6）。
    */
-  AI_CACHE_VERIFY?: string;
+  AI_CACHE_WRITE_TOKEN?: string;
   /** Database file size in bytes; Workers have no filesystem, so this stays unset there. */
   readDatabaseBytes?: () => number | null;
 };
@@ -138,6 +141,16 @@ const initializeSchema = async (db: D1Database) => {
       )
     `),
     // AI cloud cache: keyed by kind + MD5 of the lyric file.
+    /*
+     * 来源与内容摘要（issue C6）。
+     *
+     * 缓存是全局共享的：一条被冒名写入的条目会喂给所有拉到它的播放器。所以每条都要能回答
+     * 两个问题 ——「谁写的」（writer，准入凭证的标识，追责与吊销的依据）和「内容有没有被改过」
+     * （payload_digest = 键 + 平台公钥 + 来源 + 内容一起算的 SHA-256，见 aiCacheDigest.ts）。
+     *
+     * 两列都可空：本改动之前写进去的老条目没有它们，读的时候按「无摘要」处理（客户端不采信），
+     * 不阻塞读取、也不必回填 —— 谁需要就重新生成一次。
+     */
     db.prepare(`
       CREATE TABLE IF NOT EXISTS ai_cache (
         kind TEXT NOT NULL,
@@ -151,6 +164,8 @@ const initializeSchema = async (db: D1Database) => {
         hits INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        writer TEXT,
+        payload_digest TEXT,
         PRIMARY KEY (kind, cache_key)
       )
     `),
@@ -177,8 +192,8 @@ const initializeSchema = async (db: D1Database) => {
     /*
      * 每次被覆盖之前的那一版。
      *
-     * 上传是公开的（没填 Key 的人也要能推），所以「有人用空数据把别人做好的那条盖掉」
-     * 是迟早会发生的事。留着旧版不只是能回滚：真被盖了，后台还能把好的那版捞回来。
+     * 上传现在要准入（issue C6），但「有人用一份能看却很糟的主题把别人做好的那条盖掉」
+     * 仍然是真的写入者能做出来的事。留着旧版不只是能回滚：真被盖了，后台还能把好的那版捞回来。
      * 每个键最多留 MAX_CACHE_BACKUPS 份，超了删最旧的 —— 缓存条目本身就不大，
      * 但同一个键被反复覆盖时不该无限长。
      */
@@ -195,7 +210,9 @@ const initializeSchema = async (db: D1Database) => {
         platform TEXT,
         hits INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        archived_at TEXT NOT NULL
+        archived_at TEXT NOT NULL,
+        writer TEXT,
+        payload_digest TEXT
       )
     `),
     // 每次命中记一行。`ai_cache.hits` 只是个累加器，看不出「什么时候命中的」，
@@ -262,6 +279,23 @@ const initializeSchema = async (db: D1Database) => {
       }
     }
   }
+  /*
+   * 来源与摘要两列（issue C6 之后才有的）。和上面 `platform` 同样是「升级时补列」：
+   * 老库不重建、不丢数据；没有这两列的老条目读出来是空串，客户端按「无摘要」处理。
+   * 备份表也一起补，覆盖时才能把上一版的来源一起留档、追责时看得到是换成了谁的那一版。
+   */
+  for (const table of ['ai_cache', 'ai_cache_backups']) {
+    const columns = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    for (const column of ['writer', 'payload_digest']) {
+      if (columns.results?.some((entry) => entry.name === column)) continue;
+      try {
+        await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`).run();
+      } catch (error) {
+        const after = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+        if (!after.results?.some((entry) => entry.name === column)) throw error;
+      }
+    }
+  }
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_song_group ON ai_cache(song_title, updated_at, hits, cache_key, platform)').run();
   await ensureAdminSessionSchema(db);
 };
@@ -323,7 +357,12 @@ const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Authorization', 'Content-Type'],
+  /*
+   * `X-Folia-Cache-Token` 是写 AI 云缓存用的独立令牌（issue C6）。它必须出现在这里：
+   * 网页版跨源写缓存时，浏览器的预检只放行这张表里列出的头，少一个就会被挡下来 ——
+   * 表现是「网页版永远推不上去」，而原生桥那条路不受影响，最难查。
+   */
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Folia-Cache-Token'],
 });
 app.use('*', async (c, next) => {
   if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {

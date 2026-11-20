@@ -105,6 +105,35 @@ object BackgroundThemeWorker {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>): Boolean = size > MAX_GENERATIONS
     }
 
+    /**
+     * 失败记忆（issue H33）：key 是**生成身份**（`resultKey` 那一套：本曲 + policy + 歌词 +
+     * 配置指纹），值是这个身份最近一次失败是什么、什么时候、连续几次。
+     *
+     * 为什么必须有：`request` 的三个触发点（切歌、`onStop`、歌词到手）都是热路径，而这里
+     * 原来只有「已有结果不排队」和「在飞去重」两道保护 —— **没有失败记忆**。一次失败之后
+     * 结果表里没有条目、在飞标记也释放了，于是下一次退到后台就把整轮重跑一遍：云端候选
+     * 解析、多条条目拉取，再一次完整的**付费**模型生成。失败越频繁（限流、401）重试越密，
+     * 额度就是这么烧掉的。
+     *
+     * 放进同一个 `resultLock` 是因为它和结果表一起读写，两把锁反而会给出不一致的快照。
+     */
+    private val failures: MutableMap<String, BackgroundThemeFailure> = object : LinkedHashMap<String, BackgroundThemeFailure>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BackgroundThemeFailure>): Boolean =
+            size > MAX_FAILURES
+    }
+
+    /** 失败记忆表的容量上限：只在最近这么多生成身份上记退避，够覆盖在听的那几首。 */
+    private const val MAX_FAILURES = 64
+
+    /**
+     * 用户主动「重新生成」时显式清掉失败记忆的那一次（issue H33 的边界条件）。
+     *
+     * 退避**只拦自动触发**：用户自己按了按钮就是在明确要求「再试一次」，把他挡回去会
+     * 变成「点了没反应」。所以 `request` 的 `userInitiated = true` 会先清掉这个身份的
+     * 全部失败记录，并且这一次失败也不再计入连续次数（下次自动触发照旧受退避约束）。
+     */
+    private const val MAX_FAILURES = 64
+
     private val inFlight = HashSet<String>()
     private val generationCounter = AtomicLong()
 
@@ -184,10 +213,15 @@ object BackgroundThemeWorker {
      * 配置关掉时会清空旧结果，避免关掉之后 JS 还读到上一首的答案。
      * `daylight` 不传时取当前配置；它只决定叠层取 stage 的哪一侧，不参与结果 identity。
      * 真正应用叠层时仍以 fresh config 的 daylight 为准。
+     *
+     * `userInitiated` 是「用户主动要求重新生成」（issue H33）：自动触发（切歌 / `onStop` /
+     * 歌词到手）要受失败退避约束，用户主动点的那一次不受 —— 见 [BackgroundThemeBackoff]。
      */
     @JvmStatic
+    @JvmOverloads
     fun request(
-        context: Context, songKey: String, title: String, artist: String, lyricText: String, daylight: Boolean? = null,
+        context: Context, songKey: String, title: String, artist: String, lyricText: String,
+        daylight: Boolean? = null, userInitiated: Boolean = false,
     ) {
         val key = songKey.trim()
         if (key.isEmpty()) return
@@ -214,6 +248,11 @@ object BackgroundThemeWorker {
         synchronized(resultLock) {
             if (results.containsKey(memoryKey)) return
         }
+        /*
+         * failedAttempts 要跟着作业走：作业失败时才知道该不该记账（用户主动那一次不计入
+         * 连续次数，免得把用户的耐心当成机器的重试）。
+         */
+        val retryHeader = scheduleRetryHeader(memoryKey, userInitiated, System.currentTimeMillis()) ?: return
         if (!beginJob(memoryKey)) return
 
         val generation = synchronized(resultLock) {
@@ -235,9 +274,10 @@ object BackgroundThemeWorker {
         try {
             executor.execute {
                 try {
-                    runJob(appContext, store, job, title, artist, lyricText)
+                    runJob(appContext, store, job, title, artist, lyricText, retryHeader)
                 } catch (error: Exception) {
                     Log.w(TAG, "[BackgroundTheme] 任务异常 ${error.javaClass.simpleName}")
+                    recordFailure(job.memoryKey, retryHeader, BackgroundThemeBackoff.Kind.TRANSIENT)
                 } finally {
                     finishJob(memoryKey)
                 }
@@ -246,6 +286,7 @@ object BackgroundThemeWorker {
             /*
              * 兜底分支：`LatestFirstQueue` 自己会腾位置，正常不会再走到这里。
              * 真撞上（例如队列被判满又删不掉）也只是少算一首，缓存/生成都只是加速器。
+             * 这不算「失败」：没发一次请求、没烧一次额度，不该让它占一次冷却。
              */
             finishJob(memoryKey)
             Log.w(TAG, "[BackgroundTheme] 队列拒绝任务，跳过本次")
@@ -349,6 +390,7 @@ object BackgroundThemeWorker {
 
     private fun runJob(
         context: Context, store: FoliaSettingsStore, job: JobIdentity, title: String, artist: String, lyricText: String,
+        retryHeader: Long,
     ) {
         // 入口先验一次：排队期间切歌 / 关配置 / 换密钥的任务在这里结束，不烧云端和 AI。
         val config = validConfig(store, job) ?: return
@@ -357,17 +399,31 @@ object BackgroundThemeWorker {
         if (cloudPayload != null) {
             if (validConfig(store, job) != null && storeResult(job, cloudPayload, "cloud")) {
                 applyToOverlay(context, store, job, cloudPayload)
+                // 拿到了就清掉失败记忆：这一首现在是「有答案」的状态，退避没有理由继续。
+                clearFailure(job.memoryKey)
             }
             return
         }
 
         // 云端未命中后再验一次，之后才会花付费 AI。
         val fresh = validConfig(store, job) ?: return
-        val generated = generate(fresh, store, title, artist, lyricText) ?: return
-        if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
-            applyToOverlay(context, store, job, generated)
-            Log.i(TAG, "[BackgroundTheme] 生成完成")
+        val generated = generate(fresh, store, title, artist, lyricText)
+        if (generated != null) {
+            if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
+                applyToOverlay(context, store, job, generated)
+                clearFailure(job.memoryKey)
+                Log.i(TAG, "[BackgroundTheme] 生成完成")
+            }
+            return
         }
+        /*
+         * 失败落到这里：没拿到结果（云端没命中 + 生成没成 / 未配置 / 401 / 限流）。
+         *
+         * 记下来，下一次自动触发在冷却窗口内直接跳过（issue H33）—— 不记的话，用户每退一次
+         * 后台就是一轮云端往返加一次付费生成。`retryHeader` 带回了这次是谁发起的：用户主动
+         * 那次记成 0，表示「不增加连续次数」，退避只由自动触发的失败驱动。
+         */
+        recordFailure(job.memoryKey, retryHeader, lastFailureKind)
     }
 
     /**
@@ -588,6 +644,93 @@ object BackgroundThemeWorker {
     private fun finishJob(key: String) {
         synchronized(inFlight) {
             inFlight.remove(key)
+        }
+    }
+
+    /**
+     * 这次生成是不是「用户主动」的要求；`0` 表示用户主动（不计入连续次数），`1` 表示自动。
+     *
+     * 用 Long 而不是把布尔塞进 [JobIdentity]：作业身份参与作废判定，多一个只在记账时
+     * 用的字段会让「同样的作业」看起来不一样，得不偿失。
+     */
+    private fun scheduleRetryHeader(key: String, userInitiated: Boolean, nowMs: Long): Long? {
+        synchronized(resultLock) {
+            if (userInitiated) {
+                /* 用户点了「重新生成」：立刻清掉退避，这一次必须真的跑。 */
+                if (failures.remove(key) != null) {
+                    Log.i(TAG, "[BackgroundTheme] 用户主动重试，清掉失败退避")
+                }
+                lastFailureKind = BackgroundThemeBackoff.Kind.TRANSIENT
+                return 0L
+            }
+            val failure = failures[key]
+            if (BackgroundThemeBackoff.shouldSkip(failure, nowMs)) {
+                /*
+                 * 冷却中：直接跳过，不排队、不发请求、不生成。这一行是排查「为什么没主题」
+                 * 的唯一依据，所以把类别与还剩多久都记下来（不含任何凭据）。
+                 */
+                val kind = BackgroundThemeBackoff.kindOf(failure?.kind)
+                val remaining = if (failure != null && failure.streak < BackgroundThemeBackoff.MAX_STREAK) {
+                    BackgroundThemeBackoff.cooldownMs(kind, failure.streak) - (nowMs - failure.atMs)
+                } else {
+                    -1L
+                }
+                Log.i(
+                    TAG,
+                    "[BackgroundTheme] 冷却中，跳过本次自动生成 类别=${kind.name} 连续失败=${failure?.streak}" +
+                        if (remaining >= 0) " 剩余≈${remaining / 1000}s" else " 已停止自动重试",
+                )
+                return null
+            }
+            return 1L
+        }
+    }
+
+    /** 记一次失败。`header == 0`（用户主动那一次）只记类别，不增加连续次数。 */
+    private fun recordFailure(key: String, header: Long, kind: BackgroundThemeBackoff.Kind) {
+        val now = System.currentTimeMillis()
+        synchronized(resultLock) {
+            val previous = failures[key]
+            failures[key] = if (header == 0L) {
+                BackgroundThemeFailure(
+                    kind = kind.name,
+                    atMs = now,
+                    streak = (previous?.streak ?: 0).coerceAtLeast(1),
+                )
+            } else {
+                BackgroundThemeBackoff.recordFailure(previous, kind, now)
+            }
+            val recorded = failures[key]
+            Log.i(
+                TAG,
+                "[BackgroundTheme] 记一次失败 类别=${kind.name} 连续失败=${recorded?.streak} " +
+                    "冷却≈${BackgroundThemeBackoff.cooldownMs(kind, recorded?.streak ?: 1) / 1000}s",
+            )
+        }
+    }
+
+    private fun clearFailure(key: String) {
+        synchronized(resultLock) {
+            failures.remove(key)
+        }
+    }
+
+    /**
+     * 配置一改就整体作废退避（issue H33 的边界条件：用户改完配置必须能立刻重试）。
+     *
+     * 退避按「生成身份」记，而身份里含配置指纹 —— 改了配置本来就会算出新身份、自然不受
+     * 旧记录的约束。但仍然整体清一次：401 那些常常是用户换了密钥之后才发现旧的已经过期，
+     * 他改完就该立刻有一次机会，而不是先等旧身份那几条记录各自过期。
+     *
+     * 由 Lead 在下发配置时调用（`useBackgroundThemeConfig` → `configureBackgroundTheme`）。
+     */
+    @JvmStatic
+    fun onConfigChanged() {
+        synchronized(resultLock) {
+            if (failures.isNotEmpty()) {
+                Log.i(TAG, "[BackgroundTheme] 配置已变更，清掉全部失败退避")
+                failures.clear()
+            }
         }
     }
 }

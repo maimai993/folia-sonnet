@@ -30,6 +30,10 @@ export type AiCacheBackupRow = {
   hits: number;
   created_at: string;
   archived_at: string;
+  /** 写这一版的是谁（见 aiCache.ts 的 `AiCacheEntry.writer`）。老备份没有这一列。 */
+  writer?: string | null;
+  /** 这一版入库时的内容摘要；恢复时原样搬回去，不在恢复路径上重算。 */
+  payload_digest?: string | null;
 };
 
 /** 备份表里的一行：够管理员看清是哪一版，也能整版捞回来。 */
@@ -79,9 +83,10 @@ export const restoreCacheBackup = async (
     db.prepare('SELECT kind, cache_key FROM ai_cache_backups WHERE id = ?').bind(id),
     db.prepare(`
       INSERT INTO ai_cache_backups
-        (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at)
+        (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, archived_at, writer, payload_digest)
       SELECT current.kind, current.cache_key, current.payload_json, current.payload_bytes,
-        current.song_title, current.provider, current.model, current.platform, current.hits, current.created_at, ?
+        current.song_title, current.provider, current.model, current.platform, current.hits, current.created_at, ?,
+        current.writer, current.payload_digest
       FROM ai_cache AS current
       JOIN ai_cache_backups AS target ON target.kind = current.kind AND target.cache_key = current.cache_key
       WHERE target.id = ?
@@ -99,9 +104,10 @@ export const restoreCacheBackup = async (
         )
     `).bind(id, id, id, id, MAX_CACHE_BACKUPS),
     db.prepare(`
-      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at)
+      INSERT INTO ai_cache (kind, cache_key, payload_json, payload_bytes, song_title, provider, model, platform, hits, created_at, updated_at, writer, payload_digest)
       SELECT kind, cache_key, payload_json, COALESCE(payload_bytes, 0), COALESCE(song_title, ''),
-        COALESCE(provider, ''), COALESCE(model, ''), COALESCE(platform, ''), COALESCE(hits, 0), COALESCE(created_at, ?), ?
+        COALESCE(provider, ''), COALESCE(model, ''), COALESCE(platform, ''), COALESCE(hits, 0), COALESCE(created_at, ?), ?,
+        writer, payload_digest
       FROM ai_cache_backups WHERE id = ?
       ON CONFLICT(kind, cache_key) DO UPDATE SET
         payload_json = excluded.payload_json,
@@ -110,7 +116,9 @@ export const restoreCacheBackup = async (
         provider = excluded.provider,
         model = excluded.model,
         platform = excluded.platform,
-        updated_at = excluded.updated_at
+        updated_at = excluded.updated_at,
+        writer = excluded.writer,
+        payload_digest = excluded.payload_digest
     `).bind(now, now, id),
     db.prepare('DELETE FROM ai_cache_backups WHERE id = ?').bind(id),
   ]);

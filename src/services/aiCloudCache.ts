@@ -1,6 +1,11 @@
 import { createAiFetch, fetchAiCacheViaNative } from './aiNativeFetch';
 import { describeAiTarget, type AiCompletionTarget } from './aiCompletion';
-import { isFoliaCloudCacheEnabled, resolveCloudApiUrl } from './foliaCloud';
+import {
+    CLOUD_WRITE_TOKEN_HEADER,
+    isFoliaCloudCacheEnabled,
+    resolveCloudApiUrl,
+    resolveCloudWriteToken,
+} from './foliaCloud';
 import { dropLocalCloudEntry, forgetLocalCloudMiss, readLocalCloudEntry, readLocalCloudMiss, rememberLocalCloudMiss, writeLocalCloudEntry } from './aiCloudCacheLocal';
 import { md5 } from '../utils/md5';
 
@@ -10,11 +15,18 @@ import { md5 } from '../utils/md5';
 // 缓存键是**歌词文件本身的 MD5**，不是歌名、不是播放源 —— 同一份歌词，
 // 谁先生成谁上传，后面的人直接取答案，不再烧一次模型调用。
 //
-// 两条纪律：
-//  1. **拉取不需要 Key。** 开关默认打开正是为了没填 Key 的人：他本来一个
-//     主题都生成不出来，能命中别人的结果就是白赚。
+// 三条纪律：
+//  1. **拉取不需要 Key，也不需要任何凭证。** 服务端的这个开关默认打开正是为了没填 Key
+//     的人：他本来一个主题都生成不出来，能命中别人的结果就是白赚。
 //  2. **缓存永不阻塞功能。** 拉失败、推失败、返回的 JSON 不认识 —— 全部
 //     静默退回「照常生成」，缓存只是加速器，不是依赖。
+//  3. **写入要有凭证，读到的内容要能核对（issue C6）。**
+//     · 服务端现在只收带准入凭证的写入（管理员会话或写入令牌）—— 这是一张全局共享的表，
+//       一条冒名写入会改掉所有人拿到的主题。客户端把用户在设置里填的写入令牌带在
+//       `X-Folia-Cache-Token` 上；没填令牌 = 只读，照样能拉别人的答案。
+//     · 每条条目回来都带 `payloadDigest` 与 `verifyKey`。客户端按同一套算法复算一遍，
+//       对不上就**当没有**（而不是当别人的答案用）。万一服务端换了算法，旧条目会被判成
+//       「读不到」而不是「读错」，代价只是回云端重新生成一次。
 //
 // 本地那一层（aiCloudCacheLocal.ts）在拉之前先看：本机存着就直接用，零请求；云端拿到的
 // 一律回写本地。服务器扛不住的是「同一首歌反复问同一个键」，本地命中正好省掉的就是它。
@@ -343,6 +355,11 @@ export const fetchEntry = async (kind: AiCloudCacheKind, key: string): Promise<u
         const data = await response.json().catch(() => null) as { hit?: unknown; entry?: unknown } | null;
         const entry = data?.entry;
         if (data?.hit !== true || !isPlainObject(entry) || !('payload' in entry)) return null;
+        /* 内容与摘要对不上（或没有摘要）就当没有 —— 见 verifyEntryDigest。 */
+        if (!await verifyEntryDigest(kind, key, entry)) {
+            console.warn('[ai-cache] entry rejected: payload digest does not match');
+            return null;
+        }
         /* 取到就落本地。这条路取的是「按已知键」的一条，认它作 exact —— 内容有没有被
            早年的「强制匹配」污染，由调用方（按高亮词判定那一步）负责，不是这里。 */
         void writeLocalCloudEntry(kind, key, entry.payload, 'exact');
@@ -422,6 +439,70 @@ export interface AiCloudCachePushMeta {
 const isPlainObject = (value: unknown): value is Record<string, unknown> => (
     Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 );
+
+/**
+ * 服务端算摘要用的公钥标识 —— 与 `sync-server/src/aiCacheDigest.ts` 的 `CACHE_VERIFY_KEY`
+ * 必须是同一个值。服务端换了算法就换这个名字，老条目的摘要自然不再被认。
+ */
+const CACHE_VERIFY_KEY = 'folia-cache-digest-v1';
+
+/** SHA-256 十六进制。用 WebCrypto；没有它（老 WebView / 非安全上下文）就 `null`。 */
+const sha256Hex = async (text: string): Promise<string | null> => {
+    const subtle = typeof globalThis.crypto !== 'undefined' ? globalThis.crypto.subtle : undefined;
+    if (!subtle?.digest) return null;
+    try {
+        const buffer = await subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * 一条回来的条目能不能用：**内容与摘要对不上就当没有**（issue C6）。
+ *
+ * 摘要绑的是 `[verifyKey, kind, key, writer, payload_json]`（见 `aiCacheDigest.ts`）。
+ * 服务端在写入时算一次、读出来时把摘要一起交给客户端，客户端照着复算：
+ *
+ *  · 库被直接改过、备份被替换过、中间环节动过手脚 —— 对不上，丢弃；
+ *  · 把 A 歌的答案挪到 B 歌的键下 —— `kind`/`key` 进了摘要，对不上，丢弃；
+ *  · **老条目（没有摘要）也一并丢弃**：从本改动之前的库里分不出「正常写入」和
+ *    「早年那段谁都能写时写进来的」，采信它等于把 C6 的漏洞留在读侧。
+ *
+ * 代价是那些条目要重新生成一次 —— 而生成失败时功能照常（缓存永不阻塞功能）。
+ *
+ * `payload_json` 的复算方式必须和服务端**逐字节一致**：服务端存的是
+ * `JSON.stringify(parsed.payload)`，客户端拿到的是解析后的对象，再 stringify 一遍。
+ * 两侧都是同一份 JS 引擎语义（JSON.parse→stringify 的结果对键序稳定），所以对得上。
+ */
+const verifyEntryDigest = async (
+    kind: AiCloudCacheKind,
+    key: string,
+    entry: Record<string, unknown>,
+): Promise<boolean> => {
+    const digest = String(entry.payloadDigest ?? '').trim().toLowerCase();
+    const verifyKey = String(entry.verifyKey ?? '').trim();
+    if (!/^[a-f0-9]{64}$/.test(digest) || verifyKey !== CACHE_VERIFY_KEY) return false;
+
+    let payloadJson = '';
+    try {
+        payloadJson = JSON.stringify(entry.payload);
+    } catch {
+        return false;
+    }
+    const writer = String(entry.writer ?? '');
+    const expected = await sha256Hex(JSON.stringify([CACHE_VERIFY_KEY, kind, key, writer, payloadJson]));
+    /* 没有 WebCrypto 时 `null`：宁可当「验不了」也不当「验过了」。 */
+    return expected !== null && expected === digest;
+};
+
+/** 写缓存用的请求头：带上用户配置的准入令牌（没配就是只读，不带这一行）。 */
+const writeHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const token = resolveCloudWriteToken();
+    if (token) headers[CLOUD_WRITE_TOKEN_HEADER] = token;
+    return headers;
+};
 
 const withTimeout = (): AbortSignal => {
     const controller = new AbortController();
@@ -536,9 +617,16 @@ export const pullAiCloudCache = async (
 
     const entry = data?.entry;
     if (data?.hit === true && isPlainObject(entry) && 'payload' in entry) {
-        /* 云端给了就落本地：下次同键是本地命中，零请求。 */
-        void writeLocalCloudEntry(kind, key, entry.payload, 'exact');
-        return { status: 'hit', payload: entry.payload, matched: 'exact' };
+        /*
+         * 先核摘要：库被改过、内容与来源对不上的那条不能当成答案用（issue C6）。
+         * 对不上就当这一档没命中，继续走下面按歌名捞一次的那条路。
+         */
+        if (await verifyEntryDigest(kind, key, entry)) {
+            /* 云端给了就落本地：下次同键是本地命中，零请求。 */
+            void writeLocalCloudEntry(kind, key, entry.payload, 'exact');
+            return { status: 'hit', payload: entry.payload, matched: 'exact' };
+        }
+        console.warn('[ai-cache] exact entry rejected: payload digest does not match');
     }
 
     /*
@@ -624,7 +712,13 @@ export const pullAiCloudCache = async (
     return { status: 'miss' };
 };
 
-/** 推一次。失败就当没发生过，绝不打断已经生成好的结果。 */
+/**
+ * 推一次。失败就当没发生过，绝不打断已经生成好的结果。
+ *
+ * 服务端现在只收带准入凭证的写入（issue C6）。没配置写入令牌时**不发请求**：
+ * 那注定 401，白跑一趟还会在日志里留下一条看着像故障的记录。只读用户照样能拉别人的答案 ——
+ * 这就是「没填 Key 也能用」那条纪律现在的位置。
+ */
 export const pushAiCloudCache = async (
     kind: AiCloudCacheKind,
     key: string,
@@ -633,11 +727,13 @@ export const pushAiCloudCache = async (
 ): Promise<boolean> => {
     if (!isFoliaCloudCacheEnabled()) return false;
     if (!/^[a-f0-9]{32}$/.test(key)) return false;
+    const writeToken = resolveCloudWriteToken();
+    if (!writeToken) return false;
 
     try {
         const response = await createAiFetch()(resolveAiCloudCacheUrl(kind, key), {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            headers: writeHeaders(),
             body: JSON.stringify({
                 payload,
                 songTitle: meta.songTitle ?? '',
@@ -649,6 +745,11 @@ export const pushAiCloudCache = async (
             }),
             signal: withTimeout(),
         });
+        /* 401/403 = 令牌不对或没签发：记一行就够，别再指望下一次能过。 */
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`[ai-cache] push refused (${response.status}): the cache write token is missing or wrong`);
+            return false;
+        }
         /* 成功就地留一份：这首自己刚生成的，下次同键本地命中，不用再问服务器。 */
         if (response.ok) {
             forgetMiss(kind, key);
