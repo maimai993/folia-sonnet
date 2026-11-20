@@ -1549,20 +1549,28 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
-     * 投送前的准备：把转发服务临时对局域网开放，并把手机 IP / 端口交给 Web 层。
+     * 投送前的准备：打开一次带截止时间的局域网音频租约，并把手机 IP / 端口 / 凭证交给 Web 层。
      *
      * 安卓上歌曲地址大多是 `http://127.0.0.1:<port>/remote-audio/<token>`（CORS 转发），
      * 音响把 127.0.0.1 当成它自己，直接推过去必然无声。这里给出可替换的局域网地址，
-     * Web 层把 host 换掉即可；端口和 token 都是本次会话的，不会持久化。
+     * Web 层把 host 换掉即可；端口、令牌和租约都是本次会话的，不会持久化。
+     *
+     * 安全：租约不是「开一个全局布尔」，而是一次性凭证 —— 局域网连接必须带上本次签发的
+     * `lanToken`、来源必须是局域网、且响应不再下发 `Access-Control-Allow-Origin: *`。
+     * 幂等续期：投送期间反复调用不换凭证，只顺延截止时间。
      */
     @PluginMethod
     fun lanCastPrepare(call: PluginCall) {
         try {
             if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
             val port = localAudioServer!!.start()
-            localAudioServer!!.setLanClientsAllowed(true)
+            val lease = localAudioServer!!.openLanCastLease()
             val result = JSObject()
             result.put("port", port)
+            // 音响必须拿这个令牌才能取流；pairCode 是给人看的配对码（日志 / 界面提示）。
+            result.put("token", lease.lanToken)
+            result.put("pairCode", lease.pairCode)
+            result.put("expiresAt", lease.expiresAtMillis)
             val lanIp = LocalAudioServer.lanIpv4()
             if (lanIp != null) result.put("lanIp", lanIp)
             call.resolve(result)
@@ -1571,10 +1579,10 @@ class FoliaNativePlugin : Plugin() {
         }
     }
 
-    /** 停止投送后收口：局域网设备重新连不进来，本机回环播放不受影响。 */
+    /** 停止投送后收口：局域网设备重新连不进来（旧 URL 一律 403），本机回环播放不受影响。 */
     @PluginMethod
     fun lanCastRelease(call: PluginCall) {
-        localAudioServer?.setLanClientsAllowed(false)
+        localAudioServer?.releaseLanCastLeases()
         call.resolve()
     }
 
