@@ -35,12 +35,35 @@ const dictOf = (value) => (value && typeof value === 'object' && !Array.isArray(
 /** 上游的清单：null / 缺省当作没有，其他非数组是格式变了。 */
 const listOf = (value) => (Array.isArray(value) ? value : []);
 
-/** 分页参数：不是正整数用默认值，超过上限压到上限。 */
+/**
+ * 分页参数：不是正整数用默认值，超过上限压到上限。
+ *
+ * `max` 有默认值（M26）：改前它是必传的约定而不是类型，`pageSizeOf(params.page, 1)`
+ * 漏传一次，`Math.min(undefined, n)` 就是 NaN，而且这个 NaN 会被原样写进发给上游的
+ * 分页参数里 —— 没有报错、没有日志，只表现为「某个分类歌单突然是空的」。
+ * 现在返回值永远是安全整数：上限缺省 `DEFAULT_PAGE_SIZE_MAX`，`fallback` 给坏了
+ * （负数、小数、非数字）也一律退回 1。
+ *
+ * 边界：`value` 为负数 / 0 / 小数 / 非数字 / 空串 → fallback；超大值 → 上限；
+ * `Number.parseInt('1e999')` 得 1（不是 Infinity），所以它按 1 处理，不会溢出。
+ */
+const DEFAULT_PAGE_SIZE_MAX = 100;
+/**
+ * 页码也有上限（M26）：上游没有一页之外的语义，翻到几百页之后只会回空。
+ * 与刷歌模式的 `Math.min(100, …)` 同一条线。
+ */
+const MAX_PAGE_NUMBER = 100;
+
 const pageSizeOf = (value, fallback, max) => {
+    const ceiling = Number.isSafeInteger(max) && max > 0 ? max : DEFAULT_PAGE_SIZE_MAX;
+    const base = Number.isSafeInteger(fallback) && fallback > 0 ? fallback : 1;
     const parsed = Number.parseInt(String(value ?? ''), 10);
-    if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
-    return Math.min(max, parsed);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) return Math.min(ceiling, base);
+    return Math.min(ceiling, parsed);
 };
+
+/** 页码归一化：正整数、不超过 `MAX_PAGE_NUMBER`，其余回 1。 */
+const pageNumber = (value) => Math.min(MAX_PAGE_NUMBER, pageSizeOf(value, 1));
 
 const offsetOf = (value) => {
     const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -120,7 +143,7 @@ const toPlaylist = (entry) => {
 export async function readCategoryPlaylists(params, cookieHeader) {
     const id = requiredId(params.id);
     if (id === undefined) return { code: 0, playlists: [] };
-    const page = pageSizeOf(params.page, 1);
+    const page = pageNumber(params.page);
     const size = pageSizeOf(params.limit, 20, 40);
     const result = await qqMusicuCall(
         'music.playlist.PlayListCategory', 'get_category_content',
@@ -665,7 +688,7 @@ export async function searchCatalog(params, cookieHeader) {
         ? params.type : 'song';
     const keyword = String(params.keyword ?? '').trim();
     if (!keyword || keyword.length > 60) return { code: 0, type, items: [], more: false };
-    const page = pageSizeOf(params.page, 1);
+    const page = pageNumber(params.page);
     const limit = pageSizeOf(params.limit, 10, 20);
     const signedIn = Boolean(qqCookieUin(cookieHeader));
     const result = await qqMusicuCall(
