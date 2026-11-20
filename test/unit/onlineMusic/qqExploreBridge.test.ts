@@ -100,15 +100,14 @@ describe('读接口的失败语义（M25）', () => {
 
     it('网络失败回统一失败对象，不再是一份空集合', async () => {
         answer = () => ({ ok: false, loginRequired: false, code: 502, data: null });
-        const { readNewSongs, readToplists, readRadioList, readUserCloud } = await load();
+        const { readToplists, readUserCloud, readUserVip } = await load();
 
         for (const [asked, params] of [
-            [readNewSongs, {}],
-            [readToplists, {}],
-            [readRadioList, {}],
-            [readUserCloud, {}],
+            [readToplists, [COOKIE]],
+            [readUserCloud, [{}, COOKIE]],
+            [readUserVip, [COOKIE]],
         ] as const) {
-            const result: any = await asked(params as any, COOKIE);
+            const result: any = await asked(...(params as any));
             expect(isFailure(result), asked.name).toBe(true);
             expect(result.__foliaBridgeError).toBe('NETWORK');
             // 路由名留在文案里：面板上能看出是哪一栏读不出来。
@@ -116,17 +115,30 @@ describe('读接口的失败语义（M25）', () => {
         }
     });
 
+    it('公开栏的读接口也一样：网络断了就说断了', async () => {
+        answer = () => ({ ok: false, loginRequired: false, code: 502, data: null });
+        const { readNewSongs, readPlaylistCategories } = await load();
+
+        const songs: any = await readNewSongs({}, COOKIE);
+        expect(songs.__foliaBridgeError).toBe('NETWORK');
+        const categories: any = await readPlaylistCategories(COOKIE);
+        expect(categories.__foliaBridgeError).toBe('NETWORK');
+    });
+
     it('没登录仍然是 AUTH_REQUIRED，与「读不出来」分开', async () => {
         answer = () => ({ ok: false, loginRequired: true, code: 1000, data: null });
-        const { readNewSongs } = await load();
+        const { readNewSongs, readUserCloud } = await load();
 
         const result: any = await readNewSongs({}, '');
-
         expect(result.__foliaBridgeError).toBe('AUTH_REQUIRED');
+
+        // 需要登录的那几条：连请求都不发，直接回 AUTH_REQUIRED。
+        const cloud: any = await readUserCloud({}, '');
+        expect(cloud.__foliaBridgeError).toBe('AUTH_REQUIRED');
     });
 
     it('上游明确答「空」时仍然是空集合', async () => {
-        answer = () => ({ ok: true, data: {} });
+        answer = () => ({ ok: true, data: { songlist: [], lanlist: [], group: [] } });
         const { readNewSongs, readToplists } = await load();
 
         const songs: any = await readNewSongs({}, COOKIE);

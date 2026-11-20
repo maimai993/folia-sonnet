@@ -241,9 +241,9 @@ const redirectHostOf = (response) => {
  * 发一次请求，把「fetch 本身 reject」收进同一族错误（M28）。
  *
  * `redirect: 'error'` 撞上重定向时 fetch 交回来的是一个 TypeError —— 不上这一层，
- * 它会被 handleBodianRequest 的兜底分支当成 invalid-response，又一次把
- * 「上游要求换地址」错报成「协议格式错误」。这里按错误名区分两句文案，
- * 都归成 network（可以退避重试的那一类），并带上被拒的主机名 —— 不带完整地址。
+ * 它会被兜底分支当成 invalid-response，又一次把「上游要求换地址」错报成「协议格式错误」。
+ * 这里按错误名区分两句文案，都归成 network（可以退避重试的那一类），
+ * 并带上被拒的主机名 —— 不带完整地址。
  */
 const fetchForCall = async (url, init) => {
   try {
@@ -260,30 +260,25 @@ const fetchForCall = async (url, init) => {
     // 所以两只手都留着：名字对不上就按网络失败说。
     if (error instanceof TypeError && /redirect/i.test(String(error.message || ''))) {
       console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { host: target });
-      throw new BodianError(
-        'network',
-        `Bodian responded with a redirect to ${target}; redirects are not followed`,
-      );
+      throw new BodianError('network', `upstream asked to redirect to ${target}; redirects are not followed`);
     }
     console.warn('[Bodian] 请求没发出去', { host: target, error });
-    throw new BodianError('network', `Bodian request to ${target} failed`);
+    throw new BodianError('network', `request to ${target} failed`);
   }
 };
 
 /**
- * 上游的重定向一律不跟随（M28）。
- *
- * 波点的 token 在**请求头**里，而重定向是自动重发的：`redirect: 'follow'` 会把带着
- * token 的请求原样交到跳转目标主机手上。上游被劫持或配置错误时，那一下就是凭据外泄。
- * 这里一律当失败处理，并说出「跳到了哪台主机」—— 出问题时能定位，又不把 token 送出去。
- * 真要换地址，让上游把地址写进设置里重新走一遍（那时会重新过一遍主机判定）。
+ * 上游的重定向一律不跟随（M28）：token 在**请求头**里，而重定向是自动重发的，
+ * 跟过去就等于把它交给跳转目标主机。这里一律当失败处理，并说出跳到了哪台主机
+ * —— 出问题时能定位，又不把 token 送出去。真要换地址，让上游把地址重新配一遍
+ * （那时会再走一遍主机判定）。
  */
 const redirectFailure = (response) => {
   const host = redirectHostOf(response);
   console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { status: response.status, host });
   return new BodianError(
     'network',
-    `Bodian redirected to ${host || 'another location'} (HTTP ${response.status}); redirects are not followed`,
+    `upstream redirected to ${host || 'another location'} (HTTP ${response.status}); redirects are not followed`,
     response.status,
   );
 };
@@ -357,7 +352,7 @@ const createClient = (deviceId) => ({
       throw redirectFailure(response);
     }
     if (response.status === 401) {
-      throw new BodianError('auth-required', 'Bodian sign-in is required', 401);
+      throw new BodianError('auth-required', 'sign-in is required', 401);
     }
     if (!response.ok) {
       // 非 2xx：分类只认状态码；响应体里的业务码 / 文案有就补上，没有也不影响分类。
@@ -367,7 +362,7 @@ const createClient = (deviceId) => ({
         : typeof detail?.message === 'string' ? detail.message : '';
       throw new BodianError(
         'network',
-        `Bodian HTTP ${response.status}${message ? `: ${message.slice(0, 200)}` : ''}`,
+        `HTTP ${response.status}${message ? `: ${message.slice(0, 200)}` : ''}`,
         response.status,
       );
     }
@@ -376,7 +371,7 @@ const createClient = (deviceId) => ({
       // 2xx 但读不出响应体：这才是真正的「协议格式错误」。
       throw new BodianError(
         'invalid-response',
-        `Bodian returned an unreadable response (${unreadableBodyNote(response)})`,
+        `unreadable response (${unreadableBodyNote(response)})`,
         response.status,
       );
     }
@@ -394,7 +389,7 @@ const createClient = (deviceId) => ({
       }
       throw new BodianError(
         code === 11012 ? 'auth-required' : code === 20018 ? 'not-playable' : 'invalid-response',
-        `Bodian rejected the request (code ${payload?.code ?? 'missing'})`,
+        `rejected the request (code ${payload?.code ?? 'missing'})`,
         payload?.code,
       );
     }

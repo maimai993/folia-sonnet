@@ -1,4 +1,4 @@
-﻿// test/unit/onlineMusic/platformNamePlaces.ts
+// test/unit/onlineMusic/platformNamePlaces.ts
 // The files outside a platform's own folders that name the platform, with the number of lines
 // that do (platformNameCount.ts counts them) and why those lines may stay. The numbers only go
 // down: omniArchitecture.test.ts fails when a file names a platform more often than it says
@@ -152,7 +152,7 @@ export const PLATFORM_NAME_PLACES: Record<string, PlatformNamePlace> = {
     'src/library/suites/grid/home/Grid3D.tsx': { n: { lxmusic: 14 }, kind: 'doc', why: '洛雪在首页的三块专属卡流（歌单筛选条 / 电台榜单 / 专辑封面墙）就是在这里分支的：LxSquareToolbar / LxChartBoard / LxAlbumWall 三个组件的入口只能由首页套件决定，挪进 lxmusic 目录就等于让平台自己挑首页布局' },
     'src/library/suites/grid/transitions/standInHandover.ts': { n: { netease: 1, ytm: 2 }, kind: 'doc', why: 'comments on the picture-host rules under them (YouTube stills, Google\'s picture hosts, NetEase\'s hosts); those rules would go with getSizedCoverUrl in src/utils/coverUrl.ts' },   // comments only,
     'src/mods/folium/lyricsSource.ts': { n: { netease: 1 }, kind: 'doc' },   // comments only,
-    'src/nativeBridge/api/bodian.js': { n: { bodian: 72 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the encrypted session store 2026-11-20: the slot name, the migration and the warnings that name the platform' },
+    'src/nativeBridge/api/bodian.js': { n: { bodian: 79 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the encrypted session store 2026-11-20: the slot name, the migration and the warnings that name the platform; raised by M28 2026-11-21 (+7 lines): 先判状态码再解析响应体、重定向一律不跟随，新增的诊断行首是 [Bodian] 的 console.warn —— 日志切分要靠它，写进一行统一文案就读不出是哪一段出的错；同一次改动里已经删掉 7 条只用于错误文案的平台名' },
     'src/nativeBridge/api/cookies.js': { n: { netease: 11, qq: 51, kugou: 9 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the encrypted session store 2026-11-20: each platform now has a secure slot and says whether the cookie carries an account' },
     'src/nativeBridge/api/eapi.js': { n: { netease: 7 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17' },
     'src/nativeBridge/api/folia.js': { n: { netease: 19, qq: 140, kugou: 15, bodian: 3 }, kind: 'question', why: 'raised by the upstream merge 2026-10-17; raised by the logout cleanup that lives in the platform folder, which the shared dispatch table has to import (2026-11-02); raised by the cookie hand-off after a QR confirmation; raised by the daily-recommendation fallbacks and the explore route traces 2026-10-20; raised by the guest (anonymous) session 2026-10-21; raised by the trace of which gateway answered 2026-10-21; raised by the three-in-one login channel 2026-10-22 (the backend declares qq/wechat/qqmusic and hands the app channel to qq/appLogin.js); raised by the comment routes (/comment/hot, /comment/music) the song-comments mod asks for (2026-11-11)' },
