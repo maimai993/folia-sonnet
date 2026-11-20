@@ -2,6 +2,11 @@ package top.izuna.foliamajor.ai
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import top.izuna.foliamajor.FoliaPrivateNetworks
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 // android/app/src/test/java/top/izuna/foliamajor/ai/AiEndpointsTest.kt
 // 三套协议端点解析的边界。这里的规则错一条，那一家的用户就是「填了 Key 也发不出去」，
@@ -128,5 +133,158 @@ class AiEndpointsTest {
         assertEquals(false, out.contains("abc123def456789"))
         assertEquals(false, out.contains("sk-abcd12345678"))
         assertEquals(false, out.contains("zz9888hh0011"))
+    }
+
+    // ---- 端点准入（M30）----
+    //
+    // 改前这里什么都不拦：baseUrl 填 127.0.0.1 / 10.x / 192.168.x，原生网络栈就照着发出去，
+    // 响应原样回到页面 —— 页面侧的主机白名单对这条通道无效。
+    // 这里钉住三件事：内网与环回在**发请求之前**就被拒；公网主机照旧发得出去
+    // （否则就是把所有人自建的第三方 AI 代理一起打死）；地址段判定与 httpRequest 同一条。
+
+    /** 一个「通过了主机判定」的桩：记下被放行的地址，不做白名单（那是 FoliaNativeAccess 的事）。 */
+    private class PassGate : (String) -> Unit {
+        val passed = ArrayList<String>()
+        override fun invoke(url: String) {
+            passed.add(url)
+        }
+    }
+
+    private fun openAiConfig(baseUrl: String) = AiConfig(
+        provider = "custom",
+        geminiApiKey = "",
+        geminiApiUrl = "",
+        apiKey = "fixture-key",
+        model = "m1",
+        baseUrl = baseUrl,
+        temperature = 0.7,
+    )
+
+    /**
+     * 起一个只活在这条用例里的本地服务：收到请求就回一个最小的 chat/completions 负载。
+     *
+     * 不用 com.sun.net.httpserver —— 它不在 kotlin-stdlib 能编到的范围里，安卓的单元测试
+     * 环境也不保证有；裸 ServerSocket 几下就够，还顺手数得出「到底发了几次」。
+     */
+    private class LocalEndpoint {
+        val socket = ServerSocket(0, 0, InetAddress.getLoopbackAddress())
+        val port: Int = socket.localPort
+        val served = AtomicInteger()
+
+        init {
+            thread(isDaemon = true) {
+                while (!socket.isClosed) {
+                    try {
+                        val client = socket.accept()
+                        val buffer = ByteArray(2048)
+                        val read = client.getInputStream().read(buffer)
+                        val head = if (read > 0) String(buffer, 0, read) else ""
+                        if (head.contains("HTTP/")) served.incrementAndGet()
+                        val body = """{"choices":[{"message":{"content":"ok"}}]}""".toByteArray()
+                        val response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n" +
+                            "Content-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                        client.getOutputStream().write(response.toByteArray())
+                        client.getOutputStream().write(body)
+                        client.getOutputStream().flush()
+                        client.close()
+                    } catch (_: Exception) {
+                        break
+                    }
+                }
+            }
+        }
+
+        fun stop() {
+            runCatching { socket.close() }
+        }
+    }
+
+    private fun assertBlocked(baseUrl: String) {
+        val gate = PassGate()
+        try {
+            AiCompletion.run(openAiConfig(baseUrl), "s", "p", 0, false) { url -> gate(url) }
+            throw AssertionError("$baseUrl 应当被拦下")
+        } catch (error: AiCompletion.AiException) {
+            assertEquals("ai-endpoint-blocked", error.code)
+        }
+        // 判定发生在发请求之前：闸门一次都没被问过。
+        assertEquals(emptyList<String>(), gate.passed)
+    }
+
+    @Test
+    fun `AI 端点指向回环地址时不发请求就拒绝`() {
+        val local = LocalEndpoint()
+        try {
+            assertBlocked("http://127.0.0.1:${local.port}/v1")
+            // 服务端一次都没被敲过：拦在发请求之前，不是拦在收到响应之后。
+            assertEquals(0, local.served.get())
+        } finally {
+            local.stop()
+        }
+    }
+
+    @Test
+    fun `AI 端点指向私网地址时不发请求就拒绝`() {
+        // 10/8、172.16/12、192.168/16 三条都要拦：少一条就是少一条通往内网的路。
+        assertBlocked("http://10.1.2.3:8788/v1")
+        assertBlocked("http://172.20.0.9:8788/v1")
+        assertBlocked("http://192.168.1.10:8788/v1")
+        assertBlocked("http://[::1]:8788/v1")
+        assertBlocked("http://localhost:8788/v1")
+    }
+
+    @Test
+    fun `用户配置的公网自建端点照旧发得出去`() {
+        /*
+         * 这是 M30 的另一半：只拦内网，不搞「只许某几家」的白名单 —— 很多人用的就是
+         * 自建的 / 第三方的 API 代理，它们本来就该能用。
+         *
+         * 用 httpbin 之类的公网地址会让单测依赖外网，所以这里只验「判定放行」这一步：
+         * 公网主机过闸之后，被放行的正是拼出来的那条地址。
+         */
+        val gate = PassGate()
+        try {
+            AiCompletion.run(openAiConfig("https://proxy.example.test/v1"), "s", "p", 0, false) { url -> gate(url) }
+        } catch (_: Exception) {
+            // 这一步不真的连外网：放行之后可能失败在 DNS / 连接上，与准入判定无关。
+        }
+        assertEquals(listOf("https://proxy.example.test/v1/chat/completions"), gate.passed)
+    }
+
+    @Test
+    fun `私有网段按与 httpRequest 相同的口径拦下`() {
+        // 这一组和 FoliaPrivateNetworks 共用同一份实现：这里列出来的，httpRequest 那边同样被拦。
+        // 期望值是「命中的那一段」，不是主机本身 —— 日志与错误文案只说地址段。
+        val ranges = mapOf(
+            "127.0.0.1" to "127.0.0.0/8",
+            "127.1.2.3" to "127.0.0.0/8",
+            "0.0.0.0" to "0.0.0.0/8",
+            "10.0.0.1" to "10.0.0.0/8",
+            "172.16.0.1" to "172.16.0.0/12",
+            "172.31.255.255" to "172.16.0.0/12",
+            "192.168.0.1" to "192.168.0.0/16",
+            "169.254.1.1" to "169.254.0.0/16",
+            "100.64.0.1" to "100.64.0.0/10",
+            "198.19.0.1" to "198.18.0.0/15",
+            "224.0.0.1" to "224.0.0.0/4",
+            "::1" to "::1",
+            "::" to "::",
+            "fc00::1" to "fc00::/7",
+            "fd12:3456::1" to "fc00::/7",
+            "fe80::1" to "fe80::/10",
+            "::ffff:192.168.0.1" to "::ffff:192.168.0.0/16",
+            "localhost" to "localhost",
+            "nas.localhost" to "localhost",
+        )
+        ranges.forEach { (host, range) ->
+            assertEquals(host, range, FoliaPrivateNetworks.describePrivateLiteral(host))
+            // 上面每一条都同时被判成内网：describe 与 isPrivate 是同一份实现的两种说法。
+            assertEquals(host, true, FoliaPrivateNetworks.isPrivateLiteral(host))
+        }
+        // 公网字面量与解析不出来的东西不算内网（白名单那一步另外管）。
+        assertEquals(null, FoliaPrivateNetworks.describePrivateLiteral("8.8.8.8"))
+        assertEquals(null, FoliaPrivateNetworks.describePrivateLiteral("api.deepseek.com"))
+        assertEquals(null, FoliaPrivateNetworks.describePrivateLiteral("172.32.0.1"))
+        assertEquals(false, FoliaPrivateNetworks.isPrivateLiteral("8.8.8.8"))
     }
 }

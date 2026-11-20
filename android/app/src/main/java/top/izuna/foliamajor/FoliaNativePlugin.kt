@@ -3605,8 +3605,16 @@ class FoliaNativePlugin : Plugin() {
                     baseUrl = store.getString("ai.baseUrl") ?: "",
                     temperature = store.getDouble("ai.temperature", 0.7),
                 )
+                /*
+                 * M30：AI 端点走的是原生网络栈，页面侧的主机白名单管不到它。所以发请求
+                 * 之前过 requireAllowedRequestUrl —— 与 httpRequest 同一套判定（`gate` 就是
+                 * 那一层，出处理由见 denyIfNotMainDocument）：内网 / 环回 / 链路本地一律拒，
+                 * 公网主机要在页面白名单里（用户自建的 AI 代理就登记在那里）。被拦时抛
+                 * FoliaNativeAccessDenied，AiEndpoints.guardRequestUrl 把它转成 ai-endpoint-blocked。
+                 */
                 val text = top.izuna.foliamajor.ai.AiCompletion.run(
-                        config, system, prompt, maxTokens, jsonMode)
+                        config, system, prompt, maxTokens, jsonMode,
+                ) { url -> gate.requireAllowedRequestUrl(url, "runAiCompletion") }
                 val out = JSObject()
                 out.put("text", text)
                 call.resolve(out)
