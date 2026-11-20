@@ -1,6 +1,14 @@
 import { qqCookieUin } from '../cookies.js';
 import { qqAuthRequired, qqBridgeFailure, qqMusicuBatch, qqMusicuCall } from '../qq.js';
 import { noteLibraryStep } from '../libraryTrace.js';
+import {
+    ANONYMOUS_LITE_COMM,
+    ANONYMOUS_LITE_COOKIE,
+    ANONYMOUS_SONG_SEARCH_TYPE,
+    LITE_SEARCH_MAX_KEYWORD_LENGTH,
+    liteSearchIdOf,
+    liteSearchParams,
+} from './anonymousSearch.js';
 
 // src/nativeBridge/api/qq/explore.js
 //
@@ -751,19 +759,13 @@ const SEARCH_TYPES = { song: 0, singer: 1, album: 2, playlist: 3 };
 const SEARCH_LIST_KEYS = {
     song: 'item_song', singer: 'singer', album: 'item_album', playlist: 'item_songlist',
 };
-/** 不登录搜歌要送 7：上游已经不认 0，送 0 一律回 2001。带会话照旧送 0。 */
-const ANONYMOUS_SONG_SEARCH_TYPE = 7;
-/** 精简版客户端的匿名身份：只放协议需要的应用与版本常数，不带设备指纹。 */
-const ANONYMOUS_LITE_COMM = {
-    ct: 11, cv: '1003006', v: '1003006', tmeAppID: 'qqmusiclight', nettype: 'NETWORK_WIFI', udid: '0', uid: '0',
-};
-/** 标头里的 `tmeLoginType=-1` 表示未登录。 */
-const ANONYMOUS_LITE_COOKIE = 'tmeLoginType=-1';
+
+// 匿名身份（`ANONYMOUS_SONG_SEARCH_TYPE` / `ANONYMOUS_LITE_COMM` / `ANONYMOUS_LITE_COOKIE`）
+// 不再在这里自建：页面侧的 qqLyricProvider.ts 也走同一条上游，两份常数各记各的实验结论
+// 迟早会漂移（issue M27）。唯一来源是 ./anonymousSearch.js。
 
 /** 每次搜索带一个随机数字串；不需要密码学强度。 */
-const searchIdOf = () => `${Math.floor(Math.random() * 9 + 1)}${Array.from(
-    { length: 17 }, () => Math.floor(Math.random() * 10),
-).join('')}`;
+const searchIdOf = () => liteSearchIdOf();
 
 /**
  * 有会话就带会话搜（匿名搜歌常被上游以 2001 拒绝），没有会话用精简版的匿名身份。
@@ -774,24 +776,21 @@ export async function searchCatalog(params, cookieHeader) {
         ? params.type : 'song';
     const keyword = String(params.keyword ?? '').trim();
     // 空关键字是「没搜」而不是「搜不到」：参数不对就说参数不对，别回一份空结果让人以为搜过。
-    if (!keyword || keyword.length > 60) return invalidParams('search', 'empty or too long keyword');
+    if (!keyword || keyword.length > LITE_SEARCH_MAX_KEYWORD_LENGTH) {
+        return invalidParams('search', 'empty or too long keyword');
+    }
     const page = pageNumber(params.page);
     const limit = pageSizeOf(params.limit, 10, 20);
     const signedIn = Boolean(qqCookieUin(cookieHeader));
     const result = await qqMusicuCall(
         'music.search.SearchCgiService', 'DoSearchForQQMusicLite',
-        {
-            search_id: searchIdOf(),
-            remoteplace: 'search.android.keyboard',
-            query: keyword,
-            search_type: !signedIn && type === 'song' ? ANONYMOUS_SONG_SEARCH_TYPE : SEARCH_TYPES[type],
-            num_per_page: limit,
-            page_num: page,
-            highlight: 0,
-            nqc_flag: 0,
-            page_id: 1,
-            grp: 1,
-        },
+        liteSearchParams({
+            keyword,
+            page,
+            limit,
+            searchType: !signedIn && type === 'song' ? ANONYMOUS_SONG_SEARCH_TYPE : SEARCH_TYPES[type],
+            id: searchIdOf(),
+        }),
         signedIn ? cookieHeader : ANONYMOUS_LITE_COOKIE,
         signedIn ? undefined : ANONYMOUS_LITE_COMM,
     );

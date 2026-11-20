@@ -13,6 +13,13 @@ import { applyDetectedChorusEffects, applyChorusRangesByTime } from '../../../ut
 import type { ChorusRange } from '../../../utils/lyrics/chorusEffects';
 import { getOriginalCoverUrl } from '../../../utils/coverUrl';
 import { resolveProxiedUrl } from '../../proxiedUrl';
+import {
+  ANONYMOUS_LITE_COMM,
+  ANONYMOUS_LITE_COOKIE,
+  ANONYMOUS_SONG_SEARCH_TYPE,
+  LITE_SEARCH_MAX_KEYWORD_LENGTH,
+  liteSearchParams,
+} from '../../../nativeBridge/api/qq/anonymousSearch';
 
 // 只认 platform（只有 Electron 的 preload 会写）：安卓端的模组 shim 也装了
 // `window.electron`，按对象存在与否判断会让安卓绕过同源代理、并且丢掉 cookie。
@@ -20,21 +27,14 @@ const isElectron = typeof window !== 'undefined' && typeof (window as any).elect
 
 /**
  * Sends a POST request to u.y.qq.com via proxy or directly in Electron.
+ *
+ * 匿名身份（comm、未登录标头、搜索类型）不在这里写：桥侧的
+ * `src/nativeBridge/api/qq/explore.js` 对的是同一条上游，两份常数各记各的实验结论迟早
+ * 会漂移（issue M27）。唯一来源是 `src/nativeBridge/api/qq/anonymousSearch.js`。
  */
 async function requestQQ(method: string, module: string, param: any): Promise<any> {
   const payload = {
-    comm: {
-      ct: 11,
-      cv: "1003006",
-      v: "1003006",
-      os_ver: "15",
-      phonetype: "24122RKC7C",
-      rom: "Redmi/miro/miro:15/AE3A.240806.005/OS2.0.102.0.VOMCNXM:user/release-keys",
-      tmeAppID: "qqmusiclight",
-      nettype: "NETWORK_WIFI",
-      udid: "0",
-      uid: "0",
-    },
+    comm: { ...ANONYMOUS_LITE_COMM },
     request: {
       method,
       module,
@@ -50,7 +50,7 @@ async function requestQQ(method: string, module: string, param: any): Promise<an
     credentials: isElectron ? 'omit' : 'same-origin',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': 'tmeLoginType=-1;',
+      'Cookie': `${ANONYMOUS_LITE_COOKIE};`,
       'User-Agent': 'okhttp/3.14.9',
     },
     body: JSON.stringify(payload),
@@ -97,25 +97,14 @@ export async function searchQQSongs(keyword: string, page = 1, pageSize = 20): P
   const safeKeyword = keyword.trim();
   if (!safeKeyword) return [];
 
-  const pagesize = pageSize;
-  const param = {
-    search_id: String(
-      Math.floor(
-        Math.random() * 100000000000000 + Date.now() % 86400000
-      )
-    ),
-    remoteplace: "search.android.keyboard",
-    query: safeKeyword.length > 60 ? safeKeyword.slice(0, 60) : safeKeyword,
-    // 7 = songs. 0 used to mean songs too, but QQ now answers 2001 with no items to every 0 search
-    // while the same request with 7 is answered (checked 2026-10-17, #695): do not change it back.
-    search_type: 7,
-    num_per_page: pagesize,
-    page_num: page,
-    highlight: 0,
-    nqc_flag: 0,
-    page_id: 1,
-    grp: 1,
-  };
+  // 参数模板与 search_type 都来自共用常数（issue M27）：匿名送 7，上游已经不认 0，
+  // 送 0 一律回 2001（2026-10-17 实测，见 #695）；同一请求换成 7 就有结果。别在这里改回去。
+  const param = liteSearchParams({
+    keyword: safeKeyword.slice(0, LITE_SEARCH_MAX_KEYWORD_LENGTH),
+    page,
+    limit: pageSize,
+    searchType: ANONYMOUS_SONG_SEARCH_TYPE,
+  });
 
   const data = await requestQQ("DoSearchForQQMusicLite", "music.search.SearchCgiService", param);
   const songs = data?.body?.item_song || [];
