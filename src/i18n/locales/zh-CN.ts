@@ -1076,6 +1076,10 @@ export default {
                 "title": "外观设置",
                 "description": "打开视觉和外观设置"
             },
+            "settings-cloud-cache": {
+                "title": "AI 云缓存",
+                "description": "把共享主题缓存指向你自己的服务器"
+            },
             "settings-general": {
                 "title": "通用设置",
                 "description": "打开全局应用偏好"
@@ -6098,9 +6102,15 @@ export default {
         "deepseekApiKey": "DeepSeek API 密钥",
         "deepseekApiKeyDesc": "只要填这一个密钥。接口地址固定为 api.deepseek.com，模型默认 deepseek-v4-flash（可在下面覆盖）。",
         "cloudCache": "云缓存",
-        "cloudCacheDesc": "AI 主题与 AI 导演的结果按歌词文件的 MD5 存到服务器。别人生成过的歌词你直接取答案，不再烧一次调用；自己生成完也会回传，帮下一个人省一次。",
+        "cloudCacheDesc": "AI 主题与 AI 导演的结果按歌词文件的 MD5 存到服务器。别人生成过的歌词你直接取答案，不再烧一次调用；填了写入令牌的话，自己生成完也会回传，帮下一个人省一次。",
         "cloudCacheBaseUrl": "云服务地址",
-        "cloudCacheBaseUrlDesc": "自建服务时填自己的地址，留空用官方那个。改完立刻生效。",
+        "cloudCacheBaseUrlDesc": "填你自己（或你信任的）服务地址，或自建服务后再填。App 不内置任何第三方地址，留空即关闭云缓存。改完立刻生效。",
+        "cloudCacheBaseUrlPlaceholder": "https://你的服务器地址",
+        "cloudCacheNeedBaseUrlTitle": "需要填写云服务地址",
+        "cloudCacheNeedBaseUrl": "云缓存把结果存在你自己指定的服务器上，App 不会把任何数据发往内置的第三方地址。填好地址之后再打开上面的开关；只读别人的结果不需要令牌，想把自己生成的结果回传才需要填写入令牌。",
+        "cloudCacheWriteToken": "写入令牌",
+        "cloudCacheWriteTokenDesc": "服务端配置的 AI_CACHE_WRITE_TOKEN。留空即只读：照样能拉别人生成好的结果，只是自己生成的不回传。",
+        "cloudCacheWriteTokenPlaceholder": "留空则只读",
         "cloudCacheProbe": "测试连接",
         "cloudCacheProbeOk": "云服务可达",
         "cloudCacheProbeFailed": "连不上云服务：",

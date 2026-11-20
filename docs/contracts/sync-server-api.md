@@ -22,7 +22,8 @@
 | Bearer Token | `/state`、`/settings*`、`/themes/*`（即挂在兜底网 `api` 上的全部路由） | 头 `Authorization: Bearer <SYNC_TOKEN>`。缺失或不对 → `401`（纯文本 `Unauthorized`，带 `WWW-Authenticate`）；头格式不合 Hono 的 token 正则 → `400`（纯文本 `Bad Request`） | `app.ts:494-500` |
 | 管理员会话 Cookie | `/admin` 的页面与 `/admin/api/*`（`stats.svg` 除外） | Cookie 名 `folia_admin_session`，HttpOnly、SameSite=Lax、12 小时、https 公开源时加 Secure；剩余不足 10 小时且访问面板时滚动续期；用户名/密码轮换后旧 session 立即失效 | `admin.ts:13-15`、`92-127`、`130-136` |
 | 看板 Token | 只有 `GET /` | `?token=<DASHBOARD_TOKEN>`，不匹配就 `404` 纯文本 `Not Found`；是只读页面，不是客户端 API | `app.ts:322-328` |
-| 无 | `/health`、`/favicon.*`、`/api/fonts*`、`/api/ai-cache*`、`/stage*`、`/api/stage-gallery*` | 刻意公开：字体市场与云缓存要能被「从没填过 Key 的播放器」读到 | `app.ts:715-721`、`725-732` |
+| 写入令牌或管理员会话 | **只有** `PUT /api/ai-cache/*`（读、`/resolve`、`/songs` 仍然公开） | 二选一：头 `X-Folia-Cache-Token` 等于 `AI_CACHE_WRITE_TOKEN`（常量时间比较），或带管理面板会话 Cookie。都配了但都不匹配 → `401 {"ok":false,"error":"unauthorized"}`；**一个都没配** → `503 {"ok":false,"error":"cache_write_not_configured"}`（没开门，而不是谁都能写）。写入成功后 `writer` 记成 `token:<摘要前 12 位>` 或 `admin:<用户名>` | `admin.ts` 的 `requireCacheWriter` |
+| 无 | `/health`、`/favicon.*`、`/api/fonts*`、`GET /api/ai-cache*`、`/stage*`、`/api/stage-gallery*` | 刻意公开：字体市场与云缓存要能被「从没填过 Key 的播放器」读到。AI 缓存的**写入**是例外，见上一行 | `app.ts:715-721`、`725-732` |
 
 两个容易踩的点：
 
@@ -142,14 +143,15 @@ route /  (api)              /state、/settings*、/themes/*      app.ts:795
 | 方法/路径 | 请求 | 响应 | 错误 |
 | --- | --- | --- | --- |
 | `GET /api/ai-cache/:kind/:key` | `kind` 匹配 `^[a-z0-9_-]{1,32}$`、`key` 是 32 位十六进制（歌词文件 MD5） | `{ ok: true; hit: boolean; entry: AiCacheEntry \| null }`；命中时 `hits` 自增并记一条命中流水 | `400 {ok:false,error:'invalid_key'}` |
-| `PUT /api/ai-cache/:kind/:key` | `{ payload, songTitle?, provider?, model?, platform?, lyricHash?, isPureMusic? }` | `{ ok: true; stored: true; verification: { status: 'verified'\|'word_matched'\|'unverified'; platform: string; source: string\|null; note: string } }` | `400 invalid_key`；`400 invalid_payload`（缺失/超 64KB）；`400 empty_payload`、`400 invalid_payload`（非对象）、`400 lyric_mismatch`（上传校验，见 `stageVerifier.ts:50-58,205-318`） |
+| `PUT /api/ai-cache/:kind/:key` | `{ payload, songTitle?, provider?, model?, platform?, lyricHash?, isPureMusic? }`；需要写入准入（见 §2） | `{ ok: true; stored: true; entry: { writer, payloadDigest, verifyKey }; verification: { status: 'verified'\|'word_matched'; platform: string; source: string\|null; note: string } }` | `401 unauthorized`（没凭证或凭证不对）、`503 cache_write_not_configured`（服务端一把写入凭证都没配）、`413 payload_too_large`（请求体 > 128KB）；`400 invalid_key`；`400 empty_payload`、`400 invalid_payload`（非对象 / 超 64KB）、`400 lyric_mismatch`、`400 no_lyric_evidence`、`400 lyric_unavailable`（上传校验，见 `stageVerifier.ts`） |
 | `POST /api/ai-cache/resolve` | `{ kind: string; songTitle: string }` | `{ ok: true; candidates: Array<{ key, songTitle, platform, provider, model, updatedAt, words: string[] }> }`；最多 12 条候选 | 输入不合法也回 `200 {ok:true,candidates:[]}`（刻意不报错） |
 | `GET /api/ai-cache/songs` | 查询 `limit`（默认 60，上限 200）、`offset`（≥0）、`q`（按歌名筛，LIKE 通配符已转义） | `{ ok: true; total: number; limit: number; offset: number; songs: Array<{ songTitle, platform, key, updatedAt, hits, versions }> }` | 无 4xx |
 
-- `AiCacheEntry`（`aiCache.ts:43-56`）：`{ kind, key, payload, songTitle, provider, model, platform, payloadBytes, hits, createdAt, updatedAt }`；老条目缺的字符串字段回 `''`（`aiCache.ts:87-107`），`payload` 解析失败回 `null`。
-- 覆盖是**同键替换**（`hits` 与 `created_at` 保留），覆盖前旧版进 `ai_cache_backups`，每键最多 10 份（`aiCache.ts:213-236`、`28-30`）。
-- 上传校验的第三道（拿平台歌词原文件重算哈希）可以用 `AI_CACHE_VERIFY=off` 关掉，只留空数据与形状两道（`app.ts:44-50`；`aiCache.ts:648-653`）。
-- 服务端只存 `payload` 与元数据：不存提示词、不存歌词正文、不存任何凭据（`aiCache.ts:19`）。
+- `AiCacheEntry`（`aiCache.ts`）：`{ kind, key, payload, songTitle, provider, model, platform, payloadBytes, hits, createdAt, updatedAt, writer, payloadDigest, verifyKey }`；老条目缺的字符串字段回 `''`（`aiCache.ts` 的 `mapRow`），`payload` 解析失败回 `null`。
+- **内容完整性**（issue C6）：写入时服务端算 `payloadDigest = SHA-256(JSON.stringify([verifyKey, kind, key, writer, payloadJson]))`（`aiCacheDigest.ts`，`verifyKey` 目前是 `folia-cache-digest-v1`），随条目一起发给读的人。客户端照同一套规则复算（`src/services/aiCloudCache.ts` 的 `verifyEntryDigest`），对不上就**当没命中**。摘要绑定「写在哪、谁写的、写了什么」，所以挪键、改库、旁路写入都能被发现；它不是签名，服务端自己的管理员仍能改写自己的条目。
+- 覆盖是**同键替换**（`hits` 与 `created_at` 保留），覆盖前旧版进 `ai_cache_backups`（连 `writer` 与 `payload_digest` 一起存），每键最多 10 份。
+- 上传校验**没有关闭开关**（issue C6）：`AI_CACHE_VERIFY` 已删除。缺 `lyricHash` → `no_lyric_evidence`；平台与歌名都查不到歌词 → `lyric_unavailable`。两者以前都会「降级放行」，而放行的后果是一条无法核验的内容进全局共享表。纯音乐用 `md5(songTitle)` 作 `lyricHash` 通过校验。
+- 服务端只存 `payload` 与元数据：不存提示词、不存歌词正文、不存任何凭据（`aiCache.ts` 文件头）。
 
 ### 5.3 访客检索页
 依据：`sync-server/src/stageGallery.ts`、`stageGalleryView.ts`
@@ -160,7 +162,7 @@ route /  (api)              /state、/settings*、/themes/*      app.ts:795
 | `GET /stage/entry/:key` | `key` 必须是 32 位十六进制 | 服务端渲染的详情页 HTML | 键不合法或没有该条 → `404` HTML 提示页 |
 | `GET /api/stage-gallery/search?q=&limit=` | `q` 截断 64 字符；`limit` 被夹到 1..60（`stageGalleryView.ts:17,545`；默认 24，`stageGalleryView.ts:16`） | `{ ok: true; query: string; count: number; html: string; entries: GalleryEntry[] }` —— `html` 是服务端渲染好的结果片段（转义只在服务端做一遍） | 内部查询出错时按空结果回，不 5xx |
 
-页面里每个字都来自任何人可 PUT 的 payload：文本转义、颜色只认 `#rgb`/`#rrggbb`（`sync-server/README.md` 的「访客检索页」）。
+页面里每个字都来自任何**带写入准入的** PUT 的 payload（issue C6 之后不再是「任何人」）：文本转义、颜色只认 `#rgb`/`#rrggbb`（`sync-server/README.md` 的「访客检索页」）。
 
 ## 6. 管理面板（Cookie 会话）
 

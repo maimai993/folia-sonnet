@@ -15,6 +15,120 @@ internal data class CloudCandidate(
     val words: List<String>,
 )
 
+/**
+ * 一次失败的记录：哪一类失败、什么时候失败的、已经连续失败过几次（issue H33）。
+ *
+ * 只记这三个东西，不记错误正文 —— 冷却要的是「还该不该再试」，不是「上次错在哪」；
+ * 错误详情留在日志里。
+ */
+internal data class BackgroundThemeFailure(
+    /** `BackgroundThemeBackoff.Kind` 的名字。存名字而不是枚举，便于以后加减类别。 */
+    val kind: String,
+    val atMs: Long,
+    /** 同一身份连续失败了几次；`1` 表示这是第一次。 */
+    val streak: Int,
+)
+
+/**
+ * 后台主题的失败退避（issue H33）。
+ *
+ * 问题：切歌、退到后台（`onStop`）、歌词到手都是**热路径**，而原来这里只有两道保护
+ * （已有成功结果就不再排队、同一身份在飞时去重），**没有失败记忆**。一轮失败之后
+ * （云端没命中、未配置、被限流、401）结果表里没有条目、在飞标记也释放了，于是下一次
+ * 退到后台就整轮重跑 —— 包括云端候选解析、多次条目拉取和**一次完整的付费模型生成**。
+ * 失败越频繁（限流、401）重试越密集，额度就是这么烧掉的。
+ *
+ * 现在：
+ *  - 失败按身份记住（错误类别 + 时间 + 连续次数），窗口内不再重试；
+ *  - 窗口随连续失败次数指数增长，上限 [MAX_COOLDOWN_MS]；
+ *  - 「配置错误」类（401/403 / 未配置）冷却更长：这类失败重试一万次也不会好，
+ *    真正要发生的是用户去改配置；
+ *  - **配置一改就整体作废**（[invalidate]）：用户改完之后必须能立刻重试。
+ *
+ * 这个对象不碰 Android、不碰网络，纯数据 + 算术，便于在 JVM 单测里直接跑。
+ */
+internal object BackgroundThemeBackoff {
+
+    /** 失败的类别。`key` 进存储，改名字等于让老的惨败记录失效（可以接受，只会多试一次）。 */
+    enum class Kind {
+        /** 云端没命中而且没生成出东西（超时、空结果、桥出错）。 */
+        TRANSIENT,
+
+        /** 401 / 403 / 没配 Key：重试不会好，要用户改配置。 */
+        CONFIG,
+
+        /** 429 或平台明确要求稍后再试。 */
+        RATE_LIMITED;
+
+        /** 这一类重试「也许下一次就好了」吗（决定冷却长度）。 */
+        val isConfig: Boolean get() = this == CONFIG
+    }
+
+    /** 第一次失败的冷却：比页面侧那 5 分钟的 miss 缓存短，用户改完配置马上能再试。 */
+    const val BASE_COOLDOWN_MS = 60_000L
+    /** 指数退避的上限：一小时。再长就等于「这首再也不会有主题」了。 */
+    const val MAX_COOLDOWN_MS = 60 * 60_000L
+    /** 配置错误单独的上限：这类失败要人去改东西，等久一点比反复撞墙划算。 */
+    const val MAX_CONFIG_COOLDOWN_MS = 6 * 60 * 60_000L
+    /** 配置错误第一档就比普通失败长：一条 401 基本等于「令牌过期了」。 */
+    const val CONFIG_BASE_COOLDOWN_MS = 5 * 60_000L
+    /** 连续失败到这个次数就不再自动重试，只在用户主动重试或改配置后恢复。 */
+    const val MAX_STREAK = 6
+
+    /** 这一类第 `streak` 次连续失败之后的冷却时长（毫秒）。`streak` 从 1 开始。 */
+    fun cooldownMs(kind: Kind, streak: Int): Long {
+        val base = if (kind.isConfig) CONFIG_BASE_COOLDOWN_MS else BASE_COOLDOWN_MS
+        val cap = if (kind.isConfig) MAX_CONFIG_COOLDOWN_MS else MAX_COOLDOWN_MS
+        val steps = (streak.coerceIn(1, MAX_STREAK) - 1).coerceAtMost(16)
+        /* 左移而不是 Math.pow：全整数，不会因为 double 溢出成 Infinity。 */
+        val scaled = base shl steps
+        return if (scaled <= 0) cap else scaled.coerceAtMost(cap)
+    }
+
+    /** 还该不该跳过：窗口没走完就是跳过；连续失败到了上限则**一直**跳过。 */
+    fun shouldSkip(failure: BackgroundThemeFailure?, nowMs: Long): Boolean {
+        if (failure == null) return false
+        if (failure.streak >= MAX_STREAK) return true
+        val kind = kindOf(failure.kind)
+        return nowMs - failure.atMs < cooldownMs(kind, failure.streak)
+    }
+
+    /** 这一次失败之后记成什么样：同一类别累加次数，换了类别重新从 1 数。 */
+    fun recordFailure(previous: BackgroundThemeFailure?, kind: Kind, nowMs: Long): BackgroundThemeFailure {
+        val streak = if (previous != null && previous.kind == kind.name) previous.streak + 1 else 1
+        return BackgroundThemeFailure(kind = kind.name, atMs = nowMs, streak = streak.coerceAtMost(MAX_STREAK))
+    }
+
+    /** 存进去的类别名 → 枚举；不认识的一律按「临时失败」处理（最宽松，不会永久挡住）。 */
+    fun kindOf(name: String?): Kind = Kind.entries.firstOrNull { it.name == name } ?: Kind.TRANSIENT
+
+    /**
+     * 从一次失败的码 / 错误文本判类别。
+     *
+     * 401、403 与「未配置」是配置错误；429 是限流；其余（超时、5xx、空结果）算临时失败。
+     * 只认状态码与前缀，不去解析各家模型的错误正文 —— 那东西会变，判错了代价是白试一次。
+     *
+     * `code` 收字符串是因为 `AiCompletion.AiException.code` 本身就是个字符串码（有的是
+     * `401`，有的是 `http_429` 这类），统一按「码里有没有这几个数」判即可。
+     */
+    fun kindOfFailure(code: String?, message: String?): Kind {
+        val raw = (code ?: "").trim()
+        val text = "$raw ${message ?: ""}".lowercase()
+        if (raw == "401" || raw == "403") return Kind.CONFIG
+        if (raw == "429") return Kind.RATE_LIMITED
+        if (text.contains("not_configured") || text.contains("not configured") || text.contains("未配置")) {
+            return Kind.CONFIG
+        }
+        if (text.contains("unauthorized") || text.contains("forbidden") || text.contains("invalid_api_key")) {
+            return Kind.CONFIG
+        }
+        if (text.contains("rate_limit") || text.contains("too many requests") || text.contains("429")) {
+            return Kind.RATE_LIMITED
+        }
+        return Kind.TRANSIENT
+    }
+}
+
 /** Lead 通过 FoliaSettingsStore 的 `backgroundTheme.config` 写入的整份配置。 */
 internal data class BackgroundThemeConfig(
     val enabled: Boolean = false,

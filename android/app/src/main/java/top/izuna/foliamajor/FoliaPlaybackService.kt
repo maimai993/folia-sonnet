@@ -1668,13 +1668,18 @@ class FoliaPlaybackService : android.app.Service() {
         onEntryUnplayable(songKey, policy.skip)
     }
 
-    /** 退后台时为已经取得歌词的当前曲目补发主题任务，不只覆盖后台切歌。 */
-    fun requestCurrentBackgroundTheme() {
+    /**
+     * 退后台时为已经取得歌词的当前曲目补发主题任务，不只覆盖后台切歌。
+     *
+     * `userInitiated` 见 [top.izuna.foliamajor.ai.BackgroundThemeBackoff]：自动触发（`onStop`）
+     * 要受失败退避约束，用户主动要求重新生成时不受（issue H33）。
+     */
+    fun requestCurrentBackgroundTheme(userInitiated: Boolean = false) {
         val media = top.izuna.foliamajor.player.FoliaNativePlayerPlugin.mediaSnapshot() ?: return
         val lyrics = nativeLyrics.snapshot(media.songKey) ?: return
         val lines = top.izuna.foliamajor.online.MusicGateway.parseLrc(lyrics.lrc, lyrics.translated)
         top.izuna.foliamajor.ai.BackgroundThemeWorker.request(this, media.songKey, cachedTitle, cachedArtist,
-                lines.joinToString("\n") { it.text })
+                lines.joinToString("\n") { it.text }, userInitiated = userInitiated)
     }
 
     /**

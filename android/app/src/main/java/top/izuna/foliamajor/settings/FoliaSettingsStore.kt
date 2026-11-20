@@ -193,6 +193,7 @@ class FoliaSettingsStore private constructor(context: Context) {
         if (value == null) next.remove(key) else next.put(key, value)
         cached = next
         prefs.edit().putString(KEY_SETTINGS, next.toString()).commit()
+        notifyBackgroundThemeConfigChanged(setOf(key))
         return snapshot()
     }
 
@@ -215,6 +216,12 @@ class FoliaSettingsStore private constructor(context: Context) {
         // commit() 是同步 fsync，在主线程上是 ANR，在 Capacitor 桥线程上会把后续所有调用堵住。
         // apply() 的落盘由系统在 Activity 停止 / 进程正常退出时保证发出。
         prefs.edit().putString(KEY_SETTINGS, next.toString()).apply()
+        /*
+         * 两个分支都要通知后台主题（issue H33）：配置变更通知挂在「设置的唯一写入点」上，
+         * 密钥项走加密槽位、其余走上面那个 blob，但「后台主题的配置改了」这件事是一样的。
+         * 所以通知放在分流**之前**。
+         */
+        notifyBackgroundThemeConfigChanged(values.keys)
         if (secrets.isNotEmpty()) return applySecret(secrets)
         return snapshot()
     }
@@ -236,6 +243,26 @@ class FoliaSettingsStore private constructor(context: Context) {
         }
         cached = next
         return snapshot()
+    }
+
+    /**
+     * 那份「后台主题」配置变了就通知 worker（issue H33）。
+     *
+     * 退避必须**一改配置就作废**：401 / 没配 Key 这类失败重试一万次也不会好，真正要发生的是
+     * 用户去改配置 —— 他改完就该立刻有一次机会，而不是先等冷却窗口走完（否则表现是「改好了
+     * 还是没主题」）。这里挂在设置的**唯一写入点**上，Web 从哪个入口改都覆盖得到。
+     *
+     * 只在真的变了的时候通知：Web 每次启动回前台都会重下发一遍同样的配置，那里不该清退避。
+     */
+    private fun notifyBackgroundThemeConfigChanged(changedKeys: Set<String>) {
+        val key = "backgroundTheme.config"
+        if (key !in changedKeys) return
+        try {
+            top.izuna.foliamajor.ai.BackgroundThemeWorker.onConfigChanged()
+        } catch (error: Throwable) {
+            // 通知失败不该让「保存设置」这件事失败。
+            Log.w(TAG, "后台主题配置变更通知失败", error)
+        }
     }
 
     companion object {

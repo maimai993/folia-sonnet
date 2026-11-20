@@ -26,28 +26,44 @@ const state = vi.hoisted(() => ({
   }),
 }));
 
+/*
+ * 一条**会被采信**的云端条目（issue C6）：客户端复算 `payloadDigest`，绑的是
+ * `[verifyKey, kind, key, writer, payloadJson]`。这里照同一套规则算 —— 否则缓存永远
+ * 被判成没命中，这一整套「缓存优先」的用例就全成了假绿。
+ */
+const signedEntry = async (kind: string, key: string, payload: unknown) => {
+  const verifyKey = 'folia-cache-digest-v1';
+  const writer = 'token:synthetic';
+  const text = JSON.stringify([verifyKey, kind, key, writer, JSON.stringify(payload)]);
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const payloadDigest = Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return { payload, writer, payloadDigest, verifyKey };
+};
+
 vi.mock('@/services/aiNativeFetch', () => ({
   createAiFetch: () => async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     const method = (init?.method || 'GET').toUpperCase();
     state.requested.push(`${method} ${url}`);
+    /*
+     * 摘要要按**真实地址里的 kind 与 key** 算：客户端拿到的 key 就是 URL 最后那一段。
+     * 算错了会被当成「内容被挪过」而丢掉，于是这条桩就白设了。
+     */
+    const segments = url.split('?')[0].split('/').filter(Boolean);
+    const key = segments[segments.length - 1] ?? '';
+    const kind = segments[segments.length - 2] ?? 'theme';
+    const payload = {
+      theme: {
+        light: state.shapeTheme('cached-light'),
+        dark: state.shapeTheme('cached-dark'),
+      },
+    };
+    const entry = await signedEntry(kind, key, payload);
     /* 只有缓存拉取走这里；命中与否由用例决定。 */
     return {
       ok: true,
       status: 200,
-      json: async () => (state.hit
-        ? {
-          hit: true,
-          entry: {
-            payload: {
-              theme: {
-                light: state.shapeTheme('cached-light'),
-                dark: state.shapeTheme('cached-dark'),
-              },
-            },
-          },
-        }
-        : { hit: false }),
+      json: async () => (state.hit ? { hit: true, entry } : { hit: false }),
     } as unknown as Response;
   },
 }));
@@ -79,10 +95,16 @@ beforeEach(async () => {
    * 没填」才会落到它上面。不写死这一行，这个文件就不再验它想验的东西。
    */
   localStorage.setItem('foliaAiProviderSettings', JSON.stringify({ provider: 'gemini', geminiApiKey: '' }));
-  // 云缓存默认就是开的；这里写一份只是免得受别的用例污染。
-  localStorage.setItem('foliaCloudSettings.v2', JSON.stringify({
+  /*
+   * 云缓存配置（issue H34 之后是 v3，不再有内置地址）+ 一把写入令牌。
+   *
+   * 令牌是必须的：C6 之后没有令牌就是只读，`pushAiCloudCache` 会直接返回 false，
+   * 「最后 PUT 回传」那条断言就永远不成立。谁能写在服务端那一侧钉。
+   */
+  localStorage.setItem('foliaCloudSettings.v3', JSON.stringify({
     enabled: true,
     baseUrl: 'https://cloud.test',
+    writeToken: 'synthetic-write-token',
   }));
   /*
    * 部署端点那条路用的是全局 fetch，地址还是相对路径（`/api/...`）。

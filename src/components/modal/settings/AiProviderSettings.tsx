@@ -136,13 +136,22 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     };
 
     const runCacheProbe = async () => {
+        /*
+         * 没地址就别发请求（issue H34）：`resolveAiCloudCacheUrl` 在无地址时是空串，
+         * 硬发出去只会是一次「校验地址」的报错，看着像功能坏了。
+         */
+        const probeUrl = resolveAiCloudCacheUrl(STAGE_CACHE_KIND, CLOUD_CACHE_PROBE_KEY);
+        if (!probeUrl) {
+            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheNeedBaseUrlTitle') });
+            return;
+        }
         setCacheProbe({ state: 'running', ok: false, text: '' });
         const startedAt = Date.now();
         try {
-            const response = await createAiFetch()(
-                resolveAiCloudCacheUrl(STAGE_CACHE_KIND, CLOUD_CACHE_PROBE_KEY),
-                { method: 'GET', headers: { Accept: 'application/json' } },
-            );
+            const response = await createAiFetch()(probeUrl, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+            });
             if (!response.ok) {
                 setCacheProbe({
                     state: 'done',
@@ -572,7 +581,8 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                             {t('options.cloudCacheDesc')}
                         </div>
                     </div>
-                    {/* 开关统一用 kit 那一颗：这一颗的样子本来就是照它定的。 */}
+                    {/* 开关统一用 kit 那一颗：这一颗的样子本来就是照它定的。
+                        没有地址时打不开：开关打开也没地方可发（见 services/foliaCloud.ts）。 */}
                     <Toggle
                         checked={cloudCache.enabled}
                         onChange={() => updateFoliaCloudSettings({ enabled: !cloudCache.enabled })}
@@ -581,6 +591,27 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                 </div>
 
                 <div className="pt-4 space-y-3">
+                    {/*
+                        没填地址时把话说清楚（issue H34）：以前出厂就指向一个外部域名，用户
+                        什么都没配，歌词指纹已经在往外发了。现在「没填 = 关闭」，所以这里要
+                        明确讲两件事 —— 这项能力**要求你自己有一个服务地址**，以及为什么不再
+                        给默认值。不说的话，用户只会看到开关是关的、测试连接永远失败。
+                    */}
+                    {!cloudCache.baseUrl.trim() && (
+                        <div
+                            className="rounded-xl border px-3 py-2 text-xs leading-relaxed space-y-1"
+                            style={{
+                                borderColor: 'color-mix(in srgb, var(--st-accent) 35%, transparent)',
+                                color: 'var(--text-secondary)',
+                            }}
+                            role="status"
+                        >
+                            <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {t('options.cloudCacheNeedBaseUrlTitle')}
+                            </div>
+                            <div>{t('options.cloudCacheNeedBaseUrl')}</div>
+                        </div>
+                    )}
                     <label className="block space-y-1 text-left">
                         <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.cloudCacheBaseUrl')}
@@ -591,7 +622,7 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                             spellCheck={false}
                             value={cloudCache.baseUrl}
                             onChange={(event) => updateFoliaCloudSettings({ baseUrl: event.target.value })}
-                            placeholder="https://apif.tangbot.xyz"
+                            placeholder={t('options.cloudCacheBaseUrlPlaceholder')}
                             className={fieldClass}
                             style={{ color: 'var(--text-primary)' }}
                         />
@@ -600,10 +631,33 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                         </span>
                     </label>
 
+                    {/*
+                        写入令牌（issue C6）：服务端只收带凭证的写入。留空 = 只读 ——
+                        自己生成的答案不回传，但照样能拉别人做好的那些。
+                    */}
+                    <label className="block space-y-1 text-left">
+                        <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.cloudCacheWriteToken')}
+                        </span>
+                        <TextField
+                            type="password"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={cloudCache.writeToken}
+                            onChange={(event) => updateFoliaCloudSettings({ writeToken: event.target.value })}
+                            placeholder={t('options.cloudCacheWriteTokenPlaceholder')}
+                            className={fieldClass}
+                            style={{ color: 'var(--text-primary)' }}
+                        />
+                        <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
+                            {t('options.cloudCacheWriteTokenDesc')}
+                        </span>
+                    </label>
+
                     <div className="flex flex-wrap items-center gap-3 text-left">
                         <Button
                             onClick={() => void runCacheProbe()}
-                            disabled={cacheProbe.state === 'running'}
+                            disabled={cacheProbe.state === 'running' || !cloudCache.baseUrl.trim()}
                             className={ghostButtonClass}
                             style={{ color: 'var(--text-primary)' }}
                         >

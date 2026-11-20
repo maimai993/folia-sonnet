@@ -1,17 +1,20 @@
+// sync-server/src/stageVerifier.ts
 import { md5 } from './md5.js';
 import { lyricTextCandidates, searchLyricCandidates, LYRIC_SOURCE_LABELS } from './stageLyricSources.js';
 
-// sync-server/src/stageVerifier.ts
-// 一条上传到底收不收：空数据一律拒，形状不合规一律拒，能验的再拿平台上的歌词原文件
-// 把哈希重算一遍。
+// 一条上传到底收不收：空数据一律拒，形状不合规一律拒，验不了的也拒 —— 只有真的
+// 拿平台上的歌词原文件把哈希（或高亮词）对上了才收（issue C6）。
 //
-// 上传接口是公开的（没填 Key 的人也要能把自己那份推上来），所以「有人拿空数据把别人
-// 做好的那条盖掉」迟早会发生。备份解决的是事后能捞回来，这里解决的是别让它进来。
+// 这份核验是**唯一**说明「这条答案属于这首歌」的证据：写缓存那一侧虽然已经有准入
+// （requireCacheWriter 与写入令牌），但它证明的是「谁在写」，不是「写进来的东西对不对」。
+// 所以核验结果从「尽力而为」改成了准入条件：
 //
-// 两条纪律：
 //  1. **空数据一律拒绝**，没有例外。
-//  2. **平台取不到歌词时放行**：第三方接口随时会不通，而缓存的纪律是永不阻塞功能 ——
-//     取不到只记成「没验证过」，不能让一次上游抖动把正常上传卡死。
+//  2. **验不了就拒绝**。以前有三条放行：`AI_CACHE_VERIFY=off` 一键关闭、没带 lyricHash
+//     放行、平台取不到歌词放行。三条都是为了让「上游抖动」不阻塞上传 —— 代价是任何人都能
+//     拿一句手写的请求把全局共享的那条盖掉：只要不带 lyricHash，核验根本不发生。现在
+//     上游不通的结果是「这次写不进去」，而不是「跳过核验写进去」；读缓存那条路照旧公开，
+//     一次写不进去不影响任何人拉已有的答案。
 
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -44,17 +47,23 @@ export type StageUploadVerification =
     ok: true;
     /**
      * - verified     = 与平台上这首歌的歌词哈希对上了；
-     * - word_matched = 哈希对不上，但**内容合规**：AI 标记的高亮词在这首歌的歌词里都在；
-     * - unverified   = 无从验证（放行，但不算数）。
+     * - word_matched = 哈希对不上，但**内容合规**：AI 标记的高亮词在这首歌的歌词里都在。
+     *
+     * 以前还有第三档 `unverified`（放行但不算数）。那一档就是「谁都能写」的入口，
+     * 已经删掉（issue C6）：无从验证的上传现在直接拒。
      */
-    status: 'verified' | 'word_matched' | 'unverified';
+    status: 'verified' | 'word_matched';
     platform: string;
     source: string | null;
     note: string;
   }
   | {
     ok: false;
-    error: 'empty_payload' | 'invalid_payload' | 'lyric_mismatch';
+    /**
+     * `no_lyric_evidence` 与 `lyric_unavailable` 是 C6 新增的两条拒绝理由 ——
+     * 它们以前都被放行了（记成 `unverified`）。
+     */
+    error: 'empty_payload' | 'invalid_payload' | 'lyric_mismatch' | 'no_lyric_evidence' | 'lyric_unavailable';
     note: string;
   };
 
@@ -193,13 +202,11 @@ export const verifyStageUpload = async (input: {
   payload: unknown;
   songTitle: string;
   platform: string;
-  /** 客户端带来的「歌词正文 MD5」；老客户端没有，那就无从验证。 */
+  /** 客户端带来的「歌词正文 MD5」；没有它就没有任何说明来源的证据，直接拒。 */
   lyricHash: string;
   isPureMusic?: boolean;
-  /** 关掉之后只做空数据与合规检查（上游抖动时的退路）。 */
-  strict: boolean;
 }): Promise<StageUploadVerification> => {
-  const { payload, songTitle, platform, lyricHash, isPureMusic, strict } = input;
+  const { payload, songTitle, platform, lyricHash, isPureMusic } = input;
 
   if (isStagePayloadEmpty(payload)) {
     return { ok: false, error: 'empty_payload', note: '空数据：既没有主题也没有动画决策。' };
@@ -213,22 +220,18 @@ export const verifyStageUpload = async (input: {
   const platformName = String(platform ?? '').trim();
   const label = LYRIC_SOURCE_LABELS[platformName.toLowerCase()] ?? '';
 
-  if (!strict) {
-    return { ok: true, status: 'unverified', platform: platformName, source: null, note: '校验已关闭。' };
-  }
-
   /*
-   * 没有哈希（老客户端推的）就没法比 —— 放行，但不算验证过。
+   * 没有哈希（老客户端推的、或者手写的一条请求）就没有任何证据说明这条答案属于这首歌。
    *
-   * 兼容旧数据是硬要求：拉取那条链路照样只看 MD5 键，加了新字段也不影响它。
+   * 以前这里放行 —— 那等于给「随便推一条」留了后门：攻击者只要不带 lyricHash，整段核验
+   * 都不发生。现在拒。老客户端因此推不上去：它们照样能**读**（读那条链路从来没变），
+   * 只是自己生成的那份不再回传，这正是 issue C6 要的结果。
    */
   if (!HASH_PATTERN.test(hash)) {
     return {
-      ok: true,
-      status: 'unverified',
-      platform: platformName,
-      source: null,
-      note: '这一条没带歌词哈希（旧客户端），无从校验来源。',
+      ok: false,
+      error: 'no_lyric_evidence',
+      note: '这一条没带歌词哈希，无从校验来源。',
     };
   }
 
@@ -253,19 +256,23 @@ export const verifyStageUpload = async (input: {
     };
   }
 
-  /* 按歌名去平台上搜；搜不到（或者接口这会儿不通）就是无从校验。 */
+  /* 按歌名去平台上搜。 */
   const { candidates, source } = await searchLyricCandidates(platformName, songTitle);
 
-  /* 平台上没有这首歌、或者接口这会儿不通：放行，只记成「没验证过」。 */
+  /*
+   * 平台上没有这首歌、或者接口这会儿不通：**拒写**。
+   *
+   * 以前这一档放行（「缓存永不阻塞功能」）。放行在公开写接口上是致命的：上游不通的时候
+   * 恰好是核验最容易被绕过去的时候。现在的取舍是「上游不通 = 这次写不进去」—— 读那一侧
+   * 照旧公开、照旧不受影响，用户最多是这次生成的答案没贡献上去。
+   */
   if (candidates.length === 0) {
     return {
-      ok: true,
-      status: 'unverified',
-      platform: platformName,
-      source: null,
+      ok: false,
+      error: 'lyric_unavailable',
       note: platformName
-        ? `${label || platformName} 上没搜到这首歌，无从校验。`
-        : '各个平台都没搜到这首歌，无从校验。',
+        ? `${label || platformName} 上没搜到这首歌，无从校验来源。`
+        : '各个平台都没搜到这首歌，无从校验来源。',
     };
   }
 
