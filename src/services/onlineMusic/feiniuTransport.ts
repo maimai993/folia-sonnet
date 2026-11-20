@@ -2,6 +2,7 @@ import { OnlineProviderError } from '../../types/onlineMusic';
 import { fetchWithTimeout } from '../../utils/fetchWithTimeout';
 import { sha256Hex } from '../../utils/sha256';
 import { isNativeHttpAvailable, nativeHttpRequest, removeNativeCookie, setNativeCookie } from '../../platform/foliaNative';
+import { registerSelfHostedService } from '../nativeSelfHostedServices';
 import { readProviderSessionValue, removeProviderSessionValue, writeProviderSessionValue } from './providerStorage';
 
 // src/services/onlineMusic/feiniuTransport.ts
@@ -154,6 +155,8 @@ export const setFeiniuServerUrl = (value: string): void => {
     }
     // 原生兜底切歌要自己拼取流地址与 Cookie，地址（以及随之清掉的会话）都要推过去。
     syncFeiniuGatewayCredentials();
+    // C1：地址是用户自己填的自建服务，原生出网白名单要按它放行这台机器（仅本次会话）。
+    void registerSelfHostedService(normalized);
     getFeiniuResourceSession();
 };
 

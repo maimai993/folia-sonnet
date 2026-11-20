@@ -18,6 +18,7 @@ import type { LxLoadedSource, LxPlatformKey, LxRequestHandler, LxSourceMeta, LxS
 import { validateLxScript } from './lxSourceParser';
 import { resolveProxiedUrl } from '../../proxiedUrl';
 import { hasNativeHttp, nativeHttpRequest } from '../../nativeAndroidBridge';
+import { registerSelfHostedService } from '../../nativeSelfHostedServices';
 
 const EVENT_NAMES = { inited: 'inited', request: 'request', updateAlert: 'updateAlert' } as const;
 
@@ -530,6 +531,72 @@ const buildRequestBody = (options: LxRequestOptions): { body?: BodyInit; headers
     return { headers };
 };
 
+/**
+ * 某支音源脚本会连的主机（C1）。
+ *
+ * 原生 `httpRequest` 现在有主机白名单，而自定义音源的第一步是去它自己的服务器要地址 ——
+ * 那些域名千奇百怪，出厂白名单里不可能有。所以按「谁被用户装进来了」授信：
+ * 用户导入 / 启用一支音源时，脚本里出现的域名就是这支音源的出网范围，收进来交给原生
+ * 登记（见 registerSelfHostedService）。
+ *
+ * 为什么从脚本里扫，而不是等第一次请求再登记：等请求来才登记就退化成「任意主机登记即放行」，
+ * 那正是 C1 要堵的那条路。这里的输入只有**用户自己导入的那份脚本文本**，扫出来的是
+ * 「这支脚本自己写下的服务器」，用户装它的时候等于已经同意了。
+ *
+ * 不扫 `data:` / `blob:` 里的内联子脚本（正则只认字面量），漏掉的那些会在扫描后补一轮
+ * 运行期授权（见 [grantedLxHosts]）。
+ */
+export const lxScriptHosts = (rawScript: string): string[] => {
+    const hosts = new Set<string>();
+    const pattern = /https?:\/\/([^\s'"`/?#<>()\\{},;|*^\[\]]+)/gi;
+    const matches = rawScript.match(pattern) ?? [];
+    for (const entry of matches) {
+        const host = entry.replace(/^https?:\/\//i, '').split('/')[0]?.split(':')[0]?.toLowerCase();
+        if (!host || host.length === 0) continue;
+        // 纯数字 / 点分 IP 之外的荒唐值不要（脚本里拼模板字符串时会留下 `${...}`）。
+        if (host.includes('$') || host.includes('{') || host.includes('}')) continue;
+        hosts.add(host);
+    }
+    return Array.from(hosts).sort();
+};
+
+/** 本次运行期已登记给原生的音源主机（避免重复过桥）。 */
+const grantedLxHosts = new Set<string>();
+
+/**
+ * 把已装音源的出网主机登记给原生（C1）。
+ *
+ * 输入是「用户装进来的全部脚本文本」：每支脚本的域名都在里面，所以这里登记的范围等于
+ * 「用户自己装过的那几支音源可能连的服务器」。没有装任何音源时不登记任何东西。
+ */
+export const syncLxSourceHosts = async (scripts: string[]): Promise<void> => {
+    if (!hasNativeHttp()) return;
+    const hosts = new Set<string>();
+    for (const script of scripts) {
+        for (const host of lxScriptHosts(script)) hosts.add(host);
+    }
+    for (const host of hosts) {
+        if (grantedLxHosts.has(host)) continue;
+        grantedLxHosts.add(host);
+        await registerSelfHostedService(`https://${host}/`).catch(() => undefined);
+    }
+};
+
+/**
+ * 原生拒绝「主机不在白名单里」时，从错误里取出那个主机名（C1 的兜底用）。
+ *
+ * 原生回的是 `host is not allowlisted: <host>`（见 FoliaNativeAccess）；
+ * 认不出来就回 null —— 别把别的错误也当成「补登一下就重试」。
+ */
+const nativeHostOf = (error: unknown): string | null => {
+    const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error ?? '');
+    const matched = /host is not allowlisted:\s*([a-z0-9.:_-]+)/i.exec(message);
+    return matched ? matched[1].toLowerCase() : null;
+};
+
+/** 单次请求最多补登这么多次（一次跳转链 + 一次重试就够）。 */
+const MAX_GRANTS_PER_REQUEST = 2;
+
 export type LxRequestResponse = {
     statusCode: number;
     statusMessage?: string;
@@ -548,14 +615,20 @@ export const lxRequest = (
     const controller = new AbortController();
     const timer = options.timeout ? window.setTimeout(() => controller.abort(), options.timeout) : null;
     const { body, headers = {} } = buildRequestBody(options);
+    // 上面 catch 里的补登重试次数（C1）。
+    let grantDepth = 0;
 
     /**
-     * 安卓上必须走原生 OkHttp，而且**不能**按主机白名单过滤。
+     * 安卓上必须走原生 OkHttp。
      *
      * 音源脚本的第一步是去它自己的服务器要地址，那些域名千奇百怪；以前这里走
      * `resolveProxiedUrl`，白名单外的主机在安卓包里会直接抛
      * "VITE_FOLIA_API_BASE must be configured"，等于每个音源第一跳就失败。
      * 白名单内的主机反而能过——所以现象是「少数音源能用、大部分不能播」。
+     *
+     * C1 之后原生的主机白名单不再是「谁都能过」，所以出网范围必须在导入音源时就登记
+     * （见 [lxScriptHosts] / [syncLxSourceHosts]）：用户装了哪几支源，就只有那几支
+     * 源脚本里写下的服务器可连。上面的现象靠这一步保住，而不是靠「原生不校验」。
      */
     const run = async (): Promise<Response> => {
         if (hasNativeHttp()) {
@@ -621,7 +694,43 @@ export const lxRequest = (
             };
             callback(null, response, parsed);
         })
-        .catch((err) => callback(err));
+        .catch((err) => {
+            /*
+             * C1 的兜底：脚本把服务器地址拼出来的（模板字符串、接口返回的域名）时，导入时
+             * 扫不到那台主机，原生会拒掉。这时把这一条地址所属的主机补登一次再重试一遍 ——
+             * 仍然只在「用户装过音源」的前提下发生，且每次运行最多补这么多次，
+             * 避免被一段脚本当成无限注册器用。
+             */
+            const deniedHost = nativeHostOf(err);
+            if (deniedHost !== null && grantDepth < MAX_GRANTS_PER_REQUEST) {
+                grantDepth += 1;
+                grantedLxHosts.add(deniedHost);
+                void registerSelfHostedService(`https://${deniedHost}/`)
+                    .then(() => run())
+                    .then(async (resp) => {
+                        const text = await resp.text();
+                        const respHeaders: Record<string, string> = {};
+                        resp.headers.forEach((value, key) => { respHeaders[key] = value; });
+                        let parsed: unknown = text;
+                        try {
+                            parsed = JSON.parse(text);
+                        } catch {
+                            parsed = text;
+                        }
+                        callback(null, {
+                            statusCode: resp.status,
+                            statusMessage: resp.statusText,
+                            headers: respHeaders,
+                            bytes: text.length,
+                            raw: text,
+                            body: parsed,
+                        }, parsed);
+                    })
+                    .catch((retryError) => callback(retryError));
+                return;
+            }
+            callback(err);
+        });
     return () => {
         if (timer) window.clearTimeout(timer);
         controller.abort();

@@ -58,7 +58,10 @@ export const saveExportFile = async (input: {
         try {
             const result = await FoliaNative.saveFileFromPath({
                 fileName: filename,
-                sourcePath: written.uri,
+                // H3：原生只接受应用缓存目录里的相对路径（`kinetic-export/xxx.mp4`）。
+                // Filesystem 回的 uri 是一整条 `file:///data/...` 绝对地址，改动前原生照收；
+                // 现在那种形状一律拒绝，所以这里交相对路径 —— 它本来就相对于 cacheDir。
+                sourcePath: cachePath,
                 mimeType: mime,
             });
             if (result.cancelled || !result.saved) {

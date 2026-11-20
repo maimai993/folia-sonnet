@@ -26,6 +26,16 @@ export type UpdateDownloadProgress = {
 };
 
 /**
+ * 原生桥 `cookiesGetAll` 回的 cookie 条目。字段名由原生侧的 parseCookieHeader 决定。
+ */
+export type NativeCookie = {
+    name: string;
+    value: string;
+    domain?: string;
+    path?: string;
+};
+
+/**
  * 原生桥 `httpRequest` 的返回。headers 两种形状都可能出现（见 FoliaNativePlugin 那边）。
  *
  * 响应体是二选一（#262）：文本类回 `bodyText`，其余回 `bodyBase64`。读它一律走
@@ -112,6 +122,11 @@ interface FoliaNativePlugin {
         headers: Record<string, string>;
         bodyText: string;
         bodyBase64: string;
+        /**
+         * `manual`（原生默认）不跟随 3xx；`follow` 由原生逐跳复核白名单（C1）。
+         *
+         * 旧调用方普遍传的是 `'follow'`，那种只要跳过去的主机还在白名单里就照旧跳。
+         */
         redirect: string;
         timeoutMs?: number;
         /** 允许回传的最大字节数；原生还会按硬上限再夹一次（见 FoliaNativePlugin）。 */
@@ -119,6 +134,21 @@ interface FoliaNativePlugin {
         /** auto（默认，按 Content-Type 猜）| text | base64。 */
         responseMode?: 'auto' | 'text' | 'base64';
     }): Promise<NativeHttpResponse>;
+    /**
+     * 登记一台用户自己填的自建服务地址（飞牛 / Navidrome），供本次会话的出网白名单使用
+     * （C1 / H2）。
+     *
+     * 只在用户**主动填写**服务器地址时调用；原生侧按 host + 端口记，进程重启即失效，
+     * 落盘的那一份仍然只来自用户设置（见 android/.../FoliaNativeAccess.kt）。
+     */
+    registerSelfHostedService(options: { url: string }): Promise<{ ok?: boolean; host?: string }>;
+    /**
+     * 读一个平台域的 cookie。
+     *
+     * `url` 或 `domain` **必须给一个**，且落在平台白名单里（H2）；原来不传参数时会回退到
+     * 页面自己的域（`https://localhost/`），等于把页面凭据交出去，那个回退已经删掉。
+     */
+    cookiesGetAll(options: { url?: string; domain?: string }): Promise<{ cookies: NativeCookie[] }>;
     /** 往 WebView 的 cookie 罐里写一条。`<img>` / `<audio>` 加不了请求头，只能靠它带凭据。 */
     cookiesSet(options: {
         url: string;
@@ -128,7 +158,11 @@ interface FoliaNativePlugin {
         domain?: string;
     }): Promise<{ ok?: boolean }>;
     /** 删一条 cookie（Max-Age=0）。 */
-    cookiesRemove(options: { url: string; name: string }): Promise<{ ok?: boolean }>;
+    cookiesRemove(options: { url: string; name: string; domain?: string }): Promise<{ ok?: boolean }>;
+    /** 批量删 cookie（切换登录通道时一次清几十条，逐条过桥会超时）。 */
+    cookiesRemoveBatch(options: {
+        entries: Array<{ url?: string; name: string; domain?: string }>;
+    }): Promise<{ ok?: boolean; removed: number; denied?: number }>;
     /**
      * 弹一条系统小气泡（Toast）。
      *

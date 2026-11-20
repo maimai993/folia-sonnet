@@ -30,6 +30,7 @@ import {
     NavidromeServerProfile,
 } from '../types/navidrome';
 import md5 from 'blueimp-md5';
+import { registerSelfHostedService } from './nativeSelfHostedServices';
 
 // LocalStorage key for config
 const CONFIG_KEY = 'navidrome_config';
@@ -88,6 +89,12 @@ export const saveNavidromeConfig = (config: NavidromeConfig, origin: NavidromeCo
         localStorage.removeItem(CONFIG_ORIGIN_KEY);
     }
     localStorage.removeItem(PRESET_DISMISSED_KEY);
+    /*
+     * C1：Navidrome 是用户自己配的自建服务，地址可以按喜好换。原生出网白名单在启动时读的是
+     * localStorage 里那一份（见 FoliaNativeAccess.readConfiguredServerHosts），这里补一次
+     * 即时登记：换完地址不用重启 App 就能连上新机器。
+     */
+    void registerSelfHostedService(config?.serverUrl);
 };
 
 // Clear configuration

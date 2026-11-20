@@ -6,7 +6,7 @@
 
 import { getFromCache, saveToCache } from '../../../services/db';
 import type { LxLoadedSource, LxPlatformKey, LxSource } from './lxTypes';
-import { loadLxSource } from './lxRuntime';
+import { loadLxSource, syncLxSourceHosts } from './lxRuntime';
 import { parseLxHeader } from './lxSourceParser';
 import { raceCandidates, withTimeout, type LxRaceTask } from './lxRace';
 import { cooldownLeftMs, noteSourceFailure, noteSourceSuccess, resetSourceHealth, sourceRank } from './lxSourceHealth';
@@ -41,6 +41,8 @@ class LxSourceStore {
             const stored = await getFromCache<LxSource[]>(STORAGE_KEY);
             this.sources = Array.isArray(stored) ? stored : [];
             await this.reloadAll();
+            // C1：启动时就把已装音源的出网主机报给原生，别等到第一首歌才登记（那时已经晚了）。
+            void syncLxSourceHosts(this.sources.filter(src => src.enabled).map(src => src.rawScript));
             this.notify();
         })();
         return this.initPromise;
@@ -56,6 +58,14 @@ class LxSourceStore {
 
     private async persist(): Promise<void> {
         await saveToCache(STORAGE_KEY, this.sources);
+        /*
+         * C1：音源的出网主机随音源一起登记给原生。
+         *
+         * 启动时走一遍（init → reloadAll → 这里是 reloadAll 之后的第一处），导入 / 启用 /
+         * 删除后也各走一遍 —— 原生那边只增不减（进程内），所以删掉一支源不会让它之前
+         * 登记过的主机失效，这一点写在交付报告里。
+         */
+        void syncLxSourceHosts(this.sources.filter(src => src.enabled).map(src => src.rawScript));
     }
 
     /**
