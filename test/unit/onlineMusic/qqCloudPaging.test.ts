@@ -35,6 +35,17 @@ const COOKIE = 'uin=o0123456789; qm_keyst=fixture';
 
 const load = async () => import('../../../src/nativeBridge/api/qq/explore.js');
 
+// readUserCloud 的返回是「桥失败 | 未登录 | 正常列表」的联合，用例只关心正常那支，
+// 收窄放在一处，免得每个断言都要处理另外两支。
+type CloudPage = { count: number; hasMore: boolean; data: unknown[] };
+const asPage = (value: unknown): CloudPage => {
+    const page = value as Partial<CloudPage>;
+    if (typeof page.count !== 'number' || typeof page.hasMore !== 'boolean' || !Array.isArray(page.data)) {
+        throw new Error(`不是预期的云盘分页结果：${JSON.stringify(value)}`);
+    }
+    return { count: page.count, hasMore: page.hasMore, data: page.data };
+};
+
 beforeEach(() => {
     calls.length = 0;
     currentPage = () => ({});
@@ -52,7 +63,7 @@ describe('云盘分页', () => {
         currentPage = () => page(37, 0, 900);
         const { readUserCloud } = await load();
 
-        const result = await readUserCloud({ offset: '0', limit: '200' }, COOKIE);
+        const result = asPage(await readUserCloud({ offset: '0', limit: '200' }, COOKIE));
         expect(result.count).toBe(900);
         expect(result.hasMore).toBe(false);
     });
@@ -62,7 +73,7 @@ describe('云盘分页', () => {
         currentPage = (pageNo) => (pageNo === 1 ? page(200, 1) : page(3, 0));
         const { readUserCloud } = await load();
 
-        const first = await readUserCloud({ offset: '0', limit: '200' }, COOKIE);
+        const first = asPage(await readUserCloud({ offset: '0', limit: '200' }, COOKIE));
         expect(first.data).toHaveLength(200);
         /*
          * 关键：还有更多。
@@ -77,7 +88,7 @@ describe('云盘分页', () => {
         currentPage = (pageNo) => (pageNo === 1 ? page(37, 0) : page(0, 0));
         const { readUserCloud } = await load();
 
-        const result = await readUserCloud({ offset: '0', limit: '500' }, COOKIE);
+        const result = asPage(await readUserCloud({ offset: '0', limit: '500' }, COOKIE));
         expect(result.count).toBe(37);
         expect(result.hasMore).toBe(false);
     });
@@ -86,7 +97,7 @@ describe('云盘分页', () => {
         currentPage = (pageNo) => (pageNo === 1 ? page(200, 1, 900) : page(0, 0));
         const { readUserCloud } = await load();
 
-        const result = await readUserCloud({ offset: '0', limit: '200' }, COOKIE);
+        const result = asPage(await readUserCloud({ offset: '0', limit: '200' }, COOKIE));
         expect(result.count).toBe(900);
         expect(result.hasMore).toBe(true);
     });
@@ -95,7 +106,7 @@ describe('云盘分页', () => {
         currentPage = () => page(12, 0, 12);
         const { readUserCloud } = await load();
 
-        const result = await readUserCloud({ offset: '0', limit: '200' }, COOKIE);
+        const result = asPage(await readUserCloud({ offset: '0', limit: '200' }, COOKIE));
         expect(result.count).toBe(12);
         expect(result.hasMore).toBe(false);
     });
