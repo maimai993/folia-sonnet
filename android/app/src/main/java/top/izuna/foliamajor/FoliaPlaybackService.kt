@@ -1492,6 +1492,8 @@ class FoliaPlaybackService : android.app.Service() {
         val hash = entry.optString("providerHash", "")
         val albumAudioId = entry.optString("providerAlbumAudioId", "")
         val songKey = entry.optString("songKey", "")
+        // 前台推镜像时带上用户选定的音质档；空表示老镜像或没传，取流按 standard（issue H22）。
+        val audioQuality = entry.optString("audioQuality", "")
         if (providerId.isEmpty() || (songId.isEmpty() && mid.isEmpty() && hash.isEmpty())) {
             /*
              * 身份不全，连问都问不了。**必须回执**：这条以前是静默 return，而 playFromQueue
@@ -1504,7 +1506,7 @@ class FoliaPlaybackService : android.app.Service() {
             return
         }
         BackgroundWork.io("resolve-url") {
-            val url = resolveWithRetry(providerId, songId, mid, hash, albumAudioId)
+            val url = resolveWithRetry(providerId, songId, mid, hash, albumAudioId, audioQuality)
             if (url == null || url.isEmpty()) {
                 /*
                  * 重试也拿不到地址。**原生自己决定接下来怎么办**，不再只是给 JS 发一条回执：
@@ -1567,7 +1569,8 @@ class FoliaPlaybackService : android.app.Service() {
      * 重试放在原生，是因为前台被冻结时没有别人能替它重试。
      */
     private fun resolveWithRetry(providerId: String, songId: String, mid: String,
-                                 hash: String, albumAudioId: String): String? {
+                                 hash: String, albumAudioId: String,
+                                 audioQuality: String = ""): String? {
         val delays = longArrayOf(0L, 400L, 1200L)
         for ((attempt, delay) in delays.withIndex()) {
             if (delay > 0) {
@@ -1580,7 +1583,7 @@ class FoliaPlaybackService : android.app.Service() {
             }
             val url = try {
                 top.izuna.foliamajor.online.MusicGateway.resolvePlayUrl(
-                        providerId, songId, mid, hash, albumAudioId)
+                        providerId, songId, mid, hash, albumAudioId, audioQuality)
             } catch (error: Throwable) {
                 Log.w(TAG, "解析地址失败（第 ${attempt + 1} 次）", error)
                 null
@@ -1717,10 +1720,12 @@ class FoliaPlaybackService : android.app.Service() {
                 val mid = entry.optString("providerMid", "")
                 val hash = entry.optString("providerHash", "")
                 val albumAudioId = entry.optString("providerAlbumAudioId", "")
+                // 预加载也按用户选的档，否则缓存里存的是 standard、真播时又要重新取（issue H22）。
+                val audioQuality = entry.optString("audioQuality", "")
                 if (providerId.isEmpty() || (songId.isEmpty() && mid.isEmpty() && hash.isEmpty())) continue
                 BackgroundWork.io("preload-url") {
                     val url = top.izuna.foliamajor.online.MusicGateway.resolvePlayUrl(
-                            providerId, songId, mid, hash, albumAudioId)
+                            providerId, songId, mid, hash, albumAudioId, audioQuality)
                     if (url != null && !url.isEmpty()) {
                         resolvedUrlCache.put(key, url)
                     }
