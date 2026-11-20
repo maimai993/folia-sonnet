@@ -122,6 +122,11 @@ internal object BackgroundThemeBackoff {
         val text = "$raw ${message ?: ""}".lowercase()
         if (raw == "401" || raw == "403") return Kind.CONFIG
         if (raw == "429") return Kind.RATE_LIMITED
+        /*
+         * M30：端点被主机判定拦下（内网 / 环回）重试一万次也不会变，算配置错误 ——
+         * 让退避多等一会儿并指向设置页，而不是每切一首歌就再撞一次同一堵墙。
+         */
+        if (raw == "ai-endpoint-blocked") return Kind.CONFIG
         if (text.contains("not_configured") || text.contains("not configured") || text.contains("未配置")) {
             return Kind.CONFIG
         }

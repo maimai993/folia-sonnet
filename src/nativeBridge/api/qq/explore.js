@@ -1,6 +1,14 @@
 import { qqCookieUin } from '../cookies.js';
 import { qqAuthRequired, qqBridgeFailure, qqMusicuBatch, qqMusicuCall } from '../qq.js';
 import { noteLibraryStep } from '../libraryTrace.js';
+import {
+    ANONYMOUS_LITE_COMM,
+    ANONYMOUS_LITE_COOKIE,
+    ANONYMOUS_SONG_SEARCH_TYPE,
+    LITE_SEARCH_MAX_KEYWORD_LENGTH,
+    liteSearchIdOf,
+    liteSearchParams,
+} from './anonymousSearch.js';
 
 // src/nativeBridge/api/qq/explore.js
 //
@@ -12,8 +20,16 @@ import { noteLibraryStep } from '../libraryTrace.js';
 // 设备信息），本地桥只有网页 / 扫码登录拿到的 cookie，所以沿用曲库与私人 FM 一直在用的
 // buildQQAuthComm。公开内容（新歌、新碟、榜单、分类）匿名就读得到，其余要登录。
 //
-// 与上游同一条约定：读不出来就是空结果（上游是 422，本地桥回空数组），探索页据此跳过这一栏；
-// 要登录而没有会话的回 AUTH_REQUIRED —— 不让「没登录」伪装成「没有内容」。
+// 失败语义只有一条（issue M25）：**读不出来就说读不出来**。
+//   · 上游明确答「空」             → `{ code: 0, …空集合 }`，探索页据此跳过这一栏；
+//   · 没登录                       → AUTH_REQUIRED（qqAuthRequired），调用方提示去登录；
+//   · 网络断了 / 上游报错 / 字段变了 → NETWORK（qqBridgeFailure），调用方显示「这一栏读不出来」。
+//
+// 改前这三者是两套：建歌单会上报失败，其余每条读接口都是 `{ code: 0, …空数组 }`。
+// 于是「网络断了」「上游改了字段」全被折叠成「没有内容」，探索页出现空栏目时根本无法
+// 判断成因，排查与上报都拿不到信息 —— 同一模块两种失败语义，新增接口时也容易跟错。
+// 现在统一走 qqBridgeFailure（与建歌单同一条路），并且失败分支都带一条结构化诊断：
+// 只记路由名、上游码与结果形状，不记凭据。
 
 // ---- 上游字段的读法：只收认识的形状，其余当作「没有」 ----
 
@@ -35,12 +51,35 @@ const dictOf = (value) => (value && typeof value === 'object' && !Array.isArray(
 /** 上游的清单：null / 缺省当作没有，其他非数组是格式变了。 */
 const listOf = (value) => (Array.isArray(value) ? value : []);
 
-/** 分页参数：不是正整数用默认值，超过上限压到上限。 */
+/**
+ * 分页参数：不是正整数用默认值，超过上限压到上限。
+ *
+ * `max` 有默认值（M26）：改前它是必传的约定而不是类型，`pageSizeOf(params.page, 1)`
+ * 漏传一次，`Math.min(undefined, n)` 就是 NaN，而且这个 NaN 会被原样写进发给上游的
+ * 分页参数里 —— 没有报错、没有日志，只表现为「某个分类歌单突然是空的」。
+ * 现在返回值永远是安全整数：上限缺省 `DEFAULT_PAGE_SIZE_MAX`，`fallback` 给坏了
+ * （负数、小数、非数字）也一律退回 1。
+ *
+ * 边界：`value` 为负数 / 0 / 小数 / 非数字 / 空串 → fallback；超大值 → 上限；
+ * `Number.parseInt('1e999')` 得 1（不是 Infinity），所以它按 1 处理，不会溢出。
+ */
+const DEFAULT_PAGE_SIZE_MAX = 100;
+/**
+ * 页码也有上限（M26）：上游没有一页之外的语义，翻到几百页之后只会回空。
+ * 与刷歌模式的 `Math.min(100, …)` 同一条线。
+ */
+const MAX_PAGE_NUMBER = 100;
+
 const pageSizeOf = (value, fallback, max) => {
+    const ceiling = Number.isSafeInteger(max) && max > 0 ? max : DEFAULT_PAGE_SIZE_MAX;
+    const base = Number.isSafeInteger(fallback) && fallback > 0 ? fallback : 1;
     const parsed = Number.parseInt(String(value ?? ''), 10);
-    if (!Number.isSafeInteger(parsed) || parsed <= 0) return fallback;
-    return Math.min(max, parsed);
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) return Math.min(ceiling, base);
+    return Math.min(ceiling, parsed);
 };
+
+/** 页码归一化：正整数、不超过 `MAX_PAGE_NUMBER`，其余回 1。 */
+const pageNumber = (value) => Math.min(MAX_PAGE_NUMBER, pageSizeOf(value, 1));
 
 const offsetOf = (value) => {
     const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -65,6 +104,51 @@ const needsLogin = (where, cookieHeader) => (
     qqCookieUin(cookieHeader) ? null : qqAuthRequired(where)
 );
 
+/**
+ * 回包的形状，只到「顶层几个键、各是什么型别」这一层 —— 够判断字段是不是改了名，
+ * 又不会把上游塞回来的任何内容（歌名、昵称、token）带进诊断。
+ */
+const describePayload = (value) => {
+    if (value === null || value === undefined) return 'empty';
+    if (Array.isArray(value)) return `array(${value.length})`;
+    if (typeof value !== 'object') return typeof value;
+    const keys = Object.keys(value);
+    if (!keys.length) return 'object(0)';
+    const shown = keys.slice(0, 6).map((key) => {
+        const field = value[key];
+        const kind = Array.isArray(field) ? `array(${field.length})` : field === null ? 'null' : typeof field;
+        return `${key}:${kind}`;
+    }).join(',');
+    return `object(${keys.length}){${shown}${keys.length > 6 ? ',…' : ''}}`;
+};
+
+/**
+ * 一条读接口失败（M25）：统一用 qqBridgeFailure 构造，并补一条结构化诊断。
+ *
+ * 诊断只记「哪条路由、上游给了什么码、回包是什么形状」—— 不记 cookie / uin / 任何请求参数，
+ * 这些会进「复制诊断数据」导出的报告（libraryTrace）。`note` 是给上游 `code: 0` 但
+ * 形状对不上的那几种情况用的，说明是「字段认丢了」而不是「网络断了」。
+ */
+const bridgeFailure = (where, result, note) => {
+    const code = result?.code;
+    noteLibraryStep('qq', 'explore:failed', {
+        route: where,
+        code: typeof code === 'number' || typeof code === 'string' ? code : 'none',
+        shape: describePayload(result?.data),
+        ...(note ? { note } : {}),
+    });
+    return qqBridgeFailure(where, code === undefined ? 'missing' : code);
+};
+
+/** 上游答了 `ok` 但形状对不上（字段改名 / 结构变化）：这也是「读不出来」，不是「没有内容」。 */
+const shapeFailure = (where, data, note) => bridgeFailure(where, { ok: true, data }, note || 'unexpected shape');
+
+/** 参数不合法：不是上游的问题，也不是「没有内容」，照样明确报错。 */
+const invalidParams = (where, detail) => ({
+    __foliaBridgeError: 'INVALID_PARAMS',
+    message: `QQ ${where}: ${detail}`,
+});
+
 // ---- 歌单分类 ----
 
 /** 分类是 `get_hot_category`：上游给的是分组，每组里才是分类。 */
@@ -75,7 +159,7 @@ export async function readPlaylistCategories(cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('playlist-categories') : { code: 0, groups: [] };
+        return result.loginRequired ? qqAuthRequired('playlist-categories') : bridgeFailure('playlist-categories', result);
     }
     const groups = listOf(dictOf(result.data).category).map((entry) => {
         const group = dictOf(entry);
@@ -119,8 +203,8 @@ const toPlaylist = (entry) => {
 /** `page` 对外从 1 起，上游减 1；total 只看 content.total_cnt。 */
 export async function readCategoryPlaylists(params, cookieHeader) {
     const id = requiredId(params.id);
-    if (id === undefined) return { code: 0, playlists: [] };
-    const page = pageSizeOf(params.page, 1);
+    if (id === undefined) return invalidParams('category-playlists', 'missing category id');
+    const page = pageNumber(params.page);
     const size = pageSizeOf(params.limit, 20, 40);
     const result = await qqMusicuCall(
         'music.playlist.PlayListCategory', 'get_category_content',
@@ -129,7 +213,7 @@ export async function readCategoryPlaylists(params, cookieHeader) {
         { uin: 0 },
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('category-playlists') : { code: 0, playlists: [] };
+        return result.loginRequired ? qqAuthRequired('category-playlists') : bridgeFailure('category-playlists', result);
     }
     const data = dictOf(result.data);
     const content = dictOf(data.content);
@@ -159,9 +243,13 @@ export async function readNewSongs(params, cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('new-songs') : { code: 0, songs: [], areas: [] };
+        return result.loginRequired ? qqAuthRequired('new-songs') : bridgeFailure('new-songs', result);
     }
     const data = dictOf(result.data);
+    // 认不出 `songlist` 就说明字段换了名 —— 那是「读不出来」，不是「今天没有新歌」。
+    if (!Array.isArray(data.songlist)) {
+        return shapeFailure('new-songs', result.data, 'songlist missing');
+    }
     const areas = listOf(data.lanlist).map((entry) => {
         const id = positiveId(dictOf(entry).type);
         return id === undefined ? null : { id, name: String(dictOf(entry).name || '') };
@@ -212,9 +300,12 @@ export async function readNewAlbums(params, cookieHeader) {
         },
     ], cookieHeader);
     if (!albums.ok) {
-        return albums.loginRequired ? qqAuthRequired('new-albums') : { code: 0, albums: [], areas: [] };
+        return albums.loginRequired ? qqAuthRequired('new-albums') : bridgeFailure('new-albums', albums);
     }
     const data = dictOf(albums.data);
+    if (!Array.isArray(data.albums)) {
+        return shapeFailure('new-albums', albums.data, 'albums missing');
+    }
     const entries = listOf(data.albums);
     const total = countOf(data.total);
     return {
@@ -269,7 +360,7 @@ export async function readToplists(cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('toplists') : { code: 0, groups: [] };
+        return result.loginRequired ? qqAuthRequired('toplists') : bridgeFailure('toplists', result);
     }
     const groups = listOf(dictOf(result.data).group).map((entry) => {
         const group = dictOf(entry);
@@ -289,9 +380,9 @@ export async function readToplists(cookieHeader) {
 /** 单榜是 `GetDetail`；参数要全小写的 `topid`，大写的 `topId` 会被忽略。 */
 export async function readToplistSongs(params, cookieHeader) {
     const id = requiredId(params.id);
-    if (id === undefined) return { code: 0, songs: [] };
+    if (id === undefined) return invalidParams('toplist', 'missing toplist id');
     const rawPeriod = params.period === undefined || params.period === null ? '' : String(params.period);
-    if (!/^[0-9_-]{0,20}$/.test(rawPeriod)) return { code: 0, songs: [] };
+    if (!/^[0-9_-]{0,20}$/.test(rawPeriod)) return invalidParams('toplist', 'bad period');
     const offset = offsetOf(params.offset);
     const size = pageSizeOf(params.limit, 20, 100);
     const result = await qqMusicuCall(
@@ -300,11 +391,12 @@ export async function readToplistSongs(params, cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('toplist') : { code: 0, songs: [] };
+        return result.loginRequired ? qqAuthRequired('toplist') : bridgeFailure('toplist', result);
     }
     const data = dictOf(result.data);
     const info = toChart(data.data);
-    if (!info) return { code: 0, songs: [] };
+    // 榜单本身都认不出来（不是「这个榜今天空了」）：字段换了名，报读不出来。
+    if (!info) return shapeFailure('toplist', result.data, 'toplist info missing');
     const songs = listOf(data.songInfoList);
     const total = countOf(info.total);
     return {
@@ -328,7 +420,7 @@ export async function readRadar(params, cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('radar') : { code: 0, songs: [] };
+        return result.loginRequired ? qqAuthRequired('radar') : bridgeFailure('radar', result);
     }
     const data = dictOf(result.data);
     const entries = listOf(data.VecSongs);
@@ -376,7 +468,7 @@ export async function readRadioList(cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('radio-list') : { code: 0, groups: [] };
+        return result.loginRequired ? qqAuthRequired('radio-list') : bridgeFailure('radio-list', result);
     }
     const groups = listOf(dictOf(result.data).radio_list).map((entry) => {
         const group = dictOf(entry);
@@ -396,7 +488,7 @@ export async function readRadioTracks(params, cookieHeader) {
     const login = needsLogin('radio-tracks', cookieHeader);
     if (login) return login;
     const id = requiredId(params.id);
-    if (id === undefined) return { code: 0, songs: [] };
+    if (id === undefined) return invalidParams('radio-tracks', 'missing radio id');
     const result = id === PERSONAL_RADIO_ID
         ? await qqMusicuCall(
             'music.radioProxy.MbTrackRadioSvr', 'get_radio_track',
@@ -409,7 +501,7 @@ export async function readRadioTracks(params, cookieHeader) {
             cookieHeader,
         );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('radio-tracks') : { code: 0, songs: [] };
+        return result.loginRequired ? qqAuthRequired('radio-tracks') : bridgeFailure('radio-tracks', result);
     }
     const data = dictOf(result.data);
     return {
@@ -426,16 +518,22 @@ export async function readSimilarSongs(params, cookieHeader) {
     const login = needsLogin('similar-songs', cookieHeader);
     if (login) return login;
     const songId = requiredId(params.id);
-    if (songId === undefined) return { code: 0, songs: [] };
+    if (songId === undefined) return invalidParams('similar-songs', 'missing song id');
     const result = await qqMusicuCall(
         'music.recommend.TrackRelationServer', 'GetSimilarSongs',
         { songid: songId },
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('similar-songs') : { code: 0, songs: [] };
+        return result.loginRequired ? qqAuthRequired('similar-songs') : bridgeFailure('similar-songs', result);
     }
-    const rows = listOf(dictOf(result.data).vecSongNew)
+    const data = dictOf(result.data);
+    // 匿名时上游会答 code 0 但清单是空的，所以这条本来就要登录；登录了还认不出清单，
+    // 那就是字段换了名（读不出来），不能当成「这首歌没有相似歌曲」。
+    if (!Array.isArray(data.vecSongNew)) {
+        return shapeFailure('similar-songs', result.data, 'vecSongNew missing');
+    }
+    const rows = listOf(data.vecSongNew)
         .flatMap((group) => listOf(dictOf(group).songs));
     const songs = rows
         .map((row) => dictOf(row).track)
@@ -470,11 +568,13 @@ export async function readUserVip(cookieHeader) {
         cookieHeader,
     );
     if (!result.ok) {
-        return result.loginRequired ? qqAuthRequired('user-vip') : { code: 0, vipLevel: 'unknown' };
+        return result.loginRequired ? qqAuthRequired('user-vip') : bridgeFailure('user-vip', result);
     }
     const info = dictOf(dictOf(dictOf(result.data).infoMap)[uin]);
+    // 认不出会员旗标就说读不出来：会员等级关系着能不能放高音质，「未知」不能同时表示
+    // 「上游没给」和「我们没看懂」——改前两者都是 vipLevel: 'unknown'，读失败根本看不出来。
     if (typeof info.iVipFlag !== 'number' || !Number.isSafeInteger(info.iVipFlag)) {
-        return { code: 0, vipLevel: 'unknown' };
+        return shapeFailure('user-vip', result.data, 'iVipFlag missing');
     }
     const upstream = Object.fromEntries(VIP_FIELDS.flatMap((key) => (
         typeof info[key] === 'string' || typeof info[key] === 'boolean'
@@ -540,12 +640,29 @@ export async function readUserCloud(params, cookieHeader) {
             cookieHeader,
         );
         if (!result.ok) {
-            // 第一页就读不出来才是失败；已经读到一些就交出这些。
-            return entries.length
-                ? { code: 0, data: [], count: entries.length, hasMore: false }
-                : (result.loginRequired ? qqAuthRequired('user-cloud') : { code: 0, data: [], count: 0 });
+            /*
+             * 第一页就读不出来才是失败；已经读到一些就交出这些。
+             * 但「交出这些」不能回空数组（M25）：改前这里回的是 `{ data: [], count: n }` ——
+             * 说是读到了 n 首、交出去的却是空的，调用方既看不到内容也不知道出了事。
+             */
+            if (!entries.length) {
+                return result.loginRequired ? qqAuthRequired('user-cloud') : bridgeFailure('user-cloud', result);
+            }
+            const partial = entries.slice(offset, offset + limit)
+                .filter((entry) => entry && typeof entry === 'object')
+                .map(toCloudSong);
+            noteLibraryStep('qq', 'explore:failed', {
+                route: 'user-cloud',
+                code: typeof result.code === 'number' || typeof result.code === 'string' ? result.code : 'none',
+                note: `partial page after ${entries.length} entries`,
+            });
+            return { code: 0, data: partial, count: entries.length, hasMore: false, partial: true };
         }
         const data = dictOf(result.data);
+        // 第一页就认不出清单：字段换了名，是读不出来，不是「云盘是空的」。
+        if (page === 1 && !Array.isArray(data.info_list)) {
+            return shapeFailure('user-cloud', result.data, 'info_list missing');
+        }
         if (total === undefined) total = countOf(data.total);
         entries.push(...listOf(data.info_list));
         hasMore = data.has_more === 1 && listOf(data.info_list).length > 0;
@@ -642,19 +759,13 @@ const SEARCH_TYPES = { song: 0, singer: 1, album: 2, playlist: 3 };
 const SEARCH_LIST_KEYS = {
     song: 'item_song', singer: 'singer', album: 'item_album', playlist: 'item_songlist',
 };
-/** 不登录搜歌要送 7：上游已经不认 0，送 0 一律回 2001。带会话照旧送 0。 */
-const ANONYMOUS_SONG_SEARCH_TYPE = 7;
-/** 精简版客户端的匿名身份：只放协议需要的应用与版本常数，不带设备指纹。 */
-const ANONYMOUS_LITE_COMM = {
-    ct: 11, cv: '1003006', v: '1003006', tmeAppID: 'qqmusiclight', nettype: 'NETWORK_WIFI', udid: '0', uid: '0',
-};
-/** 标头里的 `tmeLoginType=-1` 表示未登录。 */
-const ANONYMOUS_LITE_COOKIE = 'tmeLoginType=-1';
+
+// 匿名身份（`ANONYMOUS_SONG_SEARCH_TYPE` / `ANONYMOUS_LITE_COMM` / `ANONYMOUS_LITE_COOKIE`）
+// 不再在这里自建：页面侧的 qqLyricProvider.ts 也走同一条上游，两份常数各记各的实验结论
+// 迟早会漂移（issue M27）。唯一来源是 ./anonymousSearch.js。
 
 /** 每次搜索带一个随机数字串；不需要密码学强度。 */
-const searchIdOf = () => `${Math.floor(Math.random() * 9 + 1)}${Array.from(
-    { length: 17 }, () => Math.floor(Math.random() * 10),
-).join('')}`;
+const searchIdOf = () => liteSearchIdOf();
 
 /**
  * 有会话就带会话搜（匿名搜歌常被上游以 2001 拒绝），没有会话用精简版的匿名身份。
@@ -664,33 +775,32 @@ export async function searchCatalog(params, cookieHeader) {
     const type = typeof params.type === 'string' && SEARCH_TYPES[params.type] !== undefined
         ? params.type : 'song';
     const keyword = String(params.keyword ?? '').trim();
-    if (!keyword || keyword.length > 60) return { code: 0, type, items: [], more: false };
-    const page = pageSizeOf(params.page, 1);
+    // 空关键字是「没搜」而不是「搜不到」：参数不对就说参数不对，别回一份空结果让人以为搜过。
+    if (!keyword || keyword.length > LITE_SEARCH_MAX_KEYWORD_LENGTH) {
+        return invalidParams('search', 'empty or too long keyword');
+    }
+    const page = pageNumber(params.page);
     const limit = pageSizeOf(params.limit, 10, 20);
     const signedIn = Boolean(qqCookieUin(cookieHeader));
     const result = await qqMusicuCall(
         'music.search.SearchCgiService', 'DoSearchForQQMusicLite',
-        {
-            search_id: searchIdOf(),
-            remoteplace: 'search.android.keyboard',
-            query: keyword,
-            search_type: !signedIn && type === 'song' ? ANONYMOUS_SONG_SEARCH_TYPE : SEARCH_TYPES[type],
-            num_per_page: limit,
-            page_num: page,
-            highlight: 0,
-            nqc_flag: 0,
-            page_id: 1,
-            grp: 1,
-        },
+        liteSearchParams({
+            keyword,
+            page,
+            limit,
+            searchType: !signedIn && type === 'song' ? ANONYMOUS_SONG_SEARCH_TYPE : SEARCH_TYPES[type],
+            id: searchIdOf(),
+        }),
         signedIn ? cookieHeader : ANONYMOUS_LITE_COOKIE,
         signedIn ? undefined : ANONYMOUS_LITE_COMM,
     );
     if (!result.ok) {
-        return result.loginRequired
-            ? qqAuthRequired('search')
-            : { code: 0, type, items: [], more: false };
+        return result.loginRequired ? qqAuthRequired('search') : bridgeFailure('search', result);
     }
     const data = dictOf(result.data);
+    if (!data.body && !data.meta) {
+        return shapeFailure('search', result.data, 'body missing');
+    }
     const items = listOf(dictOf(data.body)[SEARCH_LIST_KEYS[type]])
         .filter((item) => item && typeof item === 'object');
     const meta = dictOf(data.meta);

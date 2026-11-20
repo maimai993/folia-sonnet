@@ -1,7 +1,9 @@
 package top.izuna.foliamajor.ai
 
+import top.izuna.foliamajor.FoliaPrivateNetworks
 import java.net.URI
 import java.net.URLEncoder
+import java.util.Locale
 
 /**
  * 三套协议的请求端点解析。规则与 Web 侧逐一对应：
@@ -157,6 +159,53 @@ object AiEndpoints {
 
     /** 设置里没填站点时给 Gemini 的默认反代地址（导出给日志/诊断用）。 */
     const val GEMINI_FALLBACK_BASE = DEFAULT_GEMINI_API_BASE
+
+    /**
+     * 发请求之前的最后一道：端点不许指向内网 / 环回 / 链路本地（M30）。
+     *
+     * 改前这里什么都不查，只把地址拼出来交给 OkHttp / HttpURLConnection —— 于是
+     * `baseUrl = http://127.0.0.1:8080/v1` 就能让原生网络栈去打本机与内网，并把响应
+     * 原样带回页面（装进来的模组也能这么干）。页面侧的主机白名单
+     * （FoliaNativeAccess.requireAllowedTarget）管不到这条通道，安全边界被绕过。
+     *
+     * 这一道与 httpRequest 共用同一份判定，**不是**另起一套白名单：
+     *   · 内网 / 环回 / 链路本地字面量一律拒（[FoliaPrivateNetworks.describePrivateLiteral]）；
+     *   · 公网主机要求走 requireAllowedRequestUrl —— 页面白名单里登记过的自建 AI 代理
+     *     照旧放行，那是这一类地址唯一合法的用法。
+     *
+     * 用户真要连本机或局域网里自建的模型服务，现在的答案是「不行」：放行需要一个显式
+     * 开关，而开关必须在一次明确的操作里被打开，不能由 baseUrl 自己决定 —— 否则这条
+     * 通道又回到了「填个地址就出网」。
+     *
+     * 只看字面量：域名解析到内网（DNS rebinding）不在这一层判，要挡得在 OkHttp 的 DNS
+     * 上做；而这条通道恰恰要允许用户自建的第三方代理，所以按字面量判定已经是能守住的界。
+     *
+     * @param url 真正要发的那条地址（已按各协议拼好路径）
+     * @param guard 第二道：公网主机交给调用方过页面白名单（`FoliaNativeAccess.requireAllowedRequestUrl`）
+     */
+    fun guardRequestUrl(url: String, guard: (String) -> Unit) {
+        val host = try {
+            URI(url).host?.lowercase(Locale.US)
+        } catch (error: Exception) {
+            throw AiCompletion.AiException(
+                "ai-endpoint-blocked",
+                "AI endpoint is not a readable url: " + redact(error.message ?: "unknown"),
+            )
+        }
+        if (host.isNullOrEmpty()) {
+            throw AiCompletion.AiException("ai-endpoint-blocked", "AI endpoint has no host")
+        }
+        // 内网 / 环回：说得出是哪一段，不说完整地址（query 里可能有 key）。
+        val privateRange = FoliaPrivateNetworks.describePrivateLiteral(host)
+        if (privateRange != null) {
+            throw AiCompletion.AiException(
+                "ai-endpoint-blocked",
+                "AI endpoint points at a private network address (" + privateRange + "); " +
+                    "local and intranet AI services are not allowed",
+            )
+        }
+        guard(url)
+    }
 
     @Suppress("unused")
     private fun unusedEncode(s: String): String = URLEncoder.encode(s, "UTF-8")

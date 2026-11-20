@@ -198,6 +198,10 @@ const desktopHeaders = deviceId => ({
   'Content-Type': 'application/json',
 });
 
+/**
+ * 把响应体读成 JSON。读不出来回 null —— 调用方各自决定「没有响应体」意味着什么，
+ * **不能**让它把状态码的分类吃掉（M28）。
+ */
 const readResponsePayload = async (response) => {
   const fallback = response.clone();
   try {
@@ -210,12 +214,73 @@ const readResponsePayload = async (response) => {
         return await new Response(stream).json();
       } catch (_) {}
     }
-    const contentType = response.headers.get('content-type') || 'unknown';
-    throw new BodianError(
-      'invalid-response',
-      `Bodian returned an unreadable response (HTTP ${response.status}, content-type ${contentType})`,
-    );
+    return null;
   }
+};
+
+/** 给日志用的那一句：只说「没读出来」，不带地址（query 里可能有 uid 与签名）。 */
+const unreadableBodyNote = response => {
+  const contentType = String(response.headers.get('content-type') || 'unknown').slice(0, 64);
+  return `HTTP ${response.status}, content-type ${contentType}`;
+};
+
+/**
+ * 3xx 的目标主机。日志只用它，不记完整地址 —— 跳转目标上可能带着上游塞进去的参数。
+ */
+const redirectHostOf = (response) => {
+  const location = response.headers.get('location');
+  if (!location) return null;
+  try {
+    return new URL(location, response.url || API_ORIGIN).host || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 发一次请求，把「fetch 本身 reject」收进同一族错误（M28）。
+ *
+ * `redirect: 'error'` 撞上重定向时 fetch 交回来的是一个 TypeError —— 不上这一层，
+ * 它会被兜底分支当成 invalid-response，又一次把「上游要求换地址」错报成「协议格式错误」。
+ * 这里按错误名区分两句文案，都归成 network（可以退避重试的那一类），
+ * 并带上被拒的主机名 —— 不带完整地址。
+ */
+const fetchForCall = async (url, init) => {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const target = (() => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return 'unknown host';
+      }
+    })();
+    // 规格里 redirect: 'error' 抛 TypeError；真正的网络故障（断网、DNS）也是 TypeError，
+    // 所以两只手都留着：名字对不上就按网络失败说。
+    if (error instanceof TypeError && /redirect/i.test(String(error.message || ''))) {
+      console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { host: target });
+      throw new BodianError('network', `upstream asked to redirect to ${target}; redirects are not followed`);
+    }
+    console.warn('[Bodian] 请求没发出去', { host: target, error });
+    throw new BodianError('network', `request to ${target} failed`);
+  }
+};
+
+/**
+ * 上游的重定向一律不跟随（M28）：token 在**请求头**里，而重定向是自动重发的，
+ * 跟过去就等于把它交给跳转目标主机。这里一律当失败处理，并说出跳到了哪台主机
+ * —— 出问题时能定位，又不把 token 送出去。真要换地址，让上游把地址重新配一遍
+ * （那时会再走一遍主机判定）。
+ */
+const redirectFailure = (response) => {
+  const host = redirectHostOf(response);
+  console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { status: response.status, host });
+  return new BodianError(
+    'network',
+    `upstream redirected to ${host || 'another location'} (HTTP ${response.status}); redirects are not followed`,
+    response.status,
+  );
 };
 
 const createClient = (deviceId) => ({
@@ -260,21 +325,55 @@ const createClient = (deviceId) => ({
       headers.uid = String(session.uid);
       headers.token = session.token;
     }
-    const response = await fetch(url.toString(), {
+    const response = await fetchForCall(url.toString(), {
       method,
       headers,
       ...(bodyText ? { body: bodyText } : {}),
-      redirect: 'follow',
+      /*
+       * 重定向一律不自动跟（M28）：token 在请求头里，`redirect: 'follow'` 会把带着
+       * token 的请求原样交给跳转目标主机 —— 上游被劫持或配置错误时那就是凭据外泄。
+       *
+       * 用 `error` 而不是 `manual`：`manual` 交回的是 opaque-redirect 响应，状态码和
+       * Location 都读不到，日志里就说不清「跳到了哪台主机」；`error` 让 fetch 直接
+       * reject，由 fetchForCall 归成同一类失败（没有上游状态码可报）。
+       */
+      redirect: 'error',
     });
-    let payload = null;
-    try { payload = await readResponsePayload(response); } catch (error) {
-      if (error instanceof BodianError) throw error;
+    /*
+     * 先判状态码，再解析响应体（M28）。
+     *
+     * 改前的次序是「取响应体 → 判 401 → 判 2xx」，响应体取不出来时抛的是 invalid-response，
+     * 于是 401 / 429 / 503 全被错报成「协议格式错误」，状态码丢掉，按 429 / 503 认的限流
+     * 退避永远不生效。现在状态码先说话，响应体只用来补充错误详情；解析失败不影响分类。
+     */
+    // 按规范 `manual` 才回 opaque-redirect；这里留着这一支，是为不依赖浏览器对
+    // `error` 的具体实现（两种都当「上游要求换地址」处理）。
+    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+      throw redirectFailure(response);
     }
     if (response.status === 401) {
-      throw new BodianError('auth-required', 'Bodian sign-in is required', 401);
+      throw new BodianError('auth-required', 'sign-in is required', 401);
     }
     if (!response.ok) {
-      throw new BodianError('network', `Bodian HTTP ${response.status}`, response.status);
+      // 非 2xx：分类只认状态码；响应体里的业务码 / 文案有就补上，没有也不影响分类。
+      const detail = await readResponsePayload(response);
+      const message = typeof detail?.msg === 'string'
+        ? detail.msg
+        : typeof detail?.message === 'string' ? detail.message : '';
+      throw new BodianError(
+        'network',
+        `HTTP ${response.status}${message ? `: ${message.slice(0, 200)}` : ''}`,
+        response.status,
+      );
+    }
+    const payload = await readResponsePayload(response);
+    if (payload === null) {
+      // 2xx 但读不出响应体：这才是真正的「协议格式错误」。
+      throw new BodianError(
+        'invalid-response',
+        `unreadable response (${unreadableBodyNote(response)})`,
+        response.status,
+      );
     }
     if (!payload || Number(payload.code) !== 200) {
       const code = Number(payload?.code);
@@ -290,7 +389,7 @@ const createClient = (deviceId) => ({
       }
       throw new BodianError(
         code === 11012 ? 'auth-required' : code === 20018 ? 'not-playable' : 'invalid-response',
-        `Bodian rejected the request (code ${payload?.code ?? 'missing'})`,
+        `rejected the request (code ${payload?.code ?? 'missing'})`,
         payload?.code,
       );
     }
@@ -753,6 +852,14 @@ export async function handleBodianRequest(operation, params = {}) {
   } catch (error) {
     if (error instanceof BodianError && error.code === 'auth-required' && sessionState.revision === revision) {
       await clearSession();
+    }
+    /*
+     * 兜底也要把抛出来的错本身记下来（M28）：改前只回一句 `Bodian operation failed`，
+     * 非 BodianError 的岔子（fetch reject、类型错误）在诊断里连名字都没有。
+     * 只记错误对象，不记请求地址 —— 地址的 query 里有 uid 与签名。
+     */
+    if (!(error instanceof BodianError)) {
+      console.warn('[Bodian] 操作抛出未归类的错误', { operation, error });
     }
     const result = {
       ok: false,

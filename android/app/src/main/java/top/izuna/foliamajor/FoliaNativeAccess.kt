@@ -559,6 +559,53 @@ class FoliaNativeAccess(
     }
 
     /**
+     * 一条「由用户配置的对外服务地址」的准入判定（M30）。
+     *
+     * 与 [requireAllowedTarget] 的差别只有一条：**不要求**它是用户登记过的自建服务
+     * （sessionHosts 里那台「host:port」）。AI 端点正是这一类 —— 用户自己填的第三方代理
+     * 就该允许，只是不许它变成一条通往内网的出口。
+     *
+     * 所以放行条件只剩两条，和 httpRequest 同一套实现：
+     *   · scheme 是 http / https，且主机在页面白名单里（`FoliaPlatformHosts` 的 AI 那几条
+     *     与各家的自建服务后缀，见那里的注释）；
+     *   · 主机不是内网 / 环回 / 链路本地字面量（[FoliaPrivateNetworks]）。
+     *
+     * 拦下来时抛 [FoliaNativeAccessDenied]，原因只说地址段，不回显完整地址 ——
+     * query 里可能有 key。
+     */
+    fun requireAllowedRequestUrl(url: String, method: String): String {
+        val uri = try {
+            Uri.parse(url)
+        } catch (error: Exception) {
+            Log.w(TAG, "denied " + method + ": unreadable url", error)
+            throw FoliaNativeAccessDenied("request target is not a readable url")
+        }
+        val scheme = uri.scheme?.lowercase(Locale.US) ?: ""
+        if (scheme != "http" && scheme != "https") {
+            Log.w(TAG, "denied " + method + ": scheme " + scheme)
+            throw FoliaNativeAccessDenied("only http and https targets are allowed")
+        }
+        val host = uri.host?.lowercase(Locale.US)
+        if (host.isNullOrEmpty()) {
+            Log.w(TAG, "denied " + method + ": no host")
+            throw FoliaNativeAccessDenied("request target has no host")
+        }
+        val privateRange = FoliaPrivateNetworks.describePrivateLiteral(host)
+        if (privateRange != null) {
+            // 只记地址段：完整地址可能带 query，query 里可能有 key。
+            Log.w(TAG, "denied " + method + ": private range " + privateRange)
+            throw FoliaNativeAccessDenied(
+                "private network targets are not allowed for this service (" + privateRange + ")",
+            )
+        }
+        if (!isAllowedHost(host)) {
+            Log.w(TAG, "denied " + method + ": host " + host + " is not allowlisted")
+            throw FoliaNativeAccessDenied("host is not allowlisted: " + host)
+        }
+        return host
+    }
+
+    /**
      * cookie 操作的目标（H2）：必须显式给 url 或 domain，且落在白名单里。
      *
      * 回的是「这个域的地址」—— 调用方拿它去问 CookieManager，读到的就只有该平台那一片。
@@ -820,52 +867,65 @@ class FoliaNativeAccess(
 object FoliaPrivateNetworks {
 
     /** 明确不被当作「内网」的公共主机名后缀之外的一切，都按字面量判断。 */
-    fun isPrivateLiteral(host: String?): Boolean {
-        if (host == null) return true
+    fun isPrivateLiteral(host: String?): Boolean = describePrivateLiteral(host) != null
+
+    /**
+     * 命中私有网段时回是哪一段（`127.0.0.0/8` 这种），没命中回 null。
+     *
+     * 给日志与拒绝对话用：说得出「是哪一段被拦了」，又不把完整地址写出去 ——
+     * 完整地址可能带 query，query 里可能有 key（M30 的 AI 链路就是这种地址）。
+     */
+    fun describePrivateLiteral(host: String?): String? {
+        if (host == null) return "no host"
         val value = host.trim().lowercase(Locale.US).removePrefix("[").removeSuffix("]")
-        if (value.isEmpty()) return true
-        if (value == "localhost" || value.endsWith(".localhost")) return true
-        if (value.contains(':')) return isPrivateIpv6(value)
-        return isPrivateIpv4(value)
+        if (value.isEmpty()) return "no host"
+        if (value == "localhost" || value.endsWith(".localhost")) return "localhost"
+        if (value.contains(':')) return describePrivateIpv6(value)
+        return describePrivateIpv4(value)
     }
 
-    private fun isPrivateIpv4(value: String): Boolean {
+    private fun describePrivateIpv4(value: String): String? {
         val parts = value.split(".")
-        if (parts.size != 4) return false
+        if (parts.size != 4) return null
         val octets = IntArray(4)
         for (index in 0 until 4) {
             val part = parts[index]
-            if (part.isEmpty() || !part.all { it.isDigit() }) return false
-            val parsed = part.toIntOrNull() ?: return false
-            if (parsed > 255) return false
+            if (part.isEmpty() || !part.all { it.isDigit() }) return null
+            val parsed = part.toIntOrNull() ?: return null
+            if (parsed > 255) return null
             octets[index] = parsed
         }
         val a = octets[0]
         val b = octets[1]
         return when {
-            a == 0 -> true                       // 0.0.0.0/8「本网络」
-            a == 10 -> true                      // 10/8
-            a == 127 -> true                     // 回环
-            a == 169 && b == 254 -> true         // 链路本地 / 云元数据
-            a == 172 && b in 16..31 -> true      // 172.16/12
-            a == 192 && b == 168 -> true         // 192.168/16
-            a == 100 && b in 64..127 -> true     // CGNAT 100.64/10
-            a == 192 && b == 0 -> true           // IETF 协议分配 192.0/24
-            a == 198 && (b == 18 || b == 19) -> true
-            a >= 224 -> true                     // 组播 / 保留
-            else -> false
+            a == 0 -> "0.0.0.0/8"
+            a == 10 -> "10.0.0.0/8"
+            a == 127 -> "127.0.0.0/8"
+            a == 169 && b == 254 -> "169.254.0.0/16"
+            a == 172 && b in 16..31 -> "172.16.0.0/12"
+            a == 192 && b == 168 -> "192.168.0.0/16"
+            a == 100 && b in 64..127 -> "100.64.0.0/10"
+            a == 192 && b == 0 -> "192.0.0.0/24"
+            a == 198 && (b == 18 || b == 19) -> "198.18.0.0/15"
+            a >= 224 -> "224.0.0.0/4"
+            else -> null
         }
     }
 
-    private fun isPrivateIpv6(value: String): Boolean {
-        if (value == "::1" || value == "::" || value == "0:0:0:0:0:0:0:1") return true
-        if (value.startsWith("fe80:") || value.startsWith("fc") || value.startsWith("fd")) return true
+    private fun describePrivateIpv6(value: String): String? {
+        if (value == "::1" || value == "0:0:0:0:0:0:0:1") return "::1"
+        if (value == "::") return "::"
+        if (value.startsWith("fe80:")) return "fe80::/10"
+        if (value.startsWith("fc") || value.startsWith("fd")) return "fc00::/7"
         // IPv4-mapped：::ffff:192.168.0.1 / ::ffff:10.0.0.1
         if (value.startsWith("::ffff:")) {
             val tail = value.removePrefix("::ffff:")
-            if (tail.contains('.')) return isPrivateIpv4(tail)
+            if (tail.contains('.')) {
+                val inner = describePrivateIpv4(tail)
+                return inner?.let { "::ffff:" + it }
+            }
         }
-        return false
+        return null
     }
 }
 

@@ -487,7 +487,7 @@ object BackgroundThemeWorker {
          * 但 request 会在主线程提前读，一个可变的「上次失败类别」迟早对不上号。
          */
         val failureKind = arrayOf(BackgroundThemeBackoff.Kind.TRANSIENT)
-        val generated = generate(fresh, store, title, artist, lyricText, failureKind)
+        val generated = generate(context, fresh, store, title, artist, lyricText, failureKind)
         if (generated != null) {
             if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
                 applyToOverlay(context, store, job, generated)
@@ -648,7 +648,8 @@ object BackgroundThemeWorker {
      * 退避按它决定冷却多长 —— 401 重试一万次也不会好，那类要多等一会儿并让用户去改配置。
      */
     private fun generate(
-        config: BackgroundThemeConfig, store: FoliaSettingsStore, title: String, artist: String, lyricText: String,
+        context: Context, config: BackgroundThemeConfig, store: FoliaSettingsStore, title: String, artist: String,
+        lyricText: String,
         failureKind: Array<BackgroundThemeBackoff.Kind>,
     ): JSONObject? {
         val aiConfig = readAiConfig(store)
@@ -674,7 +675,14 @@ object BackgroundThemeWorker {
         }
 
         return try {
-            val text = AiCompletion.run(aiConfig, system, prompt, BackgroundThemeRules.MAX_TOKENS, true)
+            /*
+             * M30：后台主题与前台补全走同一条原生网络栈，端点的准入判定也要一样，
+             * 否则「前台不让连内网、后台照连」就是一个现成的绕过口。
+             */
+            val access = top.izuna.foliamajor.FoliaNativeAccess(context.applicationContext)
+            val text = AiCompletion.run(aiConfig, system, prompt, BackgroundThemeRules.MAX_TOKENS, true) { url ->
+                access.requireAllowedRequestUrl(url, "background-theme")
+            }
             val payload = BackgroundThemeRules.parseStagePayload(text)
             if (payload == null) {
                 Log.w(TAG, "[BackgroundTheme] 模型输出不是可用的 stage JSON")

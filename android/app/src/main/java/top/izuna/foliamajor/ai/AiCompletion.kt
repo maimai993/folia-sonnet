@@ -61,23 +61,25 @@ object AiCompletion {
      * @param jsonMode true 时请求 JSON 输出（Gemini 用 responseMimeType，OpenAI 用 response_format）
      */
     fun run(config: AiConfig, system: String, prompt: String,
-            maxTokens: Int, jsonMode: Boolean): String {
+            maxTokens: Int, jsonMode: Boolean, guardUrl: (String) -> Unit): String {
         if (!config.configured) {
             throw AiException("ai-not-configured", "AI 未配置")
         }
         return when (AiProviderPreset.of(config.provider).protocol) {
-            "gemini" -> runGemini(config, system, prompt, maxTokens, jsonMode)
-            "anthropic" -> runAnthropic(config, system, prompt, maxTokens)
-            else -> runOpenAiCompatible(config, system, prompt, maxTokens, jsonMode)
+            "gemini" -> runGemini(config, system, prompt, maxTokens, jsonMode, guardUrl)
+            "anthropic" -> runAnthropic(config, system, prompt, maxTokens, guardUrl)
+            else -> runOpenAiCompatible(config, system, prompt, maxTokens, jsonMode, guardUrl)
         }
     }
 
     // ---- Gemini ----
 
     private fun runGemini(config: AiConfig, system: String, prompt: String,
-                          maxTokens: Int, jsonMode: Boolean): String {
+                          maxTokens: Int, jsonMode: Boolean, guardUrl: (String) -> Unit): String {
         val model = config.model.trim().ifEmpty { AiProviderPreset.of("gemini").recommendedModel }
         val url = AiEndpoints.geminiGenerateContent(config.geminiApiUrl, model)
+        // M30：真正发出去之前过主机判定，内网 / 环回在这里就被拦下。
+        AiEndpoints.guardRequestUrl(url, guardUrl)
         val body = JSONObject().apply {
             put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
             put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)))))
@@ -107,10 +109,12 @@ object AiCompletion {
     // ---- Anthropic ----
 
     private fun runAnthropic(config: AiConfig, system: String, prompt: String,
-                             maxTokens: Int): String {
+                             maxTokens: Int, guardUrl: (String) -> Unit): String {
         val preset = AiProviderPreset.of("anthropic")
         val base = config.baseUrl.trim().ifEmpty { preset.baseUrl }
         val url = AiEndpoints.anthropicMessages(base)
+        // M30：真正发出去之前过主机判定，内网 / 环回在这里就被拦下。
+        AiEndpoints.guardRequestUrl(url, guardUrl)
         val model = config.model.trim().ifEmpty { preset.recommendedModel }
         val body = JSONObject().apply {
             put("model", model)
@@ -140,10 +144,12 @@ object AiCompletion {
     // ---- OpenAI 兼容（含参数降级重试） ----
 
     private fun runOpenAiCompatible(config: AiConfig, system: String, prompt: String,
-                                    maxTokens: Int, jsonMode: Boolean): String {
+                                    maxTokens: Int, jsonMode: Boolean, guardUrl: (String) -> Unit): String {
         val preset = AiProviderPreset.of(config.provider)
         val base = config.baseUrl.trim().ifEmpty { preset.baseUrl }
         val url = AiEndpoints.chatCompletions(base)
+        // M30：真正发出去之前过主机判定，内网 / 环回在这里就被拦下。
+        AiEndpoints.guardRequestUrl(url, guardUrl)
         val model = AiEndpoints.resolveModel(url, config.model)
         val provider = AiEndpoints.detectProvider(url)
         val caps = capsFor(url, model)
