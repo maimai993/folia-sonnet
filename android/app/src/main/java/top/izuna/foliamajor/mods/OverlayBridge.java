@@ -58,6 +58,12 @@ final class OverlayBridge {
     private final ConcurrentHashMap<Long, List<String>> pendingSends = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Boolean> pageReady = new ConcurrentHashMap<>();
 
+    /** 单个窗口在页面就绪前最多攒多少条（issue M12），到顶丢最旧的。 */
+    private static final int PENDING_SENDS_LIMIT = 512;
+
+    /** 累计丢掉多少条待发消息，只用于日志节流。 */
+    private int droppedSends = 0;
+
     interface IpcHandler {
         void onMessage(IpcEvent event, JSONObject payload);
     }
@@ -130,11 +136,34 @@ final class OverlayBridge {
         String script = "window.__foliaIpc && window.__foliaIpc.receive("
                 + JSONObject.quote(envelope.toString()) + ");";
         if (!Boolean.TRUE.equals(pageReady.get(windowId))) {
-            pendingSends.computeIfAbsent(windowId, key -> new ArrayList<>()).add(script);
+            enqueuePending(windowId, script);
             return;
         }
         OverlayWindowManager.OverlayWindow window = findWindow(windowId);
         if (window != null) overlays.evaluate(window, script);
+    }
+
+    /**
+     * 页面就绪前先把脚本攒起来（issue M12）。
+     *
+     * 攒的条数要有上限：一个在建完窗口之后立刻高频发送的模组，可以在页面加载完之前把
+     * 这几条待注入的 JS 字符串堆到很长；Node 那边没有 V8 堆上限，跟着一起涨。
+     * 到顶之后**丢掉最旧的**而不是拒收新的 —— 页面渲染的是最新状态，旧消息过时。
+     */
+    private void enqueuePending(long windowId, String script) {
+        List<String> queue = pendingSends.computeIfAbsent(windowId, key -> new ArrayList<>());
+        synchronized (queue) {
+            if (queue.size() >= PENDING_SENDS_LIMIT) {
+                queue.remove(0);
+                droppedSends += 1;
+                /* 只在每跌满一批时记一行，不然高频发送会自己把日志刷爆。 */
+                if (droppedSends % PENDING_SENDS_LIMIT == 0) {
+                    Log.w(TAG, "页面就绪前的待发消息超过 " + PENDING_SENDS_LIMIT
+                            + " 条，已丢弃最旧的，累计丢弃 " + droppedSends + " 条");
+                }
+            }
+            queue.add(script);
+        }
     }
 
     /** 页面加载完成：把攒下的消息补发出去。 */
@@ -144,7 +173,12 @@ final class OverlayBridge {
         if (queued == null) return;
         OverlayWindowManager.OverlayWindow window = findWindow(windowId);
         if (window == null) return;
-        for (String script : queued) {
+        /* 与 enqueuePending 共用同一把锁：补发期间进来的新消息会另起一条队列，不会插进这份快照。 */
+        List<String> snapshot;
+        synchronized (queued) {
+            snapshot = new ArrayList<>(queued);
+        }
+        for (String script : snapshot) {
             overlays.evaluate(window, script);
         }
     }
