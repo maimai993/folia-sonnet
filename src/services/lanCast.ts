@@ -72,6 +72,52 @@ const isLoopbackUrl = (value: string): boolean => {
 };
 
 /**
+ * 局域网主机白名单（与原生 LanCastTargetPolicy 同一套判定）。
+ *
+ * 为什么要在前端再判一次：`controlUrl` 会被持久化到 localStorage（上次那台音响），
+ * 下次启动「WiFi 自动投送」时会不经重新发现直接把它传回原生。一旦某次发现被伪造的
+ * SSDP 应答污染过，落盘的地址就可能指向任意主机 —— 存进来这条路上就先挡掉，
+ * 而不是指望原生每次都拦得住。原生侧仍然独立校验一遍，两边都不依赖对方。
+ */
+const LAN_PORTS = new Set([80, 443, 49152, 49153, 49154, 49155, 49156, 49157, 8080, 8443]);
+
+const isLanHost = (hostname: string): boolean => {
+    const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (!host) return false;
+    if (host.endsWith('.local')) return true;
+    const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (v4) {
+        const parts = v4.slice(1).map(Number);
+        if (parts.some(part => part > 255)) return false;
+        const [a, b] = parts;
+        return a === 10
+            || (a === 172 && b >= 16 && b <= 31)
+            || (a === 192 && b === 168)
+            || (a === 100 && b >= 64 && b <= 127)
+            || (a === 198 && (b === 18 || b === 19));
+    }
+    // IPv6：只认唯一本地地址 fc00::/7 与链路本地 fe80::/10。
+    if (host.includes(':')) return /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+    return false;
+};
+
+/** 投送目标（音响的 controlUrl / volumeControlUrl）是否可信：局域网、常见端口、http(s)。 */
+export const isTrustedLanTarget = (value: string | null | undefined): boolean => {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    try {
+        const url = new URL(text);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+        if (url.username || url.password) return false;
+        const port = url.port ? Number(url.port) : (url.protocol === 'https:' ? 443 : 80);
+        if (!LAN_PORTS.has(port)) return false;
+        return isLanHost(url.hostname);
+    } catch {
+        return false;
+    }
+};
+
+/**
  * 把播放地址变成音响能真正拉到的地址。
  *
  * 安卓上绝大多数在线歌曲走 `http://127.0.0.1:<port>/remote-audio/<token>`（绕 CORS 的转发），
@@ -223,12 +269,17 @@ export const getLastSpeaker = (): LanSpeaker | null => {
         const raw = localStorage.getItem(LAST_SPEAKER_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw) as LanSpeaker;
-        return parsed?.controlUrl ? parsed : null;
+        // 落盘之后可能已经被污染（见 isTrustedLanTarget）：读回来先过一遍白名单，
+        // 不合格就当没有记住过，下次让用户重新扫一遍。
+        if (!parsed?.controlUrl || !isTrustedLanTarget(parsed.controlUrl)) return null;
+        return parsed;
     } catch { return null; }
 };
 
 export const rememberSpeaker = (speaker: LanSpeaker): void => {
     if (typeof window === 'undefined') return;
+    // 只记可信的地址；不可思议就干脆不记，免得下一次自动投送打向别处。
+    if (!isTrustedLanTarget(speaker.controlUrl)) return;
     try { localStorage.setItem(LAST_SPEAKER_KEY, JSON.stringify(speaker)); } catch { /* 忽略 */ }
 };
 
@@ -255,7 +306,10 @@ export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[
     const plugin = cast();
     if (!plugin?.discover) throw new Error('当前设备不支持局域网投送');
     const result = await plugin.discover({ timeoutMs });
-    return (result?.devices ?? []).filter(device => Boolean(device?.controlUrl && device?.name));
+    // 原生已经拦过一遍，这里再拦是防旧版本插件（升级后第一次启动仍可能路由到旧的原生实现）。
+    return (result?.devices ?? []).filter(device => (
+        Boolean(device?.controlUrl && device?.name) && isTrustedLanTarget(device.controlUrl)
+    ));
 };
 
 export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrack): Promise<void> => {

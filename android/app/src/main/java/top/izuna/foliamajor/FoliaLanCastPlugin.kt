@@ -45,10 +45,18 @@ class FoliaLanCastPlugin : Plugin() {
         private val SOAP_XML = "text/xml; charset=\"utf-8\"".toMediaType()
     }
 
+    /**
+     * 不跟随重定向。
+     *
+     * 投送用的 POST 带 `SOAPACTION`，过去开着 `followRedirects(true)`：合法设备的一次 302
+     * 就能把整条 SOAP 记录（含我们代发的指令）转发到第二跳主机上。UPnP 的控制端口不该
+     * 靠重定向做跳转，需要跳的设备自己会在设备描述里给对地址。
+     */
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
-        .followRedirects(true)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /** 一次发现的结果。controlUrl 已经是绝对地址，Web 层不必再解析设备描述。 */
@@ -103,6 +111,14 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这首歌曲没有可在局域网访问的地址")
             return
         }
+        // 推之前先过目标准入（见 LanCastTargetPolicy）：伪造的 SSDP 应答会把这里导向任意主机。
+        val target = try {
+            LanCastTargetPolicy.requireAllowedTarget(controlUrl, "音响地址")
+        } catch (error: java.io.IOException) {
+            Log.w(TAG, "play target rejected: " + error.message)
+            call.reject(error.message ?: "音响地址不在局域网内")
+            return
+        }
         val title = call.getString("title") ?: ""
         val artist = call.getString("artist") ?: ""
         val album = call.getString("album") ?: ""
@@ -113,12 +129,19 @@ class FoliaLanCastPlugin : Plugin() {
                 val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs)
                 // 有些老设备解析不了 DIDL-Lite，正文送不进去就退成 NOT_IMPLEMENTED 再试一次：
                 // 地址照样能播，只是音响上不显示歌名。
-                val sent = soap(controlUrl, "SetAVTransportURI", setUriBody(audioUrl, metadata))
-                    || soap(controlUrl, "SetAVTransportURI", setUriBody(audioUrl, "NOT_IMPLEMENTED"))
+                val sent = soap(
+                    target,
+                    "SetAVTransportURI",
+                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to metadata),
+                ) || soap(
+                    target,
+                    "SetAVTransportURI",
+                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to "NOT_IMPLEMENTED"),
+                )
                 val started = sent && soap(
-                    controlUrl,
+                    target,
                     "Play",
-                    "<u:Play xmlns:u=\"$AV_TRANSPORT\"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>",
+                    listOf("InstanceID" to "0", "Speed" to "1"),
                 )
                 if (!started) {
                     call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放")
@@ -142,13 +165,16 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("缺少音响地址")
             return
         }
+        val target = try {
+            LanCastTargetPolicy.requireAllowedTarget(controlUrl, "音响地址")
+        } catch (error: java.io.IOException) {
+            Log.w(TAG, "stop target rejected: " + error.message)
+            call.reject(error.message ?: "音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val stopped = soap(
-                    controlUrl,
-                    "Stop",
-                    "<u:Stop xmlns:u=\"$AV_TRANSPORT\"><InstanceID>0</InstanceID></u:Stop>",
-                )
+                val stopped = soap(target, "Stop", listOf("InstanceID" to "0"))
                 val payload = JSObject()
                 payload.put("ok", stopped)
                 call.resolve(payload)
@@ -167,11 +193,13 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这台音响不支持音量控制")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val body = "<u:GetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>"
-                val value = soapNumber(url, "GetVolume", body, "CurrentVolume")
+                val value = soapNumber(target, "GetVolume", listOf("InstanceID" to "0", "Channel" to "Master"), "CurrentVolume")
                 if (value == null) call.reject("音响没有返回音量")
                 else call.resolve(JSObject().put("volume", value))
             } catch (error: Exception) {
@@ -190,12 +218,17 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("缺少音响地址或音量")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val body = "<u:SetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
-                    "<DesiredVolume>$volume</DesiredVolume></u:SetVolume>"
-                val ok = soap(url, "SetVolume", body, RENDERING_CONTROL)
+                val ok = soap(
+                    target,
+                    "SetVolume",
+                    listOf("InstanceID" to "0", "Channel" to "Master", "DesiredVolume" to volume.toString()),
+                )
                 call.resolve(JSObject().put("ok", ok))
             } catch (error: Exception) {
                 Log.w(TAG, "setVolume failed", error)
@@ -212,19 +245,32 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这台音响不支持静音控制")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         val muted = call.getBoolean("muted") ?: false
         Thread {
             try {
-                val body = "<u:SetMute xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
-                    "<DesiredMute>${if (muted) 1 else 0}</DesiredMute></u:SetMute>"
-                val ok = soap(url, "SetMute", body, RENDERING_CONTROL)
+                val ok = soap(
+                    target,
+                    "SetMute",
+                    listOf("InstanceID" to "0", "Channel" to "Master", "DesiredMute" to (if (muted) "1" else "0")),
+                )
                 call.resolve(JSObject().put("ok", ok))
             } catch (error: Exception) {
                 Log.w(TAG, "setMute failed", error)
                 call.reject("设置静音失败：${error.message ?: "unknown"}", error)
             }
         }.start()
+    }
+
+    /** RenderingControl 的地址也过一次准入；不合格就返回 null（调用方统一 reject）。 */
+    private fun controlTargetOrNull(value: String): URL? = try {
+        LanCastTargetPolicy.requireAllowedTarget(value, "音量控制地址")
+    } catch (error: java.io.IOException) {
+        Log.w(TAG, "volume target rejected: " + error.message)
+        null
     }
 
     // ------------------------------------------------------------------ WiFi 自动投送
@@ -330,6 +376,14 @@ class FoliaLanCastPlugin : Plugin() {
                             val text = String(incoming.data, 0, incoming.length, Charsets.UTF_8)
                             val headers = parseHeaders(text)
                             val location = headers["location"] ?: continue
+                            /*
+                             * LOCATION 先过一次准入再拿去 GET。
+                             *
+                             * SSDP 应答是明文 UDP、没有认证：同网段任何设备都能回一份把
+                             * LOCATION 指向公网地址的假应答。照着它去 GET 就已经是一次出站请求
+                             * （SSRF 的第一跳），所以在发出任何请求之前就挡掉。
+                             */
+                            if (!isAllowedLocation(location)) continue
                             val usn = headers["usn"] ?: location
                             if (!replies.containsKey(usn)) replies[usn] = location
                         } catch (timeout: java.net.SocketTimeoutException) {
@@ -363,6 +417,15 @@ class FoliaLanCastPlugin : Plugin() {
         return headBytes + target + tail
     }
 
+    /** 应答里的 LOCATION 是否落在局域网内（判据见 LanCastTargetPolicy）。 */
+    private fun isAllowedLocation(location: String): Boolean = try {
+        LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
+        true
+    } catch (error: java.io.IOException) {
+        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + error.message)
+        false
+    }
+
     /** SSDP 回复是 HTTP 风格的头，键统一小写。 */
     private fun parseHeaders(text: String): Map<String, String> {
         val headers = HashMap<String, String>()
@@ -377,20 +440,22 @@ class FoliaLanCastPlugin : Plugin() {
     /** GET 设备描述，确认它真的是 MediaRenderer 并取出 AVTransport 的 controlURL。 */
     private fun readSpeaker(usn: String, location: String): Speaker? {
         return try {
-            val request = Request.Builder().url(location).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
+            val deviceUrl = LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
+            val request = Request.Builder().url(deviceUrl).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 val body = response.body?.string() ?: return@use null
                 val parsed = parseDescription(body)
                 val controlPath = parsed.controlUrl ?: return@use null
-                val absolute = absoluteUrl(location, controlPath, parsed.urlBase)
+                val absolute = resolveControlUrl(deviceUrl, controlPath, parsed.urlBase) ?: return@use null
                 Speaker(
                     id = usn,
                     name = parsed.name.ifEmpty { hostOf(location) },
                     location = location,
-                    controlUrl = absolute,
+                    controlUrl = absolute.toString(),
                     manufacturer = parsed.manufacturer,
-                    volumeControlUrl = parsed.volumeControlUrl?.let { absoluteUrl(location, it, parsed.urlBase) },
+                    volumeControlUrl = parsed.volumeControlUrl
+                        ?.let { resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
                 )
             }
         } catch (error: Exception) {
@@ -445,15 +510,31 @@ class FoliaLanCastPlugin : Plugin() {
         return result
     }
 
-    private fun absoluteUrl(location: String, controlPath: String, urlBase: String): String {
-        if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) return controlPath
-        val base = if (urlBase.isNotEmpty()) {
-            urlBase
-        } else {
-            val url = URL(location)
-            "${url.protocol}://${url.host}${if (url.port > 0) ":${url.port}" else ""}/"
+    /**
+     * 设备描述里的 controlURL 拼成绝对地址，并做准入。
+     *
+     * 过去绝对 URL 原样接受：一份伪造的设备描述就能把后续所有 SOAP 指向任意主机。
+     * 现在相对路径以设备描述自己的地址（或它声明的 URLBase）为基准，拼完统一过
+     * [LanCastTargetPolicy]：局域网、允许端口、且绝对 URL 必须与设备同段。
+     * 不合格返回 null，那台设备直接被丢弃（发现列表里不出现）。
+     */
+    private fun resolveControlUrl(deviceUrl: URL, controlPath: String, urlBase: String): URL? {
+        return try {
+            val raw = if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) {
+                controlPath
+            } else {
+                val base = if (urlBase.isNotEmpty()) urlBase else {
+                    "${deviceUrl.protocol}://${deviceUrl.host}${if (deviceUrl.port > 0) ":${deviceUrl.port}" else ""}/"
+                }
+                base.trimEnd('/') + "/" + controlPath.trimStart('/')
+            }
+            val target = LanCastTargetPolicy.requireAllowedTarget(raw, "控制地址")
+            LanCastTargetPolicy.requireSameLanAs(target, deviceUrl)
+            target
+        } catch (error: Exception) {
+            Log.w(TAG, "rejected control url $controlPath: " + error.message)
+            null
         }
-        return base.trimEnd('/') + "/" + controlPath.trimStart('/')
     }
 
     private fun hostOf(location: String): String = try {
@@ -464,10 +545,29 @@ class FoliaLanCastPlugin : Plugin() {
 
     // ------------------------------------------------------------------ SOAP
 
-    private fun soapRaw(controlUrl: String, action: String, body: String, service: String): String? {
+    /**
+     * 结构化构造 SOAP 请求：动作名 + 参数表，转义由这里统一做。
+     *
+     * 过去正文是调用方拼好的字符串，`soapRaw` 原样塞进信封 —— 任何一个新动作方法漏用
+     * escapeXml 就是一个 XML 注入（歌名、地址全都来自外部数据）。现在调用方只给键值对，
+     * 拼装与转义只有这一处实现。
+     */
+    private fun soapRaw(
+        controlUrl: URL,
+        action: String,
+        args: List<Pair<String, String>>,
+        service: String = AV_TRANSPORT,
+    ): String? {
+        val body = StringBuilder("<u:").append(action).append(" xmlns:u=\"").append(service).append("\">")
+        for ((key, value) in args) {
+            body.append('<').append(key).append('>')
+                .append(escapeXml(value))
+                .append("</").append(key).append('>')
+        }
+        body.append("</u:").append(action).append('>')
         val envelope = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
             "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
-            "<s:Body>$body</s:Body></s:Envelope>"
+            "<s:Body>${body}</s:Body></s:Envelope>"
         val request = Request.Builder()
             .url(controlUrl)
             .header("SOAPACTION", "\"$service#$action\"")
@@ -482,24 +582,21 @@ class FoliaLanCastPlugin : Plugin() {
         }
     }
 
-    private fun soap(controlUrl: String, action: String, body: String, service: String = AV_TRANSPORT): Boolean =
-        soapRaw(controlUrl, action, body, service) != null
+    private fun soap(
+        controlUrl: URL,
+        action: String,
+        args: List<Pair<String, String>>,
+        service: String = AV_TRANSPORT,
+    ): Boolean = soapRaw(controlUrl, action, args, service) != null
 
     /** GetVolume 的响应形如 <CurrentVolume>42</CurrentVolume>，命名空间前缀各家不一样。 */
-    private fun soapNumber(controlUrl: String, action: String, body: String, tag: String): Int? {
-        val text = soapRaw(controlUrl, action, body, RENDERING_CONTROL) ?: return null
+    private fun soapNumber(controlUrl: URL, action: String, args: List<Pair<String, String>>, tag: String): Int? {
+        val text = soapRaw(controlUrl, action, args, RENDERING_CONTROL) ?: return null
         val pattern = Regex("<(?:[A-Za-z0-9_]+:)?$tag[^>]*>\\s*([0-9]+)\\s*</", RegexOption.IGNORE_CASE)
         return pattern.find(text)?.groupValues?.get(1)?.toIntOrNull()
     }
 
-    private fun setUriBody(audioUrl: String, metadata: String): String =
-        "<u:SetAVTransportURI xmlns:u=\"$AV_TRANSPORT\">" +
-            "<InstanceID>0</InstanceID>" +
-            "<CurrentURI>${escapeXml(audioUrl)}</CurrentURI>" +
-            "<CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>" +
-            "</u:SetAVTransportURI>"
-
-    /** DIDL-Lite 是塞在 XML 文本节点里的，所以整体还要在 setUriBody 里再转义一次。 */
+    /** DIDL-Lite 是塞在 XML 文本节点里的，所以整段会由 soapRaw 再转义一次。 */
     private fun didlMetadata(
         audioUrl: String,
         title: String,
