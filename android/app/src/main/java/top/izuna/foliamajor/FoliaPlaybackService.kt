@@ -175,7 +175,7 @@ class FoliaPlaybackService : android.app.Service() {
 
     private val heartbeatTick: Runnable = object : Runnable {
         override fun run() {
-            if (!running) {
+            if (!isRunning()) {
                 return
             }
             val alive = FoliaPlaybackPlugin.isBridgeAlive()
@@ -227,43 +227,90 @@ class FoliaPlaybackService : android.app.Service() {
     /**
      * 心跳断了：注销播放控制通知并退出前台。
      *
-     * 与 onStop 的收法一致（stopForegroundCompat + 撤 session），另加一次
-     * notificationManager.cancel —— publishNotification 那条路是 notify 贴的，
-     * stopForeground(REMOVE) 只收 startForeground 关联的那张。
+     * 收尾动作与 MediaSession 的 onStop 走同一个 [endNotificationState]（#M4）：
+     * 以前 onStop 只 stopSelf、心跳这条只撤 session，两条路各自漏一半，于是
+     * 「onStop 之后通知还在」「session inactive 但没 release」这类中间态都能出现。
      *
      * 复活路径是通的：哪天播放又活了（原生兜底切歌 / JS 醒来推状态），
      * promoteToForeground() 会重新前台化并把 session 拉回来，通知跟着回来。
      */
     private fun withdrawMediaNotification() {
         Log.i(TAG, "playback heartbeat is gone; withdrawing the media notification")
+        endNotificationState(keepSession = true, stopService = false)
+    }
+
+    /**
+     * 前台化 / 通知 / MediaSession 三件东西的唯一收尾处（#M4）。
+     *
+     * 三条来路（心跳撤回、媒体面板 onStop、onDestroy）只在最后一步上不同，所以这里收成一个函数，
+     * 靠 [keepSession] / [stopService] 两个开关决定「差在哪」，而不是各写一份、各自漏一处：
+     *
+     *  - 撤回（心跳断、`stopService=false, keepSession=true`）：撤 session 的有效性、退前台、
+     *    取消通知，服务**继续活着**。这是唯一允许的中间态，并显式落到 [ForegroundNotificationState.WITHDRAWN]：
+     *    以前这一下只把 `foregrounded` 置 false，服务便以「无名字的非前台身份」继续跑，
+     *    插件仍按旧逻辑判它在前台。（#M4 影响 3）
+     *  - onStop（媒体面板点了停止，`stopService=true`）：与上面完全相同，再加上 stopSelf。
+     *  - onDestroy（`keepSession=false`）：上面全部做完，再把 session release 掉。
+     *
+     * 每一步都单独兜异常：一次 startForeground 失败过之后，任何一步抛都会让后面的步骤永远走不到，
+     * 也就是 notifications + session 一起残留。
+     */
+    private var notificationState: top.izuna.foliamajor.player.ForegroundNotificationState =
+            top.izuna.foliamajor.player.ForegroundNotificationState.NONE
+
+    private fun endNotificationState(keepSession: Boolean, stopService: Boolean) {
         if (mediaSession != null) {
             try {
                 mediaSession?.setActive(false)
-            } catch (ignored: Throwable) {
+            } catch (error: Throwable) {
+                Log.w(TAG, "mediaSession.setActive(false) failed", error)
+            }
+            if (!keepSession) {
+                try {
+                    mediaSession?.release()
+                } catch (error: Throwable) {
+                    Log.w(TAG, "mediaSession.release() failed", error)
+                }
+                mediaSession = null
             }
         }
-        foregrounded = false
-        cachedNotification = null
         try {
             stopForegroundCompat()
-        } catch (ignored: Throwable) {
+        } catch (error: Throwable) {
+            Log.w(TAG, "stopForeground failed", error)
         }
+        /*
+         * 单独再 cancel 一次：publishNotification 那条路是用 notify 贴的，
+         * stopForeground(REMOVE) 只收 startForeground 关联的那一张。少这一句，onStop
+         * 之后通知栏里就会留一颗按了没反应的暂停键（#M4 影响 1）。
+         */
         try {
             notificationManager?.cancel(NOTIFICATION_ID)
-        } catch (ignored: Throwable) {
+        } catch (error: Throwable) {
+            Log.w(TAG, "notification cancel failed", error)
+        }
+        if (!keepSession) {
+            notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.NONE
+        } else {
+            notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.WITHDRAWN
+        }
+        if (stopService) {
+            stopSelf()
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        running = true
         snapshotSource = this
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         // 新实例起来了：前台状态必须从零算。它是静态的，进程活着时插件读它
         // （isForegrounded）决定走 startService 还是 startForegroundService；留着上一个
         // 实例的 true，新实例就会以为自己已经前台化、跳过 startForeground() ——
         // 5 秒后系统抛 ForegroundServiceDidNotStartInTimeException 杀进程。
-        foregrounded = false
+        // #M4：`foregrounded` 与 `running` 现在由 notificationState 一份担着（见 endNotificationState）。
+        // 置 WITHDRAWN（= 实例活着、但还没前台化）：isRunning 因此立刻报 true，isForegrounded 报 false，
+        // 与旧实现里 onCreate 里那两句同时置位的效果一致，只是不再可能只对一半。
+        notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.WITHDRAWN
         cachedNotification = null
         createNotificationChannel()
         // 就地前台化，**在任何可能卡住的工作之前**。
@@ -398,9 +445,9 @@ class FoliaPlaybackService : android.app.Service() {
 
             override fun onStop() {
                 sendCommand("stop")
-                mediaSession?.setActive(false)
-                stopForegroundCompat()
-                stopSelf()
+                // 与心跳撤回同一条收尾，只在最后多一步 stopSelf（#M4）：以前这里只 stopSelf，
+                // 既没退前台也没取消通知，媒体面板点了停止之后通知栏还留着一颗按了没反应的键。
+                endNotificationState(keepSession = true, stopService = true)
             }
 
             /**
@@ -641,8 +688,11 @@ class FoliaPlaybackService : android.app.Service() {
          *
          * 所以在每条启动命令上都真调一次：开销是每条 intent 一次，而不是每秒一次，
          * 换来「后台放着放着突然没声音」这个崩溃不再发生。
+         *
+         * #M4：这里不再手写 `foregrounded = false` —— 直接把状态置成 WITHDRAWN，
+         * 让 promoteToForeground 按「不在前台」走完整的那条路（含 session 重新 active）。
          */
-        foregrounded = false
+        notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.WITHDRAWN
         promoteToForeground()
         if (intent != null) {
             val action: String? = intent.getAction()
@@ -761,8 +811,13 @@ class FoliaPlaybackService : android.app.Service() {
                         applyPlaybackState()
                     }
                     ACTION_STOP_FOREGROUND -> {
-                        stopForegroundCompat()
-                        stopSelf()
+                        /*
+                         * 第四条收尾来路（#M4）：以前这里只 stopForegroundCompat + stopSelf，
+                         * 同样漏了 cancel(notification) 与 session 的失效，通知会留到 onDestroy
+                         * 才收（而 onDestroy 那条以前也不 cancel）。现在与 onStop / 心跳撤回
+                         * 走同一个 endNotificationState，只在「要不要 release session」上不同。
+                         */
+                        endNotificationState(keepSession = true, stopService = true)
                         return START_NOT_STICKY
                     }
                     else -> {
@@ -805,7 +860,7 @@ class FoliaPlaybackService : android.app.Service() {
         // 用户刚从最近任务里划掉：接下来随时可能连进程一起被收，这一拍必须同步落盘。
         persistPositionSnapshot(commit = true)
         persistQueueSnapshot()
-        if (running) {
+        if (isRunning()) {
             promoteToForeground()
             mainHandler.removeCallbacks(heartbeatTick)
             mainHandler.postDelayed(heartbeatTick, WALLPAPER_HEARTBEAT_TICK_MS)
@@ -814,7 +869,6 @@ class FoliaPlaybackService : android.app.Service() {
     }
 
     override fun onDestroy() {
-        running = false
         // 实例要没了：先把会话收尾写死。这一拍之后再没有任何机会，所以位置那条走同步写。
         persistPositionSnapshot(commit = true)
         persistQueueSnapshot()
@@ -828,17 +882,18 @@ class FoliaPlaybackService : android.app.Service() {
         unregisterArtworkNetworkCallback()
         // 心跳巡检也跟着撤：服务都死了，没人有资格替播放管线敲心跳。
         mainHandler.removeCallbacks(heartbeatTick)
-        // 实例没了，前台状态必须跟着清：它是静态的，进程还在时插件靠它选
-        // startService / startForegroundService。留着 true 会让下一次创建的实例跳过
-        // startForeground()，而那条路是 startForegroundService 开的 —— 5 秒后就是
-        // ForegroundServiceDidNotStartInTimeException。（onCreate 里也重置一次，双保险。）
-        foregrounded = false
-        cachedNotification = null
-        if (mediaSession != null) {
-            mediaSession?.setActive(false)
-            mediaSession?.release()
-            mediaSession = null
-        }
+        /*
+         * 前台状态、通知、MediaSession 一起收（#M4）。
+         *
+         * 以前这里只 release session，**没有 cancel(notification)**：promoteToForeground 与
+         * publishNotification 是用 notify 贴的，那条不归 stopForeground(REMOVE) 管，
+         * 于是服务没了、通知还挂在通知栏里。现在与 onStop / 心跳撤回同走 endNotificationState，
+         * 差别只在最后一步 —— 这里 keepSession=false，连 session 一起收掉，
+         * 并把 notificationState 置回 NONE（实例已经不在，插件 isForegrounded 必须报 false，
+         * 否则新实例会跳过 startForeground、5 秒后被系统杀：见 isForegrounded 里那段）。
+         * 放在最后一步：上面那些落盘 / 撤回调用的是 `running`，而 running 现在由状态推出来。
+         */
+        endNotificationState(keepSession = false, stopService = false)
         super.onDestroy()
     }
 
@@ -2022,7 +2077,7 @@ class FoliaPlaybackService : android.app.Service() {
          * startForegroundService（见 startServiceCompat），服务已经在前台时改走普通
          * startService —— 那条路不会开倒计时，也就不需要在这里兑现。
          */
-        if (foregrounded) {
+        if (notificationState.isForeground) {
             return
         }
         /*
@@ -2038,9 +2093,16 @@ class FoliaPlaybackService : android.app.Service() {
          */
         try {
             startForeground(NOTIFICATION_ID, buildPlaceholderNotification())
-            foregrounded = true
+            notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.FOREGROUND
         } catch (error: Throwable) {
             Log.e(TAG, "startForeground failed; keeping the service alive without it", error)
+            /*
+             * 前台化没兑现（#M4）。系统那边随时可能因为 5 秒超时把进程带走，
+             * 但这中间不该对外报「已前台」—— 插件据此改走 startForegroundService，
+             * 下一次投递会把这次前台化补上。置 WITHDRAWN 而不是维持原状态：
+             * 原来这里什么都不写，于是「标志说在前台、系统说不在」这个错位一路留着。
+             */
+            notificationState = top.izuna.foliamajor.player.ForegroundNotificationState.WITHDRAWN
             return
         }
         // 心跳中断时 session 被撤过（withdrawMediaNotification）：重新拉起来，
@@ -2087,7 +2149,7 @@ class FoliaPlaybackService : android.app.Service() {
     private fun publishNotification() {
         try {
             cachedNotification = buildForegroundNotification()
-            if (foregrounded) {
+            if (notificationState.isForeground) {
                 notificationManager?.notify(NOTIFICATION_ID, cachedNotification)
             }
         } catch (error: Throwable) {
@@ -2273,7 +2335,7 @@ class FoliaPlaybackService : android.app.Service() {
 
     private fun scheduleArtworkRetry(plan: ArtworkFetchTracker.RetryPlan, songKey: String?) {
         val runnable = Runnable {
-            if (!running || cachedArtwork != null) return@Runnable
+            if (!isRunning() || cachedArtwork != null) return@Runnable
             val retryRequest = artworkTracker.beginScheduledRetry(plan) ?: return@Runnable
             executeArtworkFetch(retryRequest, songKey)
         }
@@ -2323,7 +2385,7 @@ class FoliaPlaybackService : android.app.Service() {
      * 重试计数一并清零，立刻尝试拉取（优先命中磁盘缓存）。
      */
     fun retryMissingArtwork() {
-        if (!running || cachedArtwork != null) return
+        if (!isRunning() || cachedArtwork != null) return
         val request = artworkTracker.canRecoverOnForeground() ?: return
         cancelArtworkRetry()
         Log.i(TAG, "Back in the foreground without artwork, fetching it again: ${coverHost(request.url)}")
@@ -2331,7 +2393,7 @@ class FoliaPlaybackService : android.app.Service() {
     }
 
     private fun retryMissingArtworkOnNetwork() {
-        if (!running || cachedArtwork != null) return
+        if (!isRunning() || cachedArtwork != null) return
         val request = artworkTracker.canRecoverOnNetwork() ?: return
         cancelArtworkRetry()
         Log.i(TAG, "Network available without artwork, retrying: ${coverHost(request.url)}")
@@ -2362,7 +2424,7 @@ class FoliaPlaybackService : android.app.Service() {
                 return@io
             }
             mainHandler.post {
-                if (!running || generation != artworkTracker.currentGeneration() || cachedArtwork != null) {
+                if (!isRunning() || generation != artworkTracker.currentGeneration() || cachedArtwork != null) {
                     return@post
                 }
                 artworkTracker.onExternalArtworkLoaded(songKey)
@@ -2393,7 +2455,7 @@ class FoliaPlaybackService : android.app.Service() {
 
     private fun deliverLoadedArtwork(request: ArtworkFetchTracker.FetchRequest, bitmap: Bitmap) {
         mainHandler.post {
-            if (!running || !artworkTracker.onFetchSucceeded(request)) return@post
+            if (!isRunning() || !artworkTracker.onFetchSucceeded(request)) return@post
             cancelArtworkRetry()
             applyLoadedArtwork(bitmap)
         }
@@ -2449,13 +2511,13 @@ class FoliaPlaybackService : android.app.Service() {
             // 磁盘命中要真的走「成功」这条路（#383）：否则 tracker 里那条请求一直算在途，
             // 这一首再也起不了新请求，回前台 / 网络恢复的补拉也全被挡住。
             mainHandler.post {
-                if (!running || !artworkTracker.onFetchSucceeded(request)) return@post
+                if (!isRunning() || !artworkTracker.onFetchSucceeded(request)) return@post
                 cancelArtworkRetry()
             }
             return
         }
         mainHandler.post {
-            if (!running) return@post
+            if (!isRunning()) return@post
             val plan = artworkTracker.onFetchTransientFailure(request) ?: return@post
             Log.i(TAG, "Artwork not fetched, retry #${plan.attemptNumber} in ${plan.delayMs}ms: ${coverHost(plan.url)}")
             scheduleArtworkRetry(plan, targetSongKey)
@@ -2795,13 +2857,22 @@ class FoliaPlaybackService : android.app.Service() {
         return NotificationCompat.Action(icon, title, pendingIntent)
     }
 
+    /**
+     * 退前台。
+     *
+     * 用的是 [android.app.Service.STOP_FOREGROUND_REMOVE]，所以 startForeground 关联的那张
+     * 通知会跟着消失；但 publishNotification / promoteToForeground 是另外用 notify 贴的
+     * 那一份，那条不归它管 —— 收尾必须再 cancel 一次（见 endNotificationState，#M4）。
+     *
+     * 这里不自己改 [notificationState]：退前台只是收尾里的一步，状态由收尾函数统一落，
+     * 免得两处对「现在到底算不算前台」各记一份。
+     */
     private fun stopForegroundCompat() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(android.app.Service.STOP_FOREGROUND_REMOVE)
         } else {
             stopForeground(true)
         }
-        foregrounded = false
         // 通知已经被撤下来了：再前台化时按当前缓存重建，别把撤掉的那条贴回去。
         cachedNotification = null
     }
@@ -2815,13 +2886,19 @@ class FoliaPlaybackService : android.app.Service() {
         private const val NOTIFICATION_ID = 0x1F01
 
         /**
-         * 服务是否还活着。
+         * 前台化 + 通知存在状态（#M4）。
          *
-         * 插件侧要靠它判断「有没有必要把服务拉起来」：原先无歌/暂停也会
-         * startForegroundService，于是打开应用就起一个前台服务。
+         * 以前是 `running` 与 `foregrounded` 两个静态字段各自维护：`running` 在 onCreate 置 true、
+         * onDestroy 置 false，`foregrounded` 在 promoteToForeground / withdrawMediaNotification /
+         * stopForegroundCompat / onStartCommand 四处各改一次，于是出现了
+         * 「running=true / foregrounded=false」（服务以非前台身份继续跑，被系统限流）
+         * 和「onStop 之后通知还在」这类对不上的组合。现在只有这一个字段，
+         * 由 [endNotificationState] 与 [promoteToForeground] 两条边改：
+         * NONE ↔ （WITHDRAWN ↔ FOREGROUND）。
          */
         @Volatile
-        private var running = false
+        private var notificationState: top.izuna.foliamajor.player.ForegroundNotificationState =
+                top.izuna.foliamajor.player.ForegroundNotificationState.NONE
 
         /** 活着的服务实例：getPlaybackSnapshot（JS 问原生要状态）从这里读。 */
         @Volatile
@@ -2836,7 +2913,7 @@ class FoliaPlaybackService : android.app.Service() {
         /** 服务是否还活着。public：coloros 包要判断「有没有必要发刷新 intent」。 */
         @JvmStatic
         fun isRunning(): Boolean {
-            return running
+            return top.izuna.foliamajor.player.ForegroundNotificationState.isAlive(notificationState)
         }
 
         /**
@@ -2856,9 +2933,11 @@ class FoliaPlaybackService : android.app.Service() {
              * 两头一对，谁都没兑现，系统 5 秒后抛
              * ForegroundServiceDidNotStartInTimeException 把进程带走。
              * 用户看到的就是「后台放着放着突然没声音，打开 App 报这个错」。
+             *
+             * #M4：这条守卫现在是白送的 —— onDestroy 把状态落成 NONE，NONE 不可能是 FOREGROUND。
+             * 留着它是因为读的是同一个字段，删掉也不会有别的影响。
              */
-            if (!running) return false
-            return foregrounded
+            return notificationState.isForeground
         }
 
         /**
@@ -3164,14 +3243,12 @@ class FoliaPlaybackService : android.app.Service() {
             }
         }
 
-        /**
-         * 已经调用过 startForeground 了；见 promoteToForeground()。
-         *
-         * 静态 + volatile 是给插件那边读的（isForegrounded）：它要在发 intent 之前知道
-         * 服务在不在前台，决定用 startService 还是 startForegroundService。
+        /*
+         * 「已经调用过 startForeground 了」这个标志（#M4）已经并入 companion object 里的
+         * notificationState：单一枚举同时回答「在不在前台」和「通知还在不在」，
+         * 插件那边照旧读 isForegrounded()。两份字段分开记的时候，
+         * onStop / 心跳撤回 / onDestroy 三条收尾各漏一半，正是本条 issue 的成因。
          */
-        @Volatile
-        private var foregrounded = false
 
         /**
          * 「按下播放」之后，等 Web 层确认真的播起来了的宽限期（毫秒）。
