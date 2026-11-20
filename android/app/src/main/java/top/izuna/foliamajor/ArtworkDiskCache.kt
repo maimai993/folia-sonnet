@@ -55,8 +55,7 @@ class ArtworkDiskCache internal constructor(
     fun get(key: String?): ByteArray? {
         if (key.isNullOrBlank()) return null
         synchronized(lock) {
-            val file = fileFor(key)
-            if (!file.isFile) return null
+            val file = findEntry(key) ?: return null
             val bytes = try {
                 val length = file.length()
                 if (length <= 0L || length > MAX_ENTRY_BYTES) {
@@ -90,13 +89,18 @@ class ArtworkDiskCache internal constructor(
                 return null
             }
             /*
-             * 更新最近访问时间，淘汰时按 LRU 保留近期常听的封面。
+             * 记成「刚用过」：换一个更大的序号（改名），而不是推 mtime。
              *
-             * 必须走 touchTimestamp：直接写 clockMs() 的话，一旦这个钟比盘上的 mtime 小
-             * （服务注入的是 elapsedRealtime，重启后从零开始），「刚读过」的条目反而被推成最旧，
-             * 下一次淘汰第一个删它 —— 正是这条用例钉住的场景。
+             * 改名的代价很便宜（同一目录内的 inode 操作），而且不受时间域影响 —— 见 [fileFor]。
+             * 改名失败就保持原样：这一条下次淘汰时按旧序号算，只是不够新，不会丢数据。
              */
-            runCatching { file.setLastModified(touchTimestamp(file)) }
+            runCatching {
+                val bumped = fileFor(key, nextSeqLocked())
+                if (!file.renameTo(bumped)) {
+                    // 目标已存在（并发写入了更新的那条）就保留对方那份，删掉自己这份旧的。
+                    if (bumped.isFile) file.delete()
+                }
+            }
             return bytes
         }
     }
@@ -104,14 +108,8 @@ class ArtworkDiskCache internal constructor(
     /**
      * 写一条，并把它记为「刚用过」。
      *
-     * 落盘时间戳取 [touchTimestamp]：文件**已经存在于盘上**时，它必须留在自己原来的时间域里
-     * （原来就比 [clockMs] 现在给的旧、或者反而更新，都不会跳序），所以推到
-     * `max(clockMs(), 原 mtime)`；新文件用 [clockMs] 的值。
-     *
-     * 以前这里直接写 [clockMs]：服务注入的是 `SystemClock.elapsedRealtime()`（开机以来的毫秒），
-     * 而 [trimLocked] 按 `File.lastModified()`（墙钟）排序 —— 两套时间域。结果重启之后整批条目
-     * 看起来都老得多，刚写过的条目排序全乱，最近常听的反而先被淘汰。
-     * 现在写盘用的时间戳与文件 mtime 同域，跨重启、跨实例都按真实访问先后淘汰。
+     * 「刚用过」在文件名里体现：每次都写一个**更大的序号**，见 [fileFor] 里为什么不用 mtime。
+     * 同一条旧文件（旧序号）写成新的之后立刻删掉，缓存里同一个 key 只留一份。
      */
     fun put(key: String?, bytes: ByteArray) {
         if (key.isNullOrBlank() || bytes.isEmpty()) return
@@ -120,24 +118,24 @@ class ArtworkDiskCache internal constructor(
             var temp: File? = null
             try {
                 if (!cacheDir.exists() && !cacheDir.mkdirs()) return
+                // mtime 不再参与淘汰排序（见 [fileFor]），但仍在落盘之前取一次：
+                // 一是让「这个文件是什么时候落的盘」在文件管理器/调试时仍然可读，
+                // 二是 clockMs 本身是调用方观察写入时机的钩子，失败要发生在写入之前
+                //    （这样 OOM 时不会有半个条目留在盘上，临时文件由 finally 清掉）。
+                val stamp = clockMs()
                 temp = File.createTempFile(TEMP_PREFIX, TEMP_SUFFIX, cacheDir)
                 temp.writeBytes(bytes)
-                val target = fileFor(key)
-                val previous = if (target.isFile) target.lastModified() else 0L
-                val stamp = touchTimestamp(target)
                 temp.setLastModified(stamp)
-                if (target.exists()) target.delete()
+                val previous = findEntry(key)
+                val target = fileFor(key, nextSeqLocked())
                 if (!temp.renameTo(target)) {
                     temp.copyTo(target, overwrite = true)
-                    target.setLastModified(stamp)
+                    temp.setLastModified(stamp)
                     temp.delete()
                 }
-                // 覆盖同一首歌时，文件系统可能给新文件一个**比旧文件还新**的 mtime（ext4 这类
-                // 秒级时间戳、写入与读回同一秒）。读的时候会把 mtime 推到现在，所以这种文件
-                // 会在下一次淘汰时骗过 LRU：把刚覆盖的那个当成很久没用过的删掉。
-                // 这里直接钉住：覆盖 = 刚刚用过，mtime 不许倒退。
-                if (target.isFile && target.lastModified() < previous) {
-                    target.setLastModified(previous)
+                // 序号必须唯一：万一撞上（理论上不会），保留既有那份，别把刚写的删了。
+                if (previous != null && previous != target && previous.isFile) {
+                    runCatching { previous.delete() }
                 }
                 trimLocked()
             } catch (error: OutOfMemoryError) {
@@ -155,7 +153,7 @@ class ArtworkDiskCache internal constructor(
     fun remove(key: String?) {
         if (key.isNullOrBlank()) return
         synchronized(lock) {
-            runCatching { fileFor(key).delete() }
+            runCatching { findEntry(key)?.delete() }
         }
     }
 
@@ -171,15 +169,6 @@ class ArtworkDiskCache internal constructor(
         cacheDir.listFiles { file -> file.isFile && file.name.endsWith(ENTRY_SUFFIX) }?.size ?: 0
     }
 
-    /** 写入/访问时要打在文件上的时间戳：已有文件的 mtime 比自己新时，保住它原来的位置。 */
-    private fun touchTimestamp(target: File): Long {
-        val provided = clockMs()
-        if (!target.isFile) return provided
-        val previous = target.lastModified()
-        if (previous <= 0L) return provided
-        return if (provided > previous) provided else previous
-    }
-
     private fun trimLocked() {
         val entries = cacheDir.listFiles() ?: return
         val images = ArrayList<File>()
@@ -189,11 +178,14 @@ class ArtworkDiskCache internal constructor(
                 runCatching { file.delete() }
                 continue
             }
+            // 序号文件不是条目，别删也别计数。
+            if (file.name == SEQ_FILE || file.name == SEQ_FILE + TEMP_SUFFIX) continue
             if (file.name.endsWith(ENTRY_SUFFIX)) {
                 images.add(file)
             }
         }
-        images.sortWith(compareByDescending<File> { it.lastModified() }.thenBy { it.name })
+        // 按序号降序：新的在前，留下的都是最近用过的。老格式（无序号）当 0，排最后。
+        images.sortWith(compareByDescending<File> { seqOf(it) }.thenBy { it.name })
         var keptCount = 0
         var keptBytes = 0L
         for (file in images) {
@@ -207,7 +199,68 @@ class ArtworkDiskCache internal constructor(
         }
     }
 
-    private fun fileFor(key: String): File = File(cacheDir, sha256Hex(key) + ENTRY_SUFFIX)
+    /**
+     * 一个键对应的条目文件。
+     *
+     * 文件名是 `<sha256(key)>_<序号>.img`，**排序键是那个序号**，不是 mtime。
+     *
+     * 为什么不用 mtime（#441）：服务注入的 `clockMs` 是 `SystemClock.elapsedRealtime()`
+     * （开机以来毫秒，重启后归零），而 mtime 是墙钟。两者混用之后，`max(clockMs, previous)`
+     * 这种「保住旧值」的策略并不成立 —— 旧的大数会永远压住新写入的小数：
+     *
+     *     put k1 (clock=3000) → mtime 3000
+     *     put k2 (clock=4000) → mtime 4000
+     *     get k1 (clock=5)    → max(5, 3000) = 3000   ← 刚读过，却排第二
+     *     put k3 (clock=501)  → 新文件 → mtime 501    ← 最新，却排最后
+     *
+     * 结果淘汰的是 k3。序号不受时间域影响：每次读写都取一个更大的数，跨重启照样单调。
+     */
+    private fun fileFor(key: String, seq: Long): File =
+        File(cacheDir, sha256Hex(key) + SEQ_SEPARATOR + seq + ENTRY_SUFFIX)
+
+    /** 这个键现有的条目文件（0 或 1 个；序号最大的是最新的）。 */
+    private fun findEntry(key: String): File? {
+        val prefix = sha256Hex(key) + SEQ_SEPARATOR
+        val candidates = cacheDir.listFiles { file ->
+            file.isFile && file.name.startsWith(prefix) && file.name.endsWith(ENTRY_SUFFIX)
+        } ?: return null
+        return candidates.maxByOrNull { seqOf(it) }
+    }
+
+    /** 文件名里的序号；老格式（没有序号）一律当 0，也就是最旧。 */
+    private fun seqOf(file: File): Long {
+        val name = file.name
+        if (!name.endsWith(ENTRY_SUFFIX)) return 0L
+        val body = name.substring(0, name.length - ENTRY_SUFFIX.length)
+        val at = body.lastIndexOf(SEQ_SEPARATOR)
+        if (at < 0) return 0L
+        return body.substring(at + 1).toLongOrNull() ?: 0L
+    }
+
+    /**
+     * 取下一个序号并落盘。
+     *
+     * 存在 `.seq` 里而不是只放内存：进程重启后必须接着往上走，否则新写入的条目会被当成
+     * 比旧条目还老（那正是 #441 的原始症状）。读不到就退回「盘上已有的最大序号 + 1」，
+     * 保证不会倒退。
+     */
+    private fun nextSeqLocked(): Long {
+        val seqFile = File(cacheDir, SEQ_FILE)
+        val stored = runCatching { seqFile.readText().trim().toLong() }.getOrNull() ?: 0L
+        val onDisk = cacheDir.listFiles()?.maxOfOrNull { seqOf(it) } ?: 0L
+        val next = maxOf(stored, onDisk) + 1L
+        runCatching {
+            // 临时文件 + rename：写到一半被杀不会留下半个数字。
+            val temp = File(cacheDir, SEQ_FILE + TEMP_SUFFIX)
+            temp.writeText(next.toString())
+            if (seqFile.exists()) seqFile.delete()
+            if (!temp.renameTo(seqFile)) {
+                seqFile.writeText(next.toString())
+                temp.delete()
+            }
+        }
+        return next
+    }
 
     private fun sha256Hex(value: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
@@ -225,6 +278,10 @@ class ArtworkDiskCache internal constructor(
         private const val ENTRY_SUFFIX = ".img"
         private const val TEMP_PREFIX = "art-"
         private const val TEMP_SUFFIX = ".tmp"
+        /** 条目名里 sha 与序号之间的分隔符（#441）。 */
+        private const val SEQ_SEPARATOR = "_"
+        /** 持久化的单调序号，用来替代 mtime 做 LRU 排序（#441）。 */
+        private const val SEQ_FILE = ".seq"
         private const val HEX_CHARS = "0123456789abcdef"
 
         /**

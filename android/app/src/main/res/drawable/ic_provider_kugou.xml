@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ic_provider_kugou：安卓播放通知栏的角标（smallIcon），**纯白剪影 + 透明底**。
+  通知栏从 Android 5.0 起只认 alpha，彩色图会被整体染成一个色块，所以这里只留特征笔画、不留底板。
+  图形是自绘的，和前端 <PlatformIcon> 同一份几何数据；这个文件由 npm run build:provider-badges
+  从 src/components/shared/platformIcons/ 生成，不要手改。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M 7.417 12 a 3.333 3.333 0 1 0 6.667 0 a 3.333 3.333 0 1 0 -6.667 0"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 9.75 12 a 1 1 0 1 0 2 0 a 1 1 0 1 0 -2 0"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 15.75 9.083 a 4.167 4.167 0 0 1 0 5.833"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 17.208 7.625 a 6.25 6.25 0 0 1 0 8.75"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

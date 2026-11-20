@@ -1,0 +1,158 @@
+/* res/rhine-theme/adapt/rhineFallback.css
+ *
+ * 改编自 RhinE（https://github.com/ericzhang12111-cell/RhinE，v2.1.1，MIT）。本文件由 Folia 编写。
+ *
+ * The skeleton's own skin. Upstream ships no CSS at all — Columns UI draws its panels and the 3D
+ * archive bundle brings its own stylesheet. Here the frame's shell is this file, so the theme has a
+ * complete look with **zero** files from the asset package.
+ *
+ * The rule that makes the optional download safe (issue #440): every piece of art the theme refers to
+ * is expressed as a `background-image` on a class, and the flat colour of the same class is what
+ * shows when that image 404s or is never requested. A missing picture therefore costs a gradient, not
+ * a white screen and not an exception. `html[data-rhine-assets="bundled"]` is the switch the host
+ * sets; nothing below turns it on by itself.
+ *
+ * Palette: tokens/tokens.json › schemes.AUDIO ARCHIVE (light and dark), the theme's own colours.
+ */
+
+:root {
+    --rhine-bg: #0b0b0b;
+    --rhine-fg: #f2f0ea;
+    --rhine-fg-soft: #bbb9b4;
+    --rhine-muted: #8c8b88;
+    --rhine-line: #393938;
+    --rhine-panel: #111110;
+    --rhine-accent: #ff7a01;
+    --rhine-on-accent: #0b0b0b;
+    --rhine-safe-top: env(safe-area-inset-top, 0px);
+    --rhine-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --rhine-safe-left: env(safe-area-inset-left, 0px);
+    --rhine-safe-right: env(safe-area-inset-right, 0px);
+}
+
+html[data-rhine-theme='light'] {
+    --rhine-bg: #eeede7;
+    --rhine-fg: #252821;
+    --rhine-fg-soft: #4d4f49;
+    --rhine-muted: #63665d;
+    --rhine-line: #d2d1cb;
+    --rhine-panel: #f4f3ee;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--rhine-bg);
+    color: var(--rhine-fg);
+    font-family: 'Geist Mono', ui-monospace, 'SFMono-Regular', 'DejaVu Sans Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+}
+
+#rhine-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
+    padding:
+        var(--rhine-safe-top)
+        var(--rhine-safe-right)
+        var(--rhine-safe-bottom)
+        var(--rhine-safe-left);
+}
+
+.rhine-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid var(--rhine-line);
+}
+
+.rhine-emblem {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 50%;
+    border: 1px solid var(--rhine-accent);
+    background: var(--rhine-accent);
+    /* Upstream draws the Möbius ring from lib/ring.js; until it can run here, a flat disc. */
+    align-self: center;
+}
+
+.rhine-identity {
+    font-size: 0.95rem;
+    letter-spacing: 0.24em;
+    font-weight: 600;
+}
+
+.rhine-subtitle {
+    margin-left: auto;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    color: var(--rhine-muted);
+}
+
+.rhine-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    /* Gradient stands in for assets/intro/** and assets/wallpapers/**; a flat colour if the webview
+       cannot composite gradients is still a colour, never a blank page. */
+    background-color: var(--rhine-panel);
+    background-image:
+        linear-gradient(180deg, rgba(255, 122, 1, 0.06), transparent 38%),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 96px);
+}
+
+.rhine-slot {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.rhine-placeholder {
+    margin: 0;
+    padding: 1rem 1.5rem;
+    border: 1px solid var(--rhine-line);
+    color: var(--rhine-fg-soft);
+    font-size: 0.8rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+}
+
+.rhine-status {
+    padding: 0.6rem 1.25rem;
+    border-top: 1px solid var(--rhine-line);
+    color: var(--rhine-muted);
+    font-size: 0.65rem;
+    letter-spacing: 0.16em;
+}
+
+/*
+ * The asset package is not installed: say so once, where the user is looking, instead of leaving
+ * them to wonder why the archive is flat. Text is set by the host (i18n) when it has one; the
+ * fallback strings below are English and only used when the frame is opened on its own.
+ */
+html[data-rhine-assets='bundled'] .rhine-stage::after {
+    content: attr(data-rhine-note);
+    position: absolute;
+    left: 50%;
+    bottom: 1.25rem;
+    transform: translateX(-50%);
+    max-width: min(34rem, calc(100% - 3rem));
+    text-align: center;
+    font-size: 0.7rem;
+    line-height: 1.5;
+    letter-spacing: 0.04em;
+    color: var(--rhine-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+}

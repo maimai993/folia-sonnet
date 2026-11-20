@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ic_provider_applemusic：安卓播放通知栏的角标（smallIcon），**纯白剪影 + 透明底**。
+  通知栏从 Android 5.0 起只认 alpha，彩色图会被整体染成一个色块，所以这里只留特征笔画、不留底板。
+  图形是自绘的，和前端 <PlatformIcon> 同一份几何数据；这个文件由 npm run build:provider-badges
+  从 src/components/shared/platformIcons/ 生成，不要手改。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M 8.167 14.667 a 2.083 2.083 0 1 0 4.167 0 a 2.083 2.083 0 1 0 -4.167 0"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 14.083 13.417 a 1.417 1.417 0 1 0 2.833 0 a 1.417 1.417 0 1 0 -2.833 0"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M 12.333 14.667 V 9.333 L 16.375 8.417 V 12.25"
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.25"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -1,7 +1,8 @@
-import React from 'react';
+﻿import React from 'react';
 import { omni } from '../../services/onlineMusic/omni';
 import type { OnlineProviderId, ProviderUser } from '../../types/onlineMusic';
-import { getProviderAppIcon, PROVIDER_APP_ICONS } from '../../assets/providers/appIcons';
+import { PlatformIcon } from '../shared/platformIcons/PlatformIcon';
+import { hasPlatformIcon } from '../shared/platformIcons/registry';
 import { onAccentColor } from '../modal/settings/kit/kitTheme';
 import { resolvePlatformMark } from './resolvePlatformMark';
 import { isCapacitorAndroid } from '../../platform/runtime';
@@ -36,18 +37,27 @@ type PlatformMarkProps = {
 export const PlatformMark: React.FC<PlatformMarkProps> = ({ providerId, label, size, ranOut, className }) => {
     const mark = platformMarkOf(providerId, label);
     /*
-     * 有「应用本尊」图标的平台亮那颗图标，不画字。
+     * 有自绘图形的平台亮那颗图形，不画字。
      *
-     * 登录窗口是上游重画过的：它只认 provider 声明的 `mark`（一个字 + 一种颜色），
-     * 从来不看 assets/providers 里那张来源图标表 —— 于是我们自己接的那几家
-     * 在登录界面一律变成一个彩色的字，而资料库的平台徽章、来源角标
-     * （ProviderConnectButton / BravaisProviderAvatar）都是同一张表里取的图，
-     * 两边对不上。这里按 fork 各处同一条规矩补上：有图就用图，没图才回落字 + 颜色。
+     * 这个记号登录窗口、主页的登录按钮、切换器、控制面板的账号页、资料库的平台徽章都在用。
+     * 图形与平台 id 的对应表在 platformIcons/registry（平台自己的那一份），这里只问
+     * `hasPlatformIcon`：有图形就画图形，没有才回落「字 + 颜色」的字母徽章
+     * （mod 加进来的平台、将来的新平台都走这一条，不会出现空洞）。
      *
      * 注释里不点名平台：这一层要与平台无关（loginModuleKnowsNoPlatform 那条守卫会扫本目录），
-     * 平台自己的东西由它自己的 adapter 通过 omni 声明。
+     * 平台自己的东西由它自己的 adapter 通过 omni 声明、由 registry 登记。
      */
-    const hasAppIcon = providerId in PROVIDER_APP_ICONS;
+    const hasArt = hasPlatformIcon(providerId);
+    if (hasArt) {
+        return (
+            <span className={`relative inline-flex shrink-0 ${className ?? ''}`} style={{ width: size, height: size }}>
+                <PlatformIcon platformId={providerId} size={size} round className="h-full w-full" />
+                {ranOut && (
+                    <i className="absolute -right-px -top-px h-2.5 w-2.5 rounded-full bg-[var(--st-warn)]" style={{ boxShadow: EDGE }} />
+                )}
+            </span>
+        );
+    }
     return (
         <span
             aria-hidden
@@ -55,21 +65,13 @@ export const PlatformMark: React.FC<PlatformMarkProps> = ({ providerId, label, s
             style={{
                 width: size,
                 height: size,
-                // 有图就不套彩色圆底（图自己就是那块方的 / 圆的底），没图才需要底色配字。
-                background: hasAppIcon ? undefined : mark.color,
-                color: hasAppIcon ? undefined : mark.onColor,
+                // 没有图形才需要底色配字。
+                background: mark.color,
+                color: mark.onColor,
                 fontSize: Math.round(size * 0.42),
             }}
         >
-            {hasAppIcon ? (
-                // 图是方的（飞牛那张还自带黑底），铺满再让圆角把它裁成圆。
-                <img
-                    src={getProviderAppIcon(providerId)}
-                    alt=""
-                    draggable={false}
-                    className="h-full w-full rounded-full object-cover"
-                />
-            ) : mark.letter}
+            {mark.letter}
             {ranOut && (
                 <i className="absolute -right-px -top-px h-2.5 w-2.5 rounded-full bg-[var(--st-warn)]" style={{ boxShadow: EDGE }} />
             )}
