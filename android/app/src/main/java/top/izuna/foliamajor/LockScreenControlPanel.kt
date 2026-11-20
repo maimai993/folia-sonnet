@@ -53,12 +53,12 @@ import android.widget.TextView
 class LockScreenControlPanel(private val activity: Activity) {
 
     companion object {
-        /** 上滑退出在面板上也照样生效：这一条不设的话，面板那块区域就成了"滑不动的死区"。 */
-        private const val SWIPE_UP_DP = 64f
-        private const val SWIPE_MAX_SIDE_RATIO = 0.6f
-        /** 一次「点」允许的最大位移（与锁屏页那条同值，别让两处的手感不一样）。 */
-        private const val TAP_MAX_MOVE_DP = 16f
-        private const val TAP_MAX_DURATION_MS = 400L
+        /*
+         * 手势阈值不在这里：上滑 / 点击的判定与常量都在 LockScreenGesture.kt，与锁屏页
+         * （LockScreenMusicActivity）共用同一份。这里原先自己存了一套，注释还写着"与锁屏页
+         * 那条同值"—— 但上滑阈值实际是 64dp vs 72dp，只有点击那一组真的一样。统一到哪
+         * 一侧、为什么，见 LockScreenGestureTuning 那段说明。
+         */
         /**
          * 已喜欢那颗心的颜色：与面板里喜爱按钮按下去的 red-500 同一个色。
          * 通知栏那颗做不到（系统只按 alpha 染色），这条面板是我们自己画的，可以。
@@ -185,10 +185,15 @@ class LockScreenControlPanel(private val activity: Activity) {
      */
     private var seekPreviewDeadlineMs = 0L
 
-    private var tracking = false
-    private var gestureConsumed = false
-    private var startX = 0f
-    private var startY = 0f
+    /**
+     * 面板上的手势判定，与锁屏页共用同一份实现与常量（见 LockScreenGesture.kt）。
+     *
+     * 面板外壳与面板上那条退出手柄各用**一个独立的**跟踪器，因为它们接的是不同的窗口
+     * 区域，同一时刻只会有其中一条在收事件；分开之后一条被系统 CANCEL 掉也不会把另一条
+     * 的锚点带歪。
+     */
+    private val shellGesture = LockScreenGestureTracker(activity.resources.displayMetrics.density)
+    private val handleGesture = LockScreenGestureTracker(activity.resources.displayMetrics.density)
     /**
      * 点面板上**没有控件**的那一片（封面与文字周围）时走的回调。
      *
@@ -399,35 +404,37 @@ class LockScreenControlPanel(private val activity: Activity) {
          * 播放 / 切歌 / 进度条 / 退出手柄上的事件会被那些控件自己吃掉（返回 true），
          * 根本到不了外壳；只有落在**没有控件接的地方**（封面、歌名、卡片留白）
          * 才会退到这里。于是"点空白区域"不用再去逐个 hit-test 控件，省一份会走歪的判定表。
+         *
+         * 判定本身在 LockScreenGestureTracker（与锁屏页共用那一份）。多指只认落下的
+         * 第一根，第二根手指不改锚点。
          */
         shell.setOnTouchListener { view, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    tracking = true
-                    gestureConsumed = false
-                    startX = event.rawX
-                    startY = event.rawY
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (tracking && !gestureConsumed && isSwipeUp(event)) {
-                        tracking = false
-                        gestureConsumed = true
-                        dismissHost()
+            if (event.getPointerId(0) == 0) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        shellGesture.down(event.rawX, event.rawY)
                     }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (tracking && !gestureConsumed && isSwipeUp(event)) {
-                        gestureConsumed = true
-                        dismissHost()
-                    } else if (tracking && !gestureConsumed
-                            && event.actionMasked == MotionEvent.ACTION_UP
-                            && isTap(event)) {
-                        gestureConsumed = true
-                        reportBlankTap()
+                    MotionEvent.ACTION_MOVE -> {
+                        if (shellGesture.move(event.rawX, event.rawY) == LockScreenGesture.SWIPE_UP) {
+                            dismissHost()
+                        }
                     }
-                    tracking = false
-                }
-                else -> {
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        when (shellGesture.up(
+                                event.rawX,
+                                event.rawY,
+                                event.eventTime,
+                                event.downTime,
+                                cancelled = event.actionMasked == MotionEvent.ACTION_CANCEL,
+                        )) {
+                            LockScreenGesture.SWIPE_UP -> dismissHost()
+                            LockScreenGesture.TAP -> reportBlankTap()
+                            LockScreenGesture.NONE -> {
+                            }
+                        }
+                    }
+                    else -> {
+                    }
                 }
             }
             false
@@ -967,32 +974,44 @@ class LockScreenControlPanel(private val activity: Activity) {
                 .bottomMargin = Math.round(2f * density)
         handle.contentDescription = "退出"
         handle.setOnTouchListener { view, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    tracking = true
-                    gestureConsumed = false
-                    startX = event.rawX
-                    startY = event.rawY
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    // 滑到位就走，不等抬手（和外壳那条同一个规矩）。
-                    if (tracking && !gestureConsumed && isSwipeUp(event)) {
-                        tracking = false
-                        gestureConsumed = true
-                        dismissHost()
+            if (event.getPointerId(0) == 0) {
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        handleGesture.down(event.rawX, event.rawY)
                     }
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (tracking && !gestureConsumed) {
-                        if (isSwipeUp(event)) {
+                    MotionEvent.ACTION_MOVE -> {
+                        // 滑到位就走，不等抬手（和外壳那条同一个规矩）。
+                        if (handleGesture.move(event.rawX, event.rawY) == LockScreenGesture.SWIPE_UP) {
                             dismissHost()
-                        } else if (event.actionMasked == MotionEvent.ACTION_UP) {
-                            runExitAnimation()
                         }
                     }
-                    tracking = false
-                }
-                else -> {
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        val cancelled = event.actionMasked == MotionEvent.ACTION_CANCEL
+                        when (handleGesture.up(
+                                event.rawX,
+                                event.rawY,
+                                event.eventTime,
+                                event.downTime,
+                                cancelled = cancelled,
+                        )) {
+                            LockScreenGesture.SWIPE_UP -> dismissHost()
+                            /*
+                             * 这条细条上的「点」不是点空白，而是**点退出**：走的是
+                             * runExitAnimation() → dismissHost() → Activity.dismiss()，
+                             * 和原来左上角那个 ✕ 完全同一条路。
+                             *
+                             * 原来这里还有一条"既不是上滑、也不是点"（比如按住太久成了长按）
+                             * 也照样退场的兜底。那条其实退不了：上滑是 [SWIPE_UP] 判掉的，
+                             * 剩下的只剩点与长按，长按在真机上几乎不可能落在一条 20dp 的
+                             * 细条上。所以现在只有明确的点击才退场，长按什么都不做。
+                             */
+                            LockScreenGesture.TAP -> runExitAnimation()
+                            LockScreenGesture.NONE -> {
+                            }
+                        }
+                    }
+                    else -> {
+                    }
                 }
             }
             true
@@ -1266,23 +1285,6 @@ class LockScreenControlPanel(private val activity: Activity) {
         val tinted = DrawableCompat.wrap(icon).mutate()
         DrawableCompat.setTint(tinted, color)
         return tinted
-    }
-
-    private fun isSwipeUp(event: MotionEvent): Boolean {
-        val dy = startY - event.rawY
-        val dx = Math.abs(event.rawX - startX)
-        val threshold = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                SWIPE_UP_DP, activity.resources.displayMetrics)
-        return dy >= threshold && dx <= dy * SWIPE_MAX_SIDE_RATIO
-    }
-
-    /** 一次「点」：几乎没移动、也不长按 —— 拖进度条和上滑退出都不算。 */
-    private fun isTap(event: MotionEvent): Boolean {
-        val limit = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                TAP_MAX_MOVE_DP, activity.resources.displayMetrics)
-        return Math.abs(event.rawX - startX) <= limit
-                && Math.abs(event.rawY - startY) <= limit
-                && (event.eventTime - event.downTime) <= TAP_MAX_DURATION_MS
     }
 
     /** 面板上的空白被点了一下：交给锁屏页统一翻转（它那边也接整屏的空白）。 */
