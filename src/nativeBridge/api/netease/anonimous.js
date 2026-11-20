@@ -86,7 +86,9 @@ function isGuestCookie(cookie) {
  */
 async function byWeapi(username) {
     const encrypted = weapiEncrypt({ username });
-    const resp = await fetch('https://music.163.com/weapi/register/anonimous', {
+    // 主机要和 weapiRequest 一致（见 weapi.js 的 WEAPI_BASE 说明）：安卓桥上只有
+    // interface.music.163.com 在代理白名单里，发到 music.163.com 的请求读不到 Set-Cookie（M1）。
+    const resp = await fetch('https://interface.music.163.com/weapi/register/anonimous', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',

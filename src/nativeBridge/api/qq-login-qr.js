@@ -337,10 +337,22 @@ export function buildLoginSession(cookie) {
   };
 }
 
-async function withInjectedCookie(cookieHeader, urlFilters, run) {
+/**
+ * 把这一条 cookie 交给 [run]（M3）。
+ *
+ * 只有**真的**有 declarativeNetRequest 的宿主（浏览器扩展）才走 DNR 注入；没有就原样跑 ——
+ * 请求自己带着 Cookie 头，那本来就是唯一一条能生效的路。
+ *
+ * 这里刻意不看「`chrome.declarativeNetRequest` 在不在」：安卓桥以前装过一个恒成功的空实现，
+ * 于是这段代码在安卓上总是走进 DNR 分支 —— 规则"装上了"却什么也没做，cookie 注入静默失效，
+ * 失败表现成后面几步莫名其妙的响应，而不是一句明确的错。现在那种宿主不再伪造这个 API，
+ * 但判断的依据改成能力位（`chrome.foliaNative.capabilities.dnr`），不再靠"函数存不存在"猜。
+ */
+export async function withInjectedCookie(cookieHeader, urlFilters, run) {
   const cookie = String(cookieHeader || '').trim();
   const filters = (urlFilters || []).filter(Boolean);
-  if (!cookie || !filters.length || !chrome.declarativeNetRequest?.updateSessionRules) {
+  const canInject = Boolean(chrome.foliaNative?.capabilities?.dnr);
+  if (!cookie || !filters.length || !canInject) {
     return run();
   }
   dnrCookieSerial = (dnrCookieSerial + 1) % 1000;
@@ -384,6 +396,23 @@ export async function fetchWithTimeout(input, init = {}, timeout = 10000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * 要读响应里 Set-Cookie 的那几次请求走这里（M1）。
+ *
+ * 与 fetchWithTimeout 的唯一区别是一个字段：安卓桥接层在白名单主机的响应上带一份原始
+ * Set-Cookie（见 src/services/nativeAndroidBridge.ts 的 nativeRawSetCookies），而 WebView 自己的
+ * 请求按 Fetch 规范永远读不到它内部的 Set-Cookie。p_skey / qrsig 都在那份数据里 —— 没有它，
+ * 扫码成功也只能从 cookie 罐里回捞旧值。
+ *
+ * `skipBridge` 只是在浏览器扩展里被忽略：那边本来就把 Set-Cookie 暴露在响应头上。
+ */
+export async function fetchWithCookies(input, init = {}, timeout = 10000, skipBridge = false) {
+  if (!skipBridge) {
+    init = { ...init, bypass: 'bridge' };
+  }
+  return await fetchWithTimeout(input, init, timeout);
 }
 
 async function writeSessionCookies(session) {
@@ -634,7 +663,8 @@ export async function qqCheckLoginQr(params = {}) {
       checkSigCookieHeader,
       ['||ptlogin2.qq.com', '||qq.com'],
       () =>
-        fetchWithTimeout(
+        // 这一跳的 Set-Cookie 里就有 p_skey：走桥那一侧才读得到（M1，见 fetchWithCookies）。
+        fetchWithCookies(
           checkSigUrl,
           {
             method: 'GET',
@@ -648,6 +678,8 @@ export async function qqCheckLoginQr(params = {}) {
             },
           },
           12000,
+          // 扩展宿主本来就把 Set-Cookie 暴露在响应头上（那边装了真的 DNR），不必绕桥。
+          Boolean(chrome.foliaNative?.capabilities?.dnr),
         ),
     );
     // check_sig 通常回 302，p_skey 写在跳转目标上。手动跟一层，
@@ -674,7 +706,8 @@ export async function qqCheckLoginQr(params = {}) {
             resolvedTarget,
             Array.from(cookieMap.values()),
           );
-          const followed = await fetchWithTimeout(
+          // 跟随这一跳同样要读 Set-Cookie（p_skey 也可能写在这里），走能读到它的那条路。
+          const followed = await fetchWithCookies(
             resolvedTarget,
             {
               method: 'GET',
@@ -687,6 +720,7 @@ export async function qqCheckLoginQr(params = {}) {
               },
             },
             12000,
+            Boolean(chrome.foliaNative),
           );
           mergeCookiePairs(cookieMap, collectSetCookies(followed));
           checkSigRes = followed;

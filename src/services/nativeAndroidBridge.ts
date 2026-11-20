@@ -7,9 +7,14 @@
 
 import { isCapacitorAndroid } from '../platform/runtime';
 
+// src/services/nativeAndroidBridge.ts
+// Android 专用的「冒充 Folia Bridge 扩展」层：装上 chrome.* 兼容层、把白名单主机的 fetch 转到原生
+// OkHttp、并在页面与内置 API 模块（src/nativeBridge/api/folia.js）之间转发 FOLIA_API_REQUEST。
+
 const PAGE_SOURCE = 'folia-web-page';
 const BRIDGE_SOURCE = 'folia-extension-bridge';
 const BRIDGE_VERSION = 'android-0.1.0';
+
 // 上游某个节点挂住（比如酷狗某个 CDN 不回包）时不让页面一直等到 OkHttp 自己的 45 秒读超时，
 // 那已经长到像是卡死了。AI 与图片请求直接调插件，各自有自己的预算。
 const BRIDGED_REQUEST_TIMEOUT_MS = 15000;
@@ -297,6 +302,33 @@ export type NativeHttpOptions = {
 };
 
 /**
+ * 原始 Set-Cookie 在桥接响应上挂哪（M1）。
+ *
+ * 与 src/nativeBridge/api/setCookieHeaders.js 的 NATIVE_RAW_SET_COOKIES 是同一个键：
+ * `Symbol.for` 的注册表在两个模块里给出同一个 symbol，于是内置接口代码直接读这个属性即可，
+ * 不需要响应头上任何「看得见」的东西 —— 页面上别的脚本拿到的 Response 里没有它，
+ * `Set-Cookie` 也仍然是禁止暴露给 JS 的响应头。
+ */
+const NATIVE_RAW_SET_COOKIES = Symbol.for('folia.native.rawSetCookies');
+
+type RawCookieCarrier = { [NATIVE_RAW_SET_COOKIES]?: string[] };
+
+/**
+ * 这条响应里的原始 Set-Cookie（只对内置接口代码显式索取过的那几次非空）。
+ *
+ * 页面上任何别的脚本拿到的 `Response` 头上没有 Set-Cookie，也没有 M1 之前的镜像头；
+ * 拿到的只有桥自己的代码能认的那个符号属性 —— 而且只有 `keepRawSetCookies` 时才有。
+ */
+export const nativeRawSetCookies = (response: Response): string[] => (
+  (response as unknown as RawCookieCarrier)[NATIVE_RAW_SET_COOKIES] || []
+);
+
+/** 忘掉这条响应上的原始 Set-Cookie（记忆只在内存里，丢掉之后回空数组）。 */
+export const nativeDropRawSetCookies = (response: Response): void => {
+  delete (response as unknown as RawCookieCarrier)[NATIVE_RAW_SET_COOKIES];
+};
+
+/**
  * 直接走原生 OkHttp 发一个请求，**不设主机白名单**。
  *
  * 为什么需要它：洛雪音源脚本会去它自己的服务器（域名千奇百怪）取地址，那些主机
@@ -306,7 +338,11 @@ export type NativeHttpOptions = {
  *
  * 安全边界和别处一致：请求由页面里已经跑着的代码发起，跟 WebView 自己发 fetch 等价。
  */
-export const nativeHttpRequest = async (url: string, options: NativeHttpOptions = {}): Promise<Response> => {
+export const nativeHttpRequest = async (
+  url: string,
+  options: NativeHttpOptions = {},
+  internal: { keepRawSetCookies?: boolean } = {},
+): Promise<Response> => {
   const plugin = getPlugin();
   if (!plugin) throw new Error('FoliaNative plugin is not available');
   const method = (options.method || 'GET').toUpperCase();
@@ -341,21 +377,16 @@ export const nativeHttpRequest = async (url: string, options: NativeHttpOptions 
     responseBytes.byteOffset + responseBytes.byteLength,
   ) as ArrayBuffer;
   const responseHeaders = new Headers();
-  const exposedSetCookies: string[] = [];
+  const rawSetCookies: string[] = [];
   if (Array.isArray(result.headers)) {
     result.headers.forEach((entry) => {
       if (!entry?.name || entry.value == null) return;
-      // Headers.set() 会把重复项折叠成一个，所以 Set-Cookie 要逐个 append，
+      // Headers.set() 会把重复项折叠成一个，所以重复出现的头要逐个 append，
       // 否则服务端下发的多个 cookie 只剩最后一个 —— 登录态就是这么丢的。
       if (entry.name.toLowerCase() === 'set-cookie') {
-        responseHeaders.append(entry.name, String(entry.value));
-        // 但 Set-Cookie 属于禁止暴露给 JS 的响应头，这里构造 Response 时会被静默丢掉。
-        // 内置的接口代码需要这些值（qrsig、p_skey、NMTID …），拿不到就只能从 cookie 罐里
-        // 回捞 —— 而罐里可能还留着上一次会话的旧值，新建的二维码第一次轮询就「已失效」。
-        // 所以把同一批值镜像到一个 JS 能读的头里。
-        exposedSetCookies.push(String(entry.value));
+        rawSetCookies.push(String(entry.value));
       } else {
-        responseHeaders.set(entry.name, String(entry.value));
+        responseHeaders.append(entry.name, String(entry.value));
       }
     });
   } else if (result.headers) {
@@ -363,15 +394,44 @@ export const nativeHttpRequest = async (url: string, options: NativeHttpOptions 
       if (value != null) responseHeaders.set(name, String(value));
     });
   }
-  exposedSetCookies.forEach((value) => responseHeaders.append('x-folia-set-cookie', value));
-  return new Response(responseBuffer, {
+  /*
+   * Set-Cookie 的交付方式（M1）。
+   *
+   * 以前这里把同一批值再镜像进一个 JS 能读的自定义头（x-folia-set-cookie）。镜像头对**所有**
+   * 调用方一视同仁，于是页面上任意一段脚本只要发一次登录相关的请求，就能读到 qrsig / p_skey /
+   * NMTID 这些本该只躺在 Cookie 罐里的原始值 —— 浏览器刻意维持的 HttpOnly 语义被绕开了。
+   *
+   * 现在不再有镜像头，连 Set-Cookie 都不往 Response 的头上写：
+   *   · 内置的接口代码要这几个值，读 nativeRawSetCookies（桥这一侧本来就能读 CookieManager），
+   *     而且只有它自己显式要的那几次请求（`internal.keepRawSetCookies`）才会在内存里留一份；
+   *   · 页面上任何别的脚本拿到的 Response 与浏览器里一模一样 —— 既没有镜像头，也没有 Set-Cookie。
+   */
+  const bridged = new Response(responseBuffer, {
     status: result.status,
     headers: responseHeaders,
   });
+  // 头上那份在 WebView 里会被静默丢掉（`Set-Cookie` 是禁止暴露的响应头）；桥自己的代码读这里的。
+  if (internal.keepRawSetCookies && rawSetCookies.length) {
+    Object.defineProperty(bridged, NATIVE_RAW_SET_COOKIES, {
+      value: rawSetCookies,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return bridged;
 };
 
 const installFetchShim = (plugin: NativePlugin) => {
   const originalFetch = window.fetch.bind(window);
+  /**
+   * 白名单主机上有没有人在等「响应里的 Set-Cookie」。
+   *
+   * 只有内置的接口代码会打开它（`bypass: 'bridge'`，见 nativeBridge/api 里的 fetchWithCookies）：
+   * 那几次请求的原始 Set-Cookie 要留在内存里交给它们读（M1）。页面脚本随时可以伪造同一个
+   * 字段，所以它只决定「桥这一侧要不要把值留在内存」，**不会**让任何人从 Response 上读到它们。
+   */
+  let awaitingBridgeCookies = 0;
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = input instanceof Request ? input : null;
     const rawUrl = request?.url ?? String(input);
@@ -379,21 +439,34 @@ const installFetchShim = (plugin: NativePlugin) => {
       return originalFetch(input, init);
     }
 
-    // 白名单主机的请求统一从这里出：原生 OkHttp 不受 CORS 约束，
-    // 回包的 Set-Cookie 还会被镜像到 x-folia-set-cookie（见 nativeHttpRequest）。
+    // 白名单主机的请求统一从这里出：原生 OkHttp 不受 CORS 约束。
+    // 回包的 Set-Cookie 只进 Cookie 罐与内置 API 模块，页面脚本读不到（见 nativeHttpRequest）。
     const method = (init?.method || request?.method || 'GET').toUpperCase();
     const headers = new Headers(request?.headers || init?.headers || {});
     const serialized = await serializeBody(init?.body ?? null);
     if (serialized.contentType && !headers.has('content-type')) {
       headers.set('content-type', serialized.contentType);
     }
-    return nativeHttpRequest(rawUrl, {
-      method,
-      headers: Object.fromEntries(headers.entries()),
-      bodyText: serialized.bodyText,
-      bodyBase64: serialized.bodyBase64,
-      redirect: init?.redirect || request?.redirect || 'follow',
-    });
+    const wantsRawCookies = (init as { bypass?: unknown } | undefined)?.bypass === 'bridge';
+    if (wantsRawCookies) awaitingBridgeCookies += 1;
+    try {
+      const response = await nativeHttpRequest(rawUrl, {
+        method,
+        headers: Object.fromEntries(headers.entries()),
+        bodyText: serialized.bodyText,
+        bodyBase64: serialized.bodyBase64,
+        redirect: init?.redirect || request?.redirect || 'follow',
+      }, { keepRawSetCookies: wantsRawCookies });
+      /*
+       * 值本来就不在 Response 的头上（`Set-Cookie` 是 JS 读不到的头），这里再收一次口子：
+       * 这期间没有内置接口代码在等着读，就把内存里那份也丢掉 —— 一次无关的请求不该让
+       * 平台凭据在桥的内存里多躺一份。
+       */
+      if (!wantsRawCookies || awaitingBridgeCookies > 1) nativeDropRawSetCookies(response);
+      return response;
+    } finally {
+      if (wantsRawCookies) awaitingBridgeCookies -= 1;
+    }
   };
 };
 
