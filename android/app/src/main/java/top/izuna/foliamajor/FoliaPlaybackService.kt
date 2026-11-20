@@ -894,6 +894,17 @@ class FoliaPlaybackService : android.app.Service() {
          * 放在最后一步：上面那些落盘 / 撤回调用的是 `running`，而 running 现在由状态推出来。
          */
         endNotificationState(keepSession = false, stopService = false)
+        /*
+         * 播放服务没了，后台主题这一轮的线程池也该放掉（issue L8）。
+         *
+         * `BackgroundThemeWorker` 的线程池、排队任务与三张缓存原本随进程常驻：服务已经不在、
+         * 没有新歌要生成主题了，它们仍然占着线程和内存。`pause()` 是收口入口，
+         * 收口之后再 `request` 会惰性重建 —— 下一轮播放照常。
+         *
+         * 放在最后：上面那些落盘要用的字段与它无关，收口在谁之后都不影响；
+         * 但放最后能保证「服务真的在收尾」时才收，而不是某个提前返回的分支里。
+         */
+        top.izuna.foliamajor.ai.BackgroundThemeWorker.pause()
         super.onDestroy()
     }
 
