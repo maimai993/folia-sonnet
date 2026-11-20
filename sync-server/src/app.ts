@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { cors } from 'hono/cors';
 import { bearerAuth } from 'hono/bearer-auth';
 import adminAuthRoutes, {
@@ -364,6 +365,28 @@ const publicCors = cors({
    */
   allowHeaders: ['Authorization', 'Content-Type', 'X-Folia-Cache-Token'],
 });
+/*
+ * 跨源写请求的来源校验（issue M36）。
+ *
+ * 公开读接口对谁都开放 —— 那是这个服务的本意，网页版、桌面版都要能直接读。
+ * 但写接口不一样：默认部署（没配 AI_CACHE_WRITE_TOKEN、也没配管理员）时
+ * `requireCacheWriter` 是放行的（云缓存是公开服务，见 admin.ts 里那段说明）。
+ * 通配 CORS 叠上那个放行，就等于**任意网页都能以用户浏览器为跳板写缓存**。
+ *
+ * 所以这里只收紧写：允许同源（网页版自身），或**没有 Origin 头**的请求 ——
+ * 原生桥走的 OkHttp 与 curl 都不带 Origin，那是合法调用方。
+ * 带了别的 Origin 就拒，预检也会一并被挡（预检是 OPTIONS，同样过这里）。
+ */
+const isAllowedPublicWriteOrigin = (c: Context<{ Bindings: Env }>): boolean => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return true;
+  const origin = c.req.header('Origin');
+  if (!origin) return true;
+  /* Origin 必须与自己页面同源；反代部署用 ADMIN_PUBLIC_ORIGIN 明确指定对外源。 */
+  const selfOrigin = readAdminPublicOrigin(c) ?? new URL(c.req.url).origin;
+  if (origin !== selfOrigin) return false;
+  return c.req.header('Sec-Fetch-Site') !== 'cross-site';
+};
+
 app.use('*', async (c, next) => {
   if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {
     c.header('Cache-Control', 'no-store');
@@ -371,6 +394,9 @@ app.use('*', async (c, next) => {
     if (!isSameOriginAdminMutation(c)) return c.json({ ok: false, error: 'invalid_origin' }, 403);
     await next();
     return;
+  }
+  if (!isAllowedPublicWriteOrigin(c)) {
+    return c.json({ ok: false, error: 'invalid_origin' }, 403);
   }
   return publicCors(c, next);
 });

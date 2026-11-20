@@ -212,3 +212,47 @@ describe('additive admin migration', () => {
         expect((await second.FOLIA_SYNC_DB.prepare('SELECT COUNT(*) AS count FROM admin_sessions').first<{ count: number }>())?.count).toBe(2);
     });
 });
+
+/*
+ * 公开写接口的跨源来源校验（issue M36）。
+ *
+ * 公开读接口对谁都开放 —— 那是本意。但默认部署（没配 AI_CACHE_WRITE_TOKEN、也没配管理员）时
+ * `requireCacheWriter` 是放行的，通配 CORS 叠上那个放行，任意网页都能以用户浏览器为跳板写缓存。
+ * 所以写请求要求同源，或干脆不带 Origin（原生 OkHttp 桥、curl 都不带）。
+ */
+describe('public write origin gate', () => {
+    const body = JSON.stringify({ schemaVersion: 1, updatedAt: '2026-01-01T00:00:00Z', data: { visualizerMode: 'classic' } });
+    /* /settings 另外还要 Bearer：这里验的是来源闸，令牌给对的，免得被 401 抢在前面。 */
+    const auth = { Authorization: 'Bearer synthetic-sync-token' };
+
+    it('rejects a cross-origin settings write', async () => {
+        const env = createEnv();
+        const response = await request(env, '/settings', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth, Origin: 'https://evil.example' }, body,
+        });
+        expect(response.status).toBe(403);
+        expect(await response.json()).toEqual({ ok: false, error: 'invalid_origin' });
+    });
+
+    it('still allows a write with no Origin header (native bridge, curl)', async () => {
+        const env = createEnv();
+        const response = await request(env, '/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth }, body });
+        expect(response.status).toBe(200);
+    });
+
+    it('still allows a same-origin write', async () => {
+        const env = createEnv();
+        const response = await request(env, '/settings', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json', ...auth, Origin: 'https://panel.synthetic.test' }, body,
+        });
+        expect(response.status).toBe(200);
+    });
+
+    /* 读接口不受影响：网页版、桌面版跨源读都是正常用法。 */
+    it('leaves cross-origin reads alone', async () => {
+        const env = createEnv();
+        const response = await request(env, '/health', { headers: { Origin: 'https://other.synthetic.test' } });
+        expect(response.status).toBe(200);
+        expect(response.headers.get('access-control-allow-origin')).toBe('*');
+    });
+});
