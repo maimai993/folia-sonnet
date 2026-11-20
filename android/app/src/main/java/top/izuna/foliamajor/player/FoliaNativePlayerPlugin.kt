@@ -64,17 +64,23 @@ class FoliaNativePlayerPlugin : Plugin() {
         )
     }
 
-    /** 释放播放器：先让排队中的旧事件失效（player=null），释放完成后再清全局缓冲豁免，且只在代数仍是当前时清。 */
+    /**
+     * 释放播放器：先让排队中的旧事件失效（player=null），释放完成后再清全局缓冲豁免。
+     *
+     * 这里**不再**按代数门禁清（#H8）：清理是跨代的义务，不是写入。以前它走 runIfCurrent，
+     * 旧实例迟到销毁时代数早已不是自己的，这一下就被挡掉 —— 而旧代可能是停在 stalled 里走的，
+     * 新一代又迟迟不装源，于是「偶发的歌词不跟着暂停收起 / 收起」一直挂着，没有任何自愈路径。
+     * 写入门禁仍在上面的 onEvent 里（那里的 isCurrent 一个字节都不改）。
+     */
     private fun releasePlayerAndClearStall() {
-        val generation = playerGeneration
         val current = player
         player = null
         if (current != null) {
             current.release {
-                PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+                PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
             }
         } else {
-            PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+            PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
         }
     }
 
@@ -357,8 +363,10 @@ class FoliaNativePlayerPlugin : Plugin() {
         instance = this
         val generation = PLAYER_GENERATIONS.advance()
         playerGeneration = generation
-        // 旧实例若还没销毁，它的释放回调会因代数过期而跳过清理；新播放器从干净的缓冲豁免开始。
-        WallpaperLyricsState.clearPlayerStall()
+        // 跨代清理在这里统一承担（#H8）：见 PlayerGeneration 与 releasePlayerAndClearStall 的说明。
+        // 旧实例若还没销毁，它的释放回调以前会因为代数过期被 runIfCurrent 挡掉 —— 旧代停在
+        // stalled 里退场、新代又迟迟不装源，这条状态就永远没人清。现在推进代数的一侧无条件清一次。
+        PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
         /*
          * 均衡器先恢复再建播放器。
          *
