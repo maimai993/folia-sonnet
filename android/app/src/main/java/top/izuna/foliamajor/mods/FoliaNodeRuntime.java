@@ -48,6 +48,12 @@ public final class FoliaNodeRuntime {
     /** 模组们自己的东西：userData/mods、userData/mods-data、userData/mods-cache。 */
     private static final String USER_DATA_DIR = "folia-userdata";
 
+    /**
+     * 信任根在应用数据目录（/data/user/0/包名/）下的子目录：
+     * 模组启用状态与内容摘要记在这里，不在模组可写的外部存储里。见 start() 里的说明。
+     */
+    private static final String TRUST_DIR = "mod-trust";
+
     /** 设备指标的采集间隔。模组的性能卡片刷新在秒级，1 秒足够、也不会让 /proc 读得太频繁。 */
     private static final long METRICS_INTERVAL_MS = 1000;
 
@@ -138,13 +144,26 @@ public final class FoliaNodeRuntime {
          */
         applyFfmpegEnvironment();
 
+        /*
+         * 信任根（启用状态与内容摘要）放到应用数据目录 /data 下。
+         *
+         * 模组目录在外部存储（getExternalFilesDir）里，模组的 fs 能直接读写它；把「用户确认过
+         * 哪一份内容」也放在同一棵树里，等于让被授权的一方自己改写授权记录，摘要绑定就形同虚设。
+         * /data 下的路径不属于任何可写的外部目录，模组（以及装了文件管理器的用户）都碰不到。
+         */
+        final File trustDir = new File(appContext.getDataDir(), TRUST_DIR);
+        if (!trustDir.isDirectory() && !trustDir.mkdirs()) {
+            Log.w(TAG, "创建信任根目录失败：" + trustDir);
+        }
+
         Thread nodeThread = new Thread(() -> {
             try {
                 nativeStart(
                         new File(hostDir, "host.js").getAbsolutePath(),
                         hostDir.getAbsolutePath(),
                         userDataDir.getAbsolutePath(),
-                        cacheDir.getAbsolutePath());
+                        cacheDir.getAbsolutePath(),
+                        trustDir.getAbsolutePath());
             } catch (Throwable error) {
                 fail("Node 线程异常退出", error);
             }
@@ -340,7 +359,7 @@ public final class FoliaNodeRuntime {
 
     /* ------------------------------------------------------------- native */
 
-    private static native void nativeStart(String entryPath, String homeDir, String userDataDir, String cacheDir);
+    private static native void nativeStart(String entryPath, String homeDir, String userDataDir, String cacheDir, String trustDir);
 
     private static native void nativeSendToNode(String channel, String payload);
 
