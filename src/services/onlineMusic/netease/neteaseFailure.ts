@@ -1,10 +1,21 @@
 import { OnlineProviderError } from '../../../types/onlineMusic';
 import type { OnlineFailureDetail, OnlineFailureOperation } from '../../../types/onlineMusic';
+import type { BridgeFailure } from '../omni/bridgeFailure';
 import { NETEASE_API_BASE_MISSING, NETEASE_API_OFFLINE, httpErrorStatusOf, isNeteaseApiUnavailable, isNeteaseNetworkFailure } from './netease';
 
 // src/services/onlineMusic/netease/neteaseFailure.ts
 // 网易云要播放地址、读歌单和专辑的歌曲没有成功时交出的事实（services/onlineMusic/failure/）。
 // 网易云自己的回答是什么意思，只在这里说。
+
+// 桥（netease.ts 的 fetchWithCreds）答的否定应答：种类留在错的 `code` 上，整条应答在 `cause` 上。
+// 原先桥这条失败被降级成裸 `Error`，这里认不出来，于是「要登录」与「连不上」在界面上长得一样（issue M20）。
+const isNeteaseBridgeFailure = (error: unknown): error is OnlineProviderError & { cause: BridgeFailure } => (
+    error instanceof OnlineProviderError
+    && error.providerId === 'netease'
+    && typeof error.cause === 'object' && error.cause !== null
+    && '__foliaBridgeError' in error.cause
+    && (error.code === 'auth-required' || error.code === 'unsupported' || error.code === 'network' || error.code === 'invalid-response')
+);
 
 // 回答带着一个不是 200 的 code。没有 code 的回答照旧去读。
 export const isRefusedNeteaseAnswer = (response: any): boolean => response?.code != null && Number(response.code) !== 200;
@@ -42,6 +53,16 @@ export const describeNeteaseFailure = (_operation: OnlineFailureOperation, error
     if (error instanceof Error && error.message === NETEASE_API_OFFLINE) return { case: 'unreachable' };
     // 网页版没有配置 API 的地址：这里用不了网易云，再试也一样。
     if ((error as { code?: unknown } | null)?.code === NETEASE_API_BASE_MISSING) return { case: 'not-configured' };
+    // 桥答的否定应答（issue M20）：种类在错的 `code` 上，整条应答在 `cause` 上。
+    if (isNeteaseBridgeFailure(error)) {
+        // 「要登录」不在这里点名成某一种情况：共用规则按 `code` 已经把它读成 sign-in-needed，
+        // 这里再点一次名反而绕开了那条规则。
+        if (error.code === 'auth-required') return null;
+        // 桥里没有这条路由：重试也不会出现，说「这里不支持」。
+        if (error.code === 'unsupported') return { case: 'not-configured' };
+        const failure = error.cause;
+        return { case: 'unreachable', code: failure.__foliaBridgeError, ...(failure.message ? { message: failure.message } : {}) };
+    }
     // 请求没有到达 API（fetchWithCreds 标出的那种，或者裸 fetch 抛的 TypeError）。
     if (isNeteaseNetworkFailure(error)) return { case: 'unreachable' };
     // API 回的不是 JSON（网关的错误页、部署里没有这个接口时 Express 自己的 404 页）：不是网易云说的话，

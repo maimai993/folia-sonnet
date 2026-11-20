@@ -5,6 +5,7 @@ import { isFoliaExtensionBridgeConfigured, requestFoliaExtension } from '../../f
 import { requestLyricProxyOnDesktop } from '../../lyricProxy';
 import { resolveProxiedUrl } from '../../proxiedUrl';
 import { withLoginRequestLimit } from '../login/loginRequestLimit';
+import { bridgeFailureError } from '../omni/bridgeFailure';
 
 // src/services/onlineMusic/kugou/kugouTransport.ts
 
@@ -657,13 +658,8 @@ export const requestKugou = async <T = unknown>(operation: KugouOperation, param
                 params,
             });
             if (bridged?.__foliaBridgeError) {
-                if (bridged.__foliaBridgeError === 'AUTH_REQUIRED') {
-                    throw new OnlineProviderError('auth-required', bridged.message || 'KuGou login required', 'kugou', bridged);
-                }
-                if (bridged.__foliaBridgeError === 'UNSUPPORTED') {
-                    throw new OnlineProviderError('unsupported', bridged.message || `KuGouMusicApi has no ${operation} route`, 'kugou', bridged);
-                }
-                throw new OnlineProviderError('network', bridged.message || bridged.__foliaBridgeError, 'kugou', bridged);
+                // 取值到种类的对应只有一份（omni/bridgeFailure.ts，issue M20）。
+                throw bridgeFailureError(bridged, 'kugou', `KuGouMusicApi has no ${operation} route`);
             }
             persistWebSession(operation, bridged);
             return bridged as T;
