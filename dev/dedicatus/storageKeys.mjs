@@ -319,6 +319,7 @@ export const STORAGE_KEYS = [
     'web:lxmusic_play_diag_v1',
     'web:lxmusic_playback_cache_v2',
     'web:lxmusic_preferences_v1',
+    'web:lxmusic_script_approvals_v1',
     'web:lxmusic_source_health_v1',
     'web:lxmusic_square_collections_v2',
     'web:lyric_auto_calibration',
