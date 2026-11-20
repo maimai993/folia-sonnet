@@ -37,8 +37,6 @@ class FoliaLanCastPlugin : Plugin() {
 
     companion object {
         private const val TAG = "FoliaLanCast"
-        private const val SSDP_ADDRESS = "239.255.255.250"
-        private const val SSDP_PORT = 1900
         private const val AV_TRANSPORT = "urn:schemas-upnp-org:service:AVTransport:1"
         private const val RENDERING_CONTROL = "urn:schemas-upnp-org:service:RenderingControl:1"
         // 发现用的 ST 统一放在 LanCastDiscovery 里（策略与报文同源），这里不再各存一份。
@@ -525,7 +523,6 @@ class FoliaLanCastPlugin : Plugin() {
         lock?.setReferenceCounted(false)
         try {
             lock?.acquire()
-            val replies = Collections.synchronizedMap(LinkedHashMap<String, String>())
             val socket = DatagramSocket(null as java.net.SocketAddress?)
             socket.reuseAddress = true
             socket.bind(InetSocketAddress(0))
@@ -533,67 +530,17 @@ class FoliaLanCastPlugin : Plugin() {
             // 收缓冲显式设大：2048 装不下某些设备的长 USN + 多个头，截断后变成畸形应答，
             // 设备就静默丢了（issue M21）。缓冲数组也只建一次，不再每轮新建。
             socket.receiveBufferSize = LanCastDiscovery.RECEIVE_BUFFER_BYTES
-            val receiveBuffer = ByteArray(
-                maxOf(socket.receiveBufferSize, LanCastDiscovery.RECEIVE_BUFFER_BYTES),
-            )
-            // 记在 socket 块外：回取预算与日志要用「抓包花了多久、发了几轮」（issue M21）。
             val started = System.currentTimeMillis()
-            var rounds = 0
-            socket.use {
-                val target = InetSocketAddress(InetAddress.getByName(SSDP_ADDRESS), SSDP_PORT)
-                var preciseRoundsWithoutResult = 0
-                while (true) {
-                    val elapsed = System.currentTimeMillis() - started
-                    // 先精准、零结果才补 ssdp:all（策略见 LanCastDiscovery）：过去无条件轮转，
-                    // 网络里只有一台音响时也在反复把全网段叫醒（issue M21）。
-                    val probe = LanCastDiscovery.nextProbe(
-                        elapsedMs = elapsed,
-                        timeoutMs = timeoutMs,
-                        found = replies.size,
-                        rounds = rounds,
-                        preciseRoundsWithoutResult = preciseRoundsWithoutResult,
-                    ) ?: break
-                    val request = LanCastDiscovery.searchRequest(probe.searchTarget, SSDP_ADDRESS, SSDP_PORT)
-                    val packet = DatagramPacket(request, request.size, target.address, target.port)
-                    try {
-                        it.send(packet)
-                    } catch (error: Exception) {
-                        Log.w(TAG, "SSDP send failed", error)
-                    }
-                    rounds += 1
-                    // 等待窗口与报文里的 MX 同源：声明 2 秒就等满 2 秒，否则按协议应答的慢设备反被丢掉。
-                    val until = System.currentTimeMillis() + probe.windowMs
-                    val before = replies.size
-                    while (System.currentTimeMillis() < until) {
-                        val incoming = DatagramPacket(receiveBuffer, receiveBuffer.size)
-                        try {
-                            it.receive(incoming)
-                            val text = String(incoming.data, 0, incoming.length, Charsets.UTF_8)
-                            val headers = parseHeaders(text)
-                            val location = headers["location"] ?: continue
-                            /*
-                             * LOCATION 先过一次准入再拿去 GET。
-                             *
-                             * SSDP 应答是明文 UDP、没有认证：同网段任何设备都能回一份把
-                             * LOCATION 指向公网地址的假应答。照着它去 GET 就已经是一次出站请求
-                             * （SSRF 的第一跳），所以在发出任何请求之前就挡掉。
-                             */
-                            if (!isAllowedLocation(location)) continue
-                            val usn = headers["usn"] ?: location
-                            if (!replies.containsKey(usn)) replies[usn] = location
-                        } catch (timeout: java.net.SocketTimeoutException) {
-                            // 本轮没有更多回复，继续等到窗口结束。
-                        } catch (error: Exception) {
-                            Log.w(TAG, "SSDP receive failed", error)
-                        }
-                    }
-                    if (replies.size == before) {
-                        if (probe.searchTarget != LanCastDiscovery.ALL) preciseRoundsWithoutResult += 1
-                    } else {
-                        preciseRoundsWithoutResult = 0
-                    }
-                }
+            val capture = socket.use {
+                // 发什么、等多久、什么时候停都在 LanCastDiscovery 里（issue M21）。
+                LanCastDiscovery.capture(
+                    socket = it,
+                    timeoutMs = timeoutMs,
+                    onAllowedLocation = ::isAllowedLocation,
+                    logWarn = { message, error -> if (error == null) Log.w(TAG, message) else Log.w(TAG, message, error) },
+                )
             }
+            val replies = capture.replies
             /*
              * 每台应答的设备单独给结论：读成了就进列表，没读成也记下原因（issue M22）。
              * 过去是一句 mapNotNull，没读成的设备从列表里消失、日志里只有异常，
@@ -611,8 +558,8 @@ class FoliaLanCastPlugin : Plugin() {
             Log.i(
                 TAG,
                 "discovery: answered=" + candidates.size + " listed=" + speakers.size +
-                    " skipped=" + skipReasons.size + " found=" + speakers.size +
-                    " rounds=" + rounds +
+                    " skipped=" + skipReasons.size +
+                    " rounds=" + capture.rounds +
                     (if (skipReasons.isEmpty()) "" else " reasons=" + skipReasons.distinct().joinToString(",")),
             )
             return DiscoveryResult(
@@ -638,17 +585,6 @@ class FoliaLanCastPlugin : Plugin() {
         // 应答地址只记网段：完整地址含局域网 IP 与端口（issue M24）。
         Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + LanCastLogText.deviceHint(location) + " " + error.message)
         false
-    }
-
-    /** SSDP 回复是 HTTP 风格的头，键统一小写。 */
-    private fun parseHeaders(text: String): Map<String, String> {
-        val headers = HashMap<String, String>()
-        for (line in text.split("\r\n")) {
-            val colon = line.indexOf(':')
-            if (colon <= 0) continue
-            headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
-        }
-        return headers
     }
 
     /**
@@ -732,24 +668,24 @@ class FoliaLanCastPlugin : Plugin() {
                     Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location) + " empty body")
                     return ReadResult(null, "empty-body")
                 }
-                val parsed = parseDescription(body)
+                val parsed = LanCastDeviceDescription.parse(body)
                 val controlPath = parsed.controlUrl
                 if (controlPath == null) {
                     // 每台 NAS / 打印机也会回 ssdp:all，它们没有 AVTransport：这不算错误，单独记。
                     Log.i(TAG, "skip device without AVTransport: " + LanCastLogText.deviceHint(location))
                     return ReadResult(null, "no-avtransport")
                 }
-                val absolute = resolveControlUrl(deviceUrl, controlPath, parsed.urlBase)
+                val absolute = LanCastDeviceDescription.resolveControlUrl(deviceUrl, controlPath, parsed.urlBase)
                 if (absolute == null) return ReadResult(null, "control-url-rejected")
                 ReadResult(
                     Speaker(
                         id = usn,
-                        name = parsed.name.ifEmpty { hostOf(location) },
+                        name = parsed.name.ifEmpty { LanCastDeviceDescription.hostOf(location) },
                         location = location,
                         controlUrl = absolute.toString(),
                         manufacturer = parsed.manufacturer,
                         volumeControlUrl = parsed.volumeControlUrl
-                            ?.let { resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
+                            ?.let { LanCastDeviceDescription.resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
                     ),
                     failure = "",
                 )
@@ -762,85 +698,6 @@ class FoliaLanCastPlugin : Plugin() {
         }
     }
 
-    private data class Description(
-        var name: String = "",
-        var manufacturer: String = "",
-        var deviceType: String = "",
-        var urlBase: String = "",
-        var controlUrl: String? = null,
-        var volumeControlUrl: String? = null,
-    )
-
-    /** 只挑需要的几个元素；嵌套的 embedded device 也一起扫，有些音响把服务挂在子设备下。 */
-    private fun parseDescription(xml: String): Description {
-        val result = Description()
-        val parser = Xml.newPullParser()
-        parser.setInput(StringReader(xml))
-        var inService = false
-        var serviceType = ""
-        var eventType = parser.eventType
-        while (eventType != XmlPullParser.END_DOCUMENT) {
-            if (eventType == XmlPullParser.START_TAG) {
-                when (parser.name) {
-                    "friendlyName" -> result.name = parser.nextText().trim()
-                    "manufacturer" -> result.manufacturer = parser.nextText().trim()
-                    "deviceType" -> result.deviceType = parser.nextText().trim()
-                    "URLBase" -> result.urlBase = parser.nextText().trim()
-                    "service" -> { inService = true; serviceType = "" }
-                    "serviceType" -> if (inService) serviceType = parser.nextText().trim()
-                    "controlURL" -> {
-                        val path = parser.nextText().trim()
-                        if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:AVTransport") && result.controlUrl == null) {
-                            result.controlUrl = path
-                        }
-                        if (inService && serviceType.startsWith("urn:schemas-upnp-org:service:RenderingControl") && result.volumeControlUrl == null) {
-                            result.volumeControlUrl = path
-                        }
-                    }
-                }
-            } else if (eventType == XmlPullParser.END_TAG && parser.name == "service") {
-                inService = false
-            }
-            eventType = parser.next()
-        }
-        // MediaServer（比如 NAS）也会回 ssdp:all，但它没有 AVTransport；
-        // readSpeaker 会因为没有 controlURL 直接把它丢掉。
-        return result
-    }
-
-    /**
-     * 设备描述里的 controlURL 拼成绝对地址，并做准入。
-     *
-     * 过去绝对 URL 原样接受：一份伪造的设备描述就能把后续所有 SOAP 指向任意主机。
-     * 现在相对路径以设备描述自己的地址（或它声明的 URLBase）为基准，拼完统一过
-     * [LanCastTargetPolicy]：局域网、允许端口、且绝对 URL 必须与设备同段。
-     * 不合格返回 null，那台设备直接被丢弃（发现列表里不出现）。
-     */
-    private fun resolveControlUrl(deviceUrl: URL, controlPath: String, urlBase: String): URL? {
-        return try {
-            val raw = if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) {
-                controlPath
-            } else {
-                val base = if (urlBase.isNotEmpty()) urlBase else {
-                    "${deviceUrl.protocol}://${deviceUrl.host}${if (deviceUrl.port > 0) ":${deviceUrl.port}" else ""}/"
-                }
-                base.trimEnd('/') + "/" + controlPath.trimStart('/')
-            }
-            val target = LanCastTargetPolicy.requireAllowedTarget(raw, "控制地址")
-            LanCastTargetPolicy.requireSameLanAs(target, deviceUrl)
-            target
-        } catch (error: Exception) {
-            // 控制地址同样只记网段与资源名，不记完整地址（issue M24）。
-            Log.w(TAG, "rejected control url " + LanCastLogText.controlHint(controlPath) + ": " + error.message)
-            null
-        }
-    }
-
-    private fun hostOf(location: String): String = try {
-        URL(location).host
-    } catch (error: Exception) {
-        location
-    }
 
     // ------------------------------------------------------------------ SOAP
 
