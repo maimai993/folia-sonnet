@@ -52,10 +52,9 @@ const pixiModule = () => ({
             if (this.resources.length > 0) destroyed.push(this);
         }
     },
+    // Pixi 8 的 TexturePoolClass 只有 returnTexture(texture, resetStyle?)，没有 getPool(key)。
     TexturePool: {
-        getPool: () => ({
-            returnTexture: () => { returnedToPool.push(String(destroyed.length)); },
-        }),
+        returnTexture: () => { returnedToPool.push(String(destroyed.length)); },
     },
 }) as unknown as typeof import('pixi.js');
 

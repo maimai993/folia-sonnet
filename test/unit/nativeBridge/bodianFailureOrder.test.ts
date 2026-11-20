@@ -15,6 +15,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const SESSION = JSON.stringify({ uid: '42', token: 'fixture-bodian-token', user: { id: '42' } });
 
 /**
+ * 从「成功 / 失败」联合类型里取出失败那一支的 error。
+ *
+ * 直接写 `result.error` 编译不过（成功那一支没有这个字段），而这一整个文件关心的都是
+ * 失败分类，所以统一从这里取：既收窄了类型，也顺带把「本该失败却成功了」当场变成一条
+ * 明确的报错，而不是一个说不清的 undefined 比较。
+ */
+const failureOf = (result: { ok: boolean } & Record<string, unknown>) => {
+    if (result.ok) throw new Error('这一条必须是失败结果，实际拿到了成功');
+    return (result as unknown as { error: { code: string; message: string } }).error;
+};
+
+/**
  * 发出去的请求条数。
  *
  * 模块级的 client 会在 `user_playlists` 前面先探一次会话（`ensureSessionLoaded`），
@@ -92,7 +104,7 @@ describe('波点的失败分类（M28）', () => {
         const result = await bodian.handleBodianRequest('user_playlists', { limit: 10, offset: 0 });
 
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('auth-required');
+        expect(failureOf(result).code).toBe('auth-required');
     });
 
     it('响应体是空的 429 仍然报服务不可用那一类，状态码不被解析失败吃掉', async () => {
@@ -102,9 +114,9 @@ describe('波点的失败分类（M28）', () => {
         const result = await bodian.handleBodianRequest('user_playlists', { limit: 10, offset: 0 });
 
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('network');
+        expect(failureOf(result).code).toBe('network');
         // 上游状态码留在文案里：调用方按它决定退避多久（见 bodianFailure.ts）。
-        expect(result.error.message).toContain('429');
+        expect(failureOf(result).message).toContain('429');
     });
 
     it('503 同样按状态码分类，不是 invalid-response', async () => {
@@ -114,8 +126,8 @@ describe('波点的失败分类（M28）', () => {
         const result = await bodian.handleBodianRequest('user_playlists', { limit: 10, offset: 0 });
 
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('network');
-        expect(result.error.message).toContain('503');
+        expect(failureOf(result).code).toBe('network');
+        expect(failureOf(result).message).toContain('503');
     });
 
     it('200 但响应体读不出来仍然是协议格式错误', async () => {
@@ -125,7 +137,7 @@ describe('波点的失败分类（M28）', () => {
         const result = await bodian.handleBodianRequest('user_playlists', { limit: 10, offset: 0 });
 
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('invalid-response');
+        expect(failureOf(result).code).toBe('invalid-response');
     });
 });
 
@@ -160,10 +172,10 @@ describe('波点的重定向（M28）', () => {
         expect(calls.every(call => !call.url.includes('attacker.example.test'))).toBe(true);
         expect(result.ok).toBe(false);
         // 归成 network（能退避重试的那一类），不是 invalid-response。
-        expect(result.error.code).toBe('network');
+        expect(failureOf(result).code).toBe('network');
         // 日志 / 文案说得出跳到了哪台主机，但只给主机，不给完整地址。
-        expect(result.error.message).toContain('attacker.example.test');
-        expect(result.error.message).not.toContain('/steal');
+        expect(failureOf(result).message).toContain('attacker.example.test');
+        expect(failureOf(result).message).not.toContain('/steal');
     });
 
     it('同主机重定向也不自动跟随：地址变了就重新判一遍', async () => {
@@ -174,7 +186,7 @@ describe('波点的重定向（M28）', () => {
 
         expect(sent).toBe(1);
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('network');
+        expect(failureOf(result).code).toBe('network');
     });
 
     it('fetch 的 redirect 不再是 follow', async () => {
@@ -201,6 +213,6 @@ describe('波点的重定向（M28）', () => {
         const result = await bodian.handleBodianRequest(REQUEST[0], REQUEST[1]);
 
         expect(result.ok).toBe(false);
-        expect(result.error.code).toBe('network');
+        expect(failureOf(result).code).toBe('network');
     });
 });
