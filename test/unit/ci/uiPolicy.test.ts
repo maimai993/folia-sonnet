@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_LINES, countControlsIn, countLines, scanControls, scanSizes } from '../../../ci/uiPolicy.ts';
+import { MAX_LINES, countControlsIn, countLines, listSizeSources, scanControls, scanSizes } from '../../../ci/uiPolicy.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -100,5 +100,79 @@ describe('基线只许变小且必须等于实测（issue L7）', () => {
     it('基线等于实测时通过', () => {
         const root = makeRepo({ 'src/steady.tsx': lines(900) }, { 'src/steady.tsx': 900 });
         expect(scanSizes(root)).toEqual([]);
+    });
+});
+
+/*
+ * 行数门禁的覆盖面（issue M17）。
+ *
+ * 原来只数 `src/` 下的 `.tsx`：仓库里最大的那些 `.ts` 与 `android/app/src/main/java` 下的
+ * Kotlin / Java 根本不进统计，门禁报「通过」时它们已经涨到上限的两倍以上。
+ * 这里把口径钉住：`.ts` 与 `.kt` / `.java` 都数、声明与语言文件不数、安卓目录算在内。
+ */
+describe('行数门禁覆盖 .ts 与安卓目录（issue M17）', () => {
+    const dirs: string[] = [];
+    afterEach(() => {
+        for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+    });
+
+    /** 与 L7 那组同款的最小仓库；`baseline` 不写就是空基线。 */
+    const makeRepo = (files: Record<string, string>, baseline: Record<string, number> = {}): string => {
+        const root = mkdtempSync(path.join(tmpdir(), 'ui-scope-'));
+        dirs.push(root);
+        for (const [relative, content] of Object.entries(files)) {
+            const full = path.join(root, relative);
+            mkdirSync(path.dirname(full), { recursive: true });
+            writeFileSync(full, content);
+        }
+        mkdirSync(path.join(root, 'ci'), { recursive: true });
+        writeFileSync(path.join(root, 'ci', 'fileSizeBaseline.json'), JSON.stringify(baseline));
+        return root;
+    };
+
+    const lines = (count: number): string => Array.from({ length: count }, (_, i) => `// ${i}`).join('\n') + '\n';
+
+    it('一个 900 行的 .ts 会失败（原来根本不进统计）', () => {
+        const root = makeRepo({ 'src/services/big.ts': lines(900) });
+        expect(scanSizes(root)).toEqual([
+            { file: 'src/services/big.ts', found: 900, allowed: MAX_LINES, unit: 'lines' },
+        ]);
+    });
+
+    it('一个 900 行的 .kt / .java 会失败（原来 android/ 不在扫描范围内）', () => {
+        const root = makeRepo({
+            'android/app/src/main/java/top/izuna/foliamajor/Big.kt': lines(900),
+            'android/app/src/main/java/top/izuna/foliamajor/mods/Big.java': lines(901),
+        });
+        expect(scanSizes(root).map(v => [v.file, v.found])).toEqual([
+            ['android/app/src/main/java/top/izuna/foliamajor/Big.kt', 900],
+            ['android/app/src/main/java/top/izuna/foliamajor/mods/Big.java', 901],
+        ]);
+    });
+
+    it('声明文件与语言文件不数：它们不是「一个功能堆在一个文件里」', () => {
+        const root = makeRepo({
+            'src/types/big.d.ts': lines(2000),
+            'src/i18n/locales/zh-CN.ts': lines(9000),
+            'src/vite-env.d.ts': lines(1200),
+        });
+        expect(scanSizes(root)).toEqual([]);
+        expect(listSizeSources(root).files).toEqual([]);
+    });
+
+    it('已有的超长文件进了基线就放行，长回去仍然失败', () => {
+        const root = makeRepo({ 'src/legacy.ts': lines(900) }, { 'src/legacy.ts': 900 });
+        expect(scanSizes(root)).toEqual([]);
+        writeFileSync(path.join(root, 'src/legacy.ts'), lines(950));
+        expect(scanSizes(root).some(v => v.unit === 'lines')).toBe(true);
+    });
+
+    it('仓库里真的有 .ts 与 Kotlin / Java 进统计，而不只是 .tsx', () => {
+        const { files, roots } = listSizeSources(repoRoot);
+        expect(roots).toEqual(['src', 'android/app/src/main/java']);
+        expect(files.some(file => file.endsWith('.ts') && !file.endsWith('.tsx'))).toBe(true);
+        expect(files.some(file => file.endsWith('.kt'))).toBe(true);
+        expect(files.some(file => file.endsWith('.d.ts'))).toBe(false);
+        expect(files.some(file => file.startsWith('src/i18n/locales/'))).toBe(false);
     });
 });
