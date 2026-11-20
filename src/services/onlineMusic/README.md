@@ -1,4 +1,4 @@
-﻿# Omni 在线音乐层
+# Omni 在线音乐层
 
 `src/services/onlineMusic/omni.ts` 是普通在线歌曲数据的唯一公开入口。组件、hook、store 和普通 app service 不得直接调用具体 provider、registry、transport 或 raw API；只有明确的跨 provider 编排，或 provider adapter/transport 自身，才可以使用 provider-explicit 层。
 
@@ -42,15 +42,17 @@ UI / hooks / stores / app services
 
 ### 汽水音乐（桌面端）
 
-`qishui/qishuiProvider.ts` 接入车机协议的能力：抖音扫码授权、歌曲搜索、歌曲详情、逐字歌词、账号自建及收藏歌单、歌单翻页、歌手详情和热门歌曲、推荐流，以及场景电台。协议、请求签名、扫码、目录分页和推荐状态在独立的 [`qishui-music-api`](https://github.com/GSQZ/qishui-music-api) 包维护，Folia 钉死版本并注入 Electron `net.fetch`；桥注入时一律加上 `credentials: 'omit'`（`qishuiApiBridge.cjs`），否则 `net.fetch` 会带上 defaultSession 的 cookie，平台回的 `Set-Cookie` 也会写进 defaultSession，账号只靠包自己的请求头。`electron/qishui/` 只保留三个宿主文件：`qishuiApiBridge.cjs` 管 IPC 操作白名单和音频地址登记，`session.cjs` 用 safeStorage 保存用户主动在 Folia 授权的会话及设备标识，`mediaCors.cjs` 管媒体跨域。凭据不交给渲染进程；操作系统不能安全保存时，仅在本次运行内保留账号。
+`qishuiProvider.ts` 接入车机协议的能力：抖音扫码授权、歌曲搜索、歌曲详情、逐字歌词、账号自建及收藏歌单、歌单翻页、歌手详情和热门歌曲、推荐流，以及场景电台。协议、请求签名、扫码、目录分页和推荐状态在独立的 [`qishui-music-api`](https://github.com/GSQZ/qishui-music-api) 包维护，Folia 钉死版本并注入 Electron `net.fetch`；桥注入时一律加上 `credentials: 'omit'`（`qishuiApiBridge.cjs`），否则 `net.fetch` 会带上 defaultSession 的 cookie，平台回的 `Set-Cookie` 也会写进 defaultSession，账号只靠包自己的请求头。`electron/qishui/` 只保留三个宿主文件：`qishuiApiBridge.cjs` 管 IPC 操作白名单和音频地址登记，`session.cjs` 用 safeStorage 保存用户主动在 Folia 授权的会话及设备标识，`mediaCors.cjs` 管媒体跨域。凭据不交给渲染进程；操作系统不能安全保存时，仅在本次运行内保留账号。
+
+> 这一节是上游 v0.7.22 那份 `qishui/` 目录的说明；那份没有注册、已整份删除（issue M19）。现在汽水只有根目录那一套，见 `providerRegistry.ts` 的说明。
 
 电台卡片带各自的场景选择；模式面板经 `omni.getPersonalFmCatalog` 读取平台自己的场景目录。场景使用车机返回的数字 ID，不套用默认目录的场景 ID。各平台分别保存选择，原有私人 FM 存储键保持不变；切换模式后自动补歌沿用新模式。上游的小场景图标由 `qishuiSceneCover.ts` 组合成有留白的封面；图标读不到时这一次只用纯矢量的底图，不记下来，下一次再去读图标。图标按字节认出的类型标进 data URL（认不出时用答复声明的位图类型），不一律标成 PNG。
 
 播放仅使用服务直接返回的未加密地址，对外声明标准音质，试听地址保留试听标记。没有解密受保护音频、提取密钥、调用官方客户端原生签名模块的实现。0.2.0 增加喜欢/取消喜欢、自建普通歌单加删歌、推荐“不喜欢”、歌单页签里的只读“汽水最近播放”集合，以及搜索和详情的可播性检查。只有明确通过检查才标成可播，其余限制保持未知，不推断下架。“我喜欢”歌单走红心；收藏歌单和最近播放不可编辑。专辑详情、创建歌单及收藏写入没有接口，继续关闭。试听片段的起点由 Omni 交给歌词时钟，不写入手动歌词偏移。歌手曲目按车机首次返回的热门列表展示，不把其不前进的游标当成还有更多。
 
-探索页（`qishui/qishuiExplore.ts`）只有一栏“推荐”（id `stream`，每次读取相同），条目全是歌曲，用歌曲自己的方形封面；来源是包的 `feed` 操作的探索队列（车机的 `/feed/song-tab/`，和私人 FM 的队列分开），一次要 20 首。从头读的那一页声明 `refreshReadsAnew`：每次“换一批”从头重读；“更多”沿这一栏的游标接着要，一次读取最多 10 批。一次读取里同一首歌只出一次：各批之间和同一批里重复的歌都去掉，一批去掉后一首不剩、而平台说还有时再要，一次最多要 3 次。交过哪些歌记在 `exploreReads.ts` 的 `createHandedOut` 里（范围 `stream`），登录确认、退出登录和登录失效时整份丢掉。不用 `listened`，没有“与某首歌相似”的栏，也没有收听记录栏要去掉（这个队列只给歌）。未实测：推荐是否按账号生成、隔几秒连读两次内容是否相同、相邻两批会不会给出同样的歌、未登录能读到什么、登录过期时答什么、请求频率的限制。
+探索页（上游那份的 `qishui/qishuiExplore.ts`，已随该目录删除；现在汽水由 `qishuiProvider.ts` 按 `capabilities.explore` 声明，见 issue M19）只有一栏“推荐”（id `stream`，每次读取相同），条目全是歌曲，用歌曲自己的方形封面；来源是包的 `feed` 操作的探索队列（车机的 `/feed/song-tab/`，和私人 FM 的队列分开），一次要 20 首。从头读的那一页声明 `refreshReadsAnew`：每次“换一批”从头重读；“更多”沿这一栏的游标接着要，一次读取最多 10 批。一次读取里同一首歌只出一次：各批之间和同一批里重复的歌都去掉，一批去掉后一首不剩、而平台说还有时再要，一次最多要 3 次。交过哪些歌记在 `exploreReads.ts` 的 `createHandedOut` 里（范围 `stream`），登录确认、退出登录和登录失效时整份丢掉。不用 `listened`，没有“与某首歌相似”的栏，也没有收听记录栏要去掉（这个队列只给歌）。未实测：推荐是否按账号生成、隔几秒连读两次内容是否相同、相邻两批会不会给出同样的歌、未登录能读到什么、登录过期时答什么、请求频率的限制。
 
-要地址、读集合没有成功时，情况由 `qishui/qishuiFailure.ts` 说：网页版没有桌面桥是 `not-configured`；桥本身抛错（主进程出错）是 `local-service-stopped`，不当成断网自动重试；只拿到加密音频是 `no-audio`（再要一次也一样，不给重试）；没有登录的账号时说“登录后才能播放”；`Qishui HTTP <状态>` 交出 HTTP 状态，平台的错误号交出码。按 id 查一首（`getSongDetail`）时平台答了却没给这首歌（包的 `not-playable`，“Qishui did not return the track”）回 null，omni 报 `missing`。登录诊断只记登录操作（`login_*`）的失败，登录窗口开着时后台的歌词、电台请求失败不进报告。
+要地址、读集合没有成功时，情况由 `qishuiFailure.ts`（根目录，注册的那份用的就是它）说：网页版没有桌面桥是 `not-configured`；桥本身抛错（主进程出错）是 `local-service-stopped`，不当成断网自动重试；只拿到加密音频是 `no-audio`（再要一次也一样，不给重试）；没有登录的账号时说“登录后才能播放”；`Qishui HTTP <状态>` 交出 HTTP 状态，平台的错误号交出码。按 id 查一首（`getSongDetail`）时平台答了却没给这首歌（包的 `not-playable`，“Qishui did not return the track”）回 null，omni 报 `missing`。登录诊断只记登录操作（`login_*`）的失败，登录窗口开着时后台的歌词、电台请求失败不进报告。
 
 本地 macOS Electron 开发版已验证扫码登录、登录态恢复、歌单读取、搜索、歌词、未加密音频地址及场景电台，界面经用户实际测试。0.2.0 接入后再次启动桌面版，确认加载新版包、恢复登录、读取喜欢列表并打开最近播放；用户完成本地测试后反馈未发现问题。自动回归覆盖红心、歌单增删、最近播放分页、可播性检查和试听歌词时钟，HTTP 答复使用替身。Windows、Linux 和完整安装包尚未实测，不代表上游接口始终可用。
 
@@ -275,7 +277,7 @@ Apple Music 的推荐能力已接入个人 FM（Apple personal station 持续补
 - `catalogRefs.ts`：歌曲、歌单、专辑、歌手的 provider-aware catalog 引用。
 - 应用自己的播放记录不在这个目录：`recentPlays.ts`、写它的 `useRecentPlaysRecorder.ts` 和用它做出探索页两栏的 `ownSections.ts` 都在探索页自己的目录 `src/components/app/home/explore/`（见上文“应用自己的两栏”）。
 - 探索页跨会话记住的两件事也不在这个目录，在探索页 store 的旁边 `src/stores/exploreFeedMemory.ts`（localStorage 键 `folia_explore_memory`）：每一页栏目标题的先后，和听众在应用里取消收藏的集合（七天）。只由 `src/stores/useExploreFeedStore.ts` 使用。
-- `exploreReads.ts`：各平台的探索页 adapter 共用的两样，不认平台（规则见 `EXPLORE_ADAPTER.md` 规则 3 和规则 10）。一，`createHandedOut()`：记前几次读取用过什么（一栏交过的条目、拿来问过的歌），按 adapter 自己定的范围记；`inTurn` 把候选排成“没用过的在前，其余最久以前用过的在前”，`note` 把这一次用的按先后记下（后记的算后用的，所以长短不一的列表都轮得匀）；每个范围最多 5000 个，超出时忘掉最久以前用过的；只在内存里。二，`stampCursor` / `cursorWords`：在游标前面写上、读出读取的序号，用来认出上一次读取的游标。用它的是 `netease/neteaseExplore.ts`、`ytm/ytmExplore.ts`、`spotify/spotifyExplore.ts`、`qishui/qishuiExplore.ts`（Spotify 只用第一样：它的游标不带序号）；YouTube Music 只记问过的歌，它的栏不记交过的条目。
+- `exploreReads.ts`：各平台的探索页 adapter 共用的两样，不认平台（规则见 `EXPLORE_ADAPTER.md` 规则 3 和规则 10）。一，`createHandedOut()`：记前几次读取用过什么（一栏交过的条目、拿来问过的歌），按 adapter 自己定的范围记；`inTurn` 把候选排成“没用过的在前，其余最久以前用过的在前”，`note` 把这一次用的按先后记下（后记的算后用的，所以长短不一的列表都轮得匀）；每个范围最多 5000 个，超出时忘掉最久以前用过的；只在内存里。二，`stampCursor` / `cursorWords`：在游标前面写上、读出读取的序号，用来认出上一次读取的游标。用它的是 `netease/neteaseExplore.ts`、`ytm/ytmExplore.ts`、`spotify/spotifyExplore.ts`（Spotify 只用第一样：它的游标不带序号；上游那份 `qishui/qishuiExplore.ts` 也用它，但那份已随目录删除，见 issue M19）；YouTube Music 只记问过的歌，它的栏不记交过的条目。
 
 `omni.ts` 的 active-provider 调用带 request generation 检查：`withActiveProvider` 会丢弃 provider 切换后返回的旧响应，切换事务需要 `invalidateActiveRequests()`。不要在调用方重新实现一套取消/晚到响应防护。
 
