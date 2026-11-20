@@ -79,7 +79,13 @@ internal object BackgroundThemeBackoff {
     fun cooldownMs(kind: Kind, streak: Int): Long {
         val base = if (kind.isConfig) CONFIG_BASE_COOLDOWN_MS else BASE_COOLDOWN_MS
         val cap = if (kind.isConfig) MAX_CONFIG_COOLDOWN_MS else MAX_COOLDOWN_MS
-        val steps = (streak.coerceIn(1, MAX_STREAK) - 1).coerceAtMost(16)
+        /*
+         * 这里**不能**用 MAX_STREAK 去夹 streak：那个常量说的是「连错几次就不再自动重试」，
+         * 而本函数问的是「这一次该等多久」。用 6 去夹，步数永远到不了 5 以上，
+         * 60s << 5 = 32 分钟，封顶值 1 小时永远达不到 —— 测试里的 cooldownMs(kind, 100)
+         * 就是这么暴露出来的。夹的是步数，防左移把 Long 推成负数。
+         */
+        val steps = (streak.coerceAtLeast(1) - 1).coerceAtMost(16)
         /* 左移而不是 Math.pow：全整数，不会因为 double 溢出成 Infinity。 */
         val scaled = base shl steps
         return if (scaled <= 0) cap else scaled.coerceAtMost(cap)

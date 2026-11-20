@@ -108,12 +108,52 @@ object AiEndpoints {
         }
     }
 
-    /** 走代理时 Gemini 的 key 在 query 上，别让它进日志 —— 与 Web 侧 redact 同一规矩。 */
+    /**
+     * 凭据的值不进日志、也不进给用户看的错误文案（H32）。
+     *
+     * 规则必须和 Web 侧 `src/utils/errorText.ts` 的 `REDACTION_RULES` **同等强度**：同一段文本
+     * 经两条路径处理应当得到同样的结果。原来这里只有四条（Bearer、x-goog-api-key、URL query、
+     * 几个键名），漏掉了「一眼能认出来的明文密钥形态」—— 而服务商在错误消息里原样回显 API key
+     * 是常见现象，用户填错 key 时那串明文正好绕过原生侧，随文案回到页面、进日志、进截图反馈。
+     *
+     * 顺序与 Web 侧一致：先认形态，再按键名收，最后收没有键名的那种。
+     */
     fun redact(text: String): String = text
         .replace(Regex("(bearer\\s+)[A-Za-z0-9._~+/=-]{8,}", RegexOption.IGNORE_CASE), "$1[redacted]")
+        // 各家签发的明文密钥形态：一眼能认出来的，值不会留全。
+        .replace(
+            Regex("\\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})"),
+            "[redacted]",
+        )
         .replace(Regex("(x-goog-api-key[\"']?\\s*[:=]\\s*[\"']?)[^\\s\"',;]+", RegexOption.IGNORE_CASE), "$1[redacted]")
         .replace(Regex("([?&](?:key|api[_-]?key|token|access_token)=)[^&\\s\"']+", RegexOption.IGNORE_CASE), "$1[redacted]")
-        .replace(Regex("(\"?(?:api[_-]?key|authorization|token)\"?\\s*[:=]\\s*\"?)[^\"\\s,}]{8,}"), "$1[redacted]")
+        /*
+         * 带引号的整段值，以及没有引号的值。
+         *
+         * 键名比原来更宽，和 Web 侧对齐：secret / password / cookie / credential 也算。
+         * 「没有引号」那条**必须**排除 true/false/null/undefined —— 那些是开关不是凭据；
+         * 而且规则只在键名后面跟 `:` 或 `=` 时才动手，`page=2`、`model=gpt-5` 里的
+         * page / model 都不在键名里，不会被误伤。
+         *
+         * 键名与分隔符用捕获组**留着**（`$1`）：`Authorization: Bearer xxx` 这种，
+         * 换成整段 `[redacted]` 会把「谁被遮了」这条线索也一起吃掉，读日志的人反而看不懂。
+         */
+        .replace(
+            Regex(
+                "([A-Za-z0-9_-]*(?:api[\\s_-]?key|token|secret|password|passwd|pwd|credential|cookie|authorization|key)[\"']?\\s*[:=]\\s*(?:bearer\\s+)?[\"'])" +
+                    "(?:(?![\"']).)*([\"'])",
+                RegexOption.IGNORE_CASE,
+            ),
+            "$1[redacted]$2",
+        )
+        .replace(
+            Regex(
+                "([A-Za-z0-9_-]*(?:api[\\s_-]?key|token|secret|password|passwd|pwd|credential|cookie|authorization|key)[\"']?\\s*[:=]\\s*(?:bearer\\s+)?)" +
+                    "(?!(?:true|false|null|undefined)(?![A-Za-z0-9_-]))(?=[^\\s\"',;&}])[^\\s\"',;&}]+",
+                RegexOption.IGNORE_CASE,
+            ),
+            "$1[redacted]",
+        )
 
     /** 设置里没填站点时给 Gemini 的默认反代地址（导出给日志/诊断用）。 */
     const val GEMINI_FALLBACK_BASE = DEFAULT_GEMINI_API_BASE

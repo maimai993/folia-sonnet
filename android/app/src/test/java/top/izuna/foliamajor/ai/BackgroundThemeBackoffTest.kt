@@ -26,7 +26,7 @@ class BackgroundThemeBackoffTest {
 
     @Test
     fun `第一次失败就在窗口内跳过`() {
-        val failure = BackgroundThemeBackoff.recordFailure(null, kind, atMs = 10_000L)
+        val failure = BackgroundThemeBackoff.recordFailure(null, kind, nowMs = 10_000L)
         assertEquals(1, failure.streak)
         assertEquals(kind.name, failure.kind)
         /* 窗口还没走完。 */
