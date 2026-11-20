@@ -106,6 +106,14 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         if (enabled) {
             FoliaNodeRuntime.resetFailure();
             FoliaNodeRuntime.start(getContext(), null);
+        } else {
+            /*
+             * 关掉就把它的悬浮窗收掉（issue H19）。
+             *
+             * 窗口不关的话，那段「已经禁用」的代码仍在屏幕上画画、歌词泵仍在每 250ms 往它的
+             * 页面注入内容 —— 用户以为关掉了，其实一直在跑。别的模组的窗口不受影响。
+             */
+            overlayManager().destroyByOwner(call.getString("id", ""));
         }
         /*
          * 启用时要带上用户在确认框里看到的那份内容摘要（sha256:<hex>）。
@@ -271,6 +279,14 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             }
             deleteRecursively(target);
             Log.i(TAG, "已删除模组：" + modId);
+
+            /*
+             * 卸载了就把它的悬浮窗一起关掉（issue H19）。
+             *
+             * 不关的话，窗口连同里面的 WebView 还挂在 WindowManager 上、歌词泵还在每 250ms
+             * 往一个「已经不存在的模组」的页面里注入原生歌词 —— 用户会看到「删掉了但浮窗还在动」。
+             */
+            overlayManager().destroyByOwner(modId);
 
             // 顺手清掉它的数据与缓存（模组卸载后这些已经没人用了）。
             File dataDirOfMod = new File(dataDir, "mods-data");
@@ -486,6 +502,11 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         } catch (JSONException error) {
             options = new JSONObject();
         }
+        /*
+         * 归属模组（issue H19）：宿主按调用栈查出来塞在 options 里，见 host.js 的 callerModId。
+         * 有了它，禁用/卸载这个模组时只需关它自己的窗口，不必连累别人的。
+         */
+        String ownerModId = options.optString("ownerModId", "");
         OverlayWindowManager.OverlayWindow window = overlayManager().create(options);
         JSObject result = new JSObject();
         if (window == null) {
@@ -494,6 +515,7 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             call.resolve(result);
             return;
         }
+        window.ownerModId = ownerModId;
         result.put("ok", true);
         result.put("id", window.id);
         call.resolve(result);
@@ -666,16 +688,29 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         OverlayWindowManager manager = overlayManager();
         switch (op) {
             case "create": {
-                OverlayWindowManager.OverlayWindow window = manager.create(args.optJSONObject("options") == null
+                JSONObject createOptions = args.optJSONObject("options") == null
                         ? new JSONObject()
-                        : args.optJSONObject("options"));
+                        : args.optJSONObject("options");
+                OverlayWindowManager.OverlayWindow window = manager.create(createOptions);
                 JSObject result = new JSObject();
                 if (window == null) {
                     result.put("error", manager.canDrawOverlays() ? "overlay-failed" : "no-overlay-permission");
                     return result;
                 }
+                // 归属模组（issue H19），理由同 createOverlayWindow。
+                window.ownerModId = createOptions.optString("ownerModId", "");
                 result.put("id", window.id);
                 return result;
+            }
+            case "destroy-all": {
+                /*
+                 * 模组系统总开关关掉时由宿主调用（issue H19）：所有窗口一起收掉，歌词泵也停。
+                 *
+                 * 这个 op 只有宿主会发 —— 模组自己关窗走的是 `destroy` + 自己的 id，
+                 * 不该有能力关别人的窗口。
+                 */
+                manager.destroyAll();
+                return new JSObject();
             }
             case "load-html": {
                 OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));

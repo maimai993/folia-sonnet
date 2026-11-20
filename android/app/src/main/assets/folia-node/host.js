@@ -541,6 +541,28 @@ const installElectronShim = (shim) => {
 const pendingOverlay = new Map();
 let overlaySeq = 0;
 
+/**
+ * 发起这次 overlay 调用的是哪个模组（issue H19）。宿主自己调的返回空串。
+ *
+ * 逐帧问 [modIdForFile]：栈帧里第一个落在某个模组目录下的文件就是答案。栈里的文件名有
+ * 的是 `file:///...` 形式（ESM），有的带括号，所以统一取括号后的那段。
+ */
+const callerModId = () => {
+    const holder = {};
+    Error.captureStackTrace(holder, callerModId);
+    const frames = String(holder.stack || '').split('\n');
+    for (const line of frames) {
+        const matched = /\(?((?:file:\/\/)?[^()\s]+):\d+:\d+\)?\s*$/.exec(line.trim());
+        if (!matched) continue;
+        const filename = matched[1].startsWith('file://')
+            ? matched[1].slice('file://'.length)
+            : matched[1];
+        const modId = modIdForFile(filename);
+        if (modId !== null) return modId;
+    }
+    return '';
+};
+
 const callOverlay = (op, args = {}) => new Promise((resolve, reject) => {
     const id = `ov-${++overlaySeq}`;
     const timer = setTimeout(() => {
@@ -549,8 +571,20 @@ const callOverlay = (op, args = {}) => new Promise((resolve, reject) => {
     }, 8000);
     pendingOverlay.set(id, { resolve, reject, timer });
     try {
+        /*
+         * 开窗时捎上「这是谁开的」（issue H19）。
+         *
+         * 用户禁用某个模组时，原生要能只关掉它名下的窗口 —— 没有归属信息就只剩「全关」
+         * 一个选择，会误伤别的模组。归属靠调用栈反查：`new BrowserWindow()` 那一行一定
+         * 在模组自己的文件里，`modIdForFile` 能把那段路径映射回模组 id。
+         *
+         * 只在 create 时算：别的 op 都带着已有的窗口 id，窗口建好时归属就定了。
+         */
+        const payload = op === 'create'
+            ? { ...args, ownerModId: callerModId() }
+            : args;
         // 用 emit 而不是 send：send 会再包一层 JSON。
-        foliaNode.emit('overlay', JSON.stringify({ id, op, args }));
+        foliaNode.emit('overlay', JSON.stringify({ id, op, args: payload }));
     } catch (error) {
         clearTimeout(timer);
         pendingOverlay.delete(id);
@@ -1158,6 +1192,18 @@ const operations = {
         settings.systemEnabled = enabled === true;
         writeSettings();
         const list = loadAll();
+        /*
+         * 总开关关掉 = 所有模组都停了，它们开的悬浮窗必须跟着消失（issue H19）。
+         *
+         * loadAll 只卸载运行时（跑 disposers），碰不到已经建好的系统窗口 —— 那些窗口
+         * 连同 WebView 还挂在 WindowManager 上，歌词泵还在往里注入内容。用户关掉总开关
+         * 看到的却是「窗口还在、歌词还在动」，正是文件里那句注释警告的现象。
+         */
+        if (settings.systemEnabled !== true) {
+            void callOverlay('destroy-all', {}).catch((error) => {
+                emitLog('warn', `关闭全部悬浮窗失败：${error && error.message ? error.message : error}`);
+            });
+        }
         send('event', { type: 'state-changed', list });
         return { ok: true, list };
     },
