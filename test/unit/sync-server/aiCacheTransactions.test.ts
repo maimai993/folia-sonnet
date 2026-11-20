@@ -1,25 +1,41 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import app from '../../../sync-server/src/app';
 import { D1Emulator } from '../../../sync-server/src/d1-emulator';
+import { md5 } from '../../../sync-server/src/md5';
 
 // Exercise shipped Hono routes with isolated SQLite and disabled external lyric verification.
+// 写入现在要准入（issue C6）：本文件各用例走**写入令牌**那条，管理员会话另有专门的用例。
+const WRITE_TOKEN = 'synthetic-cache-write-token';
 const db = new D1Emulator(':memory:');
 const env = {
     FOLIA_SYNC_DB: db,
     SYNC_TOKEN: 'synthetic-sync-only',
     ADMIN_USERNAME: 'synthetic-admin',
     ADMIN_PASSWORD: 'synthetic-password-only',
-    AI_CACHE_VERIFY: 'off',
+    AI_CACHE_WRITE_TOKEN: WRITE_TOKEN,
 };
 const key = 'a'.repeat(32);
 const otherKey = 'b'.repeat(32);
 let cookie = '';
 const request = (route: string, init?: RequestInit) => app.request(`https://synthetic.invalid${route}`, init, env);
 const payload = (text: string) => ({ decision: { mode: 'original' }, text });
+/*
+ * 纯音乐上传：核验走「歌名哈希」那条，服务端自己就能重算，不必去平台搜 —— 这套回归
+ * 只关心事务行为，不该被平台接口拖进来（这里 `fetch` 还是被禁的）。
+ * 通知不得带 `lyricHash`：不带就没有任何来源证据，现在一律拒（issue C6）。
+ */
 const put = (text: string, cacheKey = key) => request(`/api/ai-cache/stage/${cacheKey}`, {
     method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ payload: payload(text), songTitle: 'Synthetic Song', provider: 'synthetic', model: 'test', platform: 'qq' }),
+    headers: { 'content-type': 'application/json', 'X-Folia-Cache-Token': WRITE_TOKEN },
+    body: JSON.stringify({
+        payload: payload(text),
+        songTitle: 'Synthetic Song',
+        provider: 'synthetic',
+        model: 'test',
+        platform: 'qq',
+        isPureMusic: true,
+        lyricHash: md5('Synthetic Song'),
+    }),
 });
 const snapshot = async () => ({
     current: (await db.prepare('SELECT * FROM ai_cache ORDER BY cache_key').all()).results,
@@ -204,8 +220,19 @@ describe('AI cache atomic archive/prune/replacement/restore', () => {
         expect(body.entry.platform).toBe('qq');
         expect(body.entry.hits).toBe(1);
         expect(body.entry.createdAt).toBe(before.created_at);
-        const oldClient = await request(`/api/ai-cache/stage/${otherKey}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ payload: payload('legacy') }) });
-        expect(oldClient.status).toBe(200);
+        /*
+         * 「老客户端」那条改成了「老客户端不带 lyricHash」：这样的写入现在会被拒（issue C6）——
+         * 没有来源证据的条目不能进这张全局共享的表。这里钉住它 400，并且一行都不写。
+         */
+        const beforeOld = await snapshot();
+        const oldClient = await request(`/api/ai-cache/stage/${otherKey}`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json', 'X-Folia-Cache-Token': WRITE_TOKEN },
+            body: JSON.stringify({ payload: payload('legacy') }),
+        });
+        expect(oldClient.status).toBe(400);
+        expect((await oldClient.json()).error).toBe('no_lyric_evidence');
+        expect(await snapshot()).toEqual({ ...beforeOld, current: beforeOld.current });
     });
 });
 
@@ -246,7 +273,11 @@ describe('AI cache UTF-8 payload limits', () => {
         expect((await (await request('/health')).json()).schemaVersion).toBe(2);
         expect((await put('initial')).status).toBe(200);
         const before = await snapshot();
-        const response = await request(`/api/ai-cache/stage/${key}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ payload: {} }) });
+        const response = await request(`/api/ai-cache/stage/${key}`, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json', 'X-Folia-Cache-Token': WRITE_TOKEN },
+            body: JSON.stringify({ payload: {}, songTitle: 'Synthetic Song', isPureMusic: true, lyricHash: md5('Synthetic Song') }),
+        });
         expect(response.status).toBe(400);
         expect((await response.json()).error).toBe('empty_payload');
         expect(await snapshot()).toEqual(before);
@@ -261,8 +292,16 @@ describe('AI cache UTF-8 payload limits', () => {
         const total = async () => (await (await request('/api/ai-cache/songs?limit=50')).json()).total;
         const putTitle = (songTitle: string, cacheKey: string) => request(`/api/ai-cache/stage/${cacheKey}`, {
             method: 'PUT',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ payload: payload('x'), songTitle, provider: 'synthetic', model: 'test', platform: 'qq' }),
+            headers: { 'content-type': 'application/json', 'X-Folia-Cache-Token': WRITE_TOKEN },
+            body: JSON.stringify({
+                payload: payload('x'),
+                songTitle,
+                provider: 'synthetic',
+                model: 'test',
+                platform: 'qq',
+                isPureMusic: true,
+                lyricHash: md5(songTitle),
+            }),
         });
 
         expect(await total()).toBe(0);
