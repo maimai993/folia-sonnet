@@ -252,7 +252,7 @@ object BackgroundThemeWorker {
          * failedAttempts 要跟着作业走：作业失败时才知道该不该记账（用户主动那一次不计入
          * 连续次数，免得把用户的耐心当成机器的重试）。
          */
-        val retryHeader = scheduleRetryHeader(memoryKey, userInitiated, System.currentTimeMillis()) ?: return
+        val failureCountFlag = resolveFailureCountFlag(memoryKey, userInitiated, System.currentTimeMillis()) ?: return
         if (!beginJob(memoryKey)) return
 
         val generation = synchronized(resultLock) {
@@ -274,10 +274,10 @@ object BackgroundThemeWorker {
         try {
             executor.execute {
                 try {
-                    runJob(appContext, store, job, title, artist, lyricText, retryHeader)
+                    runJob(appContext, store, job, title, artist, lyricText, failureCountFlag)
                 } catch (error: Exception) {
                     Log.w(TAG, "[BackgroundTheme] 任务异常 ${error.javaClass.simpleName}")
-                    recordFailure(job.memoryKey, retryHeader, BackgroundThemeBackoff.Kind.TRANSIENT)
+                    recordFailure(job.memoryKey, failureCountFlag, BackgroundThemeBackoff.Kind.TRANSIENT)
                 } finally {
                     finishJob(memoryKey)
                 }
@@ -390,7 +390,7 @@ object BackgroundThemeWorker {
 
     private fun runJob(
         context: Context, store: FoliaSettingsStore, job: JobIdentity, title: String, artist: String, lyricText: String,
-        retryHeader: Long,
+        countsTowardStreak: Boolean,
     ) {
         // 入口先验一次：排队期间切歌 / 关配置 / 换密钥的任务在这里结束，不烧云端和 AI。
         val config = validConfig(store, job) ?: return
@@ -425,10 +425,10 @@ object BackgroundThemeWorker {
          * 失败落到这里：没拿到结果（云端没命中 + 生成没成 / 未配置 / 401 / 限流）。
          *
          * 记下来，下一次自动触发在冷却窗口内直接跳过（issue H33）—— 不记的话，用户每退一次
-         * 后台就是一轮云端往返加一次付费生成。`retryHeader` 带回了这次是谁发起的：用户主动
+         * 后台就是一轮云端往返加一次付费生成。`failureCountFlag` 带回了这次是谁发起的：用户主动
          * 那次记成 0，表示「不增加连续次数」，退避只由自动触发的失败驱动。
          */
-        recordFailure(job.memoryKey, retryHeader, failureKind[0])
+        recordFailure(job.memoryKey, failureCountFlag, failureKind[0])
     }
 
     /**
@@ -662,19 +662,20 @@ object BackgroundThemeWorker {
     }
 
     /**
-     * 这次生成是不是「用户主动」的要求；`0` 表示用户主动（不计入连续次数），`1` 表示自动。
+     * 决定这一次要不要跑：返回 `null` = 在冷却窗口里，跳过；`false` = 用户主动要求，跑但
+     * 不增加连续次数；`true` = 自动触发，跑，失败时计入连续次数。
      *
-     * 用 Long 而不是把布尔塞进 [JobIdentity]：作业身份参与作废判定，多一个只在记账时
-     * 用的字段会让「同样的作业」看起来不一样，得不偿失。
+     * 不把这个标志塞进 [JobIdentity]：作业身份参与作废判定，多一个只在记账时用的字段会让
+     * 「同样的作业」看起来不一样，得不偿失。
      */
-    private fun scheduleRetryHeader(key: String, userInitiated: Boolean, nowMs: Long): Long? {
+    private fun resolveFailureCountFlag(key: String, userInitiated: Boolean, nowMs: Long): Boolean? {
         synchronized(resultLock) {
             if (userInitiated) {
                 /* 用户点了「重新生成」：立刻清掉退避，这一次必须真的跑。 */
                 if (failures.remove(key) != null) {
                     Log.i(TAG, "[BackgroundTheme] 用户主动重试，清掉失败退避")
                 }
-                return 0L
+                return false
             }
             val failure = failures[key]
             if (BackgroundThemeBackoff.shouldSkip(failure, nowMs)) {
@@ -695,23 +696,23 @@ object BackgroundThemeWorker {
                 )
                 return null
             }
-            return 1L
+            return true
         }
     }
 
-    /** 记一次失败。`header == 0`（用户主动那一次）只记类别，不增加连续次数。 */
-    private fun recordFailure(key: String, header: Long, kind: BackgroundThemeBackoff.Kind) {
+    /** 记一次失败。`countsTowardStreak = false`（用户主动那一次）只记类别，不增加连续次数。 */
+    private fun recordFailure(key: String, countsTowardStreak: Boolean, kind: BackgroundThemeBackoff.Kind) {
         val now = System.currentTimeMillis()
         synchronized(resultLock) {
             val previous = failures[key]
-            failures[key] = if (header == 0L) {
+            failures[key] = if (countsTowardStreak) {
+                BackgroundThemeBackoff.recordFailure(previous, kind, now)
+            } else {
                 BackgroundThemeFailure(
                     kind = kind.name,
                     atMs = now,
                     streak = (previous?.streak ?: 0).coerceAtLeast(1),
                 )
-            } else {
-                BackgroundThemeBackoff.recordFailure(previous, kind, now)
             }
             val recorded = failures[key]
             Log.i(
