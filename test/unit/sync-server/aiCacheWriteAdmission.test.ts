@@ -9,8 +9,9 @@ import { md5 } from '../../../sync-server/src/md5';
 //
 // 这张表是**全局共享**的：一条被冒名写入的条目会喂给所有拉到它的播放器。所以要钉住四件事：
 //
-//  1. **没人能匿名写**：没有凭证的 PUT 一律 401；配了写入令牌就只认那个令牌；
-//     部署方连令牌都没配时是 503（没开门），而不是「谁都能写」。
+//  1. **配了凭证就只认凭证**：配了写入令牌时，没带或带错的 PUT 一律 401；
+//     管理员会话是另一条准入。部署方两样都没配时放行并记成 `anonymous` ——
+//     云缓存是公开服务，写入还有歌词核验兜底（见下面那条用例）。
 //  2. **核验不能降级**：`AI_CACHE_VERIFY=off` 这条关掉核验的开关已经删了；不带 lyricHash
 //     不再放行；平台取不到歌词也不再放行。三种以前都能把核验绕过去的路径，现在全部拒。
 //  3. **内容有摘要**：写进去的每一版都带一个绑定「写在哪 + 谁写的 + 内容」的 SHA-256。
@@ -127,18 +128,37 @@ describe('写入准入（issue C6）', () => {
     });
 
     /*
-     * 部署方一个写入凭证都没配：这是「没开门」，不是「你凭证写错了」。
-     * 回 503 而不是 401，运维才不会一直去查客户端的令牌。
+     * 部署方两样都没配：**放行**，记成 anonymous。
+     *
+     * 这里原来是 503（「没开门」）。改成放行的理由：云缓存本身是公开服务，读全开放，
+     * 写的内容还要过歌词核验与摘要；而 503 让默认部署一点缓存都攒不起来，这个功能等于
+     * 不存在。想收紧的部署方配 `AI_CACHE_WRITE_TOKEN` 即可 —— 配了之后没带对令牌一律 401，
+     * 上面那两条用例钉的就是那个方向。
      */
-    it('连写入凭证都没有配置时回 503（不静默开放）', async () => {
+    it('连写入凭证都没有配置时放行，并记成 anonymous', async () => {
         const bare = { FOLIA_SYNC_DB: db, SYNC_TOKEN: 'synthetic-sync-only' };
         const response = await app.request(
             `https://synthetic.invalid/api/ai-cache/stage/${key}`,
             { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(purePayload()) },
             bare as never,
         );
-        expect(response.status).toBe(503);
-        expect((await response.json()).error).toBe('cache_write_not_configured');
+        expect(response.status).toBe(200);
+        const row = await db.prepare('SELECT writer FROM ai_cache WHERE cache_key = ?').bind(key).first<{ writer: string }>();
+        expect(row?.writer).toBe('anonymous');
+    });
+
+    /* 放行归放行，歌词核验照旧 —— 开放部署不等于什么都不查。 */
+    it('开放部署下，不带 lyricHash 依然拒写', async () => {
+        const bare = { FOLIA_SYNC_DB: db, SYNC_TOKEN: 'synthetic-sync-only' };
+        const body = purePayload();
+        delete (body as { lyricHash?: string }).lyricHash;
+        const response = await app.request(
+            `https://synthetic.invalid/api/ai-cache/stage/${key}`,
+            { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) },
+            bare as never,
+        );
+        expect(response.status).toBe(400);
+        expect((await response.json()).error).toBe('no_lyric_evidence');
     });
 });
 

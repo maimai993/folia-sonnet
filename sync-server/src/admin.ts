@@ -187,7 +187,18 @@ const tokenTag = async (token: string): Promise<string> => (
     (await credentialTag({ username: 'cache-write-token', password: token })).slice(0, 12)
 );
 
-/** 见 `requireCacheWriter`：管理员会话或 `AI_CACHE_WRITE_TOKEN`，两种准入都代表「被记录在案」。 */
+/**
+ * 见 `requireCacheWriter`：管理员会话或 `AI_CACHE_WRITE_TOKEN`，两种准入都代表「被记录在案」。
+ *
+ * 部署方两样都没配时**放行**，记成 `anonymous`。
+ *
+ * 这里原来是 503（「没开门」）。改成放行是因为云缓存本身是个**公开服务**：读完全开放，
+ * 写的内容还要过歌词核验与摘要，被人写坏的代价有限；而 503 让默认部署一点缓存都攒不起来，
+ * 等于这个功能不存在（用户反馈「云缓存拉取不了」）。
+ *
+ * 想收紧的部署方照旧配 `AI_CACHE_WRITE_TOKEN` 即可 —— 一旦配了，没带对令牌的请求一律 401。
+ * 所以「默认开放、配了才收紧」这条是明确的，不是漏掉的分支。
+ */
 export const requireCacheWriter: MiddlewareHandler<CacheWriterEnv> = async (c, next: Next) => {
     c.header('Cache-Control', 'no-store');
     const configured = String(c.env.AI_CACHE_WRITE_TOKEN ?? '').trim();
@@ -207,11 +218,13 @@ export const requireCacheWriter: MiddlewareHandler<CacheWriterEnv> = async (c, n
         return;
     }
     /*
-     * 两种准入都没配（连管理员都没有）：这是部署方没开门，不是请求方的错 —— 回 503 而不是
-     * 401，否则运维看了只会一直怀疑客户端的 token 写错了。
+     * 两样都没配：这是「部署方没开准入」，不是请求方的错 —— 放行，记为 anonymous。
+     * 落库的 writer 与摘要都带着这个标记，事后仍然看得出哪些条目来自开放部署。
      */
     if (!configured && !readAdminCredentials(c.env)) {
-        return c.json({ ok: false, error: 'cache_write_not_configured' }, 503);
+        c.set('cacheWriter', 'anonymous');
+        await next();
+        return;
     }
     return c.json({ ok: false, error: 'unauthorized' }, 401);
 };

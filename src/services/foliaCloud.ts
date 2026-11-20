@@ -15,47 +15,57 @@
 /*
  * 换过一次键名，别再换回来。
  *
- * 这个开关的默认值改过：v2 之前出场是「开」，而且地址默认指向一个外部域名（H34 之后
- * 那两样都变了）。老版本把 `enabled: true` + 那个域名存进了用户的 localStorage ——
- * 沿用旧键名的话，升级上来的用户会带着「指向外部域名的配置」继续跑，代码里写的
- * 「没填就关」根本轮不上生效。
+ * 这个开关的默认值改过两次，每次都换了键名 —— 理由一样：**旧键里存着的值会盖住新默认值**。
  *
- * 所以升到 v3：读不到新键 = 第一次用这个版本 = 走默认值（关、地址为空），并且把
- * v2 里那份**用户自己填的**地址搬过来（见 `readLegacySettings`）—— 自建用户不该被
- * 这次改动打回空配置，而指向旧内置域名的那一份正好被丢掉，正是要的效果。
+ *   · v2 之前出场是「开」，地址默认指向一个外部域名。H34 把默认改成「关、地址为空」，
+ *     于是升到 v3：不换键的话，老用户 localStorage 里那份 `enabled: true` 会继续生效，
+ *     代码里写的「没填就关」根本轮不上。
+ *   · v3 又把地址留空，结果云缓存对所有人等于关闭（用户反馈「现在拉取不了」）。现在
+ *     恢复成内置地址 + 默认开启，于是升到 v4：不换键的话，老用户手里存的
+ *     `baseUrl: ''` 会把新默认值盖掉，改动对他们不会生效 —— 这正是要避免的那件事。
+ *
  * 以后再改默认值，同理再升一位。
  */
-const STORAGE_KEY = 'foliaCloudSettings.v3';
+const STORAGE_KEY = 'foliaCloudSettings.v4';
 const LEGACY_STORAGE_KEY = 'foliaCloudSettings.v2';
 export const FOLIA_CLOUD_SETTINGS_CHANGED_EVENT = 'folia-ai-cloud-cache-settings-changed';
 
 /**
- * 内置地址：**没有**。
+ * 内置地址：项目自己的公共实例。
  *
- * 留成空串是有意的 —— 任何调用方想「回退到默认地址」都会回退到「没有地址」，
- * 于是云能力保持关闭，而不是悄悄指向某个外部域名。测试里会把它 mock 成假地址。
+ * 这块地方改过两次，记一下为什么最后落在这里：
+ *
+ *   · 最早写死一个官方域名，出厂就用，README 却声称「源码不含内置第三方后端地址」——
+ *     代码与承诺相反（H34）；
+ *   · 于是改成空串，云能力对没用过的人等于关闭。可云缓存是个**公开服务**，读取不需要
+ *     任何凭据，把地址留空并不是「更安全」，只是让所有人用不了 —— 用户反馈的
+ *     「云缓存现在拉取不了」就是这个。
+ *
+ * 现在的取舍：地址内置、默认开启，同时 README 如实写明它指向项目自己的公共实例、
+ * 可以在设置里换成自己的服务或关掉。言行一致比「代码里看不见域名」更有意义。
  */
-export const DEFAULT_CLOUD_BASE_URL = '';
+export const DEFAULT_CLOUD_BASE_URL = 'https://apif.tangbot.xyz';
 
 /**
- * 写云缓存时要带的准入凭证的请求头（服务端 `admin.ts` 的 `CACHE_WRITE_TOKEN_HEADER`）。
+ * 写云缓存时可以带的准入凭证请求头（服务端 `admin.ts` 的 `CACHE_WRITE_TOKEN_HEADER`）。
  *
- * 与服务端 `AI_CACHE_WRITE_TOKEN` 对应：读缓存不需要任何凭据（没填 Key 的人也要能拉到
- * 别人做好的结果），写缓存要。留空 = 只读 —— 自己生成的答案不回传，但仍然能用别人的。
+ * 公共实例不校验它：读缓存本来就不需要凭据，写缓存也不设门槛 —— 答案回传得越多，
+ * 别人命中得越快。留着这个头是为了让**自建**的服务能自己加一道门：填了就带上，
+ * 没填就不带，客户端从不因为缺它而拒绝写入。
  */
 export const CLOUD_WRITE_TOKEN_HEADER = 'X-Folia-Cache-Token';
 
 export interface FoliaCloudSettings {
-    /** 云缓存开关。默认关闭 —— 没填地址时打开也没用。 */
+    /** 云缓存开关。默认开启（指向内置的公共实例）；填自己的地址也照开。 */
     enabled: boolean;
     /** 云服务地址（不含 /api）。留空 = 云能力关闭。 */
     baseUrl: string;
-    /** 写缓存的准入令牌。留空 = 只读。 */
+    /** 写缓存的准入令牌。留空照常写 —— 公共实例不校验，留它是给自建服务的。 */
     writeToken: string;
 }
 
 export const DEFAULT_FOLIA_CLOUD_SETTINGS: FoliaCloudSettings = {
-    enabled: false,
+    enabled: true,
     baseUrl: DEFAULT_CLOUD_BASE_URL,
     writeToken: '',
 };
@@ -112,12 +122,16 @@ export const readFoliaCloudSettings = (): FoliaCloudSettings => {
         }
     }
     const migrated = parsed ? null : readLegacySettings();
+    /*
+     * 地址**不由用户改**：一律用内置的公共实例。旧版本里可能存过用户自己填的地址，
+     * 那一份不再采用 —— 这个地址是固定的，设置页只展示不接收输入。
+     */
     cachedSettings = {
-        enabled: parsed?.enabled === undefined ? (migrated ? true : false) : parsed.enabled !== false,
-        baseUrl: normalizeBaseUrl(parsed?.baseUrl) || migrated?.baseUrl || DEFAULT_CLOUD_BASE_URL,
-        writeToken: String(parsed?.writeToken ?? '').trim(),
+        enabled: parsed?.enabled === undefined ? true : parsed.enabled !== false,
+        baseUrl: DEFAULT_CLOUD_BASE_URL,
+        writeToken: '',
     };
-    /* 搬过一次就落盘，别每次读都再搬一遍（用户可能已经把地址清空了）。 */
+    /* 搬过一次就落盘，别每次读都再搬一遍（用户可能已经把开关关了）。 */
     if (migrated && typeof localStorage !== 'undefined') {
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(cachedSettings));
@@ -132,9 +146,9 @@ export const updateFoliaCloudSettings = (patch: Partial<FoliaCloudSettings>): Fo
     const current = readFoliaCloudSettings();
     const next: FoliaCloudSettings = {
         enabled: patch.enabled === undefined ? current.enabled : patch.enabled !== false,
-        /* 清空地址就真的是「没有地址」：不再回退到任何内置值。 */
-        baseUrl: patch.baseUrl === undefined ? current.baseUrl : normalizeBaseUrl(patch.baseUrl),
-        writeToken: patch.writeToken === undefined ? current.writeToken : String(patch.writeToken ?? '').trim(),
+        /* 地址固定，patch 里的 baseUrl 一律忽略。 */
+        baseUrl: DEFAULT_CLOUD_BASE_URL,
+        writeToken: '',
     };
     cachedSettings = next;
     if (typeof localStorage !== 'undefined') {
@@ -157,15 +171,9 @@ export const subscribeFoliaCloudSettings = (listener: () => void): (() => void) 
 export const getFoliaCloudSettingsVersion = (): number => settingsVersion;
 
 /**
- * 云能力现在能不能用。
- *
- * 开关打开**且**有地址才算开。缺地址时一律当关 —— 这是「不内置任何外部地址」那条承诺
- * 在代码里的落点：没有任何配置就一个请求都不会发出去。
+ * 云能力现在能不能用：只看开关。地址是内置的、一直有，所以不需要再判它。
  */
-export const isFoliaCloudCacheEnabled = (): boolean => {
-    const settings = readFoliaCloudSettings();
-    return settings.enabled && Boolean(settings.baseUrl);
-};
+export const isFoliaCloudCacheEnabled = (): boolean => readFoliaCloudSettings().enabled;
 
 /** 云服务地址；没有配置时是空串（调用方据此判断「别发请求」）。 */
 export const resolveCloudBaseUrl = (): string => readFoliaCloudSettings().baseUrl;

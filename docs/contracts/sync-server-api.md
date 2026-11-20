@@ -22,7 +22,7 @@
 | Bearer Token | `/state`、`/settings*`、`/themes/*`（即挂在兜底网 `api` 上的全部路由） | 头 `Authorization: Bearer <SYNC_TOKEN>`。缺失或不对 → `401`（纯文本 `Unauthorized`，带 `WWW-Authenticate`）；头格式不合 Hono 的 token 正则 → `400`（纯文本 `Bad Request`） | `app.ts:494-500` |
 | 管理员会话 Cookie | `/admin` 的页面与 `/admin/api/*`（`stats.svg` 除外） | Cookie 名 `folia_admin_session`，HttpOnly、SameSite=Lax、12 小时、https 公开源时加 Secure；剩余不足 10 小时且访问面板时滚动续期；用户名/密码轮换后旧 session 立即失效 | `admin.ts:13-15`、`92-127`、`130-136` |
 | 看板 Token | 只有 `GET /` | `?token=<DASHBOARD_TOKEN>`，不匹配就 `404` 纯文本 `Not Found`；是只读页面，不是客户端 API | `app.ts:322-328` |
-| 写入令牌或管理员会话 | **只有** `PUT /api/ai-cache/*`（读、`/resolve`、`/songs` 仍然公开） | 二选一：头 `X-Folia-Cache-Token` 等于 `AI_CACHE_WRITE_TOKEN`（常量时间比较），或带管理面板会话 Cookie。都配了但都不匹配 → `401 {"ok":false,"error":"unauthorized"}`；**一个都没配** → `503 {"ok":false,"error":"cache_write_not_configured"}`（没开门，而不是谁都能写）。写入成功后 `writer` 记成 `token:<摘要前 12 位>` 或 `admin:<用户名>` | `admin.ts` 的 `requireCacheWriter` |
+| 写入令牌或管理员会话（配了才校验） | **只有** `PUT /api/ai-cache/*`（读、`/resolve`、`/songs` 仍然公开） | 二选一：头 `X-Folia-Cache-Token` 等于 `AI_CACHE_WRITE_TOKEN`（常量时间比较），或带管理面板会话 Cookie。**两样都配了但都不匹配 → `401 {"ok":false,"error":"unauthorized"}`**；**两样都没配 → 放行**，`writer` 记成 `anonymous`（云缓存是公开服务，写入另有歌词核验与摘要兜底；默认部署要能攒起缓存）。写入成功后 `writer` 记成 `token:<摘要前 12 位>`、`admin:<用户名>` 或 `anonymous` | `admin.ts` 的 `requireCacheWriter` |
 | 无 | `/health`、`/favicon.*`、`/api/fonts*`、`GET /api/ai-cache*`、`/stage*`、`/api/stage-gallery*` | 刻意公开：字体市场与云缓存要能被「从没填过 Key 的播放器」读到。AI 缓存的**写入**是例外，见上一行 | `app.ts:715-721`、`725-732` |
 
 两个容易踩的点：
@@ -143,7 +143,7 @@ route /  (api)              /state、/settings*、/themes/*      app.ts:795
 | 方法/路径 | 请求 | 响应 | 错误 |
 | --- | --- | --- | --- |
 | `GET /api/ai-cache/:kind/:key` | `kind` 匹配 `^[a-z0-9_-]{1,32}$`、`key` 是 32 位十六进制（歌词文件 MD5） | `{ ok: true; hit: boolean; entry: AiCacheEntry \| null }`；命中时 `hits` 自增并记一条命中流水 | `400 {ok:false,error:'invalid_key'}` |
-| `PUT /api/ai-cache/:kind/:key` | `{ payload, songTitle?, provider?, model?, platform?, lyricHash?, isPureMusic? }`；需要写入准入（见 §2） | `{ ok: true; stored: true; entry: { writer, payloadDigest, verifyKey }; verification: { status: 'verified'\|'word_matched'; platform: string; source: string\|null; note: string } }` | `401 unauthorized`（没凭证或凭证不对）、`503 cache_write_not_configured`（服务端一把写入凭证都没配）、`413 payload_too_large`（请求体 > 128KB）；`400 invalid_key`；`400 empty_payload`、`400 invalid_payload`（非对象 / 超 64KB）、`400 lyric_mismatch`、`400 no_lyric_evidence`、`400 lyric_unavailable`（上传校验，见 `stageVerifier.ts`） |
+| `PUT /api/ai-cache/:kind/:key` | `{ payload, songTitle?, provider?, model?, platform?, lyricHash?, isPureMusic? }`；配了写入准入时按 §2 校验（没配则放行） | `{ ok: true; stored: true; entry: { writer, payloadDigest, verifyKey }; verification: { status: 'verified'\|'word_matched'; platform: string; source: string\|null; note: string } }` | `401 unauthorized`（配了准入但没凭证或凭证不对）、`413 payload_too_large`（请求体 > 128KB）；`400 invalid_key`；`400 empty_payload`、`400 invalid_payload`（非对象 / 超 64KB）、`400 lyric_mismatch`、`400 no_lyric_evidence`、`400 lyric_unavailable`（上传校验，见 `stageVerifier.ts`） |
 | `POST /api/ai-cache/resolve` | `{ kind: string; songTitle: string }` | `{ ok: true; candidates: Array<{ key, songTitle, platform, provider, model, updatedAt, words: string[] }> }`；最多 12 条候选 | 输入不合法也回 `200 {ok:true,candidates:[]}`（刻意不报错） |
 | `GET /api/ai-cache/songs` | 查询 `limit`（默认 60，上限 200）、`offset`（≥0）、`q`（按歌名筛，LIKE 通配符已转义） | `{ ok: true; total: number; limit: number; offset: number; songs: Array<{ songTitle, platform, key, updatedAt, hits, versions }> }` | 无 4xx |
 

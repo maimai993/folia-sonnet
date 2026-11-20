@@ -727,8 +727,13 @@ export const pushAiCloudCache = async (
 ): Promise<boolean> => {
     if (!isFoliaCloudCacheEnabled()) return false;
     if (!/^[a-f0-9]{32}$/.test(key)) return false;
-    const writeToken = resolveCloudWriteToken();
-    if (!writeToken) return false;
+    /*
+     * 不再因为「没有写入令牌」而拒绝写入。
+     *
+     * 公共实例不校验这个头：读本来就不需要凭据，写也不设门槛 —— 回传得越多，别人命中得
+     * 越快。以前这里在本地直接 return false，等于没有令牌的用户一条都写不进去；
+     * 留着令牌机制只是为了自建服务能自己加一道门，填了就带上。
+     */
 
     try {
         const response = await createAiFetch()(resolveAiCloudCacheUrl(kind, key), {

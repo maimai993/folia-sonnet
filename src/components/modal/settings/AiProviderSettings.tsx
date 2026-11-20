@@ -137,12 +137,16 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
 
     const runCacheProbe = async () => {
         /*
-         * 没地址就别发请求（issue H34）：`resolveAiCloudCacheUrl` 在无地址时是空串，
-         * 硬发出去只会是一次「校验地址」的报错，看着像功能坏了。
+         * 关掉开关就别发请求：探测的目的就是「开了之后连不连得通」，关着还发一次请求
+         * 与开关的承诺相反。按钮本身在这时也是禁用的，这里再挡一道。
          */
+        if (!cloudCache.enabled) {
+            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheProbeDisabled') });
+            return;
+        }
         const probeUrl = resolveAiCloudCacheUrl(STAGE_CACHE_KIND, CLOUD_CACHE_PROBE_KEY);
         if (!probeUrl) {
-            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheNeedBaseUrlTitle') });
+            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheProbeFailed') });
             return;
         }
         setCacheProbe({ state: 'running', ok: false, text: '' });
@@ -592,72 +596,32 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
 
                 <div className="pt-4 space-y-3">
                     {/*
-                        没填地址时把话说清楚（issue H34）：以前出厂就指向一个外部域名，用户
-                        什么都没配，歌词指纹已经在往外发了。现在「没填 = 关闭」，所以这里要
-                        明确讲两件事 —— 这项能力**要求你自己有一个服务地址**，以及为什么不再
-                        给默认值。不说的话，用户只会看到开关是关的、测试连接永远失败。
+                        地址固定为项目自己的公共实例，**不由用户修改**，所以这里只展示文本，
+                        不放输入框（也就没有"填错地址"这一种失败）。开关仍然保留：不想用的人
+                        可以关掉，关掉之后一个请求都不会发出去。
                     */}
-                    {!cloudCache.baseUrl.trim() && (
-                        <div
-                            className="rounded-xl border px-3 py-2 text-xs leading-relaxed space-y-1"
-                            style={{
-                                borderColor: 'color-mix(in srgb, var(--st-accent) 35%, transparent)',
-                                color: 'var(--text-secondary)',
-                            }}
-                            role="status"
-                        >
-                            <div className="font-medium" style={{ color: 'var(--text-primary)' }}>
-                                {t('options.cloudCacheNeedBaseUrlTitle')}
-                            </div>
-                            <div>{t('options.cloudCacheNeedBaseUrl')}</div>
-                        </div>
-                    )}
-                    <label className="block space-y-1 text-left">
+                    <div className="block space-y-1 text-left">
                         <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.cloudCacheBaseUrl')}
                         </span>
-                        <TextField
-                            type="text"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={cloudCache.baseUrl}
-                            onChange={(event) => updateFoliaCloudSettings({ baseUrl: event.target.value })}
-                            placeholder={t('options.cloudCacheBaseUrlPlaceholder')}
-                            className={fieldClass}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
+                        <div
+                            className="rounded-xl border px-3 py-2 text-xs font-mono break-all"
+                            style={{
+                                borderColor: 'var(--border-subtle, color-mix(in srgb, currentColor 18%, transparent))',
+                                color: 'var(--text-primary)',
+                            }}
+                        >
+                            {cloudCache.baseUrl}
+                        </div>
                         <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.cloudCacheBaseUrlDesc')}
                         </span>
-                    </label>
-
-                    {/*
-                        写入令牌（issue C6）：服务端只收带凭证的写入。留空 = 只读 ——
-                        自己生成的答案不回传，但照样能拉别人做好的那些。
-                    */}
-                    <label className="block space-y-1 text-left">
-                        <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.cloudCacheWriteToken')}
-                        </span>
-                        <TextField
-                            type="password"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={cloudCache.writeToken}
-                            onChange={(event) => updateFoliaCloudSettings({ writeToken: event.target.value })}
-                            placeholder={t('options.cloudCacheWriteTokenPlaceholder')}
-                            className={fieldClass}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
-                        <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
-                            {t('options.cloudCacheWriteTokenDesc')}
-                        </span>
-                    </label>
+                    </div>
 
                     <div className="flex flex-wrap items-center gap-3 text-left">
                         <Button
                             onClick={() => void runCacheProbe()}
-                            disabled={cacheProbe.state === 'running' || !cloudCache.baseUrl.trim()}
+                            disabled={cacheProbe.state === 'running' || !cloudCache.enabled}
                             className={ghostButtonClass}
                             style={{ color: 'var(--text-primary)' }}
                         >
