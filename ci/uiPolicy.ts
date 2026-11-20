@@ -189,8 +189,31 @@ export function writeBaselines(root: string = repoRoot): void {
         if (lines > MAX_LINES) sizes[file] = lines;
     }
     const sort = (object: Record<string, number>) => Object.fromEntries(Object.entries(object).sort(([a], [b]) => a.localeCompare(b)));
+    const grown = describeGrowth(readBaseline(root, SIZE_BASELINE), sizes);
     fs.writeFileSync(path.join(root, CONTROL_BASELINE), JSON.stringify(sort(controls), null, 2) + '\n');
     fs.writeFileSync(path.join(root, SIZE_BASELINE), JSON.stringify(sort(sizes), null, 2) + '\n');
+    if (grown.length > 0) {
+        console.warn('这次重写把下面这些条目调大了（基线只许变小，调大要在 PR 里写明理由）：');
+        for (const line of grown) console.warn('  ' + line);
+    }
+}
+
+/**
+ * 比较新旧基线，列出被调大的条目。
+ *
+ * `--update` 本来是无条件重写，于是一次「顺手跑一下」就能把「只许变小」悄悄放宽 ——
+ * 文件从 3846 涨到 3883 也被照单全收，事后没人知道它是怎么变大的。这里把它喊出来：
+ * 增长本身不会让命令失败（有时确实要涨，比如修 bug 补了防护），但必须有人看见。
+ */
+function describeGrowth(previous: Record<string, number>, next: Record<string, number>): string[] {
+    const grown: string[] = [];
+    for (const [file, now] of Object.entries(next)) {
+        const before = previous[file];
+        // 新进基线的文件不算「调大」：它以前压根不在名单里，是这次扩范围才被抓到的。
+        if (before === undefined || now <= before) continue;
+        grown.push(file + '  ' + before + ' → ' + now + '（+' + (now - before) + '）');
+    }
+    return grown;
 }
 
 function main(): void {

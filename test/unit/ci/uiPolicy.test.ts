@@ -9,7 +9,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_LINES, countControlsIn, countLines, listSizeSources, scanControls, scanSizes } from '../../../ci/uiPolicy.ts';
+import { MAX_LINES, countControlsIn, countLines, listSizeSources, scanControls, scanSizes, writeBaselines } from '../../../ci/uiPolicy.ts';
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -174,5 +174,40 @@ describe('行数门禁覆盖 .ts 与安卓目录（issue M17）', () => {
         expect(files.some(file => file.endsWith('.kt'))).toBe(true);
         expect(files.some(file => file.endsWith('.d.ts'))).toBe(false);
         expect(files.some(file => file.startsWith('src/i18n/locales/'))).toBe(false);
+    });
+
+    /*
+     * `--update` 本来是无条件重写基线，于是随手跑一次就能把「只许变小」悄悄放宽：
+     * 文件从 3846 涨到 3883 也被照单全收，事后没人知道它是怎么变大的。
+     * 这里钉住那条提示：调大要喊出来，但命令本身不当成失败（有时增长是对的）。
+     */
+    const captureWarn = (run: () => void): string => {
+        const seen: string[] = [];
+        const original = console.warn;
+        console.warn = (...args: unknown[]) => { seen.push(args.join(' ')); };
+        try {
+            run();
+        } finally {
+            console.warn = original;
+        }
+        return seen.join('\n');
+    };
+
+    it('--update 把已有条目写大了会报出来，连增量一起', () => {
+        const root = makeRepo({ 'src/legacy.ts': lines(950) }, { 'src/legacy.ts': 900 });
+        expect(captureWarn(() => writeBaselines(root))).toContain('src/legacy.ts  900 → 950（+50）');
+    });
+
+    it('--update 写小了不报：收紧基线本来就是它的用途', () => {
+        const root = makeRepo({ 'src/legacy.ts': lines(860) }, { 'src/legacy.ts': 900 });
+        expect(captureWarn(() => writeBaselines(root))).not.toContain('src/legacy.ts');
+    });
+
+    it('新进基线的文件不算调大：它以前不在名单里', () => {
+        const root = makeRepo(
+            { 'src/legacy.ts': lines(900), 'src/fresh.ts': lines(950) },
+            { 'src/legacy.ts': 900 },
+        );
+        expect(captureWarn(() => writeBaselines(root))).not.toContain('src/fresh.ts');
     });
 });
