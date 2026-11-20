@@ -97,11 +97,78 @@ object BackgroundThemeWorker {
         }
     }
 
-    private val executor = ThreadPoolExecutor(
-        1, 1, 0L, TimeUnit.MILLISECONDS, LatestFirstQueue(MAX_PENDING),
-        ThreadFactory { runnable -> Thread(runnable, "folia-background-theme").apply { isDaemon = true } },
-        ThreadPoolExecutor.AbortPolicy(),
-    )
+    /**
+     * 线程池的持有者。收口（[pause]）之后这个字段变 null，下一次 [request] 惰性重建 ——
+     * ThreadPoolExecutor 一旦 shutdown 就不可再用，重建是唯一能继续工作的方式。
+     *
+     * 只在这把锁里换：任务提交与收口因此不会交错（否则任务可能投进一个刚被 shutdown 的池）。
+     */
+    private val executorLock = Any()
+    private var pool: ThreadPoolExecutor? = null
+
+    private fun executor(): ThreadPoolExecutor = synchronized(executorLock) {
+        val existing = pool
+        if (existing != null) return existing
+        val created = ThreadPoolExecutor(
+            1, 1, 0L, TimeUnit.MILLISECONDS, LatestFirstQueue(MAX_PENDING),
+            ThreadFactory { runnable -> Thread(runnable, "folia-background-theme").apply { isDaemon = true } },
+            ThreadPoolExecutor.AbortPolicy(),
+        )
+        pool = created
+        created
+    }
+
+    /** 单测用：看收口之后拿到的池是不是新建的（而不是一个已经 shutdown 的旧对象）。 */
+    internal fun executorForTest(): ThreadPoolExecutor = executor()
+
+    /**
+     * 单测用：不带日志的一次收口。
+     *
+     * `pause()` 收掉一个池时会写一行日志，而 JVM 单测里的 `android.util.Log` 是空壳
+     * （一调就 "not mocked"），所以测"收口之后的判据"时绕开那行日志 —— 这里走的仍然是
+     * 与 [pause] 相同的状态迁移（换代号 + shutdown + 置空）。
+     *
+     * @note 它只服务单测，运行时不要用；真实收口请调 [pause]，那里还要取消在飞的请求、
+     * 清缓存。
+     */
+    internal fun pauseQuietly() {
+        synchronized(executorLock) {
+            val current = pool ?: return@synchronized
+            sessionEpoch.incrementAndGet()
+            pool = null
+            current.shutdownNow()
+        }
+    }
+
+    /** 单测用：投递任务时用的会话代号（见 [sessionEpoch]）。 */
+    internal fun sessionEpochForTest(): Long = sessionEpoch.get()
+
+    /**
+     * 单测用：把一个任务的代号判据单独拿出来。
+     *
+     * 收口之后"排队中的旧任务要作废"这条，唯一可测的就是这个判据：真去起线程跑一遍
+     * 既慢又依赖调度时序，还测不到取消语义。
+     */
+    internal fun isCurrentSessionForTest(epoch: Long): Boolean = sessionEpoch.get() == epoch
+
+    /**
+     * 本次会话的代号。每收口一次 +1；排队中的任务带着自己那一代进来，跑的时候发现对不上
+     * 就直接放弃 —— 这就是「正在排队的请求要有取消语义」。
+     *
+     * 不用 `remove` 去把队列一条条摘掉：队列是"最新优先"的，正拿着锁遍历它的同时
+     * 主线程还在往里 offer，两边的顺序没有任何保证。用一代号判据反而更严：**收口那一刻
+     * 之后**，任何还没开始跑的任务都不该再跑。
+     */
+    private val sessionEpoch = AtomicLong()
+
+    /**
+     * 正在发出去的那次网络请求 / 生成（如果有）。
+     *
+     * 收口时 `cancel()` 它：`executor.shutdownNow()` 只能打断 worker 线程的等待，打不断一次
+     * 已经进了 OkHttp 的调用 —— 那一次生成仍然会跑完，照样烧额度。
+     */
+    @Volatile
+    private var inFlightCall: okhttp3.Call? = null
 
     private val resultLock = Any()
 
@@ -270,9 +337,18 @@ object BackgroundThemeWorker {
             requestedDaylight = daylight ?: config.daylight,
         )
 
+        /*
+         * 带上投递那一刻的会话代号：这一条要是排在队列里一直没轮到，而中间发生了一次收口
+         * （[pause]），它醒来时发现代号对不上就直接放弃，不再去发云端请求或生成。
+         */
+        val epoch = sessionEpoch.get()
         try {
-            executor.execute {
+            executor().execute {
                 try {
+                    if (sessionEpoch.get() != epoch) {
+                        Log.i(TAG, "[BackgroundTheme] 本次请求已被收口作废，跳过")
+                        return@execute
+                    }
                     runJob(appContext, store, job, title, artist, lyricText, failureCountFlag)
                 } catch (error: Exception) {
                     Log.w(TAG, "[BackgroundTheme] 任务异常 ${error.javaClass.simpleName}")
@@ -479,7 +555,7 @@ object BackgroundThemeWorker {
         }
 
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            executeCall(request).use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "[BackgroundTheme] 候选请求失败 code=${response.code}")
                     emptyList()
@@ -518,7 +594,7 @@ object BackgroundThemeWorker {
         }
 
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            executeCall(request).use { response ->
                 if (!response.isSuccessful) {
                     null
                 } else {
@@ -544,6 +620,24 @@ object BackgroundThemeWorker {
         } catch (error: Exception) {
             Log.w(TAG, "[BackgroundTheme] 条目读取异常 ${error.javaClass.simpleName}")
             null
+        }
+    }
+
+    /**
+     * 发一次请求，并把它登记成"当前这条在飞的调用"，好让 [pause] 能真的取消它。
+     *
+     * `shutdownNow()` 只能打断 worker 线程在队列上的等待；一次已经进了 OkHttp 的调用
+     * 会一直跑到超时或拿到响应 —— 而这条路后面接的是**付费**生成，收口之后还在烧额度
+     * 是这条 issue 明确点出的边界条件。登记 + `cancel()` 才算真的"取消语义"。
+     */
+    private fun executeCall(request: Request): okhttp3.Response {
+        val call = httpClient.newCall(request)
+        inFlightCall = call
+        try {
+            return call.execute()
+        } finally {
+            // 只有它还是"当前那一条"时才清：收口之后新会话可能已经登记了另一条。
+            if (inFlightCall === call) inFlightCall = null
         }
     }
 
@@ -756,6 +850,60 @@ object BackgroundThemeWorker {
                 Log.i(TAG, "[BackgroundTheme] 配置已变更，清掉全部失败退避")
                 failures.clear()
             }
+        }
+    }
+
+    /**
+     * 收口（issue L8）：播放停止时调用，把这一轮的线程池、队列与三张缓存全部放掉。
+     *
+     * 这是个**进程级单例**，原先全文没有任何 shutdown / stop / cancel：线程是守护线程，
+     * 所以不会拖住进程退出，但进程活着的时候池、队列和结果缓存一直都在，也没有一个
+     * 「应用退到后台该释放多少资源」的答案。现在这个答案就是这里。
+     *
+     * 收口之后仍然可用 —— 下一次 [request] 会惰性重建线程池（`ThreadPoolExecutor` 一旦
+     * shutdown 就不可再用）。所以要保证的三件事：
+     *
+     *  1. **队列里没跑的任务不再跑**：`shutdownNow()` 摘走队列，加上 [sessionEpoch] 那道
+     *     代号判据兜底（任务醒来先看代号，对不上就放弃）。
+     *  2. **在飞的那一次真的取消**：[inFlightCall].cancel()。只 shutdown 的话，已经进了
+     *     OkHttp 的那一次生成会跑完，照样烧额度。
+     *  3. **缓存回到基线**：结果表、generation 表、在飞去重表、当前歌与歌词指纹一起清。
+     *     失败退避（`failures`）**不清** —— 它记的是"这个身份刚刚失败过、冷却多久"，
+     *     跟这一轮会话无关；清掉它等于让下一次自动触发立刻重试、再烧一轮额度，那正是
+     *     issue H33 修掉的毛病。
+     *
+     * 第二次收口（没建过池，或上一次已经关过了）**不写日志** —— 它会被反复调用
+     * （播放停止时调一次），没有变化就没有必要留一行。
+     */
+    @JvmStatic
+    fun pause() {
+        var closed: ThreadPoolExecutor? = null
+        synchronized(executorLock) {
+            val current = pool
+            if (current != null) {
+                // 先换代：从这一刻起，任何还没开始跑的旧任务都会在入口放弃。
+                sessionEpoch.incrementAndGet()
+                pool = null
+                current.shutdownNow()
+                closed = current
+            }
+        }
+
+        inFlightCall?.cancel()
+        inFlightCall = null
+
+        synchronized(resultLock) {
+            results.clear()
+            generations.clear()
+            activeSongKey = ""
+            activeLyricHash = ""
+        }
+        synchronized(inFlight) {
+            inFlight.clear()
+        }
+
+        if (closed != null) {
+            Log.i(TAG, "[BackgroundTheme] 播放已停止，收口后台主题线程池")
         }
     }
 }

@@ -9,6 +9,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 // test/unit/android/BackgroundThemeWorkerTest.kt
 // 后台主题 worker 的纯规则回归：证据词、模板注入、缓存 identity、叠层 sanitize 与 payload 形状。
@@ -177,6 +178,62 @@ class BackgroundThemeWorkerTest {
         override fun run() = Unit
 
         override fun toString(): String = "Marker($name)"
+    }
+
+    /* issue L8：收口之后线程池要能惰性重建，否则「调用一次即可回到基线且不影响后续使用」做不到。 */
+    @Test
+    fun `收口之后线程池惰性重建且可以继续提交任务`() {
+        val ran = java.util.concurrent.CountDownLatch(1)
+        val pool = BackgroundThemeWorker.executorForTest()
+        pool.execute { ran.countDown() }
+        assertTrue("重建后的池必须还能跑任务", ran.await(5, TimeUnit.SECONDS))
+
+        // 收口会把池 shutdown 掉。（用不带日志的那一版：JVM 单测里的 android.util.Log 是空壳。）
+        BackgroundThemeWorker.pauseQuietly()
+        assertTrue(pool.isShutdown)
+
+        // 再拿一次必须是**新建的、可用的**池；不能还是那个已经 shutdown 的旧对象，
+        // 否则「收口一次回到基线，之后照常用」这条边界就不成立。
+        val rebuilt = BackgroundThemeWorker.executorForTest()
+        assertFalse(rebuilt.isShutdown)
+        assertTrue(rebuilt !== pool)
+
+        val ranAgain = java.util.concurrent.CountDownLatch(1)
+        rebuilt.execute { ranAgain.countDown() }
+        assertTrue(ranAgain.await(5, TimeUnit.SECONDS))
+
+        // 幂等：连着收口两次不会抛。
+        BackgroundThemeWorker.pauseQuietly()
+        BackgroundThemeWorker.pauseQuietly()
+    }
+
+    /* issue L8：收口那一刻之后，已经排进队列但还没跑的旧任务不该再跑（取消语义）。 */
+    @Test
+    fun `收口之后排队中的旧任务被作废`() {
+        // 先握手一次，确保此时确实有一个池；没有池的话 pause 不做任何事，代号也就不会变。
+        BackgroundThemeWorker.executorForTest()
+
+        // 模拟「一条任务已经带着当前代号排进队列」。
+        val queuedEpoch = BackgroundThemeWorker.sessionEpochForTest()
+        assertTrue(BackgroundThemeWorker.isCurrentSessionForTest(queuedEpoch))
+
+        BackgroundThemeWorker.pauseQuietly()
+
+        // 收口之后同一代不再被认为是"当前会话"：任务醒来看到对不上，直接放弃。
+        assertFalse(BackgroundThemeWorker.isCurrentSessionForTest(queuedEpoch))
+        assertEquals(queuedEpoch + 1, BackgroundThemeWorker.sessionEpochForTest())
+
+        // 新会话的任务仍然是当前会话 —— 收口不该把后续请求一起废掉。
+        assertTrue(BackgroundThemeWorker.isCurrentSessionForTest(BackgroundThemeWorker.sessionEpochForTest()))
+    }
+
+    /* issue L8：没有池的时候 pause 是空操作（它会跟着"播放停止"反复被调用）。 */
+    @Test
+    fun `没有线程池时收口是空操作`() {
+        BackgroundThemeWorker.pauseQuietly()
+        val epoch = BackgroundThemeWorker.sessionEpochForTest()
+        BackgroundThemeWorker.pauseQuietly()
+        assertEquals(epoch, BackgroundThemeWorker.sessionEpochForTest())
     }
 
     @Test

@@ -134,9 +134,17 @@ class FoliaLyricon private constructor() {
          *
          * 这些 SDK 调用不碰任何 UI，不需要主线程 —— 起一条专用线程即可。
          * 与播放器那条同理（见 FoliaNativePlayer 文件头）：线程归属是硬性的。
+         *
+         * **线程的生命周期跟着开关走，不跟进程走。** 关掉开关（`setEnabled(false)`）时
+         * 这条线程会被 `quitSafely()` 掉并置空，下次要用时再懒建一条新的 —— 见
+         * `stopHeartbeat()`。原先它建了就没有任何出口，线程活到进程结束，重开开关还复用
+         * 同一个 Looper：线程身份与 Looper 里残留的队列状态都是上一轮的。
          */
         @Volatile
         private var heartbeatHandler: Handler? = null
+        /** 与 `heartbeatHandler` 同生同灭：`quitSafely()` 之后 Looper 不可再用，必须换新线程。 */
+        @Volatile
+        private var heartbeatThread: HandlerThread? = null
         @Volatile
         private var heartbeatContext: Context? = null
         @Volatile
@@ -150,10 +158,12 @@ class FoliaLyricon private constructor() {
             return synchronized(FoliaLyricon::class.java) {
                 val locked = heartbeatHandler
                 if (locked == null) {
-                    // 线程本身不必单独留字段：Handler 抓着它的 Looper，Looper 抓着线程。
                     val thread = HandlerThread("folia-lyricon-heartbeat")
+                    // 守护线程：即使某条路径漏了 quit，也不会拖住进程退出。
+                    thread.setDaemon(true)
                     thread.start()
                     val created = Handler(thread.getLooper())
+                    heartbeatThread = thread
                     heartbeatHandler = created
                     created
                 } else {
@@ -233,11 +243,34 @@ class FoliaLyricon private constructor() {
             handler().postDelayed(heartbeatTask, HEARTBEAT_INTERVAL_MS)
         }
 
+        /**
+         * 心跳调度停掉，**并且把承载它的线程也放掉**。
+         *
+         * 两条出口都要走到这里：`clear()`（没歌可保活了）与 `teardown()`（开关关掉）。
+         * 早先这里只 `removeCallbacks`，线程本身活到进程结束 —— 一条常驻 Looper 线程
+         * 与「资源成对释放」的红线冲突，而且是确定性的；重开开关时还会复用同一个
+         * Looper，SDK 内部若依赖线程身份，重建就是不干净的。
+         *
+         * `quitSafely()` 而不是 `quit()`：已经投进去的那一两次 `tickLocked` 允许跑完
+         * （跑完才会把手里的 Binder 调用收尾），之后 Looper 才退出。不用等它 ——
+         * 下一次 `setPosition` 会通过 `handler()` 懒建一条新线程。
+         */
         private fun stopHeartbeat() {
             heartbeatScheduled = false
             val existing = heartbeatHandler
+            heartbeatHandler = null
+            heartbeatContext = null
+            val thread = heartbeatThread
+            heartbeatThread = null
             if (existing != null) {
                 existing.removeCallbacks(heartbeatTask)
+            }
+            if (thread != null) {
+                try {
+                    thread.quitSafely()
+                } catch (error: Throwable) {
+                    Log.w(TAG, "Failed to quit the Lyricon heartbeat thread", error)
+                }
             }
         }
 

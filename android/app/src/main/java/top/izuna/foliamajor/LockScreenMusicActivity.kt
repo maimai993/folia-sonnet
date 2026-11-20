@@ -41,16 +41,12 @@ import android.view.WindowManager
  */
 class LockScreenMusicActivity : Activity() {
 
-    companion object {
-        /** 上滑超过这个距离才算"退出"，别把手抖当成指令。 */
-        private const val SWIPE_UP_DP = 72f
-        /** 横向漂移超过这个比例就不算上滑（那是横扫 / 切歌手势）。 */
-        private const val SWIPE_MAX_SIDE_RATIO = 0.6f
-        /** 一次「点」允许的最大位移：超过就是滑动（上滑退出、拖进度条那类）。 */
-        private const val TAP_MAX_MOVE_DP = 16f
-        /** 一次「点」的最长按住时间：超过就是长按，不当成切换 UI。 */
-        private const val TAP_MAX_DURATION_MS = 400L
-    }
+    /*
+     * 手势阈值不在这里：上滑 / 点击的判定与常量都在 LockScreenGesture.kt，与底部面板
+     * （LockScreenControlPanel）共用同一份。这里原来自己存了一套（SWIPE_UP_DP = 72f 等），
+     * 与面板那套随着时间分叉成了 72 / 64 两个上滑阈值 —— 同一次上滑，从面板上起手要比从
+     * 画面上起手少滑 8dp。统一到哪一侧、为什么，见 LockScreenGestureTuning 那段说明。
+     */
 
     /** 底部的封面 / 歌名 / 时长 / 切歌面板（另开一个子窗口，见 LockScreenControlPanel）。 */
     private var controlPanel: LockScreenControlPanel? = null
@@ -65,11 +61,7 @@ class LockScreenMusicActivity : Activity() {
         }
     }
 
-    private var tracking = false
-    /** 这次手势已经触发过退出了：防止一次滑动里反复 dismiss（那正是"抽搐"的形状）。 */
-    private var gestureConsumed = false
-    private var startX = 0f
-    private var startY = 0f
+    private val gesture = LockScreenGestureTracker(resources.displayMetrics.density)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -163,12 +155,14 @@ class LockScreenMusicActivity : Activity() {
      * `dispatchTouchEvent` 是窗口收到事件的**第一个**入口，比 View 分发更早、也更全。
      */
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        // 多指只认落下的第一根：第二根手指按下不改锚点，那一串（缩放 / 误触）
+        // 也就不会因为抬错手指被判成上滑退出或点空白。
+        val primary = event.getPointerId(0) == 0
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                tracking = true
-                gestureConsumed = false
-                startX = event.rawX
-                startY = event.rawY
+                if (primary) {
+                    gesture.down(event.rawX, event.rawY)
+                }
             }
             MotionEvent.ACTION_MOVE -> {
                 /*
@@ -178,24 +172,29 @@ class LockScreenMusicActivity : Activity() {
                  * 系统把事件收走（ACTION_CANCEL）就永远等不到那一击，退出不会发生 ——
                  * 用户看到的就是"滑了，没反应"。
                  */
-                if (tracking && !gestureConsumed && isSwipeUp(event)) {
-                    tracking = false
-                    gestureConsumed = true
+                if (primary && gesture.move(event.rawX, event.rawY) == LockScreenGesture.SWIPE_UP) {
                     dismiss()
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (tracking && !gestureConsumed && isSwipeUp(event)) {
-                    gestureConsumed = true
-                    dismiss()
-                } else if (tracking && !gestureConsumed
-                        && event.actionMasked == MotionEvent.ACTION_UP
-                        && isTap(event)) {
-                    // 只有**抬起**才算点击：CANCEL 是系统把这一串收走了，不是用户点了一下。
-                    gestureConsumed = true
-                    toggleChrome()
+                val result = if (primary) {
+                    gesture.up(
+                            event.rawX,
+                            event.rawY,
+                            event.eventTime,
+                            event.downTime,
+                            cancelled = event.actionMasked == MotionEvent.ACTION_CANCEL,
+                    )
+                } else {
+                    LockScreenGesture.NONE
                 }
-                tracking = false
+                when (result) {
+                    LockScreenGesture.SWIPE_UP -> dismiss()
+                    // 只有**抬起**才算点击：CANCEL 是系统把这一串收走了，不是用户点了一下。
+                    LockScreenGesture.TAP -> toggleChrome()
+                    LockScreenGesture.NONE -> {
+                    }
+                }
             }
             else -> {
             }
@@ -208,21 +207,6 @@ class LockScreenMusicActivity : Activity() {
     }
 
     /**
-     * 一次「点」：几乎没移动、也不长按 —— 滑动和上滑退出都不算。
-     *
-     * 走到这里的点击**必然落在画面上**：底部那条面板是另一个子窗口，落在它上面的事件
-     * 到不了这里（它自己的 onTouch 先吃掉）；而画歌词那一层叠层是 NOT_TOUCHABLE 的，
-     * 事件照样穿过来。所以不用再去判点击落在哪儿 —— 用户眼里的"空白区域"就是这一整片。
-     */
-    private fun isTap(event: MotionEvent): Boolean {
-        val limit = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                TAP_MAX_MOVE_DP, resources.displayMetrics)
-        return Math.abs(event.rawX - startX) <= limit
-                && Math.abs(event.rawY - startY) <= limit
-                && (event.eventTime - event.downTime) <= TAP_MAX_DURATION_MS
-    }
-
-    /**
      * 点空白区域：收起 / 放出底部那条 UI。再点一下放回来，不会有一条回不来的死路。
      *
      * 状态**只有一份**，就在面板里（这里读它的当前值再翻）：页面与面板两处都能触发，
@@ -231,15 +215,6 @@ class LockScreenMusicActivity : Activity() {
     private fun toggleChrome() {
         val panel = controlPanel ?: return
         panel.setChromeHidden(!panel.isChromeHidden(), true)
-    }
-
-    /** 向上、够远、而且不是横着扫的 —— 才认它是"退出"。 */
-    private fun isSwipeUp(event: MotionEvent): Boolean {
-        val dy = startY - event.rawY
-        val dx = Math.abs(event.rawX - startX)
-        val threshold = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP,
-                SWIPE_UP_DP, resources.displayMetrics)
-        return dy >= threshold && dx <= dy * SWIPE_MAX_SIDE_RATIO
     }
 
     override fun onResume() {
