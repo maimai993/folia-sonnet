@@ -545,7 +545,8 @@ class FoliaLanCastPlugin : Plugin() {
         LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
         true
     } catch (error: java.io.IOException) {
-        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + error.message)
+        // 应答地址只记网段：完整地址含局域网 IP 与端口（issue M24）。
+        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + LanCastLogText.deviceHint(location) + " " + error.message)
         false
     }
 
@@ -582,7 +583,8 @@ class FoliaLanCastPlugin : Plugin() {
                 )
             }
         } catch (error: Exception) {
-            Log.w(TAG, "read description failed: $location", error)
+            // 只记网段与资源名：完整地址含局域网 IP 与端口，能拼出用户的网络拓扑（issue M24）。
+            Log.w(TAG, "read description failed: " + LanCastLogText.deviceHint(location), error)
             null
         }
     }
@@ -655,7 +657,8 @@ class FoliaLanCastPlugin : Plugin() {
             LanCastTargetPolicy.requireSameLanAs(target, deviceUrl)
             target
         } catch (error: Exception) {
-            Log.w(TAG, "rejected control url $controlPath: " + error.message)
+            // 控制地址同样只记网段与资源名，不记完整地址（issue M24）。
+            Log.w(TAG, "rejected control url " + LanCastLogText.controlHint(controlPath) + ": " + error.message)
             null
         }
     }
