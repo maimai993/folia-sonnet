@@ -82,3 +82,48 @@ describe('syncClient 的通道', () => {
         await expect(getRemoteState(config)).rejects.toThrow('401');
     });
 });
+
+/*
+ * 服务端给不同失败分了码（issue M38）：`settings_conflict` / `invalid_revision` /
+ * `unauthorized`。客户端原来只留状态码，于是「并发冲突该合并」「鉴权失效该重新登录」
+ * 「服务端故障该退避」在用户侧全是同一句「请求失败」。
+ */
+describe('syncClient 读服务端的错误码（M38）', () => {
+    const failing = (status: number, body: () => Promise<unknown>) => ({
+        ok: false,
+        status,
+        json: body,
+    }) as unknown as Response;
+
+    it('冲突与鉴权给出不同的 code', async () => {
+        nativeFetch.mockResolvedValue(failing(409, async () => ({ ok: false, error: 'settings_conflict' })));
+        const conflict = await getRemoteState(config).catch((error: { code: string }) => error.code);
+
+        nativeFetch.mockResolvedValue(failing(401, async () => ({ ok: false, error: 'unauthorized' })));
+        const auth = await getRemoteState(config).catch((error: { code: string }) => error.code);
+
+        expect(conflict).toBe('settings_conflict');
+        expect(auth).toBe('unauthorized');
+    });
+
+    /* 错误体不是本站 JSON（反代 HTML、空 502）时退成空码，但状态码必须还在。 */
+    it('错误体读不出来时保留状态码，code 为空', async () => {
+        nativeFetch.mockResolvedValue(failing(502, async () => {
+            throw new SyntaxError('Unexpected token <');
+        }));
+
+        await expect(getRemoteState(config)).rejects.toMatchObject({ status: 502, code: '' });
+    });
+
+    it('也认 code 字段（有的实现这么写）', async () => {
+        nativeFetch.mockResolvedValue(failing(400, async () => ({ code: 'invalid_revision' })));
+
+        await expect(getRemoteState(config)).rejects.toMatchObject({ status: 400, code: 'invalid_revision' });
+    });
+
+    it('消息里带上错误码，日志能直接看出是哪种失败', async () => {
+        nativeFetch.mockResolvedValue(failing(409, async () => ({ error: 'settings_conflict' })));
+
+        await expect(getRemoteState(config)).rejects.toThrow('settings_conflict');
+    });
+});
