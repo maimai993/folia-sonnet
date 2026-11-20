@@ -16,7 +16,7 @@
 // 里面的每个文件都算模组的内容），路径改成拷过去的位置。这个文件只给编辑器看，宿主不读它。
 
 /** The Folium version this host implements; mods read it at runtime as `folium.host.folium`. */
-export declare const FOLIUM_VERSION: { readonly major: 1; readonly minor: 10 };
+export declare const FOLIUM_VERSION: { readonly major: 1; readonly minor: 11 };
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;

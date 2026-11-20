@@ -78,6 +78,7 @@ const { verifyModSignature } = require(path.join(MODS, 'modSignature.cjs'));
 const { createModSecrets } = require(path.join(MODS, 'modSecrets.cjs'));
 const { createNetFetch } = require(path.join(MODS, 'netFetch.cjs'));
 const { createZipInstall } = require(path.join(MODS, 'zipInstall.cjs'));
+const { createModuleFence, makeChildProcessFacade, resolveRequested } = require('./moduleFence.js');
 const shared = require(path.join(MODS, 'foliumShared.json'));
 
 const FOLIUM_VERSION = shared.version;
@@ -240,6 +241,8 @@ const getDeviceMetricsSnapshot = () => deviceMetrics;
  * 只替换 `nvidia-smi` 这一条命令，别的 execFile 原样放行。拿不到指标时照常回 ENOENT，
  * 模组会退到「只显示 —」，和桌面无 N 卡时的表现一致。
  */
+// 宿主装好的替身副本：围栏把这个交给声明了 process.run 的模组，见 installNvidiaShim。
+const childProcessFacades = new Map();
 const installNvidiaShim = () => {
     try {
         const childProcess = require('child_process');
@@ -269,6 +272,15 @@ const installNvidiaShim = () => {
         };
         patched.__foliaShim = true;
         childProcess.execFile = patched;
+        /*
+         * 声明了 process.run 的模组拿到的是一份只读外观（moduleFence.makeChildProcessFacade）：
+         * 交给它的是绑在原生实现上的副本，所以它没法
+         *   · 把 execFile 改回原生实现，绕过上面那条 nvidia-smi 替身；
+         *   · 在自己的模块作用域里把 require('child_process') 的结果当成可写通道。
+         * 真正的限制仍是围栏（没声明 process.run 直接 require 失败）。
+         */
+        const facade = makeChildProcessFacade(childProcess);
+        childProcessFacades.set('child_process', facade);
     } catch (error) {
         emitLog('warn', `nvidia-smi 替身安装失败：${serializeError(error)}`);
     }
@@ -287,16 +299,18 @@ const installNvidiaShim = () => {
  */
 const installElectronShim = (shim) => {
     try {
-        const Module = require('module');
-        if (Module.__foliaElectronShim) return;
-        const originalLoad = Module._load;
-        Module._load = function load(request, parent, isMain) {
-            if (request === 'electron') return shim;
-            return originalLoad.call(this, request, parent, isMain);
-        };
-        Module.__foliaElectronShim = true;
+        moduleFence.install({
+            onElectron: () => shim,
+            facades: childProcessFacades,
+            resolveRequester: (parent) => {
+                const modId = modIdForFile(parent && parent.filename);
+                if (modId === null) return null;
+                const runtime = runtimes.get(modId);
+                return { modId, capabilities: runtime ? runtime.capabilities : [] };
+            },
+        });
     } catch (error) {
-        emitLog('warn', `electron 替身安装失败：${serializeError(error)}`);
+        emitLog('warn', `electron 替身 / 模块围栏安装失败：${serializeError(error)}`);
     }
 };
 
@@ -552,6 +566,9 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
     const rpcHandlers = new Map();
     let unloaded = false;
 
+    // 围栏按目录认人：先登记，模组 activate 时 require 才知道自己是哪个模组。
+    rememberModRoot(id, dirPath);
+
     const context = {
         modId: id,
         manifest,
@@ -658,10 +675,11 @@ const buildModRuntime = ({ id, dirPath, manifest }) => {
         }
         rpcHandlers.clear();
     };
-
     return {
         manifest,
         dirPath,
+        // 模组声明过的进程能力：围栏据此放行 child_process / net 这些模块。
+        capabilities: Array.isArray(manifest.processes) ? manifest.processes.slice() : [],
         load,
         unload,
         rpcHandler: (name) => rpcHandlers.get(name),
@@ -677,8 +695,9 @@ const publicState = (item, status, error, digest) => {
         name: manifest ? manifest.name : item.id,
         version: manifest ? manifest.version : '0.0.0',
         author: manifest ? manifest.author ?? '' : '',
-        description: manifest ? manifest.description ?? '' : '',
         permissions: manifest && Array.isArray(manifest.permissions) ? manifest.permissions : [],
+        // 声明过的进程能力（mod.json 的 processes）：界面据此在确认框里说明「这个模组能起子进程 / 直连网络」。
+        processes: manifest && Array.isArray(manifest.processes) ? manifest.processes : [],
         status,
         error: error ?? null,
         enabled: isEnabled(item.id),

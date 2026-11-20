@@ -47,7 +47,8 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
 
 模组是**可信代码，不是沙箱**：`main` 入口运行在主进程，拥有完整 Node.js 权限；`client` 入口运行在
 主界面所在的渲染进程，能读写界面里的一切。`mod.json` 的 `permissions` 是功能开关约定（未声明的 API
-调用 fail closed），**不构成安全边界**。
+调用 fail closed），**不构成安全边界**。安卓的 Node 宿主对 `require` 加了模块白名单（见「进程能力」），
+它把未声明的 `child_process` / `net` 变成一次可见的失败，模组仍与宿主同进程、同内存，不是隔离。
 
 - **两道开关**：「设置 → 模组」里的「模组系统」总开关决定加载器是否工作；总开关开启后，单个模组仍默认禁用，需逐个确认启用。
 - **启用需二次确认**：主进程原生确认窗口列出模组 id、安装位置、声明的权限、界面代码入口、选用的实验接口、
@@ -57,6 +58,14 @@ Folium 是 Folia 的模组平台，形状参照 Minecraft Forge：模组通过**
   加载器随即**撤销授权并保持禁用**，需要重新确认。唯一的例外是**未打包的开发版**里、位于仓库 `mods/`
   目录的模组：首次启用仍需确认，之后文件变化会把授权更新到新内容，方便开发调试。安装版不扫描仓库目录，
   用户模组目录（`userData/mods`）与 `resources/mods` 永远没有这项豁免。
+- **安卓上的确认框在应用界面里画**（`src/mods/android/AndroidModApprovalDialog.tsx`）：安卓没有主进程窗口，
+  这条路径没法做到「模组代码碰不到弹窗」。作为补偿，同意与内容摘要绑定得更紧：确认框展示的摘要会随启用
+  请求交回 Node 宿主，宿主重新计算当前目录的摘要比对，对不上就拒绝启用（`enable-digest-mismatch`）。
+  从 zip 安装**只安装不启用**，装完仍要在这个确认框里点一次。
+- **信任记录不在模组目录里**：安卓的启用状态与内容摘要在应用数据目录（`/data/user/0/<包名>/mod-trust/`），
+  不在 `userData/mods` 那棵树里——模组自己的 `fs` 能写外部存储上的 `userData`，把授权记录放在那里就等于
+  让被授权方自己改写授权。旧版本写在 `userData/mod-system.json` 里的记录会在首次启动时迁移一次：只迁移
+  「明确关掉的模组」和内置模组的启用记录，第三方模组的「启用」不迁移（那份记录本身不可信），需要重新确认。
 - **官方签名只是标识**：带有效官方签名的模组在确认窗口和模组面板里标为「官方认证」，但照样要二次确认，
   启用后也照样拥有完整权限。签名证明的是「Folium 审查过这些字节、之后没被改动」，不是沙箱。见[签名与官方认证](#签名与官方认证)。
 - 仅安装并启用可信来源的模组；启用前请审阅它的 `main` 与 `client` 代码。
@@ -160,7 +169,27 @@ client 只能用相对路径 import 模组目录里的 `.mjs/.js`，**不能 imp
 | `permissions` | 见下表。未知权限直接拒绝 |
 | `embedOrigins` | `folium.ui.embed` 可以加载的 https origin（形如 `https://host[:port]`），需要 `net.embed` |
 | `experimental` | 选用的实验接口：`omni.providers`、`omni.hooks`、`ponder.targets`、`player.layout`、`remote.actions`、`platform.raw`（1.7） |
+| `processes` | 1.11：main 入口要用到 `fs` / `path` / `crypto` / `zlib` 这些核心模块之外的 Node 模块时必须声明（见下面的「进程能力」）。未知能力直接拒绝 |
 | `folia` | 可选。宿主版本范围（空格分隔的比较式，支持 `>= > <= < = ^` 与 `*`）；宿主版本不在范围内时加载器拒绝加载（`host-version-mismatch`） |
+
+### 进程能力（`processes`，1.11）
+
+main 入口默认只能 `require` 一组只读的核心模块：`assert`、`buffer`、`crypto`、`events`、`fs`、`module`、`os`、`path`、`punycode`、`querystring`、`stream`、`string_decoder`、`timers`、`url`、`util`、`zlib`（`node:` 前缀同样）。要拿别的模块，得像声明权限一样在 `mod.json` 里写下对应能力：
+
+| 能力 | 解锁 |
+| --- | --- |
+| `worker-threads` | `worker_threads`：在自己的后台线程里跑统计之类的工作 |
+| `process.run` | `child_process`：启动外部程序（ffmpeg 这类） |
+| `network.socket` | `net`、`dgram`、`tls`、`dns`、`http`、`https`、`http2`：自己开网络连接，不经过 `folium.net.fetch` |
+
+没声明的模块 `require` 会抛一个 `code` 为 `MODULE_NOT_ALLOWED` 的错误，宿主日志里记一行 `[模块 id] require('xxx') 被拒绝`。能力会写进启用确认框，让用户先看到「这个模组能起子进程 / 能自己开网络」。
+
+这条围栏在安卓的 Node 宿主里落实（`android/app/src/main/assets/folia-node/moduleFence.js`）；桌面端由 Electron 主进程加载模组，`processes` 目前只用于确认框与校验。围栏拦的是 `require`：它把随手一句 `require('child_process')` 变成一次可见的失败，不是虚拟机级的沙箱，模组仍然与宿主同进程（见[安全声明](#安全声明重要)）。
+
+**内置模组例外**：`public/mods/builtin/` 里随包发布的模组（`mod-market`、`vinyl-disc`、`visualizer-jump`、
+`listening-archive`、`lizi-stages`）不受围栏限制。它们和宿主一起签名发布、用户装到的就是这份字节，而
+`mod.json` 一改官方签名就失效，所以不能靠给它们加 `processes` 放行（`listening-archive` 用
+`worker_threads` 就是这种情况）。其余模组一律按下面的规则走。
 
 | 权限 | 解锁 |
 | --- | --- |

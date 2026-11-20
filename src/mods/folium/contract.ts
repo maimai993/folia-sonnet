@@ -9,7 +9,7 @@
 // that goes: FoliumLegacyLyricsResult, which getLyrics may still answer.
 
 /** The Folium version this host implements; mods read it at runtime as `folium.host.folium`. */
-export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 10 });
+export const FOLIUM_VERSION = Object.freeze({ major: 1, minor: 11 });
 
 /** `modid:name`, like a Forge ResourceLocation. The mod id part is added by the host. */
 export type FoliumId = string;
