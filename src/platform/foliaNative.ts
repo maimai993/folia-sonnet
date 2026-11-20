@@ -135,7 +135,7 @@ interface FoliaNativePlugin {
         responseMode?: 'auto' | 'text' | 'base64';
     }): Promise<NativeHttpResponse>;
     /**
-     * 登记一台用户自己填的自建服务地址（飞牛 / Navidrome），供本次会话的出网白名单使用
+     * 登记一台用户自己填的自建服务地址（NAS 之类），供本次会话的出网白名单使用
      * （C1 / H2）。
      *
      * 只在用户**主动填写**服务器地址时调用；原生侧按 host + 端口记，进程重启即失效，

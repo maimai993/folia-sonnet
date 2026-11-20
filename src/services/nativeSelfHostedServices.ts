@@ -1,8 +1,8 @@
 // src/services/nativeSelfHostedServices.ts
 // 把「用户自己填的自建服务地址」告诉原生授权层（issue C1 / H2）。
 //
-// 原生的 httpRequest 现在有主机白名单：平台域名是出厂内置的，用户自己的 NAS（飞牛、Navidrome）
-// 则是用户在设置 / 登录表单里填的。原生能自己读到已经**落盘**的那一份（见
+// 原生的 httpRequest 现在有主机白名单：平台域名是出厂内置的，用户自己的 NAS（自建音乐
+// 服务的服务器）则是用户在设置 / 登录表单里填的。原生能自己读到已经**落盘**的那一份（见
 // android/.../FoliaNativeAccess.kt 的 readConfiguredServerHosts），但首次登录时地址还只在
 // 这一次的输入框里 —— 那次登录用的就是它，所以要在发请求之前报给原生，让它把这台机器
 // 记进「本次会话可用的自建服务」。
