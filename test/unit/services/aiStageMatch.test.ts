@@ -21,6 +21,9 @@ const { handlers } = vi.hoisted(() => ({
 vi.mock('@/services/foliaCloud', () => ({
   isFoliaCloudCacheEnabled: () => handlers.cloudEnabled,
   resolveCloudApiUrl: (path: string) => `https://cloud.test/api/${path}`,
+  /* 写入准入（issue C6）：这套用例不断言「谁能写」，给个令牌让推送照常走完。 */
+  resolveCloudWriteToken: () => 'synthetic-write-token',
+  CLOUD_WRITE_TOKEN_HEADER: 'X-Folia-Cache-Token',
   DEFAULT_CLOUD_BASE_URL: 'https://cloud.test',
 }));
 
@@ -43,6 +46,19 @@ const dualTheme = {
 } as unknown as import('@/types').DualTheme;
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body }) as unknown as Response;
+
+/*
+ * 一条**会被采信**的云端条目（issue C6）：客户端会复算 `payloadDigest`，摘要绑的是
+ * `[verifyKey, kind, key, writer, payloadJson]`。这里照同一套规则算。
+ */
+const VERIFY_KEY = 'folia-cache-digest-v1';
+const hit = async (kind: 'stage' | 'theme', key: string, body: unknown) => {
+  const writer = 'token:synthetic';
+  const text = JSON.stringify([VERIFY_KEY, kind, key, writer, JSON.stringify(body)]);
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const payloadDigest = Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return json({ hit: true, entry: { payload: body, writer, payloadDigest, verifyKey: VERIFY_KEY } });
+};
 
 /** 每首歌用各自的一段歌词：missCache 会把「刚问过没有」记 5 分钟，共用会互相挡掉。 */
 const lyricsOf = {
@@ -86,7 +102,7 @@ describe('matchStage', () => {
     handlers.fetch = async (url) => {
       if (url.includes('/ai-cache/resolve')) return candidatesFor(['小黄花']);
       if (url.includes(REMOTE_KEY)) {
-        return json({ hit: true, entry: { payload: { theme: dualTheme, decision: { mode: 'flow', reason: 'r', params: {} } } } });
+        return await hit('stage', REMOTE_KEY, { theme: dualTheme, decision: { mode: 'flow', reason: 'r', params: {} } });
       }
       return json({ hit: false }, false);
     };
@@ -123,7 +139,7 @@ describe('matchStage', () => {
     handlers.fetch = async (url) => {
       if (url.includes('/ai-cache/resolve')) return candidatesFor(['动画决策']);
       if (url.includes(REMOTE_KEY)) {
-        return json({ hit: true, entry: { payload: { decision: { mode: 'flow', reason: 'r', params: {} } } } });
+        return await hit('stage', REMOTE_KEY, { decision: { mode: 'flow', reason: 'r', params: {} } });
       }
       return json({ hit: false }, false);
     };
@@ -173,7 +189,7 @@ describe('matchStage', () => {
         return json({ ok: true, stored: true });
       }
       if (url.includes('/ai-cache/resolve')) return candidatesFor(['刮风', '握着']);
-      if (url.includes(REMOTE_KEY)) return json({ hit: true, entry: { payload: { theme: dualTheme } } });
+      if (url.includes(REMOTE_KEY)) return await hit('stage', REMOTE_KEY, { theme: dualTheme });
       return json({ hit: false }, false);
     };
     await matchStage(baseRequest(lyricsOf.sameKey));
