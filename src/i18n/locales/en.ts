@@ -9575,6 +9575,7 @@ export default {
     "lanCastWifiAutoOn": "On",
     "lanCastWifiAutoOff": "Off",
     "lanCastWifiAutoRestored": "Automatically casting to {{name}}",
+    "lanCastInterrupted": "Left the Wi-Fi network — casting stopped and the phone's sound is back",
     "perfCheck": {
         "title": "Performance check",
         "songTitle": "Performance check",

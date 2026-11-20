@@ -45,10 +45,18 @@ class FoliaLanCastPlugin : Plugin() {
         private val SOAP_XML = "text/xml; charset=\"utf-8\"".toMediaType()
     }
 
+    /**
+     * 不跟随重定向。
+     *
+     * 投送用的 POST 带 `SOAPACTION`，过去开着 `followRedirects(true)`：合法设备的一次 302
+     * 就能把整条 SOAP 记录（含我们代发的指令）转发到第二跳主机上。UPnP 的控制端口不该
+     * 靠重定向做跳转，需要跳的设备自己会在设备描述里给对地址。
+     */
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(4, TimeUnit.SECONDS)
         .readTimeout(6, TimeUnit.SECONDS)
-        .followRedirects(true)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .build()
 
     /** 一次发现的结果。controlUrl 已经是绝对地址，Web 层不必再解析设备描述。 */
@@ -82,10 +90,10 @@ class FoliaLanCastPlugin : Plugin() {
                 }
                 val payload = JSObject()
                 payload.put("devices", devices)
-                call.resolve(payload)
+                deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "discover failed", error)
-                call.reject("发现失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("发现失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -103,6 +111,14 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这首歌曲没有可在局域网访问的地址")
             return
         }
+        // 推之前先过目标准入（见 LanCastTargetPolicy）：伪造的 SSDP 应答会把这里导向任意主机。
+        val target = try {
+            LanCastTargetPolicy.requireAllowedTarget(controlUrl, "音响地址")
+        } catch (error: java.io.IOException) {
+            Log.w(TAG, "play target rejected: " + error.message)
+            call.reject(error.message ?: "音响地址不在局域网内")
+            return
+        }
         val title = call.getString("title") ?: ""
         val artist = call.getString("artist") ?: ""
         val album = call.getString("album") ?: ""
@@ -113,23 +129,30 @@ class FoliaLanCastPlugin : Plugin() {
                 val metadata = didlMetadata(audioUrl, title, artist, album, coverUrl, durationMs)
                 // 有些老设备解析不了 DIDL-Lite，正文送不进去就退成 NOT_IMPLEMENTED 再试一次：
                 // 地址照样能播，只是音响上不显示歌名。
-                val sent = soap(controlUrl, "SetAVTransportURI", setUriBody(audioUrl, metadata))
-                    || soap(controlUrl, "SetAVTransportURI", setUriBody(audioUrl, "NOT_IMPLEMENTED"))
+                val sent = soap(
+                    target,
+                    "SetAVTransportURI",
+                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to metadata),
+                ) || soap(
+                    target,
+                    "SetAVTransportURI",
+                    listOf("InstanceID" to "0", "CurrentURI" to audioUrl, "CurrentURIMetaData" to "NOT_IMPLEMENTED"),
+                )
                 val started = sent && soap(
-                    controlUrl,
+                    target,
                     "Play",
-                    "<u:Play xmlns:u=\"$AV_TRANSPORT\"><InstanceID>0</InstanceID><Speed>1</Speed></u:Play>",
+                    listOf("InstanceID" to "0", "Speed" to "1"),
                 )
                 if (!started) {
-                    call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放")
+                    deliver(call) { call.reject(if (sent) "地址已送出，但音响没有开始播放" else "音响拒绝了这次推送，请确认它支持 DLNA 播放") }
                 } else {
                     val payload = JSObject()
                     payload.put("ok", true)
-                    call.resolve(payload)
+                    deliver(call) { call.resolve(payload) }
                 }
             } catch (error: Exception) {
                 Log.w(TAG, "play failed", error)
-                call.reject("推送失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("推送失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -142,19 +165,22 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("缺少音响地址")
             return
         }
+        val target = try {
+            LanCastTargetPolicy.requireAllowedTarget(controlUrl, "音响地址")
+        } catch (error: java.io.IOException) {
+            Log.w(TAG, "stop target rejected: " + error.message)
+            call.reject(error.message ?: "音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val stopped = soap(
-                    controlUrl,
-                    "Stop",
-                    "<u:Stop xmlns:u=\"$AV_TRANSPORT\"><InstanceID>0</InstanceID></u:Stop>",
-                )
+                val stopped = soap(target, "Stop", listOf("InstanceID" to "0"))
                 val payload = JSObject()
                 payload.put("ok", stopped)
-                call.resolve(payload)
+                deliver(call) { call.resolve(payload) }
             } catch (error: Exception) {
                 Log.w(TAG, "stop failed", error)
-                call.reject("停止失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("停止失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -167,16 +193,20 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这台音响不支持音量控制")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val body = "<u:GetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume>"
-                val value = soapNumber(url, "GetVolume", body, "CurrentVolume")
-                if (value == null) call.reject("音响没有返回音量")
-                else call.resolve(JSObject().put("volume", value))
+                val value = soapNumber(target, "GetVolume", listOf("InstanceID" to "0", "Channel" to "Master"), "CurrentVolume")
+                deliver(call) {
+                    if (value == null) call.reject("音响没有返回音量")
+                    else call.resolve(JSObject().put("volume", value))
+                }
             } catch (error: Exception) {
                 Log.w(TAG, "getVolume failed", error)
-                call.reject("读取音量失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("读取音量失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -190,16 +220,21 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("缺少音响地址或音量")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         Thread {
             try {
-                val body = "<u:SetVolume xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
-                    "<DesiredVolume>$volume</DesiredVolume></u:SetVolume>"
-                val ok = soap(url, "SetVolume", body, RENDERING_CONTROL)
-                call.resolve(JSObject().put("ok", ok))
+                val ok = soap(
+                    target,
+                    "SetVolume",
+                    listOf("InstanceID" to "0", "Channel" to "Master", "DesiredVolume" to volume.toString()),
+                )
+                deliver(call) { call.resolve(JSObject().put("ok", ok)) }
             } catch (error: Exception) {
                 Log.w(TAG, "setVolume failed", error)
-                call.reject("设置音量失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("设置音量失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
     }
@@ -212,39 +247,134 @@ class FoliaLanCastPlugin : Plugin() {
             call.reject("这台音响不支持静音控制")
             return
         }
+        val target = controlTargetOrNull(url) ?: run {
+            call.reject("音响地址不在局域网内")
+            return
+        }
         val muted = call.getBoolean("muted") ?: false
         Thread {
             try {
-                val body = "<u:SetMute xmlns:u=\"$RENDERING_CONTROL\">" +
-                    "<InstanceID>0</InstanceID><Channel>Master</Channel>" +
-                    "<DesiredMute>${if (muted) 1 else 0}</DesiredMute></u:SetMute>"
-                val ok = soap(url, "SetMute", body, RENDERING_CONTROL)
-                call.resolve(JSObject().put("ok", ok))
+                val ok = soap(
+                    target,
+                    "SetMute",
+                    listOf("InstanceID" to "0", "Channel" to "Master", "DesiredMute" to (if (muted) "1" else "0")),
+                )
+                deliver(call) { call.resolve(JSObject().put("ok", ok)) }
             } catch (error: Exception) {
                 Log.w(TAG, "setMute failed", error)
-                call.reject("设置静音失败：${error.message ?: "unknown"}", error)
+                deliver(call) { call.reject("设置静音失败：${error.message ?: "unknown"}", error) }
             }
         }.start()
+    }
+
+    /** RenderingControl 的地址也过一次准入；不合格就返回 null（调用方统一 reject）。 */
+    private fun controlTargetOrNull(value: String): URL? = try {
+        LanCastTargetPolicy.requireAllowedTarget(value, "音量控制地址")
+    } catch (error: java.io.IOException) {
+        Log.w(TAG, "volume target rejected: " + error.message)
+        null
     }
 
     // ------------------------------------------------------------------ WiFi 自动投送
 
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    /**
+     * 「监听是否启用」与「网络是否连通」是两件事，必须分开记。
+     *
+     * 过去两者共用一个事件：unregisterNetworkCallback 会给 callback 合成一次 onLost，
+     * 于是「用户关掉自动投送开关」和「WiFi 真断了」走同一条分支，Web 层收到
+     * wifi:false 就把正在进行中的投送停掉。现在停监听只清这个标志，不下发任何状态。
+     */
+    @Volatile
+    private var wifiWatchEnabled = false
+
+    /** 上一次推给 Web 层的值；null 表示还没推过。只在 [publishWifiState] 所在的调用里读写。 */
+    @Volatile
+    private var lastPublishedWifi: Boolean? = null
+
+    /**
+     * 插件是否已被销毁。
+     *
+     * 这个插件持有两类跨调用常驻资源：OkHttpClient（连接池 + dispatcher 线程）和由
+     * ConnectivityManager 持有的 NetworkCallback。它们都比插件活得久，Activity 重建之后
+     * 旧的回调还会继续往已经销毁的 Bridge 发事件。置真之后所有调用直接 reject，
+     * 后台线程也会在 `deliver` 里被静默丢弃，不再碰已失效的 Bridge。
+     */
+    @Volatile
+    private var destroyed = false
+
+    /**
+     * 插件实例上线。
+     *
+     * `destroyed` 是实例字段：Activity 重建时 Capacitor 会新建一个插件实例，
+     * 新实例的 load() 必须把标志归零，否则新建的这个一上来就「已销毁」，
+     * 所有投送调用都会被静默丢掉。
+     */
+    override fun load() {
+        destroyed = false
+        super.load()
+    }
+
+    /**
+     * 插件销毁时调用的收尾：注销网络监听、断开在途连接、关掉 OkHttp。
+     *
+     * 为什么要在这里收：这个插件持有两类跨调用常驻资源。NetworkCallback 由系统持有，
+     * 过去唯一的注销点是 setWifiAutoCast(false)（只能等 Web 层主动下发）；OkHttpClient
+     * 的连接池与 dispatcher 线程则是进程级对象，过去完全没有关闭点。Activity 销毁后
+     * 两者都还活着，旧回调继续往已销毁的 Bridge 发事件。
+     */
+    override fun handleOnDestroy() {
+        destroyed = true
+        // 先停监听：unregisterNetworkCallback 会对 callback 合成一次 onLost，
+        // stopWifiWatch 里的 enabled 标志保证这次合成事件不会继续下发。
+        stopWifiWatch()
+        try {
+            httpClient.dispatcher.cancelAll()
+            httpClient.connectionPool.evictAll()
+            httpClient.dispatcher.executorService.shutdown()
+        } catch (error: Exception) {
+            Log.w(TAG, "release http client failed", error)
+        }
+        super.handleOnDestroy()
+    }
+
+    /**
+     * 把结果交回 Web 层，但插件已销毁时什么都不做。
+     *
+     * 这些 resolve/reject 大多跑在自己起的后台线程上（发现、推送各有 4~6 秒），
+     * Activity 在这期间销毁就会碰到已失效的 Bridge —— 逐处判断太容易漏，统一收在这里。
+     */
+    private fun deliver(call: PluginCall, action: () -> Unit) {
+        if (destroyed) return
+        try {
+            action()
+        } catch (error: Exception) {
+            Log.w(TAG, "deliver to web failed", error)
+        }
+    }
+
     /** 打开/关闭「连上 WiFi 自动投送」的原生网络监听。 */
     @PluginMethod
     fun setWifiAutoCast(call: PluginCall) {
         val enabled = call.getBoolean("enabled") ?: false
         if (enabled) startWifiWatch() else stopWifiWatch()
-        call.resolve()
+        deliver(call) { call.resolve() }
     }
 
     /** 前端刚挂载时用它确认当前是不是已经在 WiFi 上。 */
     @PluginMethod
     fun getWifiState(call: PluginCall) {
-        call.resolve(JSObject().put("wifi", isOnWifi()))
+        deliver(call) { call.resolve(JSObject().put("wifi", isOnWifi())) }
     }
 
+    /**
+     * 当前「是不是在 WiFi 上」的真相来源。
+     *
+     * 只问 activeNetwork 的 transport 与连通性，不看 Wi-Fi 开关：关掉开关但设备已经切到
+     * 别的可用网络（例如有线 / 另一个 WiFi）时，interface 列表里并没有「断网」这件事，
+     * 投送该不该断由「还有没有可用网络」决定，不由开关状态决定。
+     */
     private fun isOnWifi(): Boolean {
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
@@ -254,6 +384,8 @@ class FoliaLanCastPlugin : Plugin() {
     }
 
     private fun startWifiWatch() {
+        if (destroyed) return
+        wifiWatchEnabled = true
         if (networkCallback != null) return
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return
@@ -262,25 +394,36 @@ class FoliaLanCastPlugin : Plugin() {
             .build()
         val callback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                val data = JSObject()
-                data.put("wifi", true)
-                notifyListeners("wifiCastChange", data)
+                publishWifiState()
             }
+
             override fun onLost(network: Network) {
-                val data = JSObject()
-                data.put("wifi", false)
-                notifyListeners("wifiCastChange", data)
+                // onLost 的语义只是「这个 network 不再匹配请求」，网络迁移、重建、active
+                // network 切换都会触发它，此时设备可能仍在 WiFi 上。所以这里同样现查
+                // isOnWifi() 取真相，而不是照着回调类型下发布尔值。
+                publishWifiState()
+            }
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                publishWifiState()
             }
         }
         try {
             cm.registerNetworkCallback(request, callback)
             networkCallback = callback
+            // 注册后立刻同步一次：冷启动时页面挂载晚于网络就绪，不主动推一次的话
+            // Web 层要等到下一次网络变化才收到事件（表现为「开了自动投送但连上 WiFi 没反应」）。
+            publishWifiState()
         } catch (error: Exception) {
             Log.w(TAG, "register network callback failed", error)
         }
     }
 
     private fun stopWifiWatch() {
+        // 先关闸：unregisterNetworkCallback 会给 callback 合成一次 onLost，
+        // 若不加这个标志，用户关掉开关就会被当成「断网」下发一次 wifi:false，
+        // Web 层收到立刻终止正在进行中的投送 —— 与用户意图相反。
+        wifiWatchEnabled = false
         val callback = networkCallback ?: return
         val cm = context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         try {
@@ -289,6 +432,32 @@ class FoliaLanCastPlugin : Plugin() {
             Log.w(TAG, "unregister network callback failed", error)
         }
         networkCallback = null
+    }
+
+    /**
+     * 把当前的 WiFi 连通状态推给 Web 层。
+     *
+     * 判据统一是 isOnWifi()，而不是回调类型：回调只是「有事发生了」的提示，
+     * 真相要现查。另外只在状态真的变了才下发 —— 网络在 WiFi 之间迁移时
+     * onLost/onAvailable 会连着来，逐条转发的做法会让 Web 层重复触发自动投送。
+     */
+    private fun publishWifiState() {
+        if (!wifiWatchEnabled || destroyed) return
+        val current = isOnWifi()
+        val previous = lastPublishedWifi ?: run {
+            // 冷启动第一次同步：无论值是什么都要报，让 Web 层拿到初值。
+            lastPublishedWifi = current
+            emitWifiState(current)
+            return
+        }
+        if (current == previous) return
+        lastPublishedWifi = current
+        emitWifiState(current)
+    }
+
+    private fun emitWifiState(onWifi: Boolean) {
+        Log.i(TAG, "wifi cast state -> " + onWifi)
+        notifyListeners("wifiCastChange", JSObject().put("wifi", onWifi))
     }
 
     // ------------------------------------------------------------------ SSDP
@@ -330,6 +499,14 @@ class FoliaLanCastPlugin : Plugin() {
                             val text = String(incoming.data, 0, incoming.length, Charsets.UTF_8)
                             val headers = parseHeaders(text)
                             val location = headers["location"] ?: continue
+                            /*
+                             * LOCATION 先过一次准入再拿去 GET。
+                             *
+                             * SSDP 应答是明文 UDP、没有认证：同网段任何设备都能回一份把
+                             * LOCATION 指向公网地址的假应答。照着它去 GET 就已经是一次出站请求
+                             * （SSRF 的第一跳），所以在发出任何请求之前就挡掉。
+                             */
+                            if (!isAllowedLocation(location)) continue
                             val usn = headers["usn"] ?: location
                             if (!replies.containsKey(usn)) replies[usn] = location
                         } catch (timeout: java.net.SocketTimeoutException) {
@@ -363,6 +540,15 @@ class FoliaLanCastPlugin : Plugin() {
         return headBytes + target + tail
     }
 
+    /** 应答里的 LOCATION 是否落在局域网内（判据见 LanCastTargetPolicy）。 */
+    private fun isAllowedLocation(location: String): Boolean = try {
+        LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
+        true
+    } catch (error: java.io.IOException) {
+        Log.w(TAG, "ignored SSDP reply from a non-LAN location: " + error.message)
+        false
+    }
+
     /** SSDP 回复是 HTTP 风格的头，键统一小写。 */
     private fun parseHeaders(text: String): Map<String, String> {
         val headers = HashMap<String, String>()
@@ -377,20 +563,22 @@ class FoliaLanCastPlugin : Plugin() {
     /** GET 设备描述，确认它真的是 MediaRenderer 并取出 AVTransport 的 controlURL。 */
     private fun readSpeaker(usn: String, location: String): Speaker? {
         return try {
-            val request = Request.Builder().url(location).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
+            val deviceUrl = LanCastTargetPolicy.requireAllowedTarget(location, "设备地址")
+            val request = Request.Builder().url(deviceUrl).header("User-Agent", "Folia/1.0 UPnP/1.0").build()
             httpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) return@use null
                 val body = response.body?.string() ?: return@use null
                 val parsed = parseDescription(body)
                 val controlPath = parsed.controlUrl ?: return@use null
-                val absolute = absoluteUrl(location, controlPath, parsed.urlBase)
+                val absolute = resolveControlUrl(deviceUrl, controlPath, parsed.urlBase) ?: return@use null
                 Speaker(
                     id = usn,
                     name = parsed.name.ifEmpty { hostOf(location) },
                     location = location,
-                    controlUrl = absolute,
+                    controlUrl = absolute.toString(),
                     manufacturer = parsed.manufacturer,
-                    volumeControlUrl = parsed.volumeControlUrl?.let { absoluteUrl(location, it, parsed.urlBase) },
+                    volumeControlUrl = parsed.volumeControlUrl
+                        ?.let { resolveControlUrl(deviceUrl, it, parsed.urlBase)?.toString() },
                 )
             }
         } catch (error: Exception) {
@@ -445,15 +633,31 @@ class FoliaLanCastPlugin : Plugin() {
         return result
     }
 
-    private fun absoluteUrl(location: String, controlPath: String, urlBase: String): String {
-        if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) return controlPath
-        val base = if (urlBase.isNotEmpty()) {
-            urlBase
-        } else {
-            val url = URL(location)
-            "${url.protocol}://${url.host}${if (url.port > 0) ":${url.port}" else ""}/"
+    /**
+     * 设备描述里的 controlURL 拼成绝对地址，并做准入。
+     *
+     * 过去绝对 URL 原样接受：一份伪造的设备描述就能把后续所有 SOAP 指向任意主机。
+     * 现在相对路径以设备描述自己的地址（或它声明的 URLBase）为基准，拼完统一过
+     * [LanCastTargetPolicy]：局域网、允许端口、且绝对 URL 必须与设备同段。
+     * 不合格返回 null，那台设备直接被丢弃（发现列表里不出现）。
+     */
+    private fun resolveControlUrl(deviceUrl: URL, controlPath: String, urlBase: String): URL? {
+        return try {
+            val raw = if (controlPath.startsWith("http://", true) || controlPath.startsWith("https://", true)) {
+                controlPath
+            } else {
+                val base = if (urlBase.isNotEmpty()) urlBase else {
+                    "${deviceUrl.protocol}://${deviceUrl.host}${if (deviceUrl.port > 0) ":${deviceUrl.port}" else ""}/"
+                }
+                base.trimEnd('/') + "/" + controlPath.trimStart('/')
+            }
+            val target = LanCastTargetPolicy.requireAllowedTarget(raw, "控制地址")
+            LanCastTargetPolicy.requireSameLanAs(target, deviceUrl)
+            target
+        } catch (error: Exception) {
+            Log.w(TAG, "rejected control url $controlPath: " + error.message)
+            null
         }
-        return base.trimEnd('/') + "/" + controlPath.trimStart('/')
     }
 
     private fun hostOf(location: String): String = try {
@@ -464,10 +668,29 @@ class FoliaLanCastPlugin : Plugin() {
 
     // ------------------------------------------------------------------ SOAP
 
-    private fun soapRaw(controlUrl: String, action: String, body: String, service: String): String? {
+    /**
+     * 结构化构造 SOAP 请求：动作名 + 参数表，转义由这里统一做。
+     *
+     * 过去正文是调用方拼好的字符串，`soapRaw` 原样塞进信封 —— 任何一个新动作方法漏用
+     * escapeXml 就是一个 XML 注入（歌名、地址全都来自外部数据）。现在调用方只给键值对，
+     * 拼装与转义只有这一处实现。
+     */
+    private fun soapRaw(
+        controlUrl: URL,
+        action: String,
+        args: List<Pair<String, String>>,
+        service: String = AV_TRANSPORT,
+    ): String? {
+        val body = StringBuilder("<u:").append(action).append(" xmlns:u=\"").append(service).append("\">")
+        for ((key, value) in args) {
+            body.append('<').append(key).append('>')
+                .append(escapeXml(value))
+                .append("</").append(key).append('>')
+        }
+        body.append("</u:").append(action).append('>')
         val envelope = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
             "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
-            "<s:Body>$body</s:Body></s:Envelope>"
+            "<s:Body>${body}</s:Body></s:Envelope>"
         val request = Request.Builder()
             .url(controlUrl)
             .header("SOAPACTION", "\"$service#$action\"")
@@ -482,24 +705,21 @@ class FoliaLanCastPlugin : Plugin() {
         }
     }
 
-    private fun soap(controlUrl: String, action: String, body: String, service: String = AV_TRANSPORT): Boolean =
-        soapRaw(controlUrl, action, body, service) != null
+    private fun soap(
+        controlUrl: URL,
+        action: String,
+        args: List<Pair<String, String>>,
+        service: String = AV_TRANSPORT,
+    ): Boolean = soapRaw(controlUrl, action, args, service) != null
 
     /** GetVolume 的响应形如 <CurrentVolume>42</CurrentVolume>，命名空间前缀各家不一样。 */
-    private fun soapNumber(controlUrl: String, action: String, body: String, tag: String): Int? {
-        val text = soapRaw(controlUrl, action, body, RENDERING_CONTROL) ?: return null
+    private fun soapNumber(controlUrl: URL, action: String, args: List<Pair<String, String>>, tag: String): Int? {
+        val text = soapRaw(controlUrl, action, args, RENDERING_CONTROL) ?: return null
         val pattern = Regex("<(?:[A-Za-z0-9_]+:)?$tag[^>]*>\\s*([0-9]+)\\s*</", RegexOption.IGNORE_CASE)
         return pattern.find(text)?.groupValues?.get(1)?.toIntOrNull()
     }
 
-    private fun setUriBody(audioUrl: String, metadata: String): String =
-        "<u:SetAVTransportURI xmlns:u=\"$AV_TRANSPORT\">" +
-            "<InstanceID>0</InstanceID>" +
-            "<CurrentURI>${escapeXml(audioUrl)}</CurrentURI>" +
-            "<CurrentURIMetaData>${escapeXml(metadata)}</CurrentURIMetaData>" +
-            "</u:SetAVTransportURI>"
-
-    /** DIDL-Lite 是塞在 XML 文本节点里的，所以整体还要在 setUriBody 里再转义一次。 */
+    /** DIDL-Lite 是塞在 XML 文本节点里的，所以整段会由 soapRaw 再转义一次。 */
     private fun didlMetadata(
         audioUrl: String,
         title: String,

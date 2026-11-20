@@ -9524,6 +9524,7 @@ export default {
     "lanCastWifiAutoOn": "Bật",
     "lanCastWifiAutoOff": "Tắt",
     "lanCastWifiAutoRestored": "Đã tự động phát trên {{name}}",
+    "lanCastInterrupted": "Đã rời khỏi mạng Wi-Fi — dừng phát và trả lại âm thanh cho điện thoại",
     "perfCheck": {
         "title": "Kiểm tra hiệu năng",
         "songTitle": "Kiểm tra hiệu năng",

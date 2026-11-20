@@ -9582,6 +9582,7 @@ export default {
     "lanCastWifiAutoOn": "已开启",
     "lanCastWifiAutoOff": "已关闭",
     "lanCastWifiAutoRestored": "已自动投送到 {{name}}",
+    "lanCastInterrupted": "已经离开了 WiFi，投送已停止，手机声音已恢复",
     "perfCheck": {
         "title": "性能检测",
         "songTitle": "性能检测",

@@ -9525,6 +9525,7 @@ export default {
     "lanCastWifiAutoOn": "Aktif",
     "lanCastWifiAutoOff": "Nonaktif",
     "lanCastWifiAutoRestored": "Otomatis mengirim ke {{name}}",
+    "lanCastInterrupted": "Sudah keluar dari jaringan Wi-Fi — pengiriman dihentikan dan suara ponsel kembali",
     "perfCheck": {
         "title": "Pemeriksaan performa",
         "songTitle": "Pemeriksaan performa",
