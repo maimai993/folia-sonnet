@@ -1479,6 +1479,19 @@ const main = () => {
     foliaNode.registerChannel('overlay-result', (payload) => {
         settleOverlayResult(payload);
     });
+    /*
+     * overlay 页面 → 主进程（issue H18）。
+     *
+     * 桌面端这一段由 Electron 自己搬，安卓上要手动接：原生 OverlayBridge 收到页面里
+     * `ipcRenderer.send(channel, payload)` 之后，把 { id, channel, payload } 从这个通道送回来，
+     * 这里交给替身去找到那个窗口、用它的 webContents 当 sender 触发 ipcMain 的监听。
+     */
+    foliaNode.registerChannel('overlay-ipc', (payload) => {
+        require('./electron-shim.cjs').deliverIpcToMain(
+            payload,
+            (message) => emitLog('warn', message),
+        );
+    });
     // 同理：模组的 main 一 require('electron') 就得拿到替身。
     installElectronShim(buildElectronModule());
     const list = loadAll();

@@ -809,6 +809,23 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             overlays = new OverlayWindowManager(getContext());
             overlayBridge = new OverlayBridge(getContext(), overlays);
             overlayBridge.install(overlays);
+            /*
+             * overlay 页面 → 主进程的出口（issue H18）：native 不认模组注册了哪些通道，
+             * 统一交给 Node，由那边的 electron-shim 找到窗口、用它的 webContents 当 sender
+             * 触发 ipcMain 的监听。event.sender === win.webContents 靠的就是这一步。
+             */
+            overlayBridge.setIpcSink((windowId, channel, payload) -> {
+                JSONObject message = new JSONObject();
+                try {
+                    message.put("id", windowId);
+                    message.put("channel", channel);
+                    message.put("payload", payload == null ? JSONObject.NULL : payload);
+                } catch (JSONException error) {
+                    Log.w(TAG, "构造 overlay IPC 消息失败：" + channel, error);
+                    return;
+                }
+                FoliaNodeRuntime.sendToNode("overlay-ipc", message.toString());
+            });
         }
         return overlays;
     }

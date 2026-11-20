@@ -100,9 +100,15 @@ final class OverlayWindowManager {
         Object create(long windowId);
     }
 
+    /** 窗口被销毁时通知一次；OverlayBridge 用它清掉这个窗口的 IPC 现场（issue H18）。 */
+    interface WindowDestroyedListener {
+        void onWindowDestroyed(long windowId);
+    }
+
     private final Context context;
     private final WindowManager windowManager;
     private PageInterfaceFactory pageInterfaceFactory = null;
+    private WindowDestroyedListener windowDestroyedListener = null;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final AtomicLong ids = new AtomicLong(1);
     private final ConcurrentHashMap<Long, OverlayWindow> windows = new ConcurrentHashMap<>();
@@ -118,6 +124,10 @@ final class OverlayWindowManager {
 
     void setPageInterfaceFactory(PageInterfaceFactory factory) {
         this.pageInterfaceFactory = factory;
+    }
+
+    void setWindowDestroyedListener(WindowDestroyedListener listener) {
+        this.windowDestroyedListener = listener;
     }
 
     /** 有没有悬浮窗权限。没有的话 `addView` 会直接抛异常。 */
@@ -577,6 +587,20 @@ final class OverlayWindowManager {
         if (window == null || window.destroyed) return;
         window.destroyed = true;
         windows.remove(window.id);
+        /*
+         * 通知外部「这个窗口没了」（issue H18）。
+         *
+         * OverlayBridge 靠它把自己的 contents / pageReady / 待发队列里那一项删掉；
+         * 不删的话，反复开关窗口会一直往 Map 里堆已经死掉的 WebContents。
+         */
+        WindowDestroyedListener destroyed = windowDestroyedListener;
+        if (destroyed != null) {
+            try {
+                destroyed.onWindowDestroyed(window.id);
+            } catch (Throwable error) {
+                Log.w(TAG, "窗口销毁回调失败", error);
+            }
+        }
         try {
             if (window.attached) {
                 windowManager.removeView(window.webView);
