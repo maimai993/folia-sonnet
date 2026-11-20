@@ -125,15 +125,6 @@ object BackgroundThemeWorker {
     /** 失败记忆表的容量上限：只在最近这么多生成身份上记退避，够覆盖在听的那几首。 */
     private const val MAX_FAILURES = 64
 
-    /**
-     * 用户主动「重新生成」时显式清掉失败记忆的那一次（issue H33 的边界条件）。
-     *
-     * 退避**只拦自动触发**：用户自己按了按钮就是在明确要求「再试一次」，把他挡回去会
-     * 变成「点了没反应」。所以 `request` 的 `userInitiated = true` 会先清掉这个身份的
-     * 全部失败记录，并且这一次失败也不再计入连续次数（下次自动触发照旧受退避约束）。
-     */
-    private const val MAX_FAILURES = 64
-
     private val inFlight = HashSet<String>()
     private val generationCounter = AtomicLong()
 
@@ -425,10 +416,10 @@ object BackgroundThemeWorker {
          * 失败落到这里：没拿到结果（云端没命中 + 生成没成 / 未配置 / 401 / 限流）。
          *
          * 记下来，下一次自动触发在冷却窗口内直接跳过（issue H33）—— 不记的话，用户每退一次
-         * 后台就是一轮云端往返加一次付费生成。`failureCountFlag` 带回了这次是谁发起的：用户主动
+         * 后台就是一轮云端往返加一次付费生成。`countsTowardStreak` 带回了这次是谁发起的：用户主动
          * 那次记成 0，表示「不增加连续次数」，退避只由自动触发的失败驱动。
          */
-        recordFailure(job.memoryKey, failureCountFlag, failureKind[0])
+        recordFailure(job.memoryKey, countsTowardStreak, failureKind[0])
     }
 
     /**
