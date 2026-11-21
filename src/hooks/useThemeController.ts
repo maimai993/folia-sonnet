@@ -862,7 +862,7 @@ export function useThemeController({
 
             return { status: 'generated', applied: true };
         } catch (error: unknown) {
-            console.error(error);
+            console.error(`[Theme] generateAITheme failed (source=${source}, current=${String(shouldApply())}):`, error);
             if (isMissingAiApiKeyError(error)) {
                 return await applyCoverDerivedTheme(
                     currentSong,

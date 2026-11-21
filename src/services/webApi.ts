@@ -1,4 +1,4 @@
-import { isCapacitorAndroid } from '../platform/runtime';
+import { isAndroidAppShell } from '../platform/runtime';
 
 // 当前文件：解析 Web 与 Capacitor 共用的 Folia 服务端 API 地址。
 
@@ -34,7 +34,9 @@ export const resolveFoliaApiUrl = (
   const configuredBase = options.apiBase === undefined
     ? readConfiguredApiBase()
     : String(options.apiBase || '').trim();
-  const capacitorAndroid = options.capacitorAndroid ?? isCapacitorAndroid();
+  // 用 isAndroidAppShell 而不是 isCapacitorAndroid：后者在冷启动桥尚未初始化时为 false，
+  // 会把安卓请求错误放行到同源 /api/...（WebView 回 index.html），导致 JSON 解析失败。
+  const capacitorAndroid = options.capacitorAndroid ?? isAndroidAppShell();
   const normalizedEndpoint = normalizeEndpoint(endpoint);
 
   if (configuredBase) {
