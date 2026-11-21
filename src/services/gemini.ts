@@ -3,7 +3,7 @@ import { applyStoredAnimationIntensityToDualTheme } from "./themePreferences";
 import { sanitizeDualTheme } from "./themeSanitizer";
 import { getWebAiProvider } from "./runtimeConfig";
 import { resolveFoliaApiUrl } from "./webApi";
-import { recordAiThemeAttempt, type AiThemeTrigger } from "../utils/aiThemeDiagnostics";
+import { recordAiThemeAttempt, type AiThemeStage, type AiThemeTrigger } from "../utils/aiThemeDiagnostics";
 import { AI_NOT_CONFIGURED, isAiNotConfiguredError } from "./aiCompletion";
 import { isLocalAiThemeAvailable } from "./aiThemeClient";
 import { type AiCloudCacheSource } from "./aiCloudCache";
@@ -74,6 +74,8 @@ export const generateThemeFromLyrics = async (
   const startedAt = Date.now();
   // HTTP 失败那条在分支里已经记过，catch 只补没走到响应的（网络错误、解析失败），不重复记。
   let recorded = false;
+  // 诊断（#353）：追踪主链路当前所处阶段，避免冷启动或非 HTTP 异常一律落成 stage='unknown'。
+  let currentStage: AiThemeStage = 'request';
 
   /*
    * 指纹**不在这里算**。
@@ -99,6 +101,7 @@ export const generateThemeFromLyrics = async (
      * 决策，所以自己给一个只产主题的实现，照样由同一个入口统一编排、统一上报。
      */
     if ((window as any).electron && typeof (window as any).electron.generateTheme === 'function') {
+      currentStage = 'electron-bridge';
       const stage = await requestStage({
         song: {
           title: options?.songTitle ?? '',
@@ -116,9 +119,12 @@ export const generateThemeFromLyrics = async (
           theme: sanitizeDualTheme(await (window as any).electron.generateTheme(lyricsText, options)),
         }),
       });
-      if (!stage.theme) throw new Error('AI 没有返回可用的主题。');
+      if (!stage.theme) {
+        currentStage = 'empty-response';
+        throw new Error('AI 没有返回可用的主题。');
+      }
       recorded = true;
-      recordAiThemeAttempt({ provider, trigger, stage: 'request', ok: true, durationMs: Date.now() - startedAt });
+      recordAiThemeAttempt({ provider, trigger, stage: 'electron-bridge', ok: true, durationMs: Date.now() - startedAt });
       return { theme: applyStoredAnimationIntensityToDualTheme(stage.theme), source: stage.source };
     }
 
@@ -131,6 +137,7 @@ export const generateThemeFromLyrics = async (
      * 一次往返两份答案，另一半留给动画导演，切一首歌只烧一次调用。
      */
     if (isLocalAiThemeAvailable()) {
+      currentStage = 'local-direct';
       const stage = await requestStage({
         song: {
           title: options?.songTitle ?? '',
@@ -144,12 +151,15 @@ export const generateThemeFromLyrics = async (
         require: 'theme',
         force: options?.force === true,
       });
-      if (!stage.theme) throw new Error('AI 没有返回可用的主题。');
+      if (!stage.theme) {
+        currentStage = 'empty-response';
+        throw new Error('AI 没有返回可用的主题。');
+      }
       recorded = true;
       recordAiThemeAttempt({
         provider,
         trigger,
-        stage: stage.source === 'ai' ? 'request' : 'cloud-cache',
+        stage: stage.source === 'ai' ? 'local-direct' : 'cloud-cache',
         ok: true,
         durationMs: Date.now() - startedAt,
       });
@@ -168,6 +178,7 @@ export const generateThemeFromLyrics = async (
      * 地址也因此**延后**到 generate 里才算：缓存命中时压根不需要地址，
      * 早早解析反而让「没填地址」这种无关问题挡在缓存前面。
      */
+    currentStage = 'web-endpoint';
     const stage = await requestStage({
         song: {
             title: options?.songTitle ?? '',
@@ -192,6 +203,7 @@ export const generateThemeFromLyrics = async (
                     provider === 'openai' ? 'generate-theme_openai' : 'generate-theme',
                 );
             } catch {
+                currentStage = 'missing-key';
                 throw new Error(AI_NOT_CONFIGURED);
             }
             const response = await fetch(
@@ -225,7 +237,10 @@ export const generateThemeFromLyrics = async (
         },
     });
 
-    if (!stage.theme) throw new Error('AI 没有返回可用的主题。');
+    if (!stage.theme) {
+        currentStage = 'empty-response';
+        throw new Error('AI 没有返回可用的主题。');
+    }
     recorded = true;
     recordAiThemeAttempt({
         provider,
@@ -244,17 +259,18 @@ export const generateThemeFromLyrics = async (
      */
     return { theme: applyStoredAnimationIntensityToDualTheme(stage.theme), source: stage.source };
   } catch (error) {
+    const failedStage: AiThemeStage = isAiNotConfiguredError(error) ? 'missing-key' : currentStage;
     if (!recorded) {
       recordAiThemeAttempt({
         provider,
         trigger,
-        stage: 'unknown',
+        stage: failedStage,
         ok: false,
         error: getErrorMessage(error),
         durationMs: Date.now() - startedAt,
       });
     }
-    console.error("Failed to generate theme via API:", error);
+    console.error(`[Theme] Failed to generate theme via API (stage=${failedStage}, trigger=${trigger}):`, error);
     throw error;
   }
 };

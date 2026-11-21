@@ -10,6 +10,9 @@ export type AiThemeTrigger = 'manual' | 'auto' | 'unknown';
 
 export type AiThemeStage =
     | 'request'
+    | 'electron-bridge'
+    | 'local-direct'
+    | 'missing-key'
     | 'empty-response'
     | 'parse'
     | 'sanitize'
