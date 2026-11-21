@@ -7,6 +7,7 @@ import { traditionalLocalePlugin } from './dev/i18n/traditionalLocalePlugin.mjs'
 import { icuFoliaDataPlugin } from './dev/icuFolia/icuFoliaDataPlugin.mjs';
 import { nebbiaStrokesPlugin } from './dev/nebbia/nebbiaStrokesPlugin.mjs';
 import { normalizeBuildCommit, resolveBuildKind, resolveBuildRepo, resolveDevBuildKindOverride } from './dev/build/buildIdentity.mjs';
+import { rhineThemeAssetsPlugin } from './dev/build/rhineThemeAssets.mjs';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'child_process';
 import { createHash } from 'crypto';
@@ -298,6 +299,7 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       traditionalLocalePlugin(),
       icuFoliaDataPlugin(),
       nebbiaStrokesPlugin(),
+      rhineThemeAssetsPlugin(),
       react(),
       ...(isCapacitorBuild ? [] : [VitePWA({
         registerType: 'autoUpdate',

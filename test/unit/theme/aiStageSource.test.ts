@@ -14,9 +14,22 @@ import { requestStage } from '@/services/aiStage';
 const state = vi.hoisted(() => ({ payload: null as unknown, candidateKey: 'a'.repeat(32) }));
 
 /*
+ * 云端回一条**会被采信**的条目（issue C6）：客户端会复算 `payloadDigest`，摘要绑的是
+ * `[verifyKey, kind, key, writer, payloadJson]`。这里照同一套规则算。
+ */
+const VERIFY_KEY = 'folia-cache-digest-v1';
+const signedEntry = async (key: string, payload: unknown) => {
+    const writer = 'token:synthetic';
+    const text = JSON.stringify([VERIFY_KEY, 'stage', key, writer, JSON.stringify(payload)]);
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const payloadDigest = Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { payload, writer, payloadDigest, verifyKey: VERIFY_KEY };
+};
+
+/*
  * 云端有两条接口，形状不一样：
  *  - POST /api/ai-cache/resolve       → { candidates: [{ key, words }] }
- *  - GET  /api/ai-cache/<kind>/<key>  → { hit: true, entry: { payload } }
+ *  - GET  /api/ai-cache/<kind>/<key>  → { hit: true, entry: { payload, writer, payloadDigest, verifyKey } }
  *
  * 2026-10-17 起「精确键没中时按歌名捞一条内容合规的」：带歌名又有歌词的请求**先**走候选
  * 那条，只有没歌名可判时才直接读精确键。所以桩要按地址分开答 —— 只答精确键那种形状，
@@ -27,7 +40,7 @@ vi.mock('@/services/aiNativeFetch', () => ({
         const hit = state.payload !== null;
         const body = url.endsWith('/ai-cache/resolve')
             ? (hit ? { candidates: [{ key: state.candidateKey, words: ['另一首的第一句'] }] } : { candidates: [] })
-            : (hit ? { hit: true, entry: { payload: state.payload } } : { hit: false });
+            : (hit ? { hit: true, entry: await signedEntry(state.candidateKey, state.payload) } : { hit: false });
         return {
             ok: true,
             status: 200,

@@ -1,7 +1,9 @@
 package top.izuna.foliamajor.ai
 
+import top.izuna.foliamajor.FoliaPrivateNetworks
 import java.net.URI
 import java.net.URLEncoder
+import java.util.Locale
 
 /**
  * 三套协议的请求端点解析。规则与 Web 侧逐一对应：
@@ -108,15 +110,102 @@ object AiEndpoints {
         }
     }
 
-    /** 走代理时 Gemini 的 key 在 query 上，别让它进日志 —— 与 Web 侧 redact 同一规矩。 */
+    /**
+     * 凭据的值不进日志、也不进给用户看的错误文案（H32）。
+     *
+     * 规则必须和 Web 侧 `src/utils/errorText.ts` 的 `REDACTION_RULES` **同等强度**：同一段文本
+     * 经两条路径处理应当得到同样的结果。原来这里只有四条（Bearer、x-goog-api-key、URL query、
+     * 几个键名），漏掉了「一眼能认出来的明文密钥形态」—— 而服务商在错误消息里原样回显 API key
+     * 是常见现象，用户填错 key 时那串明文正好绕过原生侧，随文案回到页面、进日志、进截图反馈。
+     *
+     * 顺序与 Web 侧一致：先认形态，再按键名收，最后收没有键名的那种。
+     */
     fun redact(text: String): String = text
         .replace(Regex("(bearer\\s+)[A-Za-z0-9._~+/=-]{8,}", RegexOption.IGNORE_CASE), "$1[redacted]")
+        // 各家签发的明文密钥形态：一眼能认出来的，值不会留全。
+        .replace(
+            Regex("\\b(?:sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{30,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})"),
+            "[redacted]",
+        )
         .replace(Regex("(x-goog-api-key[\"']?\\s*[:=]\\s*[\"']?)[^\\s\"',;]+", RegexOption.IGNORE_CASE), "$1[redacted]")
         .replace(Regex("([?&](?:key|api[_-]?key|token|access_token)=)[^&\\s\"']+", RegexOption.IGNORE_CASE), "$1[redacted]")
-        .replace(Regex("(\"?(?:api[_-]?key|authorization|token)\"?\\s*[:=]\\s*\"?)[^\"\\s,}]{8,}"), "$1[redacted]")
+        /*
+         * 带引号的整段值，以及没有引号的值。
+         *
+         * 键名比原来更宽，和 Web 侧对齐：secret / password / cookie / credential 也算。
+         * 「没有引号」那条**必须**排除 true/false/null/undefined —— 那些是开关不是凭据；
+         * 而且规则只在键名后面跟 `:` 或 `=` 时才动手，`page=2`、`model=gpt-5` 里的
+         * page / model 都不在键名里，不会被误伤。
+         *
+         * 键名与分隔符用捕获组**留着**（`$1`）：`Authorization: Bearer xxx` 这种，
+         * 换成整段 `[redacted]` 会把「谁被遮了」这条线索也一起吃掉，读日志的人反而看不懂。
+         */
+        .replace(
+            Regex(
+                "([A-Za-z0-9_-]*(?:api[\\s_-]?key|token|secret|password|passwd|pwd|credential|cookie|authorization|key)[\"']?\\s*[:=]\\s*(?:bearer\\s+)?[\"'])" +
+                    "(?:(?![\"']).)*([\"'])",
+                RegexOption.IGNORE_CASE,
+            ),
+            "$1[redacted]$2",
+        )
+        .replace(
+            Regex(
+                "([A-Za-z0-9_-]*(?:api[\\s_-]?key|token|secret|password|passwd|pwd|credential|cookie|authorization|key)[\"']?\\s*[:=]\\s*(?:bearer\\s+)?)" +
+                    "(?!(?:true|false|null|undefined)(?![A-Za-z0-9_-]))(?=[^\\s\"',;&}])[^\\s\"',;&}]+",
+                RegexOption.IGNORE_CASE,
+            ),
+            "$1[redacted]",
+        )
 
     /** 设置里没填站点时给 Gemini 的默认反代地址（导出给日志/诊断用）。 */
     const val GEMINI_FALLBACK_BASE = DEFAULT_GEMINI_API_BASE
+
+    /**
+     * 发请求之前的最后一道：端点不许指向内网 / 环回 / 链路本地（M30）。
+     *
+     * 改前这里什么都不查，只把地址拼出来交给 OkHttp / HttpURLConnection —— 于是
+     * `baseUrl = http://127.0.0.1:8080/v1` 就能让原生网络栈去打本机与内网，并把响应
+     * 原样带回页面（装进来的模组也能这么干）。页面侧的主机白名单
+     * （FoliaNativeAccess.requireAllowedTarget）管不到这条通道，安全边界被绕过。
+     *
+     * 这一道与 httpRequest 共用同一份判定，**不是**另起一套白名单：
+     *   · 内网 / 环回 / 链路本地字面量一律拒（[FoliaPrivateNetworks.describePrivateLiteral]）；
+     *   · 公网主机要求走 requireAllowedRequestUrl —— 页面白名单里登记过的自建 AI 代理
+     *     照旧放行，那是这一类地址唯一合法的用法。
+     *
+     * 用户真要连本机或局域网里自建的模型服务，现在的答案是「不行」：放行需要一个显式
+     * 开关，而开关必须在一次明确的操作里被打开，不能由 baseUrl 自己决定 —— 否则这条
+     * 通道又回到了「填个地址就出网」。
+     *
+     * 只看字面量：域名解析到内网（DNS rebinding）不在这一层判，要挡得在 OkHttp 的 DNS
+     * 上做；而这条通道恰恰要允许用户自建的第三方代理，所以按字面量判定已经是能守住的界。
+     *
+     * @param url 真正要发的那条地址（已按各协议拼好路径）
+     * @param guard 第二道：公网主机交给调用方过页面白名单（`FoliaNativeAccess.requireAllowedRequestUrl`）
+     */
+    fun guardRequestUrl(url: String, guard: (String) -> Unit) {
+        val host = try {
+            URI(url).host?.lowercase(Locale.US)
+        } catch (error: Exception) {
+            throw AiCompletion.AiException(
+                "ai-endpoint-blocked",
+                "AI endpoint is not a readable url: " + redact(error.message ?: "unknown"),
+            )
+        }
+        if (host.isNullOrEmpty()) {
+            throw AiCompletion.AiException("ai-endpoint-blocked", "AI endpoint has no host")
+        }
+        // 内网 / 环回：说得出是哪一段，不说完整地址（query 里可能有 key）。
+        val privateRange = FoliaPrivateNetworks.describePrivateLiteral(host)
+        if (privateRange != null) {
+            throw AiCompletion.AiException(
+                "ai-endpoint-blocked",
+                "AI endpoint points at a private network address (" + privateRange + "); " +
+                    "local and intranet AI services are not allowed",
+            )
+        }
+        guard(url)
+    }
 
     @Suppress("unused")
     private fun unusedEncode(s: String): String = URLEncoder.encode(s, "UTF-8")

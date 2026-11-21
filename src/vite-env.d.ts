@@ -1165,7 +1165,8 @@ declare global {
       onStagePlayerSearchRequest: (callback: (request: StagePlayerSearchRequest) => void) => () => void;
       mods?: {
         listMods: () => Promise<{ mods: ModRuntimeInfo[]; ffmpeg: ModFfmpegStatus; directories: string[]; startSkipped?: boolean }>;
-        setModEnabled: (modId: string, enabled: boolean) => Promise<{ ok: boolean; error?: string; mods: ModRuntimeInfo[] }>;
+        /** `digest`: 安卓确认框里给用户看的那一份摘要，宿主会核对后才写授权。 */
+        setModEnabled: (modId: string, enabled: boolean, digest?: string) => Promise<{ ok: boolean; error?: string; mods: ModRuntimeInfo[] }>;
         reloadMods: () => Promise<{ mods: ModRuntimeInfo[] }>;
         cancelExport: () => Promise<{ ok: boolean }>;
         invokeModRpc: (modId: string, name: string, args: unknown[]) => Promise<{ ok: boolean; result?: unknown; error?: string }>;

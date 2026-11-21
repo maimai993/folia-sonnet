@@ -1,6 +1,7 @@
 import type { MotionValue } from 'framer-motion';
 import type { AudioBands, LyricAntialias, LyricRenderScale, SonnetTuning, Theme } from '../../../types';
 import { resolveLyricPixelRatio } from '../../../utils/lyricRenderQuality';
+import { SONNET_DEGRADE_LADDER, SonnetAdaptiveQuality, resolveSonnetAdaptiveTarget } from './adaptiveRenderScale';
 import type { SonnetProgram } from './types';
 import { findSonnetParagraphIndexAtTime } from './sonnetProgram';
 import { buildSonnetScene, type SceneView } from './sonnetSceneBuilder';
@@ -48,11 +49,8 @@ export interface SonnetSongMetadata {
  * see `swapSong`.
  */
 export interface SonnetSongContext {
-    /**
-     * Track identity. Only a change here is a real song change; the rest of this object also
-     * moves when the theme is edited or lyrics are hidden, and those must swap silently rather
-     * than play a dissolve.
-     */
+    /** Track identity. Only a change here is a real song change; the rest also moves when the theme
+     *  is edited or lyrics are hidden, and those must swap silently rather than play a dissolve. */
     seed: string | number | undefined;
     program: SonnetProgram;
     theme: Theme;
@@ -128,10 +126,19 @@ export class SonnetPixiRuntime {
             return scene;
         },
         destroy: scene => this.destroyScene(scene),
+        // 换下的场景先摘离场景层：它们在交接那一帧还会留着一阵，照旧画着就成了叠影。
+        detach: scene => {
+            if (scene.container.parent === this.sceneContainer) this.sceneContainer.removeChild(scene.container);
+        },
     });
     private readonly iconTextures = new Map<string, import('pixi.js').Texture>();
     private readonly iconUrls = new Set<string>();
     private activeParagraphIndex = -1;
+    /**
+     * 还没建出来的段落场景，一帧建一个（#H7）：提交那一帧已经有「释放换下的场景」和「预建下一段」，
+     * 再叠一次逐字排版 + 逐字形建 Text 就超过一帧预算。下标**按下标排**，取出时按当前播放时间再判一次。
+     */
+    private pendingScenes: number[] = [];
     private destroyed = false;
     /** 智能动感模式 frame reader; yields null unless it is on and the track's beats are installed. */
     private readonly readBeatFx = createSonnetBeatFxReader();
@@ -170,14 +177,12 @@ export class SonnetPixiRuntime {
 
     static async create(options: SonnetRuntimeOptions) {
         const pixi = await loadPixi();
-        // The options the WebGL context is made with, ahead of Pixi (makePixiContext).
+        // The options the WebGL context is made with, ahead of Pixi (makePixiContext). With
+        // post-processing the scene goes into the filter's own multisampled target and the canvas only
+        // gets the filtered picture, so only the marks pay for the 4-sample buffers. That is the
+        // default; the 抗锯齿 setting (#929) can force it either way, in the host's rebuild key.
         const contextOptions = {
             backgroundAlpha: 0,
-            // With post-processing the scene is drawn into the filter's own multisampled target and
-            // the canvas only gets the filtered picture and the frame marks: its 4-sample buffers
-            // would cost about 190 MB of video memory for those. The marks' edges are then not
-            // smoothed. That is the default; the 抗锯齿 setting (#929) can force it either way, and
-            // the resolved value is part of the host's rebuild key, so a change applies.
             antialias: options.antialias,
             powerPreference: 'high-performance',
         } as const;
@@ -329,11 +334,52 @@ export class SonnetPixiRuntime {
 
     private clearScenes() {
         this.outroBlur.clear();
+        this.pendingScenes = [];
         this.sceneCache.clear();
         this.activeParagraphIndex = -1;
     }
+
+    /**
+     * 换歌提交时把整批旧场景摘下，不在这里销毁（#H6）：销毁一个场景要逐节点走完整棵显示树
+     * （逐字 Text + Graphics），在交接那一帧对整批做正是换歌溶解要掩盖的卡顿，改由 renderFrame 空闲帧一帧放一个。
+     */
+    private retireScenes() {
+        this.outroBlur.clear();
+        this.pendingScenes = [];
+        this.sceneCache.retireAll();
+        this.activeParagraphIndex = -1;
+    }
+
+    /**
+     * 把一段场景的构建排到之后的空闲帧（#H7）：一次 buildScene 要跑完逐字排版再给每个字形建一个
+     * pixi.Text，和交接的第一帧凑在一起就是一次可见的掉帧；排进队列后由 {@link pumpDeferredScene} 一帧建一个。
+     */
+    private queueSceneBuild(index: number) {
+        if (this.destroyed) return;
+        if (index < 0 || index >= this.options.program.paragraphs.length) return;
+        if (this.sceneCache.has(index) || this.pendingScenes.includes(index)) return;
+        this.pendingScenes.push(index);
+    }
+
+    /**
+     * 一帧建一个排队的段落场景；这一帧做了就返回 true。认的是「这一帧该显示哪一段」：拖动进度条之后
+     * 队列里的多半已不在当前段 ±1 之内，直接丢掉，别把过时的段落建出来再剪掉。
+     */
+    private pumpDeferredScene(time: number) {
+        if (this.pendingScenes.length === 0) return false;
+        const paragraphs = this.options.program.paragraphs;
+        const index = this.pendingScenes.shift()!;
+        if (paragraphs.length === 0) return true;
+        if (this.sceneCache.has(index)) return true;
+        const current = findSonnetParagraphIndexAtTime(this.options.program, time);
+        if (current >= 0 && Math.abs(index - current) > 1) return true;
+        this.sceneCache.ensure(index);
+        return true;
+    }
     private destroyScene(scene: SceneView) {
-        if (this.outroBlur.isOn(scene)) this.outroBlur.clear();
+        // 片尾模糊由 SonnetOutroBlur 自己建，也由它自己销毁（issue M8）：先把它从场景的滤镜链上
+        // 摘下并销毁，免得下面拆除场景时还挂着一个已经没人负责销毁的滤镜，只能等 Pixi 的空闲 GC。
+        this.outroBlur.release(scene);
         this.sceneContainer.removeChild(scene.container);
         unloadSonnetDisplayTree(scene.container);
         scene.container.filters = null;
@@ -377,30 +423,74 @@ export class SonnetPixiRuntime {
         };
     }
 
+    /*
+     * 自动降级（issue H12）：低端机上把用户选的 2 倍压下来，而不是让人自己去设置里找。
+     * 判定与节流都在 SonnetAdaptiveQuality 里（那部分有单测），这里只负责每帧喂一个
+     * 时间戳、降级了就按新倍数重设分辨率。
+     */
+    private readonly adaptiveQuality = new SonnetAdaptiveQuality();
+
+    /** 用户选的那个倍数，降级时以它为基准（见 sampleAdaptiveQuality）。 */
+    private adaptiveBaseScale: LyricRenderScale = 1;
+
+    /**
+     * 每帧记一次帧时；判定该降级时按降后的倍数重设分辨率。
+     *
+     * 暂停时不采样：paused 下画面本来就不动，帧时也没有意义。
+     */
+    private sampleAdaptiveQuality() {
+        if (this.options.paused || this.options.staticMode) return;
+        /*
+         * 基准是**用户选的那个倍数**，不是当前生效的。
+         *
+         * setRenderScale 会就地改 options.renderScale，降过一次之后它就是降后的值了；
+         * 每帧都拿它当基准，降级就会一格接一格地自己往下走，直到压到底。
+         * 只有还没降过时才跟着 options 走，这样用户换档（外壳推新倍数）仍然生效。
+         */
+        if (this.adaptiveQuality.steps === 0) this.adaptiveBaseScale = this.options.renderScale;
+        /* 阶梯长度 - 1 就是最多能降几格。 */
+        const maxSteps = SONNET_DEGRADE_LADDER.length - 1;
+        if (!this.adaptiveQuality.sample(performance.now(), maxSteps)) return;
+        const base = this.adaptiveBaseScale;
+        const next = resolveSonnetAdaptiveTarget(base, this.adaptiveQuality.steps, maxSteps);
+        if (next === this.options.renderScale) return;
+        console.info(`[Sonnet] frame time too high, render scale ${base} -> ${next} (step ${this.adaptiveQuality.steps})`);
+        this.setRenderScale(next);
+    }
+
     private renderFrame = () => {
         if (this.destroyed) return;
+        this.sampleAdaptiveQuality();
         // Advanced before the paragraph lookup so a commit lands on this frame's scene selection
         // instead of leaving one frame of the outgoing program on the incoming one.
         this.advanceSongSwap();
         if (this.options.program.paragraphs.length === 0) {
             sonnetDebugState.activeShot = null;
             sonnetDebugState.paragraphIndex = -1;
+            // 换歌换下来的场景仍然要放完，不然它们一直挂着等下一次运行时重建。
+            if (this.sceneCache.hasRetired) this.sceneCache.drainRetired();
             return;
         }
         const time = this.options.currentTime.get();
         const paragraphIndex = findSonnetParagraphIndexAtTime(this.options.program, time);
+        // 换歌留下、还没造好的段落场景：一帧建一个，别和下面的预建 / 释放抢同一帧（#H7）。
+        const yielded = this.pumpDeferredScene(time);
         if (paragraphIndex !== this.activeParagraphIndex) {
             this.activeParagraphIndex = paragraphIndex;
             this.sceneCache.ensure(paragraphIndex);
             this.sceneCache.prune(paragraphIndex);
-        } else if (!this.songSwap) {
+        } else if (!this.songSwap && !yielded) {
             // Neighbours are pre-rolls for a boundary that is still ahead, so at most one is built
             // per frame rather than piling three onto the frame that just changed paragraph.
             // A scene build runs the layout over every grapheme and creates a pixi.Text per glyph;
             // three at once is a dropped frame.
             const next = paragraphIndex + 1;
             const previous = paragraphIndex - 1;
-            if (next < this.options.program.paragraphs.length && !this.sceneCache.has(next)) {
+            if (this.sceneCache.hasRetired) {
+                // 一帧只做一件贵的事，按优先级：先释放换下的场景 —— 它已经不在屏幕上了，
+                // 占着的是 GPU 内存，不像预建那样还有一整段歌词的时间可用。
+                this.sceneCache.drainRetired();
+            } else if (next < this.options.program.paragraphs.length && !this.sceneCache.has(next)) {
                 this.sceneCache.ensure(next);
             } else if (previous >= 0 && !this.sceneCache.has(previous)) {
                 this.sceneCache.ensure(previous);
@@ -521,8 +611,8 @@ export class SonnetPixiRuntime {
     async swapSong(next: SonnetSongContext, signal?: AbortSignal): Promise<void> {
         if (this.destroyed) return;
         // Nothing is on screen to protect: no scene has been sized yet, or the outgoing program
-        // had no paragraphs at all. Covering an empty frame would only add a flash. And a swap
-        // that is not a track change gets no dissolve at all - see SonnetSongContext.seed.
+        // had no paragraphs. Covering an empty frame only adds a flash; a non-track swap gets no
+        // dissolve at all - see SonnetSongContext.seed.
         const isCoverWorthwhile = next.seed !== this.options.songSeed
             && !this.songSwap
             && this.lastWidth > 0
@@ -571,14 +661,18 @@ export class SonnetPixiRuntime {
         this.iconTextures.clear();
         icons.textures.forEach((texture, key) => this.iconTextures.set(key, texture));
         icons.urls.forEach(url => this.iconUrls.add(url));
-        // clearScenes only walks the cache, and a staged scene is deliberately not in it yet, so
-        // it survives the teardown of the song it is replacing.
-        this.clearScenes();
+        // The cache only walks what it still holds, and a staged scene is deliberately not in it
+        // yet, so the staged scene survives the teardown of the song it is replacing.
+        // 换下的旧场景不在这里销毁（#H6）：一帧一个地放，见 retireScenes。
+        this.retireScenes();
         if (staged) {
             staged.scene.container.visible = true;
             this.sceneCache.adopt(staged.index, staged.scene);
             // Adopted as the active paragraph so the frame that commits builds nothing at all.
             this.activeParagraphIndex = staged.index;
+        } else if (this.lastWidth > 0) {
+            // 没来得及预建（交接太短 / 这一帧凑不上）：排队去空闲帧建，别让提交帧再叠一次逐字排版（#H7）。
+            this.queueSceneBuild(findSonnetParagraphIndexAtTime(next.program, this.options.currentTime.get()));
         }
         if (this.lastWidth > 0 && this.lastHeight > 0) {
             this.drawCredits(this.lastWidth, this.lastHeight);
@@ -627,7 +721,8 @@ export class SonnetPixiRuntime {
         if (swap.pending && swap.pendingIcons && !swap.staged && progress >= SONNET_SWAP_STAGE_PROGRESS) {
             // Built here, not at the commit: this is one scene's worth of layout and glyph
             // rasterisation, and the frame it costs is spent with the cover most of the way in
-            // rather than on the frame the listener is looking at the new song on.
+            // rather than on the frame the listener is looking at the new song on. A build that
+            // does not fit is queued for an idle frame instead (#H7).
             const index = findSonnetParagraphIndexAtTime(
                 swap.pending.program,
                 this.options.currentTime.get(),
@@ -668,11 +763,9 @@ export class SonnetPixiRuntime {
     private readonly mod = (key: string): number => readSonnetModulation(this.options.modulation, key);
 
     /**
-     * Applies a settings change to the live runtime. Every scene is rebuilt against the new
-     * tuning, but the WebGL context, the canvas and the icon textures stay; the settings that
-     * shape those (`textureResolution`, `showOnlyText`, `showBackgroundDecor`, and the resolved
-     * antialiasing, which follows `postProcessEnabled` by default) are part of the
-     * host's rebuild key instead.
+     * Applies a settings change to the live runtime: every scene is rebuilt against the new tuning,
+     * but the WebGL context, the canvas and the icon textures stay - the settings that shape those
+     * (textureResolution, showOnlyText, showBackgroundDecor, antialiasing) are in the rebuild key.
      */
     setTuning(tuning: SonnetTuning) {
         if (this.destroyed || this.options.tuning === tuning) return;
@@ -699,8 +792,8 @@ export class SonnetPixiRuntime {
     }
 
     /**
-     * 智能动感模式开关。开 / 关会让镜头裁切与辉光的分层按新状态重画，所以场景像 tuning 变化一样重建；
-     * 轻拍 / 重拍的强度从不走这里 —— 节拍钟每帧把它们算进信号里。
+     * 智能动感模式开关。开 / 关让镜头裁切与辉光分层按新状态重画，所以场景像 tuning 变化一样重建；
+     * 轻拍 / 重拍的强度从不走这里 —— 节拍钟每帧算进信号里。
      */
     setSmartBeatEnabled(enabled: boolean) {
         if (this.destroyed || this.options.smartBeatEnabled === enabled) return;
@@ -755,7 +848,12 @@ export class SonnetPixiRuntime {
         this.resizeObserver = null;
         this.app.stop();
         this.app.ticker.remove(this.renderFrame);
-        this.clearScenes();
+        // destroyAll 连「换下还没放完」的场景一起放（#H6）：只 clear() 的话它们既不在缓存里，
+        // 也不会再有下一帧来 drainRetired，等于漏掉一整批 GPU 资源。
+        this.pendingScenes = [];
+        this.outroBlur.clear();
+        this.sceneCache.destroyAll();
+        this.activeParagraphIndex = -1;
         destroySonnetContainerChildren(this.creditsContainer);
         this.iconTextures.clear();
         this.releaseIconUrls(this.iconUrls);

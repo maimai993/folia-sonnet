@@ -58,10 +58,18 @@ export function weapiEncrypt(object) {
   };
 }
 
+// weapi 的网关主机。
+//
+// 选了 `interface.music.163.com` 而不是 `music.163.com`：安卓桥上只有这个主机在白名单里
+// （见 src/services/nativeAndroidBridge.ts 的 API_HOSTS）。发到 music.163.com 的请求会落进
+// WebView 自己的 fetch，那里面按 Fetch 规范**读不到** Set-Cookie —— 而扫码登录要的 p_skey 正是
+// 从这里那张 302 上下发的。同一个接口上两个主机答得一样（eapi.js 一直用的就是这一个）。
+const WEAPI_BASE = 'https://interface.music.163.com';
+
 export async function weapiRequest(path, data, cookieHeader) {
   const apiPath = String(path || '').replace(/^\/+/, '').replace(/^weapi\//, '').replace(/^api\//, '');
   const encrypted = weapiEncrypt(data || {});
-  const resp = await fetch(`https://music.163.com/weapi/${apiPath}`, {
+  const resp = await fetch(`${WEAPI_BASE}/weapi/${apiPath}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',

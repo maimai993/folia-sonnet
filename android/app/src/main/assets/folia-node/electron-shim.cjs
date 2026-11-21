@@ -388,6 +388,54 @@ const buildInjection = (windowId) => `(function(){
 /** `ipcMain`：注册监听即可，事件对象由原生侧（OverlayBridge）构造并带上 sender。 */
 const ipcMain = new EventEmitter();
 
+/**
+ * 把一条来自 overlay 页面的消息投给 `ipcMain`（issue H18）。
+ *
+ * 桌面端这条路由由 Electron 自己完成；安卓上要手动走一遍：原生收到页面里
+ * `ipcRenderer.send(channel, payload)` 之后，用 `overlay-ipc` 通道把
+ * `{ id, channel, payload }` 送回来，这里再找到那个窗口、拿它的 `webContents` 当 sender
+ * 触发 listener —— 模组普遍用 `event.sender === win.webContents` 判断消息是谁发的，
+ * 所以 sender **必须**是 `windows` 里那个对象本身，不能再包一层。
+ *
+ * 找不到窗口（已销毁，或消息迟到）就丢掉并留一行：静默丢弃正是这条通路当初全线失效的原因。
+ *
+ * @param raw JSON 文本，形状 { id: number, channel: string, payload: object }
+ * @param warn 打日志用
+ * @returns 投出去了没有
+ */
+const deliverIpcToMain = (raw, warn) => {
+    let message;
+    try {
+        message = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+        if (typeof warn === 'function') warn('overlay IPC 文本无法解析');
+        return false;
+    }
+    if (!message || typeof message !== 'object') return false;
+    const window = windows.get(Number(message.id));
+    if (!window || window.isDestroyed()) {
+        if (typeof warn === 'function') {
+            warn(`overlay IPC 丢弃：窗口 ${message.id} 不存在或已销毁，通道 ${message.channel}`);
+        }
+        return false;
+    }
+    const channel = String(message.channel || '');
+    if (!channel) return false;
+    /*
+     * 第一个参数是事件对象，形状对齐桌面端的 IpcMainEvent：
+     * `sender` 用来判别来源，`reply` 是只回给这个窗口的一条捷径。
+     */
+    const event = {
+        sender: window.webContents,
+        reply: (replyChannel, replyPayload) => {
+            if (window.isDestroyed()) return;
+            window.webContents.send(String(replyChannel), replyPayload);
+        },
+    };
+    ipcMain.emit(channel, event, message.payload === undefined ? null : message.payload);
+    return true;
+};
+
 /** `screen`：安卓单显示器，工作区与落点由原生给（`screen` op）。 */
 const screen = {
     __workArea: { x: 0, y: 0, width: 1080, height: 1920 },
@@ -445,4 +493,11 @@ module.exports = {
     app,
     installOverlayBridge,
     buildInjection,
+    // 页面 → 主进程的投递入口，host.js 在 overlay-ipc 通道上调它（issue H18）。
+    deliverIpcToMain,
+    /*
+     * 只给测试用：让用例能塞一个窗口替身进表，验证「sender 就是那个 webContents」。
+     * 生产代码不读这个字段 —— 它不是 API，别在模组侧依赖。
+     */
+    __testWindows: windows,
 };

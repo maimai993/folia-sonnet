@@ -26,9 +26,16 @@ const { handlers } = vi.hoisted(() => ({
   },
 }));
 
+/*
+ * 写令牌给一个固定值：这一套用例验的是「拉回来能不能用」，不是「谁能写」。
+ * 没有它 `pushAiCloudCache` 会认定本机只读而直接返回 false，那些「推上去」的用例就全黄了。
+ * 谁能写的准入在服务端那一侧钉（test/unit/sync-server/aiCacheWriteAdmission.test.ts）。
+ */
 vi.mock('@/services/foliaCloud', () => ({
   isFoliaCloudCacheEnabled: () => true,
   resolveCloudApiUrl: (path: string) => `https://cloud.test/api/${path}`,
+  resolveCloudWriteToken: () => 'synthetic-write-token',
+  CLOUD_WRITE_TOKEN_HEADER: 'X-Folia-Cache-Token',
   DEFAULT_CLOUD_BASE_URL: 'https://cloud.test',
 }));
 
@@ -80,6 +87,41 @@ const secondPayload = {
 };
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body }) as unknown as Response;
+
+/*
+ * 一条**能被采信**的云端条目（issue C6）。
+ *
+ * 客户端现在会复算 `payloadDigest`：摘要对不上（或干脆没有）就当这条不存在。所以这里照着
+ * `sync-server/src/aiCacheDigest.ts` 的规则算一份 —— `[verifyKey, kind, key, writer, payloadJson]`
+ * 的 SHA-256。这是**故意**把算法在测试里重写一遍而不是去 import 服务端模块：两边真的对不上
+ * 时，这里会红，正好提醒「客户端和服务端算的不是一回事」。
+ *
+ * 各用例仍然可以用第三参覆盖字段，例如验「摘要不对就当没有」时传一个假摘要。
+ */
+const WRITER = 'token:synthetic';
+const verifyKey = 'folia-cache-digest-v1';
+
+const sha256Hex = async (text: string): Promise<string> => {
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const entryFor = async (
+  kind: 'stage' | 'theme',
+  key: string,
+  body: unknown,
+  overrides: Record<string, unknown> = {},
+) => {
+  const writer = typeof overrides.writer === 'string' ? overrides.writer : WRITER;
+  const payloadJson = JSON.stringify(body);
+  const payloadDigest = await sha256Hex(JSON.stringify([verifyKey, kind, key, writer, payloadJson]));
+  return { payload: body, writer, payloadDigest, verifyKey, ...overrides };
+};
+
+/** `{ hit: true, entry }`，摘要按真实规则算好 —— 绝大多数「云端有答案」的用例用这个。 */
+const hit = async (kind: 'stage' | 'theme', key: string, body: unknown, overrides: Record<string, unknown> = {}) => (
+  json({ hit: true, entry: await entryFor(kind, key, body, overrides) })
+);
 
 beforeEach(() => {
   handlers.fetch = null;
@@ -200,7 +242,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -240,7 +282,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -258,7 +300,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: KEY_A, words: ['留住', '我', '什么', '把', '你'] }] });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -293,7 +335,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
         });
       }
       if (url.includes(KEY_A) || url.includes(KEY_H) || url.includes(KEY_B)) {
-        return json({ hit: true, entry: { payload } });
+        return await hit('stage', KEY_A, payload);
       }
       return json({ hit: false }, false);
     };
@@ -327,9 +369,9 @@ describe('pullAiCloudCache 的第二次机会', () => {
           ],
         });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
-      if (url.includes(KEY_H)) return json({ hit: true, entry: { payload: secondPayload } });
-      if (url.includes(KEY_B)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
+      if (url.includes(KEY_H)) return await hit('stage', KEY_H, secondPayload);
+      if (url.includes(KEY_B)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -363,7 +405,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
         puts.push(String(init.body ?? ''));
         return json({ ok: true, stored: true });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('theme', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -392,7 +434,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
         return json({ ok: true, candidates: [{ key: KEY_A, words: [] }] });
       }
       /* 内容照样给：只有「真取不到内容」才该轮到 miss，这一条验的是「没凭据」。 */
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -419,7 +461,7 @@ describe('pullAiCloudCache 的第二次机会', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('theme', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -451,8 +493,8 @@ describe('pullAiCloudCache 的第二次机会', () => {
           ],
         });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
-      if (url.includes(KEY_H)) return json({ hit: true, entry: { payload: secondPayload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
+      if (url.includes(KEY_H)) return await hit('stage', KEY_H, secondPayload);
       return json({ hit: false }, false);
     };
 
@@ -484,12 +526,16 @@ describe('pullAiCloudCache 的第二次机会', () => {
     const seen: string[] = [];
     handlers.fetch = async (url) => {
       seen.push(url);
-      /* 精确键这一问**答得出来**：专门造这个场景，才能验出「答得出来也不读」。 */
-      if (url.includes(KEY_F)) return json({ hit: true, entry: { payload } });
+      /*
+       * 精确键这一问**答得出来**：专门造这个场景，才能验出「答得出来也不读」。
+       * 摘要按 KEY_F 算 —— 它是「照这个键答回来的」，摘要本来就该绑定它。
+       */
+      if (url.includes(KEY_F)) return await hit('stage', KEY_F, payload);
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload: secondPayload } });
+      /* 候选那条是从 KEY_A 取回来的，摘要就绑定 KEY_A。 */
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, secondPayload);
       return json({ hit: false }, false);
     };
 
@@ -509,7 +555,8 @@ describe('pullAiCloudCache 的第二次机会', () => {
     const seen: string[] = [];
     handlers.fetch = async (url) => {
       seen.push(url);
-      return json({ hit: true, entry: { payload } });
+      /* kind 与键都要对上：摘要绑定它们，绑错了会被当成「内容被挪过」而丢弃。 */
+      return await hit('theme', KEY_N, payload);
     };
 
     const result = await pullAiCloudCache('theme', KEY_N, { songTitle: '晴天' });
@@ -541,7 +588,7 @@ describe('推上去之后自己要还能拉到', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: stored ? [{ key: KEY_PUSHED, words: ['小黄花'] }] : [] });
       }
-      if (url.includes(KEY_PUSHED) && stored) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_PUSHED) && stored) return await hit('stage', KEY_PUSHED, payload);
       return json({ hit: false }, false);
     };
 
@@ -586,7 +633,7 @@ describe('withAiCloudCache 把按内容捞到的那条回填', () => {
         puts.push(String(init.body ?? ''));
         return json({ ok: true, stored: true });
       }
-      if (url.includes(KEY_A)) return json({ hit: true, entry: { payload } });
+      if (url.includes(KEY_A)) return await hit('stage', KEY_A, payload);
       return json({ hit: false }, false);
     };
 
@@ -603,5 +650,88 @@ describe('withAiCloudCache 把按内容捞到的那条回填', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(puts).toHaveLength(1);
     expect(JSON.parse(puts[0]).payload).toEqual(payload);
+  });
+});
+
+/*
+ * 内容摘要（issue C6）：云端回来的条目要能核对「是不是服务端当初写的那一份」。
+ *
+ * 这几条钉的是**读侧**的防守 —— 写侧准入在服务端（见
+ * `test/unit/sync-server/aiCacheWriteAdmission.test.ts`）。两边任何一边松了，
+ * 「谁都能往全局共享表里塞内容」就会从另一个口子回来。
+ */
+describe('内容摘要（issue C6）', () => {
+  const KEY_DIGEST = 'aa11bb22'.repeat(4);
+  const KEY_DIGEST_2 = 'bb22cc33'.repeat(4);
+  const KEY_DIGEST_3 = 'cc33dd44'.repeat(4);
+  const KEY_DIGEST_4 = 'dd44ee55'.repeat(4);
+
+  const serveEntry = (key: string, entry: Record<string, unknown>) => {
+    handlers.fetch = async (url) => (url.includes(key) ? json({ hit: true, entry }) : json({ hit: false }, false));
+  };
+
+  /* 对不上就当没有 —— 不是「用着可疑的那份」，而是**根本不用**。 */
+  it('摘要对不上就当没命中', async () => {
+    serveEntry(KEY_DIGEST, await entryFor('stage', KEY_DIGEST, payload, { payloadDigest: 'f'.repeat(64) }));
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 内容被改过（摘要还是原来那份）正是「库被人动了」的样子。 */
+  it('内容被换掉、摘要没跟着换，就丢弃', async () => {
+    const honest = await entryFor('stage', KEY_DIGEST_2, payload);
+    serveEntry(KEY_DIGEST_2, { ...honest, payload: secondPayload });
+    expect((await pullAiCloudCache('stage', KEY_DIGEST_2, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 把 A 歌的答案挪到 B 歌的键下：摘要绑了 key，挪过去就对不上。 */
+  it('把别的键上那条搬过来会被识破（摘要绑了 kind 与 key）', async () => {
+    const elsewhere = await entryFor('stage', KEY_DIGEST_3, payload);
+    serveEntry(KEY_DIGEST_4, elsewhere);
+    expect((await pullAiCloudCache('stage', KEY_DIGEST_4, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /*
+   * 老条目（没有摘要）也一并丢：从这次改动之前的库里分不出「正常写入」和
+   * 「早年那段谁都能写时写进来的」，采信它等于把漏洞留在读侧。代价只是重新生成一次。
+   */
+  it('没有摘要的老条目同样不采信', async () => {
+    serveEntry(KEY_DIGEST, { payload, writer: 'token:synthetic', verifyKey: 'folia-cache-digest-v1' });
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 换了算法（verifyKey 不一致）也当没命中：宁可重新生成，也不按老规则认。 */
+  it('verifyKey 不认识时当没命中', async () => {
+    serveEntry(
+      KEY_DIGEST,
+      await entryFor('stage', KEY_DIGEST, payload, { verifyKey: 'folia-cache-digest-v0' }),
+    );
+    expect((await pullAiCloudCache('stage', KEY_DIGEST, { songTitle: '晴天' })).status).toBe('miss');
+  });
+
+  /* 对照：摘要对得上的那份必须照旧拿回来 —— 否则上面几条「丢弃」可能只是全都没命中。 */
+  it('摘要对得上就照旧拿回来', async () => {
+    const KEY_OK = 'ff66aa77'.repeat(4);
+    serveEntry(KEY_OK, await entryFor('stage', KEY_OK, payload));
+    const result = await pullAiCloudCache('stage', KEY_OK, { songTitle: '晴天' });
+    expect(result.status).toBe('hit');
+    if (result.status === 'hit') expect(result.payload).toEqual(payload);
+  });
+
+  /*
+   * 走「按歌名捞候选」那条路时同样要验：候选条目是从**别的键**取回来的，
+   * 正是最容易被换成别首歌内容的一路。
+   */
+  it('按候选捞回来的那条也要过摘要', async () => {
+    const KEY_TARGET = 'ee55ff66'.repeat(4);
+    handlers.fetch = async (url) => {
+      if (url.includes('/ai-cache/resolve')) {
+        return json({ ok: true, candidates: [{ key: KEY_A, words: ['小黄花'] }] });
+      }
+      /* 内容是 KEY_A 的，但摘要算在另一把键上 —— 相当于被人搬过。 */
+      if (url.includes(KEY_A)) return await hit('stage', KEY_B, payload);
+      return json({ hit: false }, false);
+    };
+    const result = await pullAiCloudCache('stage', KEY_TARGET, { songTitle: '晴天', lyricText: '故事的小黄花' });
+    expect(result.status).toBe('miss');
   });
 });

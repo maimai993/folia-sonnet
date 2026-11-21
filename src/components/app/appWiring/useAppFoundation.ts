@@ -13,6 +13,7 @@ import { useStartupExperienceGate } from '../../../hooks/useStartupExperienceGat
 import { useStartupUpdatePrompt } from '../../../hooks/useStartupUpdatePrompt';
 import { transitionCapabilities } from '../../../services/automix/stems';
 import { initializeSyncCoordinator } from '../../../services/sync/syncCoordinator';
+import { installLanCastLifecycleGuards } from '../../../services/lanCast';
 import { currentTime } from '../../../stores/motionSignals';
 import { useAppChromeStore } from '../../../stores/useAppChromeStore';
 import { useAppViewStore } from '../../../stores/useAppViewStore';
@@ -183,6 +184,14 @@ export const useAppFoundation = () => {
     const updatePrompt = useStartupUpdatePrompt();
 
     useEffect(() => initializeSyncCoordinator(), []);
+
+    /*
+     * 投送的生命周期守卫：页面关闭、App 进后台、网络切换时收回原生侧的局域网音频租约。
+     *
+     * 挂在应用级而不是 LanCastControl 里：那个组件只在播放页存在，离开播放页就会卸载，
+     * 而音响还在放、手机仍在服务 —— 收回点必须比任何一个页面都活得久。
+     */
+    useEffect(() => installLanCastLifecycleGuards(), []);
 
     // 「进入可视化自动横屏」：Web 只上报「在不在播放页」，转不转由原生按设置判。
     useAndroidPlaybackOrientation();

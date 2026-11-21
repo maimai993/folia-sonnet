@@ -12,6 +12,7 @@
 | [sync-server-api.md](sync-server-api.md) | 客户端 ↔ 自建同步服务（HTTP） | `sync-server/src/app.ts` 及同目录子路由模块 |
 | [electron-ipc.md](electron-ipc.md) | 渲染进程 ↔ 主进程（Electron IPC） | `electron/preload.cjs` + `src/vite-env.d.ts` 的 `Window['electron']` |
 | [online-music-omni.md](online-music-omni.md) | 界面/状态 ↔ 在线音乐各平台 | `src/services/onlineMusic/omni.ts`、`src/types/onlineMusic.ts`、`src/services/onlineMusic/providerRegistry.ts` |
+| [android-bridge.md](android-bridge.md) | 页面 ↔ 安卓原生（`FoliaNative` 插件） | `android/app/src/main/java/top/izuna/foliamajor/FoliaNativePlugin.kt` 的 `@PluginMethod`，页面侧类型在各 `src/services/*.ts` |
 | [secrets.md](secrets.md) | 凭据 ↔ 存放位置、流程、日志 | 各实现文件，逐条注在正文里 |
 
 - 每一条契约后面注 `文件:行`。行号会随代码漂移：**定位以符号名为准**，行号只帮忙找到起点。
@@ -62,6 +63,7 @@
 - [sync-server-api.md](sync-server-api.md)：41 条 HTTP 路由的方法、路径、鉴权、请求/响应、错误码、可空性，以及必须挂在兜底网之前的原因。
 - [electron-ipc.md](electron-ipc.md)：`window.electron` 的命名空间、invoke 与 send 的区别、事件订阅、错误形态、发送方信任边界。
 - [online-music-omni.md](online-music-omni.md)：omni 对调用方保证什么、各平台必须实现什么、能力开关、错误模型、注册表契约。
+- [android-bridge.md](android-bridge.md)：`FoliaNative` 的 58 个方法按用途登记、可选即回落的兼容规则、桥的「在不在」为什么只能在一处判、方法名漂移测试覆盖什么。
 - [secrets.md](secrets.md)：哪些值是凭据、允许出现在哪里（主进程 / 钥匙串 / 安卓原生 / 渲染进程内存）、绝对禁止的三条出口。
 
 ## 约定

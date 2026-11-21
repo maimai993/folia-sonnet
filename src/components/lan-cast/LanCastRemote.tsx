@@ -24,6 +24,13 @@ type LanCastRemoteBodyProps = {
     artist: string;
     coverUrl?: string | null;
     isDaylight: boolean;
+    /**
+     * 音响侧拿不到封面时的说明（空串 = 不用提）。
+     *
+     * 封面不是 http(s) 地址时原生不发 `albumArtURI`：音响上没有图，手机上有图。过去这一层
+     * 静默丢弃，用户只会觉得「投送不对劲」（issue M23）。
+     */
+    coverNote?: string;
     onMinimize: () => void;
     onSwitch: () => void;
     onStop: () => void;
@@ -35,6 +42,7 @@ const LanCastRemoteBody: React.FC<LanCastRemoteBodyProps> = ({
     artist,
     coverUrl,
     isDaylight,
+    coverNote,
     onMinimize,
     onSwitch,
     onStop,
@@ -149,6 +157,10 @@ const LanCastRemoteBody: React.FC<LanCastRemoteBodyProps> = ({
             <div className={`text-[11px] leading-snug ${soft}`}>
                 {t('lanCastRemoteHint')}
             </div>
+
+            {coverNote ? (
+                <div className="text-[11px] leading-snug text-amber-400">{coverNote}</div>
+            ) : null}
 
             {volumeSupported ? (
                 <div className="flex flex-col gap-1.5">

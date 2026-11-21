@@ -233,15 +233,13 @@ describe('QQ login channels declared by the backend', () => {
 
         for (const method of methods) {
             /*
-             * 图标是按 svg → png → webp 的顺序取的（见 loginMethodIcons），不是只认 .svg ——
-             * 那两颗扫码方式换成真机 App 图标之后，手绘的 .svg 就删掉了，剩下的是 .png
-             * 与 .webp（`#728` 那次）。所以在文件系统里只找 `<iconKey>.svg` 会误报缺图。
-             *
-             * 去问真正取它的那个函数，画面上没有图标时才算是真的缺。
+             * 图标是自绘图形（platformIcons/registry 登记的那一份），按平台 id 现画，不是某个文件：
+             * 项目里已经没有任何平台位图（issue #451）。所以问的是「画得出东西吗」，
+             * 而不是「文件夹里有没有 <iconKey>.svg」。
              */
             expect(loginMethodIcon(method.iconKey)).toBeTruthy();
-            // 顺带钉住「取不到就是空串」，不是 undefined —— 调用方直接当 src 用。
-            expect(loginMethodIcon(`no-such-icon-${method.iconKey}`)).toBe('');
+            // 顺带钉住「取不到就是 undefined」，调用方据此不画图标。
+            expect(loginMethodIcon(`no-such-icon-${method.iconKey}`)).toBeUndefined();
             const [group, key] = method.labelKey.split('.');
             for (const locale of locales) {
                 const table = locale.default ?? Object.values(locale)[0];

@@ -336,6 +336,14 @@ const SceneStage: React.FC<{ definition: SceneDefinition; rendererProps: Rendere
                 className="absolute inset-0 select-none overflow-hidden"
                 style={{ touchAction: 'none', visibility: hidden ? 'hidden' : undefined }}
                 data-scene={manifest.id}
+                /*
+                 * 告诉播放页的横滑切歌「这一块是场景，左右拖动是转头看」。
+                 *
+                 * 场景引擎自己有一套 trackLook（sceneSignals.ts）：在场景上按下再移动就转视角。
+                 * 但播放页那层的 usePlayerSwipeGesture 只认这个标记，标记没人挂的时候两边
+                 * 各干各的 —— 影厅里想转个视角，歌就切走了。标记的消费方在 usePlayerSwipeGesture。
+                 */
+                data-scene-look=""
                 onMouseMoveCapture={chrome.pointer.move}
                 onMouseLeave={chrome.pointer.leave}
                 onPointerDown={chrome.pointer.down}

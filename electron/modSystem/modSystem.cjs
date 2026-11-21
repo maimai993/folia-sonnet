@@ -239,6 +239,10 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
             permissions: entry.manifest.permissions,
             experimental: entry.manifest.experimental ?? [],
             embedOrigins: entry.manifest.embedOrigins ?? [],
+            // Process capabilities (manifest `processes`): shown in the confirm dialog and by the
+            // panel, and what the Android Node host's module fence checks before handing out
+            // child_process and the raw socket modules.
+            processes: entry.manifest.processes ?? [],
             folia: entry.manifest.folia ?? null,
             hasMain: Boolean(entry.manifest.main),
             // Client entries are only exposed for mods that are enabled and
@@ -468,7 +472,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
         return listMods();
     };
 
-    const setModEnabled = async (modId, enabled) => {
+    const setModEnabled = async (modId, enabled, confirmedDigest) => {
         if (!isModSystemEnabled()) {
             return { ok: false, error: 'mod-system-disabled', mods: [] };
         }
@@ -489,6 +493,16 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
         const digest = computeModDigest(runtime.dirPath);
         if (!digest) {
             return { ok: false, error: 'mod-content-unverifiable', mods: listMods() };
+        }
+        /*
+         * 安卓的确认框在渲染进程里画（没有主进程原生弹窗），用户确认的那一份摘要会跟着
+         * 请求一起送上来。这里先核对：确认框上写的内容和此刻盘上的内容不是同一份，就不启用
+         * （enable-digest-mismatch），让用户重看一遍再决定。
+         *
+         * 桌面端自己不传这个参数 —— 它马上会弹原生确认框，确认的必然是上面刚算的这一份。
+         */
+        if (typeof confirmedDigest === 'string' && confirmedDigest.length > 0 && confirmedDigest !== digest) {
+            return { ok: false, error: 'enable-digest-mismatch', mods: listMods() };
         }
         // Same moment as the digest: the label must describe the bytes being approved.
         const signature = verifyModSignature(runtime.dirPath, runtime.manifest);
@@ -710,7 +724,7 @@ const createModSystem = ({ app, BrowserWindow, getMainWindow, getLocaleKey, isFe
         handle(IPC.list, () => (
             { mods: listMods(), ffmpeg: ffmpegStatus, directories: getModsDirectories(), startSkipped: skippedThisRun }
         ));
-        handle(IPC.setEnabled, (_event, modId, enabled) => setModEnabled(modId, enabled));
+        handle(IPC.setEnabled, (_event, modId, enabled, digest) => setModEnabled(modId, enabled, digest));
         handle(IPC.reload, () => ({ mods: loadAll() }));
         handle(IPC.exportCancel, () => ({ ok: exportService.cancelActiveExport() }));
         handle(IPC.rpc, (_event, modId, name, args) => invokeModRpc(modId, name, args));

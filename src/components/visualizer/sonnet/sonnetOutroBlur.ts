@@ -1,4 +1,5 @@
 import type { SceneView } from './sonnetSceneBuilder';
+import { destroySonnetFilter } from './sonnetPixiResources';
 
 // src/components/visualizer/sonnet/sonnetOutroBlur.ts
 // 片尾模糊：片尾海报升起时给最后一段场景挂一个 BlurFilter，强度随片尾帧变化；回到 0 或换场景时摘下销毁。
@@ -18,12 +19,38 @@ export class SonnetOutroBlur {
         return this.scene === scene;
     }
 
+    /** Whether the blur still holds a filter of its own (issue M8: only this owner destroys it). */
+    isAttached() {
+        return this.filter !== null;
+    }
+
+    /** 摘下并销毁自己的过滤器（谁创建谁销毁）：池里的离屏 RT 一并交还，不等 Pixi 的空闲 GC。 */
     clear() {
-        if (this.filter && this.scene) {
-            this.scene.container.filters = (this.scene.container.filters ?? [])
-                .filter(filter => filter !== this.filter);
-            this.filter.destroy();
+        if (this.filter) {
+            if (this.scene) {
+                this.scene.container.filters = (this.scene.container.filters ?? [])
+                    .filter(filter => filter !== this.filter);
+            }
+            destroySonnetFilter(this.filter, this.pixi.TexturePool);
         }
+        this.filter = null;
+        this.scene = null;
+    }
+
+    /**
+     * Hands the filter back when `scene` is being destroyed (issue M8).
+     *
+     * The scene frees the filters it created itself (SceneView.postProcessFilters); this one is not
+     * in that list. scene.container.filters is rewired onto a copy without it before the scene tears
+     * the chain down, so the runtime never holds a destroyed filter and the GPU resources go with
+     * the owner that made them.
+     */
+    release(scene: SceneView) {
+        if (this.scene !== scene) return;
+        const filter = this.filter;
+        const remaining = (scene.container.filters ?? []).filter(candidate => candidate !== filter);
+        scene.container.filters = remaining.length > 0 ? remaining : null;
+        if (filter) destroySonnetFilter(filter, this.pixi.TexturePool);
         this.filter = null;
         this.scene = null;
     }

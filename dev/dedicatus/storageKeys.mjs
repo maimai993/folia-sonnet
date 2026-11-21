@@ -4,6 +4,14 @@
 // 新加的键追加进来；确实要废弃一个键（并做了迁移），从这里删掉并在提交里写明迁移。
 // 读法在 dev/dedicatus/storageKeys/scanStorageKeys.mjs，检查在 test/unit/dedicatus/contracts/storageKeys.test.ts。
 // 初始名单是 2026-11-08 的现状（297 个），同日补上渲染进程经 saveSettings 写进主进程的 12 个（扫描原先认不出）。src/stores 和 tuning 经 helper 拼出来的键由 D501（storeContract 快照）管，不在这里。
+//
+// 凭据的加密槽位不在这张表里：它们不是 localStorage / electron-store 的键，而是原生存
+// （FoliaSecureStore，Android Keystore 的 AES-GCM）里的一段加密文件，由 Web 侧经
+// src/nativeBridge/api/secureStore.js 按名字访问 —— 名字不是"存储键"，改名不受已发布键的约束。
+// 现有槽位：
+//   provider-netease-cookie / provider-qq-cookie / provider-kg-cookie —— 平台会话（H5）
+//   ai-keys        —— AI 的 API Key（H29，写入方是 settings/FoliaSettingsStore.kt）
+//   bodian-session —— 波点的 uid + token（H30）
 
 export const STORAGE_KEYS = [
     'main:AI_PROVIDER',
@@ -152,6 +160,7 @@ export const STORAGE_KEYS = [
     'web:folia.wallpaperFloatingFillSafeArea',
     'web:folia.wallpaperFloatingFontSize',
     'web:folia.wallpaperFloatingFontSizeMode',
+    'web:folia.wallpaperFloatingLyricsEnabled',
     'web:folia.wallpaperFloatingOffsetX',
     'web:folia.wallpaperFloatingOpacity',
     'web:folia.wallpaperFloatingOverSafeArea',
@@ -175,6 +184,10 @@ export const STORAGE_KEYS = [
     'web:foliaAppliedMarketBackground',
     'web:foliaAppliedMarketFont',
     'web:foliaCloudSettings.v2',
+    /* v3 已废弃并从表里删掉（c3a54bb67 直接从 v3 跳到 v4）：它多了写入令牌、地址是空串，
+       而 v3 时代开关默认是关的，存下的 `false` 多半是从没动过开关的人留下的默认值。
+       升级后一律按默认打开算，不搬 v3 的任何状态，所以没有迁移、也不留登记。 */
+    'web:foliaCloudSettings.v4',
     'web:foliaFontMarketChoice',
     'web:foliaMachineCode',
     'web:foliaMarketRotation',
@@ -289,6 +302,7 @@ export const STORAGE_KEYS = [
     'web:i18nextLng',
     'web:keyword_coloring_enabled',
     'web:kgPlatformMigration',
+    'web:kgVipSession',
     'web:kinetic_projects',
     'web:lanCastLastSpeaker',
     'web:lanCastWifiAutoEnabled',
@@ -319,6 +333,7 @@ export const STORAGE_KEYS = [
     'web:lxmusic_play_diag_v1',
     'web:lxmusic_playback_cache_v2',
     'web:lxmusic_preferences_v1',
+    'web:lxmusic_script_approvals_v1',
     'web:lxmusic_source_health_v1',
     'web:lxmusic_square_collections_v2',
     'web:lyric_auto_calibration',
@@ -383,7 +398,14 @@ export const STORAGE_KEYS = [
     'web:remote_control_text_shade',
     'web:remote_video_export_preset_values',
     'web:render_pixel_ratio',
-    'web:rhine-resume',
+    /*
+     * 这里原本有 'web:rhine-resume'（RhineLab 旧页面的续播标记），随 7b4362eea
+     * 「接入 RhinE 主题骨架，撤掉 RhineLabUI 静态页」一起废弃：读写它的代码整页删了，
+     * 全仓再没有引用。按 D507「确要废弃，做好迁移后再从登记表删掉」删掉这条（issue #526）。
+     *
+     * 用户 localStorage 里可能还留着这个值 —— 没人读，无害，不必清理。将来 RhinE 若要
+     * 恢复「续播位置」，用新键，不要复用这个名字，免得和残留的旧值撞上。
+     */
     'web:rhine_card_visualizer',
     'web:scene_id',
     'web:scene_options',

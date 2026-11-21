@@ -88,20 +88,33 @@ const readSessionRow = async (db: Env['FOLIA_SYNC_DB'], token: string): Promise<
     return row;
 };
 
-/** A session is valid only for the currently configured username and password. */
-export const readAdminSession = async (c: AdminContext): Promise<string | null> => {
-    const credentials = readAdminCredentials(c.env);
-    if (!credentials) return null;
-    const token = getCookie(c, ADMIN_COOKIE);
-    if (!token) return null;
-    const row = await readSessionRow(c.env.FOLIA_SYNC_DB, token);
+/**
+ * A session is valid only for the currently configured username and password.
+ *
+ * 实现只吃 `env` 与 cookie 值，不碰 Hono 上下文 —— 因为 `Context` 的 `Variables` 是逆变的，
+ * 一个「多带点 Variables」的上下文（AI 缓存写入准入那个中间件就是）传不进来。所以真正的
+ * 判断在 `readAdminSessionFor` 里，[readAdminSession] 只是把上下文拆成它要的两样东西。
+ */
+const readAdminSessionFor = async (env: Env, token: string | undefined): Promise<string | null> => {
+    const credentials = readAdminCredentials(env);
+    if (!credentials || !token) return null;
+    const row = await readSessionRow(env.FOLIA_SYNC_DB, token);
     if (!row) return null;
     if (row.username !== credentials.username || row.credential_tag !== await credentialTag(credentials)) {
-        await destroyAdminSession(c.env.FOLIA_SYNC_DB, token);
+        await destroyAdminSession(env.FOLIA_SYNC_DB, token);
         return null;
     }
     return row.username;
 };
+
+export const readAdminSession = (c: AdminContext): Promise<string | null> => (
+    readAdminSessionFor(c.env, getCookie(c, ADMIN_COOKIE))
+);
+
+/** 同上，给「上下文里还带别的 Variables」的中间件用（AI 缓存的写入准入）。 */
+export const readCacheWriterAdminSession = (c: Context<CacheWriterEnv>): Promise<string | null> => (
+    readAdminSessionFor(c.env, getCookie(c, ADMIN_COOKIE))
+);
 
 const sessionCookieOptions = (c: AdminContext) => ({
     httpOnly: true,
@@ -133,6 +146,87 @@ export const requireAdmin: MiddlewareHandler<AdminEnv> = async (c, next: Next) =
     if (!isSameOriginAdminMutation(c)) return c.json({ ok: false, error: 'invalid_origin' }, 403);
     if (!await readAdminSession(c)) return c.json({ ok: false, error: 'unauthorized' }, 401);
     await next();
+};
+
+/** 常量时间比较：按长度先短路会让攻击者从耗时里逐位试出凭证。 */
+const equalsConstantTime = (left: string, right: string): boolean => {
+    const a = new TextEncoder().encode(left);
+    const b = new TextEncoder().encode(right);
+    let diff = a.length ^ b.length;
+    for (let index = 0; index < a.length; index += 1) {
+        diff |= a[index] ^ (b[index] ?? 0);
+    }
+    return diff === 0;
+};
+
+/** 写缓存用的独立令牌（环境变量 `AI_CACHE_WRITE_TOKEN`），带头 `X-Folia-Cache-Token`。 */
+export const CACHE_WRITE_TOKEN_HEADER = 'X-Folia-Cache-Token';
+
+/**
+ * 写缓存的准入门（issue C6）。
+ *
+ * 云缓存是**全局共享**的一张表：一条写入会影响所有人拿到的主题。所以写入不能对公网开放 ——
+ * 谁能写、写的是谁的条目，必须有依据。两种准入，都代表「这台机器被记录在案」：
+ *
+ *  1. **管理员会话**：自己在面板里看得到、捞得回、删得掉那些条目的人，当然也能写。
+ *  2. **写入令牌**（`AI_CACHE_WRITE_TOKEN`）：给客户端签发的独立凭证。它和 `SYNC_TOKEN`
+ *     分开，是因为读缓存的人本来就没有 token；写和读用两把钥匙，泄露一把不至于两边都失守。
+ *     没配这个变量时只有管理员能写（安全默认：不配就不开）。
+ *
+ * 不在这里做同源校验：客户端是原生 App（OkHttp），没有 Origin，服务端也不该因此拒绝它。
+ */
+/**
+ * 写缓存这道门认定之后，把「是谁」放进上下文，写库时记进 `ai_cache.writer`。
+ *
+ * 记的是凭证的标识而不是凭证本身：令牌只记它的指纹前缀（够对上是哪把钥匙，又不至于
+ * 把钥匙抄进库和日志）；管理员记用户名。追责与吊销靠的就是这一列。
+ */
+export type CacheWriterEnv = { Bindings: Env; Variables: { cacheWriter: string } };
+/** 令牌的标识：SHA-256 前 12 位。同一个令牌每次算出来都一样，反推不出令牌。 */
+const tokenTag = async (token: string): Promise<string> => (
+    (await credentialTag({ username: 'cache-write-token', password: token })).slice(0, 12)
+);
+
+/**
+ * 见 `requireCacheWriter`：管理员会话或 `AI_CACHE_WRITE_TOKEN`，两种准入都代表「被记录在案」。
+ *
+ * 部署方两样都没配时**放行**，记成 `anonymous`。
+ *
+ * 这里原来是 503（「没开门」）。改成放行是因为云缓存本身是个**公开服务**：读完全开放，
+ * 写的内容还要过歌词核验与摘要，被人写坏的代价有限；而 503 让默认部署一点缓存都攒不起来，
+ * 等于这个功能不存在（用户反馈「云缓存拉取不了」）。
+ *
+ * 想收紧的部署方照旧配 `AI_CACHE_WRITE_TOKEN` 即可 —— 一旦配了，没带对令牌的请求一律 401。
+ * 所以「默认开放、配了才收紧」这条是明确的，不是漏掉的分支。
+ */
+export const requireCacheWriter: MiddlewareHandler<CacheWriterEnv> = async (c, next: Next) => {
+    c.header('Cache-Control', 'no-store');
+    const configured = String(c.env.AI_CACHE_WRITE_TOKEN ?? '').trim();
+    if (configured) {
+        const supplied = String(c.req.header(CACHE_WRITE_TOKEN_HEADER) ?? '');
+        if (supplied && equalsConstantTime(supplied, configured)) {
+            c.set('cacheWriter', `token:${await tokenTag(configured)}`);
+            await next();
+            return;
+        }
+    }
+    /* 令牌没给或不对，再看管理员会话：面板登录期间用 curl 写也照样放行。 */
+    const username = readAdminCredentials(c.env) ? await readCacheWriterAdminSession(c) : null;
+    if (username) {
+        c.set('cacheWriter', `admin:${username}`);
+        await next();
+        return;
+    }
+    /*
+     * 两样都没配：这是「部署方没开准入」，不是请求方的错 —— 放行，记为 anonymous。
+     * 落库的 writer 与摘要都带着这个标记，事后仍然看得出哪些条目来自开放部署。
+     */
+    if (!configured && !readAdminCredentials(c.env)) {
+        c.set('cacheWriter', 'anonymous');
+        await next();
+        return;
+    }
+    return c.json({ ok: false, error: 'unauthorized' }, 401);
 };
 
 /** Cheap housekeeping: expired rows are swept whenever the panel is opened. */

@@ -428,6 +428,8 @@ function classifyNeteasePlaybackRestriction(lastData, loginInfo) {
   return playbackRestriction('netease', 'url_unavailable', '网易云没有返回可播放地址，可能是版权、会员或地区限制', loggedIn ? 'switch_source' : 'login', { code, fee });
 }
 
+// 传入的 cookie 头里没有 MUSIC_U 时补读一次。读失败会抛 CookieReadError（见 cookies.js），
+// 不在这里吞掉 —— 吞掉的下场就是「桥超时」被当成「没登录」（H4）。
 async function ensureNeteaseCookieHeader(cookie) {
   let header = String(cookie || '');
   if (!parseCookieString(header).MUSIC_U) {
@@ -465,6 +467,10 @@ export async function getLoginInfo(cookie) {
    *   · 刚装好就凭空多出一个网易云账号；
    *   · 首页再也不是未登录那一屏（登录入口那圈高亮引导因此一直不出）。
    * 真登录（扫码 803）存下来的 cookie 里是有 MUSIC_U 的，下面那条兜底同理只认 MUSIC_U。
+   *
+   * 读失败（桥超时、插件异常）**必须**往外抛：以前它被吞成空串，于是桥抖一下就成了
+   * 「没登录」，accountRead 会把登录态判成失效并清掉本地凭据（H4）。空串在这里只剩
+   * 一个意思 —— 真的没有 MUSIC_U。
    */
   cookie = await ensureNeteaseCookieHeader(cookie);
   if (!hasNeteaseMusicU(cookie)) {
@@ -1153,6 +1159,29 @@ function cookieHeaderFromSetCookieList(list) {
   return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
 }
 
+const LOGIN_STATUS_PATH = '/api/w/nuser/account/get';
+
+/**
+ * 扫码确认之后，用「刚拿到的那份 cookie」问一次登录状态，把资料一起带回去（M1）。
+ *
+ * 为什么不直接调 `getLoginInfo()`：它先要把 cookie 写进罐子（`chrome.cookies.set` 是异步过桥的，
+ * 安卓上可能要等几毫秒到几秒），再从罐里读 MUSIC_U —— 以前那条读之所以读得到，是因为响应里
+ * 那份原始 Set-Cookie 被镜像成了一个 JS 能读的响应头。镜像头去掉之后，这里改为显式把这次
+ * 扫码拿到的 cookie 传下去，不再靠罐子是否已经落盘，也不再靠任何镜像头。
+ *
+ * 拿不到资料不改变结果：调用方本来就有「确认了但资料待补」的兜底。
+ */
+async function readLoginProfileWithConfirmedCookie(cookieText) {
+  if (!cookieText) return null;
+  try {
+    const body = await api(LOGIN_STATUS_PATH, {}, cookieText);
+    const extracted = extractAccountPayload(body);
+    return normalizeLoginInfo(extracted.profile, extracted.account, extracted.root);
+  } catch (_) {
+    return null;
+  }
+}
+
 /**
  * QR unikey/check must use EAPI (weapi often returns empty body in extension SW).
  * Do NOT route 800-803 through api() — it treats those codes as fatal errors.
@@ -1232,7 +1261,10 @@ export async function handleLoginQrCheck(key) {
       } catch (_) {}
     }
     const cookie = await getNeteaseCookie();
-    let info = await getLoginInfo(cookie);
+    // 资料用刚确认的那份 cookie 直接问一次（M1 之后不再有 JS 可读的 Set-Cookie 镜像头兜底）；
+    // 问不到就退回罐里那份，再不行交给下面「确认了但资料待补」的兜底。
+    const confirmed = await readLoginProfileWithConfirmedCookie(cookieText);
+    let info = confirmed && confirmed.loggedIn ? confirmed : await getLoginInfo(cookie);
     if (!info.loggedIn && cookieText) {
       info = {
         loggedIn: true,

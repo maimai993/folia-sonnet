@@ -88,6 +88,17 @@ class LyricsWallpaperService : WallpaperService() {
                 overlay = null
             }
             glView?.onDestroy()
+            /*
+             * 引擎要没了，两个字段都要置空（#M5）。
+             *
+             * 只清 overlay 不够：切换壁纸时系统会销毁旧引擎、再起新引擎（onCreate 重新赋值），
+             * 在那之前旧引用仍然挂在字段上。而 onDestroy 里这些调用**不该**再指着一个已经被
+             * GLSurfaceView 丢弃的渲染器 —— 例如系统晚到的 onVisibilityChanged 会走到
+             * `renderer?.setVideoActive(...)`，对着一个已经 release 的 MediaPlayer 操作。
+             * 置空之后这些晚到的回调自然变成空操作。
+             */
+            glView = null
+            renderer = null
             super.onDestroy()
         }
 

@@ -9,11 +9,11 @@ import { bodianProvider } from './bodian/bodianProvider';
 import { ytmProvider } from './ytm/ytmProvider';
 import { spotifyProvider } from './spotify/spotifyProvider';
 /*
- * 汽水有两套实现：fork 这份（`./qishuiProvider`，走本机 nativeBridge 的手机协议扫码，
- * 车机/手机两套协议都在这里）与上游 v0.7.22 新增的 `./qishui/qishuiProvider`（桌面端
- * electron + qishui-music-api 包那条）。**只能注册一份**，否则同 id 互相盖掉。
- * 保留 fork 这份：安卓包上没有 electron，且手机协议的扫码/Cookie 修复只在这边。
- * 上游那份连同 `test/unit/qishui/` 先留着（vite-env 的桥类型还引它），不注册。
+ * 汽水只注册这一份（`./qishuiProvider`，本机 nativeBridge 的手机协议扫码，车机 / 手机两套协议都在这里）。
+ * 上游 v0.7.22 那份（`./qishui/` 目录，桌面端 electron + 音乐接口包那条）没有注册，却因为公开接口那边借用它的取图
+ * 函数被拖进产物；现在取图跟着注册的这份，上游那份整份删除（issue M19），同 id 只剩一套。
+ *
+ * 洛雪那一份照旧注册。
  */
 import { qishuiProvider } from './qishuiProvider';
 import { appleMusicProvider } from './appleMusic/appleMusicProvider';

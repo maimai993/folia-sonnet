@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { cors } from 'hono/cors';
 import { bearerAuth } from 'hono/bearer-auth';
+import { bodyLimit } from 'hono/body-limit';
 import adminAuthRoutes, {
   pruneExpiredSessions,
   readAdminSession,
@@ -45,10 +47,13 @@ export type Env = {
   /** Where the font bytes go. Absent means "fall back to D1". See src/fontBlobs.ts. */
   FONT_BLOBS?: FontBlobStore;
   /**
-   * 上传时拿平台上的歌词原文件重算哈希这道校验的开关。设成 `off` 就只留空数据与
-   * 合规那两道 —— 第三方接口整片不通时的退路。默认开着。
+   * 写 AI 云缓存的独立令牌（请求头 `X-Folia-Cache-Token`）。没配时只有管理员会话能写 ——
+   * 安全默认是「不配就不开」。见 admin.ts 的 `requireCacheWriter`。
+   *
+   * 这里**不再有** `AI_CACHE_VERIFY` 这类「关掉核验」的开关：核验不可用就拒写，
+   * 关闭开关等于让任何人绕过它（issue C6）。
    */
-  AI_CACHE_VERIFY?: string;
+  AI_CACHE_WRITE_TOKEN?: string;
   /** Database file size in bytes; Workers have no filesystem, so this stays unset there. */
   readDatabaseBytes?: () => number | null;
 };
@@ -138,6 +143,16 @@ const initializeSchema = async (db: D1Database) => {
       )
     `),
     // AI cloud cache: keyed by kind + MD5 of the lyric file.
+    /*
+     * 来源与内容摘要（issue C6）。
+     *
+     * 缓存是全局共享的：一条被冒名写入的条目会喂给所有拉到它的播放器。所以每条都要能回答
+     * 两个问题 ——「谁写的」（writer，准入凭证的标识，追责与吊销的依据）和「内容有没有被改过」
+     * （payload_digest = 键 + 平台公钥 + 来源 + 内容一起算的 SHA-256，见 aiCacheDigest.ts）。
+     *
+     * 两列都可空：本改动之前写进去的老条目没有它们，读的时候按「无摘要」处理（客户端不采信），
+     * 不阻塞读取、也不必回填 —— 谁需要就重新生成一次。
+     */
     db.prepare(`
       CREATE TABLE IF NOT EXISTS ai_cache (
         kind TEXT NOT NULL,
@@ -151,6 +166,8 @@ const initializeSchema = async (db: D1Database) => {
         hits INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        writer TEXT,
+        payload_digest TEXT,
         PRIMARY KEY (kind, cache_key)
       )
     `),
@@ -177,8 +194,8 @@ const initializeSchema = async (db: D1Database) => {
     /*
      * 每次被覆盖之前的那一版。
      *
-     * 上传是公开的（没填 Key 的人也要能推），所以「有人用空数据把别人做好的那条盖掉」
-     * 是迟早会发生的事。留着旧版不只是能回滚：真被盖了，后台还能把好的那版捞回来。
+     * 上传现在要准入（issue C6），但「有人用一份能看却很糟的主题把别人做好的那条盖掉」
+     * 仍然是真的写入者能做出来的事。留着旧版不只是能回滚：真被盖了，后台还能把好的那版捞回来。
      * 每个键最多留 MAX_CACHE_BACKUPS 份，超了删最旧的 —— 缓存条目本身就不大，
      * 但同一个键被反复覆盖时不该无限长。
      */
@@ -195,7 +212,9 @@ const initializeSchema = async (db: D1Database) => {
         platform TEXT,
         hits INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
-        archived_at TEXT NOT NULL
+        archived_at TEXT NOT NULL,
+        writer TEXT,
+        payload_digest TEXT
       )
     `),
     // 每次命中记一行。`ai_cache.hits` 只是个累加器，看不出「什么时候命中的」，
@@ -262,6 +281,23 @@ const initializeSchema = async (db: D1Database) => {
       }
     }
   }
+  /*
+   * 来源与摘要两列（issue C6 之后才有的）。和上面 `platform` 同样是「升级时补列」：
+   * 老库不重建、不丢数据；没有这两列的老条目读出来是空串，客户端按「无摘要」处理。
+   * 备份表也一起补，覆盖时才能把上一版的来源一起留档、追责时看得到是换成了谁的那一版。
+   */
+  for (const table of ['ai_cache', 'ai_cache_backups']) {
+    const columns = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+    for (const column of ['writer', 'payload_digest']) {
+      if (columns.results?.some((entry) => entry.name === column)) continue;
+      try {
+        await db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`).run();
+      } catch (error) {
+        const after = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+        if (!after.results?.some((entry) => entry.name === column)) throw error;
+      }
+    }
+  }
   await db.prepare('CREATE INDEX IF NOT EXISTS idx_ai_cache_song_group ON ai_cache(song_title, updated_at, hits, cache_key, platform)').run();
   await ensureAdminSessionSchema(db);
 };
@@ -323,8 +359,53 @@ const app = new Hono<{ Bindings: Env }>();
 const publicCors = cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Authorization', 'Content-Type'],
+  /*
+   * `X-Folia-Cache-Token` 是写 AI 云缓存用的独立令牌（issue C6）。它必须出现在这里：
+   * 网页版跨源写缓存时，浏览器的预检只放行这张表里列出的头，少一个就会被挡下来 ——
+   * 表现是「网页版永远推不上去」，而原生桥那条路不受影响，最难查。
+   */
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Folia-Cache-Token'],
 });
+/*
+ * 跨源写请求的来源校验（issue M36）。
+ *
+ * 公开读接口对谁都开放 —— 那是这个服务的本意，网页版、桌面版都要能直接读。
+ * 但写接口不一样：默认部署（没配 AI_CACHE_WRITE_TOKEN、也没配管理员）时
+ * `requireCacheWriter` 是放行的（云缓存是公开服务，见 admin.ts 里那段说明）。
+ * 通配 CORS 叠上那个放行，就等于**任意网页都能以用户浏览器为跳板写缓存**。
+ *
+ * 所以这里只收紧写：允许同源（网页版自身），或**没有 Origin 头**的请求 ——
+ * 原生桥走的 OkHttp 与 curl 都不带 Origin，那是合法调用方。
+ * 带了别的 Origin 就拒，预检也会一并被挡（预检是 OPTIONS，同样过这里）。
+ */
+const isAllowedPublicWriteOrigin = (c: Context<{ Bindings: Env }>): boolean => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(c.req.method)) return true;
+  const origin = c.req.header('Origin');
+  if (!origin) return true;
+  /* Origin 必须与自己页面同源；反代部署用 ADMIN_PUBLIC_ORIGIN 明确指定对外源。 */
+  const selfOrigin = readAdminPublicOrigin(c) ?? new URL(c.req.url).origin;
+  if (origin !== selfOrigin) return false;
+  return c.req.header('Sec-Fetch-Site') !== 'cross-site';
+};
+
+/*
+ * 请求体上限（issue M34）：同步的 settings 与 themes 是 JSON，正常载荷是几 KB，
+ * 这里给到 2MB 是为了留足余量 —— 一次 500 条主题的批量写入也远低于它。
+ *
+ * 限制挂在公开网之前，所以 Bearer 那侧也会一起被挡住：以前 `/themes/put` 能收任意
+ * 大的数组，持令牌的人（或令牌泄漏后）可以一次把服务端的存储配额写满。
+ *
+ * 公开接口各有自己的更严上限，这里不会把它们的 413 顶掉：
+ * 云缓存 PUT 是 128KB（`aiCache.ts` 的 `MAX_REQUEST_BYTES`），字体上传是 40MB/2MB
+ * （`fonts.ts` 的 `MAX_FONT_BYTES` / `MAX_PREVIEW_BYTES`），都排在前面。
+ */
+const MAX_SYNC_BODY_BYTES = 2 * 1024 * 1024;
+
+app.use('*', bodyLimit({
+  maxSize: MAX_SYNC_BODY_BYTES,
+  onError: c => c.json({ ok: false, error: 'payload_too_large' }, 413),
+}));
+
 app.use('*', async (c, next) => {
   if (c.req.path === '/admin' || c.req.path.startsWith('/admin/')) {
     c.header('Cache-Control', 'no-store');
@@ -332,6 +413,9 @@ app.use('*', async (c, next) => {
     if (!isSameOriginAdminMutation(c)) return c.json({ ok: false, error: 'invalid_origin' }, 403);
     await next();
     return;
+  }
+  if (!isAllowedPublicWriteOrigin(c)) {
+    return c.json({ ok: false, error: 'invalid_origin' }, 403);
   }
   return publicCors(c, next);
 });
@@ -583,6 +667,25 @@ api.put('/settings', async (c) => {
     if (!written) return c.json({ ok: false, error: 'settings_conflict' }, 409);
     return c.json({ ok: true, accepted: true, ...await settingsConfirmation(written) });
   }
+  /*
+   * 老客户端路径：不携带 expectedRevision，只能按时间戳做守卫（issue M37）。
+   *
+   * 这里原来不管有没有真的写进去都返回 `{ ok: true }` 并记一条「已更新」——时钟回拨、
+   * 多设备并发或网络重放下设置被静默丢掉，用户以为存上了，日志还写着成功，排查时会被误导。
+   *
+   * 判据显式查一次现有时间戳，而不是看 `run()` 的 meta.changes：本地测试用的 D1 模拟器
+   * 不返回 changes，靠它判断的话这条路径在测试里根本走不到。查询与写入都在同一条 SQL 守卫
+   * 下，但判断「会不会写」这次只需一个读，成本可以接受。
+   */
+  const existing = await readSettingsRow(c.env.FOLIA_SYNC_DB);
+  if (existing && body.updatedAt < existing.updated_at) {
+    console.log(`[Sync] Settings write skipped as stale (incoming ${body.updatedAt} < stored ${existing.updated_at})`);
+    /*
+     * 409 而不是 200：老客户端看到非 2xx 会报「同步失败」，这正是实情 —— 这次确实没存上。
+     * 同时带上 `stale: true` 与现有时间戳，新客户端能据此判断是「对方更新」而非故障。
+     */
+    return c.json({ ok: false, error: 'settings_stale', stale: true, updatedAt: existing.updated_at }, 409);
+  }
   await c.env.FOLIA_SYNC_DB
     .prepare(`
       INSERT INTO settings (key, value_json, updated_at)
@@ -594,7 +697,7 @@ api.put('/settings', async (c) => {
     `)
     .bind('visual', JSON.stringify(body), body.updatedAt)
     .run();
-  
+
   console.log(`[Sync] Updated settings (timestamp: ${body.updatedAt})`);
   return c.json({ ok: true });
 });

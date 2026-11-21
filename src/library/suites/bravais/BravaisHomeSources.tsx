@@ -92,15 +92,18 @@ export const BravaisHomeOnline: React.FC<BravaisHomeSourceCommonProps & {
     // 未登录 / 无账户 / 解析中：墙空着，缝里说原因（平台切换与登录在 B10 的账户位里）。
     // fb3（用户实测）：未登录时不再显示「先搜几首喜欢的歌试试看」（grid / TUI 仍用 home.guestTitle），缝里只有
     // 「连接在线平台」入口；登录过期仍要说。
+    // H4：问不到平台（网络 / 桥故障）与「没登录」分开说 —— 那种情况用户其实还登录着。
     const emptyMessage = online.accountView === 'guest'
-        ? (online.needsRelogin ? t('status.loginExpired') : undefined)
+        ? (online.unreachable
+            ? t('libraryBravaisHome.wallHint.unreachableTitle')
+            : (online.needsRelogin ? t('status.loginExpired') : undefined))
         : online.accountView === 'resolving' ? t('home.loadingLibrary') : list.emptyMessage;
     // 未登录时墙不再整面空白：墙面上写一段背景说明（连接在线平台，或者去本地页签导入文件夹）。
     const localTab = availableLocalTabLabel(common.chrome.tabs);
-    const { accountView, needsRelogin, providerLabel } = online;
+    const { accountView, needsRelogin, providerLabel, unreachable } = online;
     const wallHint = useMemo(
-        () => onlineWallHint({ accountView, needsRelogin, providerLabel }, localTab, t),
-        [accountView, localTab, needsRelogin, providerLabel, t],
+        () => onlineWallHint({ accountView, needsRelogin, providerLabel, unreachable }, localTab, t),
+        [accountView, localTab, needsRelogin, providerLabel, unreachable, t],
     );
     // B10：账户位里的平台切换（account-select / account-logout）。
     const account = useBravaisHomeAccount(accountController, online);

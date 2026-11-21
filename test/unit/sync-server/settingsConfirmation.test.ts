@@ -76,12 +76,30 @@ describe('settings confirmation through real Hono/SQLite', () => {
         expect(await serverValue()).toBe('old-client');
     });
 
-    it('reproduces the original future-timestamp no-op ACK on the legacy path', async () => {
+    /*
+     * 老客户端路径（issue M37）。
+     *
+     * 这条原来叫「reproduces the original future-timestamp no-op ACK」，断言的是 bug 本身：
+     * 更旧的时间戳被 SQL 守卫挡下、数据实际没写，却回 `{ ok: true }`。等于把「静默丢数据」
+     * 钉成了规格。现在回执反映真实结果：409 + `settings_stale`。
+     * 携带 expectedRevision 的 CAS 路径不变（上面那条 keep-local）。
+     */
+    it('legacy path reports a stale timestamp as 409 instead of a silent ok', async () => {
         await legacyWrite('remote-future');
         const response = await request('/settings', { method: 'PUT', body: JSON.stringify(record('chosen-local', '2026-01-01T00:00:00Z')) });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ ok: false, error: 'settings_stale', stale: true });
+        /* 数据照旧没被写进去 —— 变的是回执不再骗人。 */
+        expect(await serverValue()).toBe('remote-future');
+    });
+
+    /* 相等的时间戳仍然写入（`>=` 守卫不变），别把正常覆盖也挡了。 */
+    it('legacy path still writes when the timestamp matches', async () => {
+        await legacyWrite('first');
+        const response = await request('/settings', { method: 'PUT', body: JSON.stringify(record('second', '2099-01-01T00:00:00.000Z')) });
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({ ok: true });
-        expect(await serverValue()).toBe('remote-future');
+        expect(await serverValue()).toBe('second');
     });
 
     it('keep-local actually writes over a future clock and only then saves a baseline', async () => {

@@ -139,14 +139,20 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
     return JNI_VERSION_1_6;
 }
 
-// 起 Node：参数是宿主脚本路径、home 目录、userData 目录、临时目录。
+// 起 Node：参数是宿主脚本路径、home 目录、userData 目录、临时目录、信任根目录。
+//
+// 信任根不在 userData 里：userData 落在外部存储（getExternalFilesDir），模组的 fs 能直接
+// 改写；启用状态与内容摘要必须待在模组写不到的地方（应用数据目录 /data 下），所以由 Java
+// 单独传进来，经环境变量 FOLIA_TRUST_DIR 交给宿主脚本。
 JNIEXPORT void JNICALL
 Java_top_izuna_foliamajor_mods_FoliaNodeRuntime_nativeStart(
-        JNIEnv* env, jclass, jstring entryPath, jstring homeDir, jstring userDataDir, jstring cacheDir) {
+        JNIEnv* env, jclass, jstring entryPath, jstring homeDir, jstring userDataDir, jstring cacheDir,
+        jstring trustDir) {
     const char* entry = env->GetStringUTFChars(entryPath, nullptr);
     const char* home = env->GetStringUTFChars(homeDir, nullptr);
     const char* userData = env->GetStringUTFChars(userDataDir, nullptr);
     const char* tmp = env->GetStringUTFChars(cacheDir, nullptr);
+    const char* trust = trustDir == nullptr ? nullptr : env->GetStringUTFChars(trustDir, nullptr);
 
     // Android 上这些环境变量决定 Node 去哪儿找家目录、临时文件和内置模块。
     setenv("HOME", home, 1);
@@ -156,6 +162,10 @@ Java_top_izuna_foliamajor_mods_FoliaNodeRuntime_nativeStart(
     setenv("NODE_PATH", userData, 1);
     // Node 18 默认用 OpenSSL 3；nodejs-mobile 带的 OpenSSL 1.1 走这个开关。
     setenv("OPENSSL_CONF", "", 1);
+
+    if (trust != nullptr) {
+        setenv("FOLIA_TRUST_DIR", trust, 1);
+    }
 
     folia_node_set_data_dir(userData);
     folia_node_set_callbacks(on_node_message, on_node_ready, on_node_failure);
@@ -169,6 +179,9 @@ Java_top_izuna_foliamajor_mods_FoliaNodeRuntime_nativeStart(
     env->ReleaseStringUTFChars(homeDir, home);
     env->ReleaseStringUTFChars(userDataDir, userData);
     env->ReleaseStringUTFChars(cacheDir, tmp);
+    if (trust != nullptr) {
+        env->ReleaseStringUTFChars(trustDir, trust);
+    }
 
     if (status != 0) {
         on_node_failure("Node 退出，状态码非 0");

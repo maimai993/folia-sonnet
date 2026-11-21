@@ -108,12 +108,24 @@ export const reportModsStartAlive = async (): Promise<void> => {
     }
 };
 
-export const setModEnabled = async (modId: string, enabled: boolean): Promise<ModSetEnabledResult> => {
+/*
+ * 启用/关闭一个模组。
+ *
+ * 桌面端：主进程弹出原生确认框，再按当前内容摘要写授权记录。
+ * 安卓：宿主没有原生弹窗，确认在渲染端做（mods/manager 的确认框），用户点「仍要启用」
+ * 之后把确认框里展示的那份摘要带过来；宿主会再算一次摘要比对，对不上就拒绝启用
+ * （enable-digest-mismatch）。不带 digest 的启用，安卓宿主一律拒绝。
+ */
+export const setModEnabled = async (
+    modId: string,
+    enabled: boolean,
+    digest?: string,
+): Promise<ModSetEnabledResult> => {
     const api = bridge();
     if (!api) {
         return { ok: false, error: 'no-electron-bridge', mods: [] };
     }
-    const response = await api.setModEnabled(modId, enabled);
+    const response = await api.setModEnabled(modId, enabled, digest);
     return {
         ok: Boolean(response?.ok),
         error: response?.error,

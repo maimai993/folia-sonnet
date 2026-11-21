@@ -32,6 +32,19 @@ const state = vi.hoisted(() => ({
     pushed: [] as unknown[],
 }));
 
+/*
+ * 一条**会被采信**的云端条目（issue C6）：客户端复算 `payloadDigest`，绑的是
+ * `[verifyKey, kind, key, writer, payloadJson]`。这里照同一套规则算。
+ */
+const signedEntry = async (kind: string, key: string, payload: unknown) => {
+    const verifyKey = 'folia-cache-digest-v1';
+    const writer = 'token:synthetic';
+    const text = JSON.stringify([verifyKey, kind, key, writer, JSON.stringify(payload)]);
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    const payloadDigest = Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return { payload, writer, payloadDigest, verifyKey };
+};
+
 vi.mock('@/services/aiNativeFetch', () => ({
     createAiFetch: () => async (input: unknown, init?: RequestInit) => {
         const method = (init?.method || 'GET').toUpperCase();
@@ -59,13 +72,16 @@ vi.mock('@/services/aiNativeFetch', () => ({
                 }),
             } as unknown as Response;
         }
-        /* GET = 拉缓存 */
+        /* GET = 拉缓存。摘要要按真实地址里的 kind 与 key 算，客户端就是拿这两样复算的。 */
+        const segments = String(input).split('?')[0].split('/').filter(Boolean);
+        const key = segments[segments.length - 1] ?? '';
+        const kind = segments[segments.length - 2] ?? 'theme';
         return {
             ok: true,
             status: 200,
             json: async () => (state.payload === null
                 ? { hit: false }
-                : { hit: true, entry: { payload: state.payload } }),
+                : { hit: true, entry: await signedEntry(kind, key, state.payload) }),
         } as unknown as Response;
     },
 }));
@@ -112,9 +128,14 @@ beforeEach(async () => {
      * 这件事只有在这种组合下才存在。不写死这一行，本文件验的就不是它想验的那条路了。
      */
     localStorage.setItem('foliaAiProviderSettings', JSON.stringify({ provider: 'gemini', geminiApiKey: '' }));
-    localStorage.setItem('foliaCloudSettings.v2', JSON.stringify({
+    localStorage.setItem('foliaCloudSettings.v3', JSON.stringify({
         enabled: true,
         baseUrl: 'https://cloud.test',
+        /*
+         * 带写入令牌：C6 之后没有令牌就是只读，PUT 会被 `pushAiCloudCache` 直接跳过，
+         * 「回传时别抹掉云端已有的一半」这条就验不到了。
+         */
+        writeToken: 'synthetic-write-token',
     }));
     /*
      * 假歌只填导演真正会读的那几个字段（id / name / artists 用来算 songKey，

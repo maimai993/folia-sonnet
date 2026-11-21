@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- 改编自 RhinE（https://github.com/ericzhang12111-cell/RhinE，v2.1.1，MIT）。本文件由 Folia 编写。 -->
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b0b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="description"
+      content="RhinE — An Audio Archive，莱茵生命主题，改编自 ericzhang12111-cell/RhinE 2.1.1（MIT）。"
+    />
+    <title>RHINELAB · AUDIO ARCHIVE</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./adapt/rhineFallback.css" />
+    <script src="./adapt/rhineHostConfig.js"></script>
+    <script src="./host-entry.js"></script>
+  </head>
+  <body>
+    <!--
+      The shell the skeleton paints into. Upstream draws every view into foobar2000 panels
+      (`js/frame.js` places them); here the frame is one element and the views stack inside it.
+      Nothing below is upstream markup: it is the shortest thing a skin can hang off.
+    -->
+    <main id="rhine-root" data-rhine-view="archive" aria-live="polite">
+      <header class="rhine-header">
+        <span class="rhine-emblem" aria-hidden="true"></span>
+        <span class="rhine-identity">RHINE LAB</span>
+        <span class="rhine-subtitle">AN AUDIO ARCHIVE</span>
+      </header>
+      <section class="rhine-stage" data-rhine-stage="archive">
+        <!--
+          Slot for the archive view. The fallback skin (adapt/rhineFallback.css) draws the placeholder
+          strips and the "asset package not downloaded" notice here; it stays readable with no JS.
+        -->
+        <div id="rhine-archive" class="rhine-slot">
+          <p class="rhine-placeholder">AUDIO ARCHIVE</p>
+        </div>
+      </section>
+      <footer class="rhine-status">
+        <span id="rhine-status-text">ARCHIVE · SYNTHESIZE INFORMATION ANALYSIS</span>
+      </footer>
+    </main>
+  </body>
+</html>

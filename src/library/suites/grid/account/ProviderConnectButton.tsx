@@ -1,9 +1,10 @@
-import { useId, useRef, useState } from 'react';
+﻿import { useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import { useReducedMotionFor } from '../../../../hooks/useReducedMotionFor';
 import { pillChromeClassesFor as gridChromeClassesFor } from '../../../../components/shared/pillChrome';
-import { getProviderAppIcon, PROVIDER_APP_ICONS } from '../../../../assets/providers/appIcons';
+import { hasPlatformIcon } from '../../../../components/shared/platformIcons/registry';
+import { PlatformIcon } from '../../../../components/shared/platformIcons/PlatformIcon';
 import type { ProviderAccountSummary } from '../../../../types/onlineMusic';
 
 // src/library/suites/grid/account/ProviderConnectButton.tsx
@@ -19,8 +20,8 @@ type Props = {
     onSelect: (provider: ProviderAccountSummary) => void;
 };
 
-// 有本尊图的平台（netease/qq/kugou/bodian/feiniu）直接亮 App 图标；Mod 音源等没图的
-// 回落名称首字的纯色圆形徽章，与切换器的做法一致。
+// 有自绘图形的平台（components/shared/platformIcons 登记过的那几家）直接亮图形；Mod 音源等
+// 没登记的回落名称首字的纯色圆形徽章，与切换器的做法一致。
 const fallbackBadge = (provider: ProviderAccountSummary, isDaylight: boolean): [string, string] => ([
     Array.from(provider.shortName || provider.displayName)[0] || '?',
     isDaylight ? 'bg-zinc-500' : 'bg-zinc-600',
@@ -55,7 +56,7 @@ export default function ProviderConnectButton({ providers, isDaylight, getAction
                 const configured = provider.availability.configured;
                 const label = getActionLabel(provider);
                 const [badge, color] = fallbackBadge(provider, isDaylight);
-                const hasAppIcon = provider.providerId in PROVIDER_APP_ICONS;
+                const hasArt = hasPlatformIcon(provider.providerId);
                 return (
                     <motion.button
                         key={provider.providerId}
@@ -87,20 +88,19 @@ export default function ProviderConnectButton({ providers, isDaylight, getAction
                                 className={`absolute inset-0 rounded-full ${chrome.activePill}`}
                             />
                         )}
-                        {hasAppIcon ? (
+                        {hasArt ? (
                             /*
-                             * App 本尊图直接铺满徽章位，不必再套彩色圆底。
-                             * 这里显式裁成圆形：飞牛音乐的图标带黑色方形背景，不裁会露出直角，
-                             * 其他平台图标虽然本身有圆角/透明，一起裁也不影响。
+                             * 自绘图形直接铺满徽章位（圆形裁切），不必再套彩色圆底：
+                             * 图形自己就带着识别色的底板。
                              */
-                            <img
-                                src={getProviderAppIcon(provider.providerId)}
-                                alt=""
+                            <span
                                 aria-hidden="true"
-                                className={`relative h-7 w-7 shrink-0 rounded-full object-contain transition-opacity ${
+                                className={`relative h-7 w-7 shrink-0 overflow-hidden rounded-full transition-opacity ${
                                     !configured ? 'opacity-35 grayscale' : active ? '' : 'opacity-90'
                                 }`}
-                            />
+                            >
+                                <PlatformIcon platformId={provider.providerId} size={28} round className="h-full w-full" />
+                            </span>
                         ) : (
                             <span
                                 aria-hidden="true"

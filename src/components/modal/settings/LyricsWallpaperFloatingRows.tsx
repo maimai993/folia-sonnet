@@ -14,6 +14,12 @@ import { resetFloatingLyricsWindow } from '../../../platform/foliaWallpaper';
 const LyricsWallpaperFloatingRows: React.FC<{ isDaylight: boolean }> = ({ isDaylight }) => {
     const { t } = useTranslation();
     const dividerClass = settingsDividerClassFor(isDaylight);
+    // 这颗小窗自己的开关。以前它跟着「壁纸样式 = 精简」走，没有自己的开关，
+    // 现在拆出来了：下面所有行都随它出现和收起。
+    const wallpaperFloatingLyricsEnabled = useVisualizerSettingsStore(
+        state => state.wallpaperFloatingLyricsEnabled);
+    const onToggleWallpaperFloatingLyricsEnabled = useVisualizerSettingsStore(
+        state => state.handleToggleWallpaperFloatingLyricsEnabled);
     // 「精简」样式那颗悬浮歌词小窗的底色浓度。单独一根滑条，不复用叠层那根。
     const wallpaperFloatingOpacity = useVisualizerSettingsStore(state => state.wallpaperFloatingOpacity);
     const onSetWallpaperFloatingOpacity = useVisualizerSettingsStore(state => state.handleSetWallpaperFloatingOpacity);
@@ -65,8 +71,19 @@ const LyricsWallpaperFloatingRows: React.FC<{ isDaylight: boolean }> = ({ isDayl
 
     return (
         <>
+            {/* 小窗的独立开关。关掉之后下面整段都收起 —— 那些滑条调的是一个
+                不存在的窗口，留着只会让人以为没生效。 */}
+            <SettingsRow
+                option={WALLPAPER.floatingEnabled}
+                dividerClass={dividerClass}
+                control={(
+                    <Toggle checked={wallpaperFloatingLyricsEnabled} onChange={onToggleWallpaperFloatingLyricsEnabled} />
+                )}
+            />
             {/* 小窗的底色浓度。单独一根：它是另一层系统窗口，
                 跟壁纸背景那根、叠层那根都无关。 */}
+            <Reveal when={wallpaperFloatingLyricsEnabled}>
+                <>
             <SettingsRow
                 option={WALLPAPER.floatingOpacity}
                 dividerClass={dividerClass}
@@ -251,6 +268,8 @@ const LyricsWallpaperFloatingRows: React.FC<{ isDaylight: boolean }> = ({ isDayl
                     </Button>
                 )}
             />
+                </>
+            </Reveal>
         </>
     );
 };

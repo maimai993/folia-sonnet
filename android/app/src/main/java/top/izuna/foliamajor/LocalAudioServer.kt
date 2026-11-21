@@ -410,15 +410,43 @@ class LocalAudioServer(context: Context) {
     private var _port = 0
 
     /**
-     * 投送期间才打开：允许局域网里的音响来取 `/remote-audio/` 转发地址。
-     * 默认关闭时，非回环连接一律在 handle() 里被挡掉，外面看和只监听 127.0.0.1 一样。
+     * 投送期间的局域网音频租约（见 LanCastLeaseRegistry）。
+     *
+     * 过去这里是一个全局布尔 `allowLanClients`：打开之后，同网段任何设备拿到或猜到
+     * `/remote-audio/<token>` 就能匿名拉走正在投送的音频，而且只有 Web 层一处调用能关。
+     * 现在换成带截止时间的一次性租约：局域网连接除了要「本次会话签发的 token」，
+     * 还要过来源校验（见 handle()），租约到期或收回即失效。
+     *
      * 本地文件 / 媒体缓存 / 导入音频这几路**永远**不对局域网开放。
      */
-    @Volatile
-    private var allowLanClients = false
+    private val lanCastLeases = LanCastLeaseRegistry()
 
-    fun setLanClientsAllowed(allowed: Boolean) {
-        allowLanClients = allowed
+    /** 是否处于投送期（局域网音频通道已打开）。 */
+    fun isLanCastActive(): Boolean = lanCastLeases.current() != null
+
+    /** 本次投送签发的凭证；没开投送时返回 null。 */
+    fun currentLanCastLease(): LanCastLeaseRegistry.Lease? = lanCastLeases.current()
+
+    /**
+     * 打开（或续期）投送租约，返回本次的凭证。
+     *
+     * 幂等：投送期间反复调用不换凭证，只顺延截止时间 —— 切歌 / 换音响都会再 prepare 一次，
+     * 每次都签新的会让音响手上那份立刻失效。
+     */
+    fun openLanCastLease(): LanCastLeaseRegistry.Lease {
+        val lease = lanCastLeases.ensure()
+        Log.i(TAG, "lan cast lease opened, expires in " + ((lease.expiresAtMillis - System.currentTimeMillis()) / 1000) + "s")
+        return lease
+    }
+
+    /** 收回投送租约：局域网设备重新连不进来，本机回环播放不受影响。 */
+    fun releaseLanCastLeases() {
+        if (lanCastLeases.current() == null) {
+            lanCastLeases.release()
+            return
+        }
+        lanCastLeases.release()
+        Log.i(TAG, "lan cast lease released")
     }
 
     @Synchronized
@@ -563,8 +591,68 @@ class LocalAudioServer(context: Context) {
         }
     }
 
-    private fun handle(socket: Socket) {
-        try {
+    /**
+     * 局域网来源的准入：来源 + 租约 + 本次签发的 token，三者缺一不可。
+     *
+     * 为什么要来源校验：光有 token 还不够。响应带 `Access-Control-Allow-Origin: *`
+     * 且接口无凭据时代，用户在浏览器里打开的任意页面都能直接 fetch 这条 URL 拿到字节。
+     * 这里要求来源地址是局域网私有段（伪造的 SSDP 应答、公网扫描、组播转发都排除），
+     * 并且拒绝带 `Origin` 头的请求 —— 浏览器跨源读流一定带 Origin，音响直接 GET 不带。
+     */
+    private fun admitsLanRequest(remoteHost: String?, headers: Map<String, String>, token: String?): Boolean {
+        if (token == null) return false
+        if (!isLanClientAddress(remoteHost)) {
+            // 来源地址只记网段：完整 IP 能拼出用户的局域网拓扑（issue M24）。
+            Log.w(TAG, "lan cast request from non-LAN client: " + LanCastLogText.hostHint(remoteHost))
+            return false
+        }
+        // 浏览器跨源请求一定带 Origin（同源 iframe 除外，那也已经不是「任意网页」）；
+        // 音响的 DLNA 客户端直接 GET，不发 Origin。
+        if (headers.containsKey("origin") || headers.containsKey("sec-fetch-mode")) {
+            Log.w(TAG, "lan cast request with browser origin header")
+            return false
+        }
+        if (!lanCastLeases.admitsLanToken(token)) {
+            Log.w(TAG, "lan cast request with a token outside the current lease")
+            return false
+        }
+        return true
+    }
+
+    /** 来源是不是局域网单播地址：与本机同段，或至少在一个私有段里。 */
+    /**
+     * 被拒绝的局域网请求，路径该怎么进日志：`/remote-audio/…` 那一路的后面就是本次签发的令牌，
+     * 只记路径前缀；别的路径原样记（本地曲库 / 缓存那些不是凭证，排查要靠它）。
+     */
+    private fun pathHintOf(path: String): String =
+        if (path.startsWith(REMOTE_AUDIO_PATH_PREFIX)) REMOTE_AUDIO_PATH_PREFIX + "…" else path
+
+    private fun isLanClientAddress(host: String?): Boolean {
+        if (host.isNullOrEmpty()) return false
+        val address = try {
+            java.net.InetAddress.getByName(host)
+        } catch (error: Exception) {
+            return false
+        }
+        if (address.isAnyLocalAddress || address.isMulticastAddress || address.isLoopbackAddress) return false
+        if (address is java.net.Inet4Address) {
+            val b = address.address
+            val first = b[0].toInt() and 0xFF
+            val second = b[1].toInt() and 0xFF
+            if (first == 10) return true
+            if (first == 172 && second in 16..31) return true
+            if (first == 192 && second == 168) return true
+            return false
+        }
+        if (address is java.net.Inet6Address) {
+            // 只认唯一本地地址 fc00::/7 与链路本地 fe80::/10。
+            val b = address.address
+            return (b[0].toInt() and 0xFE) == 0xFC || (b[0].toInt() == 0xFE.toByte().toInt() && (b[1].toInt() and 0xC0) == 0x80)
+        }
+        return false
+    }
+
+    private fun handle(socket: Socket) {        try {
             socket.use { client ->
                 BufferedInputStream(client.getInputStream()).use { input ->
                     BufferedOutputStream(client.getOutputStream()).use { output ->
@@ -589,16 +677,30 @@ class LocalAudioServer(context: Context) {
                         val queryString = if (queryAt >= 0) rawPath.substring(queryAt + 1) else ""
                         val path = if (queryAt >= 0) rawPath.substring(0, queryAt) else rawPath
                         /*
-                         * 投送时的对外边界：必须「投送已打开」且只访问 `/remote-audio/` 转发地址，
-                         * 才放局域网里的音响进来。本地曲库、媒体缓存、导入文件这几路永远拒绝，
-                         * 免得为了投一首歌把整个手机曲库暴露到同一个 WiFi 上。
+                         * 投送时的对外边界，三层同时成立才放行（见 LanCastLeaseRegistry）：
+                         *  1. 正在投送（租约未过期、未收回）—— 收回之后同网段第二台设备
+                         *     访问旧 URL 只会拿到 403；
+                         *  2. 只认 `/remote-audio/` 且只认**本次租约签发的**那一个 token ——
+                         *     其它会话注册的 token（哪怕猜对了路径）一律不认；
+                         *  3. 来源必须是局域网单播地址：拒绝任意公网来源、组播、以及
+                         *     伪造 Referer 的网页 —— 这条把「局域网设备」和「用户浏览器里
+                         *     打开的任意页面」分开。
+                         * 本地曲库、媒体缓存、导入文件这几路永远拒绝，免得为了投一首歌
+                         * 把整个手机曲库暴露到同一个 WiFi 上。
                          */
-                        if (!client.inetAddress.isLoopbackAddress
-                            && (!allowLanClients || !path.startsWith(REMOTE_AUDIO_PATH_PREFIX))) {
-                            val denied = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-                            output.write(denied.toByteArray(StandardCharsets.US_ASCII))
-                            output.flush()
-                            return
+                        if (!client.inetAddress.isLoopbackAddress) {
+                            val lanToken = if (path.startsWith(REMOTE_AUDIO_PATH_PREFIX)) {
+                                path.substring(REMOTE_AUDIO_PATH_PREFIX.length)
+                            } else null
+                            if (!admitsLanRequest(client.inetAddress.hostAddress, headers, lanToken)
+                                || requestParts[0] == "OPTIONS") {
+                                Log.w(TAG, "rejected lan cast request: " + pathHintOf(path) + " from " +
+                                    LanCastLogText.hostHint(client.inetAddress.hostAddress))
+                                val denied = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                output.write(denied.toByteArray(StandardCharsets.US_ASCII))
+                                output.flush()
+                                return
+                            }
                         }
                         /*
                          * 预检（OPTIONS）必须自己答。
@@ -607,6 +709,9 @@ class LocalAudioServer(context: Context) {
                          * 浏览器就会先发一个 OPTIONS —— 服务不答就是 CORS 失败，
                          * 而失败的表现和「文件不存在」一模一样（mediaErrorCode=4）。
                          * 答一个 204 并放行 Range，探测和播放两条路都才走得通。
+                         *
+                         * 注意只有回环连接会走到这里：局域网那一路在准入处就把 OPTIONS 挡了
+                         * （见 admitsLanRequest），音响直接 GET 播放，不需要 CORS。
                          */
                         if ("OPTIONS" == requestParts[0]) {
                             val response = "HTTP/1.1 204 No Content\r\n" +
@@ -621,7 +726,14 @@ class LocalAudioServer(context: Context) {
                             return
                         }
                         if (path.startsWith(REMOTE_AUDIO_PATH_PREFIX)) {
-                            streamRemoteAudio(output, requestParts, headers, path.substring(REMOTE_AUDIO_PATH_PREFIX.length))
+                            streamRemoteAudio(
+                                output,
+                                requestParts,
+                                headers,
+                                path.substring(REMOTE_AUDIO_PATH_PREFIX.length),
+                                // 只有本机回环连接才需要 CORS 头（见 streamRemoteAudio）。
+                                corsHeaders = client.inetAddress.isLoopbackAddress,
+                            )
                             return
                         }
                         if (path.startsWith(VIDEO_LAYER_PATH_PREFIX)) {
@@ -817,11 +929,13 @@ class LocalAudioServer(context: Context) {
         output: BufferedOutputStream,
         requestParts: Array<String>,
         headers: Map<String, String>,
-        token: String
+        token: String,
+        corsHeaders: Boolean,
     ) {
         val entry = remoteAudioRegistry.get(token)
         if (entry == null) {
-            Log.w(TAG, "remote audio token unknown: " + token)
+            // 令牌是投送音频的通路凭证：日志里只记它的形态（长度 / 前缀 / 字符集），不记原文（issue M24）。
+            Log.w(TAG, "remote audio token unknown: " + LanCastLogText.tokenHint(token))
             writeStatus(output, 404, "Not Found")
             return
         }
@@ -853,7 +967,8 @@ class LocalAudioServer(context: Context) {
         try {
             val body = upstream.body
             if (!upstream.isSuccessful || body == null) {
-                Log.w(TAG, "remote audio upstream " + upstream.code + " for " + target)
+                // 上游音频地址只记网段与资源名：地址里可能带 CDN 的临时签名，也是用户的网络信息（issue M24）。
+                Log.w(TAG, "remote audio upstream " + upstream.code + " for " + LanCastLogText.deviceHint(target))
                 writeStatus(output, 502, "Upstream Error")
                 return
             }
@@ -866,18 +981,26 @@ class LocalAudioServer(context: Context) {
             val size = body.contentLength()
             val partial = upstream.code == 206 || contentRange != null
 
-            Log.i(TAG, "remote " + target + " -> " + upstream.code +
+            Log.i(TAG, "remote " + LanCastLogText.deviceHint(target) + " -> " + upstream.code +
                 " type=" + contentType + " size=" + size + " range=" + (if (contentRange == null) "-" else contentRange))
 
             val response = StringBuilder()
             response.append(if (partial) "HTTP/1.1 206 Partial Content\r\n" else "HTTP/1.1 200 OK\r\n")
             response.append("Content-Type: ").append(contentType).append("\r\n")
             response.append("Accept-Ranges: bytes\r\n")
-            // 这一整条链路存在的唯一理由就是同源：没有这两行，<audio crossOrigin="anonymous">
-            // 依然会被 CORS 挡在门外，和直连 CDN 没区别。
-            response.append("Access-Control-Allow-Origin: *\r\n")
-            response.append("Access-Control-Allow-Headers: range, content-range, content-length\r\n")
-            response.append("Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n")
+            /*
+             * CORS 头只发给本机回环连接。
+             *
+             * 这一整条链路存在的唯一理由就是同源：WebView 里的 <audio crossOrigin="anonymous">
+             * 读回环地址是跨源的，没有 ACAO 会被挡在门外。但同一份响应给到局域网连接时，
+             * `ACAO: *` 等于对用户浏览器里打开的任意页面开放读取 —— 音响自己是直接 GET
+             * 播放的，完全不需要这个头，所以投送那一路只回必要内容。
+             */
+            if (corsHeaders) {
+                response.append("Access-Control-Allow-Origin: *\r\n")
+                response.append("Access-Control-Allow-Headers: range, content-range, content-length\r\n")
+                response.append("Access-Control-Expose-Headers: range, content-range, content-length, accept-ranges\r\n")
+            }
             response.append("Connection: close\r\n")
             if (size >= 0) {
                 response.append("Content-Length: ").append(size).append("\r\n")

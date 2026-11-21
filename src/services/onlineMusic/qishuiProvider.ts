@@ -11,6 +11,7 @@ import { normalizeQishuiCollection, normalizeQishuiSong, normalizeQishuiUser, qi
 import { QISHUI_FEED_PLAYLIST_ID, qishuiCatalog } from './qishuiCatalog';
 import { clearQishuiLibraryCache, qishuiLibrary } from './qishuiLibrary';
 import { qishuiMutations } from './qishuiMutations';
+import { describeQishuiFailure } from './qishuiFailure';
 import { diagnosticLine } from './login/loginDiagnosticReport';
 
 // src/services/onlineMusic/qishuiProvider.ts
@@ -199,6 +200,7 @@ export const qishuiProvider: OnlineMusicProvider = {
     },
     normalizeSong: normalizeQishuiSong, normalizeUser: normalizeQishuiUser, normalizeCollection: normalizeQishuiCollection,
     songMetadata: { getSongMetadata: createProviderSongMetadata },
+    describeFailure: describeQishuiFailure,
     search: {
         async searchSongs(query, limit, offset) {
             if (!query.trim()) return qishuiPage([], 0, offset, limit);

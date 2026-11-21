@@ -49,6 +49,13 @@ final class OverlayWindowManager {
     static final class OverlayWindow {
         final long id;
         final WebView webView;
+        /**
+         * 开这个窗口的模组 id（issue H19）。
+         *
+         * 没有它就只能「全部销毁」，而用户禁用某一个模组时不该把别人的窗口也关掉。
+         * 空串表示来源不明（老调用方没带上），这种窗口只在「没有模组在跑」时才被一起收掉。
+         */
+        String ownerModId = "";
         WindowManager.LayoutParams params;
         boolean destroyed = false;
         boolean visible = true;
@@ -93,9 +100,15 @@ final class OverlayWindowManager {
         Object create(long windowId);
     }
 
+    /** 窗口被销毁时通知一次；OverlayBridge 用它清掉这个窗口的 IPC 现场（issue H18）。 */
+    interface WindowDestroyedListener {
+        void onWindowDestroyed(long windowId);
+    }
+
     private final Context context;
     private final WindowManager windowManager;
     private PageInterfaceFactory pageInterfaceFactory = null;
+    private WindowDestroyedListener windowDestroyedListener = null;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final AtomicLong ids = new AtomicLong(1);
     private final ConcurrentHashMap<Long, OverlayWindow> windows = new ConcurrentHashMap<>();
@@ -111,6 +124,10 @@ final class OverlayWindowManager {
 
     void setPageInterfaceFactory(PageInterfaceFactory factory) {
         this.pageInterfaceFactory = factory;
+    }
+
+    void setWindowDestroyedListener(WindowDestroyedListener listener) {
+        this.windowDestroyedListener = listener;
     }
 
     /** 有没有悬浮窗权限。没有的话 `addView` 会直接抛异常。 */
@@ -570,6 +587,20 @@ final class OverlayWindowManager {
         if (window == null || window.destroyed) return;
         window.destroyed = true;
         windows.remove(window.id);
+        /*
+         * 通知外部「这个窗口没了」（issue H18）。
+         *
+         * OverlayBridge 靠它把自己的 contents / pageReady / 待发队列里那一项删掉；
+         * 不删的话，反复开关窗口会一直往 Map 里堆已经死掉的 WebContents。
+         */
+        WindowDestroyedListener destroyed = windowDestroyedListener;
+        if (destroyed != null) {
+            try {
+                destroyed.onWindowDestroyed(window.id);
+            } catch (Throwable error) {
+                Log.w(TAG, "窗口销毁回调失败", error);
+            }
+        }
         try {
             if (window.attached) {
                 windowManager.removeView(window.webView);
@@ -604,6 +635,37 @@ final class OverlayWindowManager {
          * 模组浮窗关掉之后它没有理由继续存在。下次开窗时 loadHtml 会重新 startLyricsPump。
          */
         stopLyricsPump();
+    }
+
+    /**
+     * 关掉某个模组名下的全部窗口（issue H19）。
+     *
+     * 用户禁用或卸载一个模组时调用：它开的窗口必须跟着消失，否则会出现「关掉了模组，屏幕上
+     * 那个悬浮窗还在、歌词还在动」—— 那段被禁用的代码实际上仍在跑。
+     *
+     * 别的模组的窗口一律不动：用户关的是这一个。
+     *
+     * @param ownerModId 模组 id
+     * @return 关掉几个
+     */
+    int destroyByOwner(String ownerModId) {
+        if (ownerModId == null || ownerModId.isEmpty()) return 0;
+        int closed = 0;
+        for (OverlayWindow window : new ArrayList<>(windows.values())) {
+            if (ownerModId.equals(window.ownerModId)) {
+                destroy(window);
+                closed += 1;
+            }
+        }
+        // 全没了才停泵；还有别人的窗口要用它。
+        if (windows.isEmpty()) stopLyricsPump();
+        Log.i(TAG, "按模组关闭 overlay：" + ownerModId + " 关了 " + closed + " 个");
+        return closed;
+    }
+
+    /** 现在还剩几个窗口（给收尾逻辑判断要不要停泵）。 */
+    int size() {
+        return windows.size();
     }
 
     /** 停掉歌词泵；`lyricsPump` 置空之后正在排队的那一拍醒来会自己退出（见 run 里的判空）。 */

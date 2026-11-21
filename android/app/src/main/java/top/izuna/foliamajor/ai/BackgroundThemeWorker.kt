@@ -62,6 +62,14 @@ object BackgroundThemeWorker {
     private const val MAX_PENDING = 7
     private const val MAX_GENERATIONS = 64
 
+    /**
+     * 提示词长度的告警线（issue M32）。
+     *
+     * 按字符算，12000 大致对应中文 1 万 token 上下、英文三四千 —— 过了这条线，一次主题生成的
+     * 额度消耗会明显高于普通曲目，值得在日志里留一笔。只告警不截断。
+     */
+    private const val BACKGROUND_THEME_PROMPT_WARN_CHARS = 12_000
+
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     private val httpClient = OkHttpClient.Builder()
@@ -89,11 +97,78 @@ object BackgroundThemeWorker {
         }
     }
 
-    private val executor = ThreadPoolExecutor(
-        1, 1, 0L, TimeUnit.MILLISECONDS, LatestFirstQueue(MAX_PENDING),
-        ThreadFactory { runnable -> Thread(runnable, "folia-background-theme").apply { isDaemon = true } },
-        ThreadPoolExecutor.AbortPolicy(),
-    )
+    /**
+     * 线程池的持有者。收口（[pause]）之后这个字段变 null，下一次 [request] 惰性重建 ——
+     * ThreadPoolExecutor 一旦 shutdown 就不可再用，重建是唯一能继续工作的方式。
+     *
+     * 只在这把锁里换：任务提交与收口因此不会交错（否则任务可能投进一个刚被 shutdown 的池）。
+     */
+    private val executorLock = Any()
+    private var pool: ThreadPoolExecutor? = null
+
+    private fun executor(): ThreadPoolExecutor = synchronized(executorLock) {
+        val existing = pool
+        if (existing != null) return existing
+        val created = ThreadPoolExecutor(
+            1, 1, 0L, TimeUnit.MILLISECONDS, LatestFirstQueue(MAX_PENDING),
+            ThreadFactory { runnable -> Thread(runnable, "folia-background-theme").apply { isDaemon = true } },
+            ThreadPoolExecutor.AbortPolicy(),
+        )
+        pool = created
+        created
+    }
+
+    /** 单测用：看收口之后拿到的池是不是新建的（而不是一个已经 shutdown 的旧对象）。 */
+    internal fun executorForTest(): ThreadPoolExecutor = executor()
+
+    /**
+     * 单测用：不带日志的一次收口。
+     *
+     * `pause()` 收掉一个池时会写一行日志，而 JVM 单测里的 `android.util.Log` 是空壳
+     * （一调就 "not mocked"），所以测"收口之后的判据"时绕开那行日志 —— 这里走的仍然是
+     * 与 [pause] 相同的状态迁移（换代号 + shutdown + 置空）。
+     *
+     * @note 它只服务单测，运行时不要用；真实收口请调 [pause]，那里还要取消在飞的请求、
+     * 清缓存。
+     */
+    internal fun pauseQuietly() {
+        synchronized(executorLock) {
+            val current = pool ?: return@synchronized
+            sessionEpoch.incrementAndGet()
+            pool = null
+            current.shutdownNow()
+        }
+    }
+
+    /** 单测用：投递任务时用的会话代号（见 [sessionEpoch]）。 */
+    internal fun sessionEpochForTest(): Long = sessionEpoch.get()
+
+    /**
+     * 单测用：把一个任务的代号判据单独拿出来。
+     *
+     * 收口之后"排队中的旧任务要作废"这条，唯一可测的就是这个判据：真去起线程跑一遍
+     * 既慢又依赖调度时序，还测不到取消语义。
+     */
+    internal fun isCurrentSessionForTest(epoch: Long): Boolean = sessionEpoch.get() == epoch
+
+    /**
+     * 本次会话的代号。每收口一次 +1；排队中的任务带着自己那一代进来，跑的时候发现对不上
+     * 就直接放弃 —— 这就是「正在排队的请求要有取消语义」。
+     *
+     * 不用 `remove` 去把队列一条条摘掉：队列是"最新优先"的，正拿着锁遍历它的同时
+     * 主线程还在往里 offer，两边的顺序没有任何保证。用一代号判据反而更严：**收口那一刻
+     * 之后**，任何还没开始跑的任务都不该再跑。
+     */
+    private val sessionEpoch = AtomicLong()
+
+    /**
+     * 正在发出去的那次网络请求 / 生成（如果有）。
+     *
+     * 收口时 `cancel()` 它：`executor.shutdownNow()` 只能打断 worker 线程的等待，打不断一次
+     * 已经进了 OkHttp 的调用 —— 那一次生成仍然会跑完，照样烧额度。
+     */
+    @Volatile
+    private var inFlightCall: okhttp3.Call? = null
 
     private val resultLock = Any()
 
@@ -104,6 +179,26 @@ object BackgroundThemeWorker {
     private val generations: MutableMap<String, Long> = object : LinkedHashMap<String, Long>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>): Boolean = size > MAX_GENERATIONS
     }
+
+    /**
+     * 失败记忆（issue H33）：key 是**生成身份**（`resultKey` 那一套：本曲 + policy + 歌词 +
+     * 配置指纹），值是这个身份最近一次失败是什么、什么时候、连续几次。
+     *
+     * 为什么必须有：`request` 的三个触发点（切歌、`onStop`、歌词到手）都是热路径，而这里
+     * 原来只有「已有结果不排队」和「在飞去重」两道保护 —— **没有失败记忆**。一次失败之后
+     * 结果表里没有条目、在飞标记也释放了，于是下一次退到后台就把整轮重跑一遍：云端候选
+     * 解析、多条条目拉取，再一次完整的**付费**模型生成。失败越频繁（限流、401）重试越密，
+     * 额度就是这么烧掉的。
+     *
+     * 放进同一个 `resultLock` 是因为它和结果表一起读写，两把锁反而会给出不一致的快照。
+     */
+    private val failures: MutableMap<String, BackgroundThemeFailure> = object : LinkedHashMap<String, BackgroundThemeFailure>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, BackgroundThemeFailure>): Boolean =
+            size > MAX_FAILURES
+    }
+
+    /** 失败记忆表的容量上限：只在最近这么多生成身份上记退避，够覆盖在听的那几首。 */
+    private const val MAX_FAILURES = 64
 
     private val inFlight = HashSet<String>()
     private val generationCounter = AtomicLong()
@@ -184,10 +279,15 @@ object BackgroundThemeWorker {
      * 配置关掉时会清空旧结果，避免关掉之后 JS 还读到上一首的答案。
      * `daylight` 不传时取当前配置；它只决定叠层取 stage 的哪一侧，不参与结果 identity。
      * 真正应用叠层时仍以 fresh config 的 daylight 为准。
+     *
+     * `userInitiated` 是「用户主动要求重新生成」（issue H33）：自动触发（切歌 / `onStop` /
+     * 歌词到手）要受失败退避约束，用户主动点的那一次不受 —— 见 [BackgroundThemeBackoff]。
      */
     @JvmStatic
+    @JvmOverloads
     fun request(
-        context: Context, songKey: String, title: String, artist: String, lyricText: String, daylight: Boolean? = null,
+        context: Context, songKey: String, title: String, artist: String, lyricText: String,
+        daylight: Boolean? = null, userInitiated: Boolean = false,
     ) {
         val key = songKey.trim()
         if (key.isEmpty()) return
@@ -214,6 +314,11 @@ object BackgroundThemeWorker {
         synchronized(resultLock) {
             if (results.containsKey(memoryKey)) return
         }
+        /*
+         * failedAttempts 要跟着作业走：作业失败时才知道该不该记账（用户主动那一次不计入
+         * 连续次数，免得把用户的耐心当成机器的重试）。
+         */
+        val failureCountFlag = resolveFailureCountFlag(memoryKey, userInitiated, System.currentTimeMillis()) ?: return
         if (!beginJob(memoryKey)) return
 
         val generation = synchronized(resultLock) {
@@ -232,12 +337,22 @@ object BackgroundThemeWorker {
             requestedDaylight = daylight ?: config.daylight,
         )
 
+        /*
+         * 带上投递那一刻的会话代号：这一条要是排在队列里一直没轮到，而中间发生了一次收口
+         * （[pause]），它醒来时发现代号对不上就直接放弃，不再去发云端请求或生成。
+         */
+        val epoch = sessionEpoch.get()
         try {
-            executor.execute {
+            executor().execute {
                 try {
-                    runJob(appContext, store, job, title, artist, lyricText)
+                    if (sessionEpoch.get() != epoch) {
+                        Log.i(TAG, "[BackgroundTheme] 本次请求已被收口作废，跳过")
+                        return@execute
+                    }
+                    runJob(appContext, store, job, title, artist, lyricText, failureCountFlag)
                 } catch (error: Exception) {
                     Log.w(TAG, "[BackgroundTheme] 任务异常 ${error.javaClass.simpleName}")
+                    recordFailure(job.memoryKey, failureCountFlag, BackgroundThemeBackoff.Kind.TRANSIENT)
                 } finally {
                     finishJob(memoryKey)
                 }
@@ -246,6 +361,7 @@ object BackgroundThemeWorker {
             /*
              * 兜底分支：`LatestFirstQueue` 自己会腾位置，正常不会再走到这里。
              * 真撞上（例如队列被判满又删不掉）也只是少算一首，缓存/生成都只是加速器。
+             * 这不算「失败」：没发一次请求、没烧一次额度，不该让它占一次冷却。
              */
             finishJob(memoryKey)
             Log.w(TAG, "[BackgroundTheme] 队列拒绝任务，跳过本次")
@@ -349,6 +465,7 @@ object BackgroundThemeWorker {
 
     private fun runJob(
         context: Context, store: FoliaSettingsStore, job: JobIdentity, title: String, artist: String, lyricText: String,
+        countsTowardStreak: Boolean,
     ) {
         // 入口先验一次：排队期间切歌 / 关配置 / 换密钥的任务在这里结束，不烧云端和 AI。
         val config = validConfig(store, job) ?: return
@@ -357,17 +474,36 @@ object BackgroundThemeWorker {
         if (cloudPayload != null) {
             if (validConfig(store, job) != null && storeResult(job, cloudPayload, "cloud")) {
                 applyToOverlay(context, store, job, cloudPayload)
+                // 拿到了就清掉失败记忆：这一首现在是「有答案」的状态，退避没有理由继续。
+                clearFailure(job.memoryKey)
             }
             return
         }
 
         // 云端未命中后再验一次，之后才会花付费 AI。
         val fresh = validConfig(store, job) ?: return
-        val generated = generate(fresh, store, title, artist, lyricText) ?: return
-        if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
-            applyToOverlay(context, store, job, generated)
-            Log.i(TAG, "[BackgroundTheme] 生成完成")
+        /*
+         * 生成失败的原因分类由 generate 带回来（out 参数），不放进共享字段：worker 是单线程，
+         * 但 request 会在主线程提前读，一个可变的「上次失败类别」迟早对不上号。
+         */
+        val failureKind = arrayOf(BackgroundThemeBackoff.Kind.TRANSIENT)
+        val generated = generate(context, fresh, store, title, artist, lyricText, failureKind)
+        if (generated != null) {
+            if (validConfig(store, job) != null && storeResult(job, generated, "ai")) {
+                applyToOverlay(context, store, job, generated)
+                clearFailure(job.memoryKey)
+                Log.i(TAG, "[BackgroundTheme] 生成完成")
+            }
+            return
         }
+        /*
+         * 失败落到这里：没拿到结果（云端没命中 + 生成没成 / 未配置 / 401 / 限流）。
+         *
+         * 记下来，下一次自动触发在冷却窗口内直接跳过（issue H33）—— 不记的话，用户每退一次
+         * 后台就是一轮云端往返加一次付费生成。`countsTowardStreak` 带回了这次是谁发起的：用户主动
+         * 那次记成 0，表示「不增加连续次数」，退避只由自动触发的失败驱动。
+         */
+        recordFailure(job.memoryKey, countsTowardStreak, failureKind[0])
     }
 
     /**
@@ -419,7 +555,7 @@ object BackgroundThemeWorker {
         }
 
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            executeCall(request).use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "[BackgroundTheme] 候选请求失败 code=${response.code}")
                     emptyList()
@@ -458,7 +594,7 @@ object BackgroundThemeWorker {
         }
 
         return try {
-            httpClient.newCall(request).execute().use { response ->
+            executeCall(request).use { response ->
                 if (!response.isSuccessful) {
                     null
                 } else {
@@ -487,21 +623,66 @@ object BackgroundThemeWorker {
         }
     }
 
-    /** 用已有 AiCompletion.run；模板只在本机拼，密钥只从 ai.* 设置读。 */
+    /**
+     * 发一次请求，并把它登记成"当前这条在飞的调用"，好让 [pause] 能真的取消它。
+     *
+     * `shutdownNow()` 只能打断 worker 线程在队列上的等待；一次已经进了 OkHttp 的调用
+     * 会一直跑到超时或拿到响应 —— 而这条路后面接的是**付费**生成，收口之后还在烧额度
+     * 是这条 issue 明确点出的边界条件。登记 + `cancel()` 才算真的"取消语义"。
+     */
+    private fun executeCall(request: Request): okhttp3.Response {
+        val call = httpClient.newCall(request)
+        inFlightCall = call
+        try {
+            return call.execute()
+        } finally {
+            // 只有它还是"当前那一条"时才清：收口之后新会话可能已经登记了另一条。
+            if (inFlightCall === call) inFlightCall = null
+        }
+    }
+
+    /**
+     * 用已有 AiCompletion.run；模板只在本机拼，密钥只从 ai.* 设置读。
+     *
+     * `failureKind` 是出参：失败时把「这一趟为什么没成」写回去（配置错误 / 限流 / 临时），
+     * 退避按它决定冷却多长 —— 401 重试一万次也不会好，那类要多等一会儿并让用户去改配置。
+     */
     private fun generate(
-        config: BackgroundThemeConfig, store: FoliaSettingsStore, title: String, artist: String, lyricText: String,
+        context: Context, config: BackgroundThemeConfig, store: FoliaSettingsStore, title: String, artist: String,
+        lyricText: String,
+        failureKind: Array<BackgroundThemeBackoff.Kind>,
     ): JSONObject? {
         val aiConfig = readAiConfig(store)
         if (!aiConfig.configured) {
             Log.i(TAG, "[BackgroundTheme] AI 未配置，跳过生成")
+            failureKind[0] = BackgroundThemeBackoff.Kind.CONFIG
             return null
         }
 
         val system = config.system.ifBlank { BackgroundThemeRules.DEFAULT_SYSTEM }
         val prompt = BackgroundThemeRules.injectTemplate(config.promptTemplate, title, artist, lyricText)
+        /*
+         * 输入规模（issue M32）：歌词整份拼进提示词，双语时长曲目能到几万 token，而额度按 token 计。
+         * 超了只记一行，不截断 —— 截断会直接影响主题质量，那是产品取舍，不该在这一层悄悄做决定。
+         * 只记字数、不记正文。
+         */
+        if (prompt.length > BACKGROUND_THEME_PROMPT_WARN_CHARS) {
+            Log.w(
+                TAG,
+                "[BackgroundTheme] 提示词偏长 chars=${prompt.length}（歌词 ${lyricText.length}）" +
+                    "，超过 ${BACKGROUND_THEME_PROMPT_WARN_CHARS}，本次生成的额度消耗会明显偏高",
+            )
+        }
 
         return try {
-            val text = AiCompletion.run(aiConfig, system, prompt, BackgroundThemeRules.MAX_TOKENS, true)
+            /*
+             * M30：后台主题与前台补全走同一条原生网络栈，端点的准入判定也要一样，
+             * 否则「前台不让连内网、后台照连」就是一个现成的绕过口。
+             */
+            val access = top.izuna.foliamajor.FoliaNativeAccess(context.applicationContext)
+            val text = AiCompletion.run(aiConfig, system, prompt, BackgroundThemeRules.MAX_TOKENS, true) { url ->
+                access.requireAllowedRequestUrl(url, "background-theme")
+            }
             val payload = BackgroundThemeRules.parseStagePayload(text)
             if (payload == null) {
                 Log.w(TAG, "[BackgroundTheme] 模型输出不是可用的 stage JSON")
@@ -509,9 +690,11 @@ object BackgroundThemeWorker {
             payload
         } catch (error: AiCompletion.AiException) {
             Log.w(TAG, "[BackgroundTheme] AI 调用失败 code=${error.code}")
+            failureKind[0] = BackgroundThemeBackoff.kindOfFailure(error.code, error.message)
             null
         } catch (error: Exception) {
             Log.w(TAG, "[BackgroundTheme] AI 调用异常 ${error.javaClass.simpleName}")
+            failureKind[0] = BackgroundThemeBackoff.kindOfFailure(null, error.message)
             null
         }
     }
@@ -588,6 +771,147 @@ object BackgroundThemeWorker {
     private fun finishJob(key: String) {
         synchronized(inFlight) {
             inFlight.remove(key)
+        }
+    }
+
+    /**
+     * 决定这一次要不要跑：返回 `null` = 在冷却窗口里，跳过；`false` = 用户主动要求，跑但
+     * 不增加连续次数；`true` = 自动触发，跑，失败时计入连续次数。
+     *
+     * 不把这个标志塞进 [JobIdentity]：作业身份参与作废判定，多一个只在记账时用的字段会让
+     * 「同样的作业」看起来不一样，得不偿失。
+     */
+    private fun resolveFailureCountFlag(key: String, userInitiated: Boolean, nowMs: Long): Boolean? {
+        synchronized(resultLock) {
+            if (userInitiated) {
+                /* 用户点了「重新生成」：立刻清掉退避，这一次必须真的跑。 */
+                if (failures.remove(key) != null) {
+                    Log.i(TAG, "[BackgroundTheme] 用户主动重试，清掉失败退避")
+                }
+                return false
+            }
+            val failure = failures[key]
+            if (BackgroundThemeBackoff.shouldSkip(failure, nowMs)) {
+                /*
+                 * 冷却中：直接跳过，不排队、不发请求、不生成。这一行是排查「为什么没主题」
+                 * 的唯一依据，所以把类别与还剩多久都记下来（不含任何凭据）。
+                 */
+                val kind = BackgroundThemeBackoff.kindOf(failure?.kind)
+                val remaining = if (failure != null && failure.streak < BackgroundThemeBackoff.MAX_STREAK) {
+                    BackgroundThemeBackoff.cooldownMs(kind, failure.streak) - (nowMs - failure.atMs)
+                } else {
+                    -1L
+                }
+                Log.i(
+                    TAG,
+                    "[BackgroundTheme] 冷却中，跳过本次自动生成 类别=${kind.name} 连续失败=${failure?.streak}" +
+                        if (remaining >= 0) " 剩余≈${remaining / 1000}s" else " 已停止自动重试",
+                )
+                return null
+            }
+            return true
+        }
+    }
+
+    /** 记一次失败。`countsTowardStreak = false`（用户主动那一次）只记类别，不增加连续次数。 */
+    private fun recordFailure(key: String, countsTowardStreak: Boolean, kind: BackgroundThemeBackoff.Kind) {
+        val now = System.currentTimeMillis()
+        synchronized(resultLock) {
+            val previous = failures[key]
+            failures[key] = if (countsTowardStreak) {
+                BackgroundThemeBackoff.recordFailure(previous, kind, now)
+            } else {
+                BackgroundThemeFailure(
+                    kind = kind.name,
+                    atMs = now,
+                    streak = (previous?.streak ?: 0).coerceAtLeast(1),
+                )
+            }
+            val recorded = failures[key]
+            Log.i(
+                TAG,
+                "[BackgroundTheme] 记一次失败 类别=${kind.name} 连续失败=${recorded?.streak} " +
+                    "冷却≈${BackgroundThemeBackoff.cooldownMs(kind, recorded?.streak ?: 1) / 1000}s",
+            )
+        }
+    }
+
+    private fun clearFailure(key: String) {
+        synchronized(resultLock) {
+            failures.remove(key)
+        }
+    }
+
+    /**
+     * 配置一改就整体作废退避（issue H33 的边界条件：用户改完配置必须能立刻重试）。
+     *
+     * 退避按「生成身份」记，而身份里含配置指纹 —— 改了配置本来就会算出新身份、自然不受
+     * 旧记录的约束。但仍然整体清一次：401 那些常常是用户换了密钥之后才发现旧的已经过期，
+     * 他改完就该立刻有一次机会，而不是先等旧身份那几条记录各自过期。
+     *
+     * 由 Lead 在下发配置时调用（`useBackgroundThemeConfig` → `configureBackgroundTheme`）。
+     */
+    @JvmStatic
+    fun onConfigChanged() {
+        synchronized(resultLock) {
+            if (failures.isNotEmpty()) {
+                Log.i(TAG, "[BackgroundTheme] 配置已变更，清掉全部失败退避")
+                failures.clear()
+            }
+        }
+    }
+
+    /**
+     * 收口（issue L8）：播放停止时调用，把这一轮的线程池、队列与三张缓存全部放掉。
+     *
+     * 这是个**进程级单例**，原先全文没有任何 shutdown / stop / cancel：线程是守护线程，
+     * 所以不会拖住进程退出，但进程活着的时候池、队列和结果缓存一直都在，也没有一个
+     * 「应用退到后台该释放多少资源」的答案。现在这个答案就是这里。
+     *
+     * 收口之后仍然可用 —— 下一次 [request] 会惰性重建线程池（`ThreadPoolExecutor` 一旦
+     * shutdown 就不可再用）。所以要保证的三件事：
+     *
+     *  1. **队列里没跑的任务不再跑**：`shutdownNow()` 摘走队列，加上 [sessionEpoch] 那道
+     *     代号判据兜底（任务醒来先看代号，对不上就放弃）。
+     *  2. **在飞的那一次真的取消**：[inFlightCall].cancel()。只 shutdown 的话，已经进了
+     *     OkHttp 的那一次生成会跑完，照样烧额度。
+     *  3. **缓存回到基线**：结果表、generation 表、在飞去重表、当前歌与歌词指纹一起清。
+     *     失败退避（`failures`）**不清** —— 它记的是"这个身份刚刚失败过、冷却多久"，
+     *     跟这一轮会话无关；清掉它等于让下一次自动触发立刻重试、再烧一轮额度，那正是
+     *     issue H33 修掉的毛病。
+     *
+     * 第二次收口（没建过池，或上一次已经关过了）**不写日志** —— 它会被反复调用
+     * （播放停止时调一次），没有变化就没有必要留一行。
+     */
+    @JvmStatic
+    fun pause() {
+        var closed: ThreadPoolExecutor? = null
+        synchronized(executorLock) {
+            val current = pool
+            if (current != null) {
+                // 先换代：从这一刻起，任何还没开始跑的旧任务都会在入口放弃。
+                sessionEpoch.incrementAndGet()
+                pool = null
+                current.shutdownNow()
+                closed = current
+            }
+        }
+
+        inFlightCall?.cancel()
+        inFlightCall = null
+
+        synchronized(resultLock) {
+            results.clear()
+            generations.clear()
+            activeSongKey = ""
+            activeLyricHash = ""
+        }
+        synchronized(inFlight) {
+            inFlight.clear()
+        }
+
+        if (closed != null) {
+            Log.i(TAG, "[BackgroundTheme] 播放已停止，收口后台主题线程池")
         }
     }
 }

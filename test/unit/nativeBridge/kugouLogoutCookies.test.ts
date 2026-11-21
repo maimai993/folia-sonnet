@@ -2,12 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // #208：登出必须清掉桥上的全部账号恢复来源，而不是只让页面暂时忘记账号。
 const SESSION_COOKIE = 'userid=42; token=fixture-token; KuGoo=KugooID=42&t=fixture-token; vip_token=fixture-vip';
-const SESSION_KEYS = ['foliaBridgeKgCookie', 'kgLoginPersist', 'kgVipSession'];
+const SESSION_KEYS = ['kgLoginPersist', 'kgVipSession'];
 const hostOf = (value: string) => String(value).replace(/^https?:\/\//, '').split('/')[0].replace(/^\./, '');
 
 type HostOptions = { batch?: boolean; cookiesHang?: boolean; cookiesReject?: boolean; readsHang?: boolean };
 const installHost = (options: HostOptions = {}) => {
     const storage = new Map<string, unknown>([
+        // H5 之前的明文键：升级迁移把它搬进加密槽位后该删掉，登出之后也不该留下。
         ['foliaBridgeKgCookie', SESSION_COOKIE],
         ['kgLoginPersist', { userid: '42', token: 'fixture-token' }],
         ['kgVipSession', { userId: '42', appToken: 'fixture-app', vipToken: 'fixture-vip', at: Date.now() }],
@@ -79,7 +80,29 @@ const installHost = (options: HostOptions = {}) => {
             },
         },
     });
-    return { storage, jar, batch, removeOne, getAll };
+    // H5：桥的会话从 localStorage 搬进了原生的加密槽位，登出要连它一起抹。
+    const slots = new Map<string, string>([['provider-kg-cookie', SESSION_COOKIE]]);
+    vi.stubGlobal('window', {
+        Capacitor: {
+            Plugins: {
+                FoliaNative: {
+                    readSecureValue: async ({ slot }: { slot: string }) => (slots.has(slot)
+                        ? { ok: true, found: true, decrypted: true, text: slots.get(slot) }
+                        : { ok: true, found: false, decrypted: false, text: null }),
+                    writeSecureValue: async ({ slot, text }: { slot: string; text: string }) => {
+                        slots.set(slot, text);
+                        return { ok: true };
+                    },
+                    clearSecureValue: async ({ slot }: { slot: string }) => {
+                        slots.delete(slot);
+                        return { ok: true };
+                    },
+                    hasSecureValue: async ({ slot }: { slot: string }) => ({ ok: true, exists: slots.has(slot) }),
+                },
+            },
+        },
+    });
+    return { storage, jar, batch, removeOne, getAll, slots };
 };
 
 const logout = async () => {
@@ -103,6 +126,10 @@ describe('酷狗桥登出清会话（#208）', () => {
         const answer = await logout();
         expect(answer).toMatchObject({ status: 1, error_code: 0, code: 200 });
         SESSION_KEYS.forEach(key => expect(host.storage.has(key), key).toBe(false));
+        // H5：桥存的那份酷狗会话在加密槽位里，登出必须连它一起抹。
+        expect(host.slots.has('provider-kg-cookie')).toBe(false);
+        // 其他人平台的加密槽位不能被误伤。
+        expect(host.slots.size).toBe(0);
         expect([...host.jar.keys()].filter(key => /\|(userid|token|KuGoo|KGLogin|kguser|kg_token|vip_token)$/.test(key) && /kugou\./.test(key))).toEqual([]);
         expect(host.storage.has('kgLiteDevice')).toBe(true);
         expect(host.storage.get('kgMid')).toBe('fixture-mid');
@@ -132,7 +159,7 @@ describe('酷狗桥登出清会话（#208）', () => {
     it.each(['jar', 'bridge', 'persist'])('仅 %s 存在的会话也被清掉，模块重载后不恢复', async source => {
         const host = installHost({ batch: true });
         if (source !== 'jar') host.jar.clear();
-        if (source !== 'bridge') host.storage.delete('foliaBridgeKgCookie');
+        if (source !== 'bridge') host.slots.delete('provider-kg-cookie');
         if (source !== 'persist') host.storage.delete('kgLoginPersist');
         await logout();
         const cookies = await import('../../../src/nativeBridge/api/cookies.js');
@@ -145,7 +172,7 @@ describe('酷狗桥登出清会话（#208）', () => {
     it('冷启动只有 kgLoginPersist 时也直接清掉，不先恢复登录', async () => {
         const host = installHost({ batch: true });
         host.jar.clear();
-        host.storage.delete('foliaBridgeKgCookie');
+        host.slots.delete('provider-kg-cookie');
         await logout();
         expect((globalThis as any).chrome.cookies.set).not.toHaveBeenCalled();
         expect(host.storage.has('kgLoginPersist')).toBe(false);
@@ -182,6 +209,34 @@ describe('酷狗桥登出清会话（#208）', () => {
         expect(result).toHaveProperty('token', 'fixture-new-token');
         const cookies = await import('../../../src/nativeBridge/api/cookies.js');
         expect(cookies.kgCookieToken(await bridge.ensureKGCookie())).toBe('fixture-new-token');
+    });
+
+    /*
+     * #H23：闩锁的两条判据 —— 登出后「自动恢复」必须被挡住，「用户主动登录」必须还能进。
+     *
+     * 核实记录：审查意见说「kgSignedOut = false 只有一个复位点，走到那行以外就再也登不回来」。
+     * 扫码那条路（handleKGLoginQrCheck）拿到答复后另有一次 generation 检查，登出后根本走不到
+     * persistKGLoginCookies，所以那条路上并不成立；真正没有前置守护的是手动贴 cookie 这条路
+     * （handleKGLoginCookie）。对它的处置是把闩锁复位提到过期检查之前（见 kugou.js 注释），
+     * 属防御性收敛 —— 那个竞态窗口在测试里插不稳，所以这里不假装能复现它。
+     */
+    it('登出后自动恢复被挡住，但用户主动登录仍然进得去', async () => {
+        installHost({ batch: true });
+        const bridge = await import('../../../src/nativeBridge/api/kugou.js');
+        await logout();
+        // 自动恢复被挡住：ensureKGCookie 在闩锁处直接回空串，不去读 cookie。
+        expect(await bridge.ensureKGCookie()).toBe('');
+
+        /*
+         * 用户主动登录必须还得进去。
+         *
+         * 用扫码这条路观察：它会走 handleKGLoginQrCheck → persistKGLoginCookies（闩锁唯一
+         * 复位点）。贴 cookie 那条（handleKGLoginCookie）落盘后还要 getKGLoginStatus 走真实
+         * 用户信息接口，测试环境里不好合成，换这条同样经过复位点的路径来钉。
+         */
+        vi.mocked(fetch).mockResolvedValue(Response.json({ status: 1, data: { status: 4, userid: '99', token: 'fixture-recovered' } }));
+        const recovered = await bridge.handleKGLoginQrCheck('recover-key');
+        expect(recovered.loggedIn).toBe(true);
     });
 
     it('登出后迟到的二维码答复不重新保存登录', async () => {

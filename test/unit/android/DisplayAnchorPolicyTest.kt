@@ -2,6 +2,7 @@ package top.izuna.foliamajor.player
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -89,5 +90,62 @@ class DisplayAnchorPolicyTest {
     fun `没在出声或采样失效时不外推`() {
         assertEquals(10_000L, extrapolatedDisplayPositionMs(10_000L, 1_000L, 1_900L, false, 1f))
         assertEquals(10_000L, extrapolatedDisplayPositionMs(10_000L, 0L, 1_900L, true, 1f))
+    }
+
+    // ---------- 原生 seek 的回弹守卫（#H9） ----------
+
+    @Test
+    fun `守卫窗内小于 250ms 的回退照写`() {
+        // 拖到 60s 落位之后，播放器接着报一条 59.9s：差在容差内，就是这次 seek 的真落位。
+        val guard = armNativeSeekGuard(60_000L, 1_000L)
+        assertEquals(59_900L, seekGuardVerdict(guard, 59_900L, 1_050L))
+    }
+
+    @Test
+    fun `守卫窗内旧位置那条不写`() {
+        // seek 还没落位，播放器先用旧位置（10s）报了一条不连续：写下去歌词就弹回去了。
+        val guard = armNativeSeekGuard(60_000L, 1_000L)
+        assertNull(seekGuardVerdict(guard, 10_000L, 1_030L))
+    }
+
+    @Test
+    fun `守卫窗过期之后同样的回退照写`() {
+        // 播放器崩在缓冲里、一直没落位：窗口到上限就放行，别让歌词永久停住。
+        val guard = armNativeSeekGuard(60_000L, 1_000L)
+        assertEquals(10_000L, seekGuardVerdict(guard, 10_000L, 1_000L + NATIVE_SEEK_GUARD_MAX_MS + 1L))
+    }
+
+    @Test
+    fun `落位之后窗口再撑一小段就关`() {
+        val armed = armNativeSeekGuard(60_000L, 1_000L)
+        val confirmed = advanceNativeSeekGuard(armed, 60_000L, 1_060L)
+        assertTrue(confirmed.confirmed)
+        // 收尾期里紧跟着的那条旧位置仍然不写。
+        assertNull(seekGuardVerdict(confirmed, 10_000L, 1_200L))
+        // 收尾期结束：窗口关掉，之后一律照写。
+        val closed = advanceNativeSeekGuard(confirmed, 60_000L, 1_060L + NATIVE_SEEK_GUARD_HOLD_MS + 1L)
+        assertFalse(closed.armed)
+        assertEquals(10_000L, seekGuardVerdict(closed, 10_000L, 99_999L))
+    }
+
+    @Test
+    fun `没打开窗口时一律照写`() {
+        assertEquals(10_000L, seekGuardVerdict(NATIVE_SEEK_GUARD_IDLE, 10_000L, 1_000L))
+        assertFalse(nativeSeekGuardActive(NATIVE_SEEK_GUARD_IDLE, 1_000L))
+    }
+
+    @Test
+    fun `时钟倒退按过期处理而不是永久挂住`() {
+        val guard = armNativeSeekGuard(60_000L, 5_000L)
+        assertEquals(10_000L, seekGuardVerdict(guard, 10_000L, 1_000L))
+        assertFalse(nativeSeekGuardActive(advanceNativeSeekGuard(guard, 10_000L, 1_000L), 1_000L))
+    }
+
+    @Test
+    fun `seek 到 0 与单曲循环回绕都在容差内放行`() {
+        val toZero = armNativeSeekGuard(0L, 1_000L)
+        assertEquals(0L, seekGuardVerdict(toZero, 0L, 1_010L))
+        // 单曲循环回绕：目标就是 0，播放器报 5ms 也算落位。
+        assertEquals(5L, seekGuardVerdict(toZero, 5L, 1_020L))
     }
 }

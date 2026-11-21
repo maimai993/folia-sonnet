@@ -94,7 +94,36 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
     public void setModEnabled(PluginCall call) {
         JSObject args = new JSObject();
         args.put("id", call.getString("id", ""));
-        args.put("enabled", Boolean.TRUE.equals(call.getBoolean("enabled", Boolean.FALSE)));
+        boolean enabled = Boolean.TRUE.equals(call.getBoolean("enabled", Boolean.FALSE));
+        args.put("enabled", enabled);
+        /*
+         * 用户主动启用 = 「再给我试一次」（issue H16）。
+         *
+         * Node 运行时连崩到上限后就不再自动重启，那时候开关打开本该立刻重来一次 ——
+         * 否则用户会觉得「开关点了没反应」，真正的出路只有杀进程。这里清掉连崩计数，
+         * 并确保运行时装着：崩过的运行时 started 已经放回去了，start 会重新起线程。
+         */
+        if (enabled) {
+            FoliaNodeRuntime.resetFailure();
+            FoliaNodeRuntime.start(getContext(), null);
+        } else {
+            /*
+             * 关掉就把它的悬浮窗收掉（issue H19）。
+             *
+             * 窗口不关的话，那段「已经禁用」的代码仍在屏幕上画画、歌词泵仍在每 250ms 往它的
+             * 页面注入内容 —— 用户以为关掉了，其实一直在跑。别的模组的窗口不受影响。
+             */
+            overlayManager().destroyByOwner(call.getString("id", ""));
+        }
+        /*
+         * 启用时要带上用户在确认框里看到的那份内容摘要（sha256:<hex>）。
+         * 宿主会拿它和当前目录重新算出来的摘要比对，对不上就拒绝启用 ——
+         * 确认过的内容和实际要跑的必须是同一份字节。
+         */
+        String digest = call.getString("digest");
+        if (digest != null && !digest.isEmpty()) {
+            args.put("digest", digest);
+        }
         forward(call, "set-enabled", args);
     }
 
@@ -250,6 +279,14 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             }
             deleteRecursively(target);
             Log.i(TAG, "已删除模组：" + modId);
+
+            /*
+             * 卸载了就把它的悬浮窗一起关掉（issue H19）。
+             *
+             * 不关的话，窗口连同里面的 WebView 还挂在 WindowManager 上、歌词泵还在每 250ms
+             * 往一个「已经不存在的模组」的页面里注入原生歌词 —— 用户会看到「删掉了但浮窗还在动」。
+             */
+            overlayManager().destroyByOwner(modId);
 
             // 顺手清掉它的数据与缓存（模组卸载后这些已经没人用了）。
             File dataDirOfMod = new File(dataDir, "mods-data");
@@ -443,6 +480,39 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         forward(call, "storage", args);
     }
 
+    /**
+     * 模组的 `secret` 设置值（issue M13）：渲染端 `window.electron.mods.invokeModSecrets` 的安卓实现。
+     *
+     * 以前没有这个方法，渲染端的 shim 恒回 `unsupported-on-android`，`folium.secrets` 的每次调用
+     * 都在安卓上抛错。能力其实早就在：宿主 host.js 的 `secrets` op 接的就是同一份
+     * modSystem/modSecrets.cjs（安卓上 safeStorage 不可用，值只活在本次运行的内存里，
+     * `state().persistent` 为 false）。
+     *
+     * 参数名与桌面端 preload 一致：`modId`、`operation`，以及 `key`。`declare` 的键在 `key` 里
+     * 是字符串数组（也接受放在 `value` 里的那一份，兼容按位置传参的调用方）。
+     * 转成宿主认的 `{ modId, op, key, value }`，与 `invokeModStorage` 同一条路。
+     */
+    @PluginMethod
+    public void invokeModSecrets(PluginCall call) {
+        JSObject args = new JSObject();
+        args.put("modId", call.getString("modId", ""));
+        String operation = call.getString("operation", "");
+        args.put("op", operation);
+        // declare 的键放在 key / value 里都可能出现，谁是数组就用谁（两个都是时 key 优先）。
+        Object keyValue = call.getData().opt("key");
+        Object keys = keyValue instanceof com.getcapacitor.JSArray ? keyValue : call.getData().opt("value");
+        if ("declare".equals(operation) && keys instanceof com.getcapacitor.JSArray) {
+            args.put("key", "");
+            args.put("value", keys);
+        } else {
+            args.put("key", keyValue == null ? "" : String.valueOf(keyValue));
+            if (call.getData().has("value")) {
+                args.put("value", call.getData().opt("value"));
+            }
+        }
+        forward(call, "secrets", args);
+    }
+
     @PluginMethod
     public void getFfmpegStatus(PluginCall call) {
         forward(call, "ffmpeg-status", new JSObject());
@@ -465,6 +535,11 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         } catch (JSONException error) {
             options = new JSONObject();
         }
+        /*
+         * 归属模组（issue H19）：宿主按调用栈查出来塞在 options 里，见 host.js 的 callerModId。
+         * 有了它，禁用/卸载这个模组时只需关它自己的窗口，不必连累别人的。
+         */
+        String ownerModId = options.optString("ownerModId", "");
         OverlayWindowManager.OverlayWindow window = overlayManager().create(options);
         JSObject result = new JSObject();
         if (window == null) {
@@ -473,6 +548,7 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             call.resolve(result);
             return;
         }
+        window.ownerModId = ownerModId;
         result.put("ok", true);
         result.put("id", window.id);
         call.resolve(result);
@@ -645,16 +721,29 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
         OverlayWindowManager manager = overlayManager();
         switch (op) {
             case "create": {
-                OverlayWindowManager.OverlayWindow window = manager.create(args.optJSONObject("options") == null
+                JSONObject createOptions = args.optJSONObject("options") == null
                         ? new JSONObject()
-                        : args.optJSONObject("options"));
+                        : args.optJSONObject("options");
+                OverlayWindowManager.OverlayWindow window = manager.create(createOptions);
                 JSObject result = new JSObject();
                 if (window == null) {
                     result.put("error", manager.canDrawOverlays() ? "overlay-failed" : "no-overlay-permission");
                     return result;
                 }
+                // 归属模组（issue H19），理由同 createOverlayWindow。
+                window.ownerModId = createOptions.optString("ownerModId", "");
                 result.put("id", window.id);
                 return result;
+            }
+            case "destroy-all": {
+                /*
+                 * 模组系统总开关关掉时由宿主调用（issue H19）：所有窗口一起收掉，歌词泵也停。
+                 *
+                 * 这个 op 只有宿主会发 —— 模组自己关窗走的是 `destroy` + 自己的 id，
+                 * 不该有能力关别人的窗口。
+                 */
+                manager.destroyAll();
+                return new JSObject();
             }
             case "load-html": {
                 OverlayWindowManager.OverlayWindow window = manager.find(args.optLong("id", -1L));
@@ -753,6 +842,23 @@ public class FoliaModsPlugin extends Plugin implements FoliaNodeRuntime.MessageL
             overlays = new OverlayWindowManager(getContext());
             overlayBridge = new OverlayBridge(getContext(), overlays);
             overlayBridge.install(overlays);
+            /*
+             * overlay 页面 → 主进程的出口（issue H18）：native 不认模组注册了哪些通道，
+             * 统一交给 Node，由那边的 electron-shim 找到窗口、用它的 webContents 当 sender
+             * 触发 ipcMain 的监听。event.sender === win.webContents 靠的就是这一步。
+             */
+            overlayBridge.setIpcSink((windowId, channel, payload) -> {
+                JSONObject message = new JSONObject();
+                try {
+                    message.put("id", windowId);
+                    message.put("channel", channel);
+                    message.put("payload", payload == null ? JSONObject.NULL : payload);
+                } catch (JSONException error) {
+                    Log.w(TAG, "构造 overlay IPC 消息失败：" + channel, error);
+                    return;
+                }
+                FoliaNodeRuntime.sendToNode("overlay-ipc", message.toString());
+            });
         }
         return overlays;
     }

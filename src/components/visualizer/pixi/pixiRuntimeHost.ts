@@ -118,6 +118,15 @@ export const useVisualizerPixiHost = <TRuntime, TSong>({
         void createRef.current(host, initialSong, abortController.signal)
             .then(runtime => {
                 if (disposed) {
+                    /*
+                     * 这一次 effect 已经被清理掉了，`create` 却还是 resolve 了（issue H14）。
+                     *
+                     * 销毁的责任在这里，不在 cleanup：cleanup 跑的时候这个运行时还不存在，
+                     * 它拿不到引用。以前 cleanup 写的是 `createdRuntime ?? runtimeRef.current`，
+                     * 靠这个 `??` 兜住「创建晚于销毁」的情况 —— 那是靠隐式时序，读代码的人
+                     * 无法确认「到底谁负责销毁」。现在所有权是唯一一条：谁拿到 resolve 的值，
+                     * 谁负责销毁；cleanup 只销毁它自己 offer 出来的那个。
+                     */
                     destroyRef.current(runtime);
                     return;
                 }
@@ -142,8 +151,15 @@ export const useVisualizerPixiHost = <TRuntime, TSong>({
             abortController.abort();
             if (signalRef.current === abortController.signal) signalRef.current = null;
             appliedSongRef.current = null;
-            const runtime = createdRuntime ?? runtimeRef.current;
-            if (runtime) destroyRef.current(runtime);
+            /*
+             * 只销毁「这一次 effect 自己建出来的」那个运行时（issue H14）。
+             *
+             * 不存在就用不着猜：create 还没 resolve，那个运行时还没有人见过它，而它 resolve
+             * 的时候 `disposed` 已经为 true，会在上面的 then 里自己销毁。
+             * 以前这里的 `?? runtimeRef.current` 会把「别人建的那个」也当成自己的 —— 一次
+             * 重建里如果旧运行时仍在引用上，就会连它一起销毁。
+             */
+            if (createdRuntime) destroyRef.current(createdRuntime);
             runtimeRef.current = null;
             host.replaceChildren();
         };

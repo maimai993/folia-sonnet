@@ -64,23 +64,49 @@ class FoliaNativePlayerPlugin : Plugin() {
         )
     }
 
-    /** 释放播放器：先让排队中的旧事件失效（player=null），释放完成后再清全局缓冲豁免，且只在代数仍是当前时清。 */
+    /**
+     * 释放播放器：先让排队中的旧事件失效（player=null），释放完成后再清全局缓冲豁免。
+     *
+     * 这里**不再**按代数门禁清（#H8）：清理是跨代的义务，不是写入。以前它走 runIfCurrent，
+     * 旧实例迟到销毁时代数早已不是自己的，这一下就被挡掉 —— 而旧代可能是停在 stalled 里走的，
+     * 新一代又迟迟不装源，于是「偶发的歌词不跟着暂停收起 / 收起」一直挂着，没有任何自愈路径。
+     * 写入门禁仍在上面的 onEvent 里（那里的 isCurrent 一个字节都不改）。
+     */
     private fun releasePlayerAndClearStall() {
-        val generation = playerGeneration
         val current = player
         player = null
+        // 守卫窗跟着播放器一起作废：新播放器的 seek 会重新打开它。
+        nativeSeekGuard = NATIVE_SEEK_GUARD_IDLE
         if (current != null) {
             current.release {
-                PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+                PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
             }
         } else {
-            PLAYER_GENERATIONS.runIfCurrent(generation) { WallpaperLyricsState.clearPlayerStall() }
+            PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
         }
     }
 
     /** 当前这首的 songKey。伴奏缓存键、以及「生成完是不是还在听这首」都靠它。 */
     @Volatile
     private var currentSongKey: String? = null
+
+    /**
+     * 原生 seek 的回弹守卫窗（#H9）：见 onEvent 里「seeked」那一段。
+     *
+     * 只在**发起 seek 的一侧**打开、由播放器报告落位时关闭。播放器线程读、桥线程或主线程写，
+     * 所以是 volatile 的不可变快照，换的时候整体替换。
+     */
+    @Volatile
+    private var nativeSeekGuard: NativeSeekGuard = NATIVE_SEEK_GUARD_IDLE
+
+    /** 守卫窗现在的目标位置，只给上面那条日志用。 */
+    private val nativeSeekGuardTarget: Long
+        get() = nativeSeekGuard.targetMs
+
+    /** 记下「这一下是往哪儿 seek」，供 [onEvent] 里的守卫判断。 */
+    private fun armSeekGuard(targetMs: Long) {
+        nativeSeekGuard = armNativeSeekGuard(targetMs, android.os.SystemClock.elapsedRealtime())
+    }
 
     companion object {
         /** 跨插件实例共享：新实例 load() 一旦推进代数，旧实例的任何迟到写入都被挡掉。 */
@@ -191,7 +217,10 @@ class FoliaNativePlayerPlugin : Plugin() {
             val current = instance
             val player = current?.player
             if (current == null || player == null || !player.hasMedia()) return
-            player.seek(Math.max(0L, positionMs))
+            val target = Math.max(0L, positionMs)
+            // 打开回弹守卫窗（#H9）：落位之前到达的位置跳变不许把锚点写回拖动之前。
+            current.armSeekGuard(target)
+            player.seek(target)
         }
 
         /**
@@ -357,8 +386,10 @@ class FoliaNativePlayerPlugin : Plugin() {
         instance = this
         val generation = PLAYER_GENERATIONS.advance()
         playerGeneration = generation
-        // 旧实例若还没销毁，它的释放回调会因代数过期而跳过清理；新播放器从干净的缓冲豁免开始。
-        WallpaperLyricsState.clearPlayerStall()
+        // 跨代清理在这里统一承担（#H8）：见 PlayerGeneration 与 releasePlayerAndClearStall 的说明。
+        // 旧实例若还没销毁，它的释放回调以前会因为代数过期被 runIfCurrent 挡掉 —— 旧代停在
+        // stalled 里退场、新代又迟迟不装源，这条状态就永远没人清。现在推进代数的一侧无条件清一次。
+        PLAYER_GENERATIONS.clearForRetiredGeneration { WallpaperLyricsState.clearPlayerStall() }
         /*
          * 均衡器先恢复再建播放器。
          *
@@ -482,11 +513,36 @@ class FoliaNativePlayerPlugin : Plugin() {
                      */
                     val unityRate = Math.abs(self.getSpeed() - 1f) < 0.01f
                     val snapshot = WallpaperLyricsState.get()
-                    if ("position" == type && playing && unityRate
-                        && !displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, positionMs)) {
-                        // 差在一个采样周期内、播停也一致：这个采样值没有信息量，不写。
+                    /*
+                     * ⭐ 原生 seek 的回弹守卫（#H9）。
+                     *
+                     * 原来「seeked」是**一律照写**，而 ExoPlayer 的 seek 是异步的：seekTo 之后、
+                     * 真正落位之前，可能先用旧位置报一条位置不连续，锚点就被写回拖动之前 ——
+                     * 壁纸 / 悬浮窗 / 锁屏的歌词往回跳一行再追回来。Web 回声那一侧早就有守卫
+                     * （WallpaperLyricsState 的 seek 守卫窗），原生这一侧没有。
+                     *
+                     * 现在两阶段：seek 发起时打开窗口（通知栏 / 锁屏走 seekFromSystem、App 内拖动走
+                     * player.seek、恢复进度走 seekForResume），**播放器报告目标位置时才关**。窗口里
+                     * 报上来的位置只有落在锚点写入容差 [DISPLAY_ANCHOR_TOLERANCE_MS] 之内才认；
+                     * 差得远的一律不写锚点，位置留给「外推 + 那一条真落位」对齐。
+                     */
+                    val guardedPosition = if ("seeked" == type) {
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        val verdict = seekGuardVerdict(nativeSeekGuard, positionMs, now)
+                        nativeSeekGuard = advanceNativeSeekGuard(nativeSeekGuard, positionMs, now)
+                        if (verdict == null) {
+                            android.util.Log.i("FoliaNativePlayer", "seek 落位前的陈旧位置已丢弃 " +
+                                    "reported=" + positionMs + " target=" + nativeSeekGuardTarget)
+                        }
+                        verdict
                     } else {
-                        WallpaperLyricsState.setAnchor(positionMs, playing)
+                        positionMs
+                    }
+                    if (guardedPosition != null && "position" == type && playing && unityRate
+                        && !displayAnchorNeedsWrite(snapshot.playing, snapshot.positionMs(), playing, guardedPosition)) {
+                        // 差在一个采样周期内、播停也一致：这个采样值没有信息量，不写。
+                    } else if (guardedPosition != null) {
+                        WallpaperLyricsState.setAnchor(guardedPosition, playing)
                     }
                 }
                 /*
@@ -800,7 +856,10 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("positionMs is required.")
             return
         }
-        current.seek(positionMs.toLong())
+        val target = positionMs.toLong()
+        // App 内拖进度条（Web → player.seek）也是原生 seek：同一条守卫（#H9）。
+        if (target >= 0L) armSeekGuard(target)
+        current.seek(target)
         call.resolve()
     }
 
@@ -814,6 +873,8 @@ class FoliaNativePlayerPlugin : Plugin() {
             call.reject("A player, positionMs, songKey and sourceToken are required.")
             return
         }
+        // 恢复进度那一下也是原生 seek：守卫窗先打开，真落位之后才关（#H9）。
+        if (position >= 0) armSeekGuard(position.toLong())
         current.seekForResume(position.toLong(), songKey, token) { outcome ->
             outcome.fold(
                 { applied -> call.resolve(JSObject().apply { put("ok", applied); put("stale", !applied) }) },

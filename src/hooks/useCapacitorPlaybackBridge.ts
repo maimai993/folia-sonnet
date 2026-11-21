@@ -7,6 +7,7 @@ import { getPlaybackSongKey } from '../utils/appPlaybackGuards';
 import { nativePlaybackEngine } from '../services/playbackEngine/nativePlaybackEngine';
 import { applyNativeLikeOverrides, omni, type NativeLikeOverrideInput } from '../services/onlineMusic/omni';
 import { useOnlineProviderAccountStore } from '../stores/useOnlineProviderAccountStore';
+import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
 import { buildQueueMirrorEntries, getMirrorDurationMs, resolveLikeIdentity } from '../utils/queueMirrorEntry';
 import type { NativeQueueState } from '../services/nativeQueueBridge';
 import { isNativePlaybackReconciling } from '../services/playbackEngine/nativePlaybackSync';
@@ -423,7 +424,13 @@ export const useCapacitorPlaybackBridge = ({
     }).join(','),
     [queue, likeStateOf],
   );
-  const mirrorSourceRef = React.useRef({ queue, likeStateOf, currentSong });
+  /*
+   * 音质档也进镜像：原生自己取流时用它，否则锁屏切歌拿到的是 standard（issue H22）。
+   * 走 ref 而不是依赖数组 —— 音质变了没必要重推整份队列，等下一次推队列顺手带上就行，
+   * 那首歌真正被原生取流时读到的已经是新值。
+   */
+  const audioQualityRef = React.useRef(useAudioSettingsStore.getState().audioQuality);
+  audioQualityRef.current = useAudioSettingsStore(state => state.audioQuality);  const mirrorSourceRef = React.useRef({ queue, likeStateOf, currentSong });
   mirrorSourceRef.current = { queue, likeStateOf, currentSong };
   React.useEffect(() => {
     if (!enabled || reconciling || isNativePlaybackReconciling()) return;
@@ -433,7 +440,7 @@ export const useCapacitorPlaybackBridge = ({
     // 这里每推一次队列顺手同步一遍 —— 一次几十字节的调用，换原生兜底不空手。
     // 走 omni 而不是直连 transport：hooks 按依赖方向只该经过 omni。
     omni.syncNativeGatewayCredentials();
-    const entries = buildQueueMirrorEntries(list, stateOf);
+    const entries = buildQueueMirrorEntries(list, stateOf, audioQualityRef.current);
     const index = activeSong ? list.findIndex((song) => getPlaybackSongKey(song) === getPlaybackSongKey(activeSong)) : -1;
     void FoliaPlayback.setQueueMirror({ queueJson: JSON.stringify(entries), index });
     // likeSignal 不进依赖数组的「语义」，只当「红心状态变了」的触发器用。

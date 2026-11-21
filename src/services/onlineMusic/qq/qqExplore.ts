@@ -126,6 +126,8 @@ const songsIn = (answer: any): UnifiedSong[] => (
 const listOf = (value: unknown): any[] => (Array.isArray(value) ? value : []);
 
 // 422 是「上游成功但没有数据」：这一栏这次没有东西，不是失败。
+// @note 桥（src/nativeBridge/api/qq/explore.js）自 M25 起改成「读不出来就回 __foliaBridgeError」，
+// 不再用空数组冒充失败；这条判断留着只为老后端（HTTP 后端仍可能回 422），不是新语义的入口。
 const isEmptyAnswer = (error: unknown): boolean => (
     error instanceof OnlineProviderError && error.code === 'network' && error.httpStatus === 422
 );

@@ -111,6 +111,14 @@ export type QueueMirrorEntry = {
     providerHash: string;
     providerAlbumAudioId: string;
     /**
+     * 用户选的音质档。
+     *
+     * 原生侧自己去取流时要用它（issue H22）：以前那边写死 standard，于是「前台 Web 拿无损、
+     * 锁屏切下一首走原生拿标准档」，同一首歌两种音质。放在镜像条目里一起推过去，
+     * 原生就不用自己猜用户选了什么。没传时原生按 standard 处理。
+     */
+    audioQuality?: string;
+    /**
      * 现成的播放地址。
      *
      * 原生那边**先用它**，拿不到才自己去取流（见 FoliaPlaybackService 的 mirrorEntryUrl）。
@@ -143,6 +151,7 @@ const nativeMirrorArtworkUrl = (song: SongResult): string => {
 export const buildQueueMirrorEntry = (
     song: SongResult,
     likeStateOf?: QueueMirrorLikeStateOf,
+    audioQuality?: string,
 ): QueueMirrorEntry => {
     const identity = resolveLikeIdentity(song);
     const likeState = likeStateOf?.(song);
@@ -158,6 +167,7 @@ export const buildQueueMirrorEntry = (
         providerMid: identity.providerMid,
         providerHash: identity.providerHash,
         providerAlbumAudioId: identity.providerAlbumAudioId,
+        ...(audioQuality ? { audioQuality } : {}),
         liked: likeState?.liked ?? false,
         canLike: likeState?.canLike ?? false,
     };
@@ -166,7 +176,8 @@ export const buildQueueMirrorEntry = (
 export const buildQueueMirrorEntries = (
     list: SongResult[],
     likeStateOf?: QueueMirrorLikeStateOf,
-): QueueMirrorEntry[] => list.map(song => buildQueueMirrorEntry(song, likeStateOf));
+    audioQuality?: string,
+): QueueMirrorEntry[] => list.map(song => buildQueueMirrorEntry(song, likeStateOf, audioQuality));
 
 /**
  * 按原生镜像队列的顺序重排本地队列：**字段用本地的，顺序用原生的**。

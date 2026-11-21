@@ -38,7 +38,15 @@ let lastHeldThemeFields = '';
 
 window.__foliaWallpaperPush = (incoming) => {
     let payload = incoming;
-    if (!payload || typeof payload !== 'object') return;
+    if (!payload || typeof payload !== 'object') {
+        /*
+         * 原生把 payload 塞进 `__foliaWallpaperPush(...)` 时，只要那边序列化出了问题，
+         * 这里收到的就是 undefined / 一个基本类型。以前直接 return（issue C4 的验收标准
+         * 第三条）：叠层停在上一首，而日志里什么都没有，只能去翻 Kotlin 那侧。
+         */
+        console.warn('[wallpaper] dropped a non-object lyrics payload', incoming);
+        return;
+    }
     /*
      * 整份主题每一推都是 JSON 现解出来的新对象，内容通常一字未变。
      * 直接用的话主题 memo 每推一次就重算、可视化拿到新 theme 跟着重建 —— 叠层上就是推送之后
@@ -148,10 +156,17 @@ window.__foliaWallpaperPush = (incoming) => {
  * 和歌词/主题走同一份快照，组件那边才不会拿到两套互相打架的数据。
  */
 window.__foliaWallpaperPushCover = (incoming) => {
-    if (!incoming || typeof incoming !== 'object') return;
+    if (!incoming || typeof incoming !== 'object') {
+        console.warn('[wallpaper] dropped a non-object cover payload', incoming);
+        return;
+    }
     const url = typeof incoming.url === 'string' && incoming.url ? incoming.url : null;
     const data = typeof incoming.data === 'string' && incoming.data ? incoming.data : null;
-    if (!url && !data) return;
+    if (!url && !data) {
+        /* 空的封面推送：原生那边可能拿到了一张抓不出来的图。记一行，别让封面「莫名不更新」。 */
+        console.warn('[wallpaper] dropped an empty cover payload (no url, no data)');
+        return;
+    }
     if (latest.coverUrl === url && latest.cover === data) return;
     latest = { ...latest, coverUrl: url, cover: data };
     subscribers.forEach(notify => notify());
@@ -163,7 +178,10 @@ window.__foliaWallpaperPushCover = (incoming) => {
  * 和封面一样落在 `latest` 上：组件那边只读一份快照，不会出现两套互相打架的数据。
  */
 window.__foliaWallpaperPushCappellaImages = (incoming) => {
-    if (!incoming || typeof incoming !== 'object') return;
+    if (!incoming || typeof incoming !== 'object') {
+        console.warn('[wallpaper] dropped a non-object cappella images payload', incoming);
+        return;
+    }
     const avatars = Array.isArray(incoming.avatars) ? incoming.avatars : undefined;
     const emojis = Array.isArray(incoming.emojis) ? incoming.emojis : undefined;
     if (!avatars && !emojis) return;

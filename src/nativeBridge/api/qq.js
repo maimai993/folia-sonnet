@@ -645,6 +645,9 @@ async function fetchQQVipQuery(uin, cookieHeader) {
   }, cookieHeader);
 }
 
+// 先摸一次 y.qq.com 让罐里已有 cookie 生效，再读回来。
+// 摸站失败不要紧（cookie 罐里可能已经有登录态）；**读 cookie 失败要紧** —— 那会抛
+// CookieReadError 往上走，不能被这里吞成空串（H4：否则桥超时等于「未登录」）。
 export async function warmQQLoginCookies() {
   try {
     await fetch('https://y.qq.com/', {
@@ -660,7 +663,10 @@ export async function warmQQLoginCookies() {
 
 export async function getQQLoginStatus(cookieHeader) {
   if (!cookieHeader) {
-    try { cookieHeader = await warmQQLoginCookies(); } catch (_) { cookieHeader = ''; }
+    // 读不到 cookie 时**不能**当成「没登录」：这里以前 catch 成空串，于是桥抖一下就
+    // 回「未检测到 QQ 音乐登录 Cookie」，登录态被判失效并连带清掉本地凭据（H4）。
+    // warmQQLoginCookies 里的 cookie 读取抛 CookieReadError，往外交给上层说「暂时读不到」。
+    cookieHeader = await warmQQLoginCookies();
   }
   const uin = qqCookieUin(cookieHeader);
   const musicKey = qqCookieMusicKey(cookieHeader);

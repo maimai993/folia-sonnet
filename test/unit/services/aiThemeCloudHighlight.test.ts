@@ -26,6 +26,9 @@ const { handlers } = vi.hoisted(() => ({
 vi.mock('@/services/foliaCloud', () => ({
   isFoliaCloudCacheEnabled: () => true,
   resolveCloudApiUrl: (path: string) => `https://cloud.test/api/${path}`,
+  /* 写入准入（issue C6）：这套用例验的是高亮词判定，令牌只要「有」。 */
+  resolveCloudWriteToken: () => 'synthetic-write-token',
+  CLOUD_WRITE_TOKEN_HEADER: 'X-Folia-Cache-Token',
   DEFAULT_CLOUD_BASE_URL: 'https://cloud.test',
 }));
 
@@ -68,6 +71,19 @@ const themeWith = (words: string[]) => ({
 
 const json = (body: unknown, ok = true) => ({ ok, status: ok ? 200 : 404, json: async () => body }) as unknown as Response;
 
+/*
+ * 一条**会被采信**的云端主题条目（issue C6）。客户端复算 `payloadDigest`，绑的是
+ * `[verifyKey, kind, key, writer, payloadJson]`；这里照同一套规则算。
+ */
+const VERIFY_KEY = 'folia-cache-digest-v1';
+const hit = async (key: string, payload: unknown, kind: 'theme' | 'stage' = 'theme') => {
+  const writer = 'token:synthetic';
+  const text = JSON.stringify([VERIFY_KEY, kind, key, writer, JSON.stringify(payload)]);
+  const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  const payloadDigest = Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return json({ hit: true, entry: { payload, writer, payloadDigest, verifyKey: VERIFY_KEY } });
+};
+
 /** 用户报的那一例：标了 `留住`，可这首的歌词里根本没有「留住」。 */
 const LYRIC = '可那些与我无关\n麻烦总缠着我\n什么也不想说\n让我重新认识一个更好的你\n因为你陪着我';
 
@@ -78,7 +94,7 @@ beforeEach(() => {
 describe('按已知键直取的那一条（AI 主题页点播放）', () => {
   it('高亮词在这首的歌词里凑不齐就不要', async () => {
     handlers.fetch = async (url) => (
-      url.includes(KEY) ? json({ hit: true, entry: { payload: themeWith(['留住', '我', '什么', '把', '你']) } }) : json({ hit: false }, false)
+      url.includes(KEY) ? await hit(KEY, themeWith(['留住', '我', '什么', '把', '你'])) : json({ hit: false }, false)
     );
 
     expect(await pullCachedThemeByKey(KEY, LYRIC)).toBeNull();
@@ -87,7 +103,7 @@ describe('按已知键直取的那一条（AI 主题页点播放）', () => {
   /* 对照：同一份 payload，歌词对得上就该照旧拿回来 —— 上面那条 null 才确实是被判住的。 */
   it('高亮词都在就照旧拿回来', async () => {
     handlers.fetch = async (url) => (
-      url.includes(KEY) ? json({ hit: true, entry: { payload: themeWith(['麻烦', '重新认识']) } }) : json({ hit: false }, false)
+      url.includes(KEY) ? await hit(KEY, themeWith(['麻烦', '重新认识'])) : json({ hit: false }, false)
     );
 
     const theme = await pullCachedThemeByKey(KEY, LYRIC);
@@ -98,7 +114,7 @@ describe('按已知键直取的那一条（AI 主题页点播放）', () => {
   /* 没歌词 = 没得判：这时候判死等于把没 Key 的人唯一的来源掐了。 */
   it('拿不到歌词时照旧放行', async () => {
     handlers.fetch = async (url) => (
-      url.includes(KEY) ? json({ hit: true, entry: { payload: themeWith(['留住']) } }) : json({ hit: false }, false)
+      url.includes(KEY) ? await hit(KEY, themeWith(['留住'])) : json({ hit: false }, false)
     );
 
     expect(await pullCachedThemeByKey(KEY)).not.toBeNull();
@@ -107,7 +123,7 @@ describe('按已知键直取的那一条（AI 主题页点播放）', () => {
   /* 一个高亮词都没标 = 没凭据，不是「判出来不对」。 */
   it('没标高亮词的老主题照样放行', async () => {
     handlers.fetch = async (url) => (
-      url.includes(KEY) ? json({ hit: true, entry: { payload: themeWith([]) } }) : json({ hit: false }, false)
+      url.includes(KEY) ? await hit(KEY, themeWith([])) : json({ hit: false }, false)
     );
 
     expect(await pullCachedThemeByKey(KEY, LYRIC)).not.toBeNull();
@@ -117,7 +133,7 @@ describe('按已知键直取的那一条（AI 主题页点播放）', () => {
   it('落在 stage 那半里的主题一样要判', async () => {
     handlers.fetch = async (url) => {
       if (url.includes(KEY) && url.includes('/stage/')) {
-        return json({ hit: true, entry: { payload: { theme: themeWith(['留住']) } } });
+        return await hit(KEY, { theme: themeWith(['留住']) }, 'stage');
       }
       return json({ hit: false }, false);
     };
@@ -133,7 +149,7 @@ describe('按歌名 + 歌手拉的那一条', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: OTHER_KEY, words: ['留住', '我', '什么', '把', '你'] }] });
       }
-      if (url.includes(OTHER_KEY)) return json({ hit: true, entry: { payload: themeWith(['留住', '我']) } });
+      if (url.includes(OTHER_KEY)) return await hit(OTHER_KEY, themeWith(['留住', '我']));
       return json({ hit: false }, false);
     };
 
@@ -149,7 +165,7 @@ describe('按歌名 + 歌手拉的那一条', () => {
       if (url.includes('/ai-cache/resolve')) {
         return json({ ok: true, candidates: [{ key: OTHER_KEY, words: ['麻烦', '重新认识'] }] });
       }
-      if (url.includes(OTHER_KEY)) return json({ hit: true, entry: { payload: themeWith(['麻烦', '重新认识']) } });
+      if (url.includes(OTHER_KEY)) return await hit(OTHER_KEY, themeWith(['麻烦', '重新认识']));
       return json({ hit: false }, false);
     };
 

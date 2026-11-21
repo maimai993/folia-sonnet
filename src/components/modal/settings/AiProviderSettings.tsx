@@ -136,13 +136,26 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
     };
 
     const runCacheProbe = async () => {
+        /*
+         * 关掉开关就别发请求：探测的目的就是「开了之后连不连得通」，关着还发一次请求
+         * 与开关的承诺相反。按钮本身在这时也是禁用的，这里再挡一道。
+         */
+        if (!cloudCache.enabled) {
+            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheProbeDisabled') });
+            return;
+        }
+        const probeUrl = resolveAiCloudCacheUrl(STAGE_CACHE_KIND, CLOUD_CACHE_PROBE_KEY);
+        if (!probeUrl) {
+            setCacheProbe({ state: 'done', ok: false, text: t('options.cloudCacheProbeFailed') });
+            return;
+        }
         setCacheProbe({ state: 'running', ok: false, text: '' });
         const startedAt = Date.now();
         try {
-            const response = await createAiFetch()(
-                resolveAiCloudCacheUrl(STAGE_CACHE_KIND, CLOUD_CACHE_PROBE_KEY),
-                { method: 'GET', headers: { Accept: 'application/json' } },
-            );
+            const response = await createAiFetch()(probeUrl, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+            });
             if (!response.ok) {
                 setCacheProbe({
                     state: 'done',
@@ -572,7 +585,8 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                             {t('options.cloudCacheDesc')}
                         </div>
                     </div>
-                    {/* 开关统一用 kit 那一颗：这一颗的样子本来就是照它定的。 */}
+                    {/* 开关统一用 kit 那一颗：这一颗的样子本来就是照它定的。
+                        没有地址时打不开：开关打开也没地方可发（见 services/foliaCloud.ts）。 */}
                     <Toggle
                         checked={cloudCache.enabled}
                         onChange={() => updateFoliaCloudSettings({ enabled: !cloudCache.enabled })}
@@ -581,29 +595,33 @@ const AiProviderSettings: React.FC<AiProviderSettingsProps> = ({ settingsCardCla
                 </div>
 
                 <div className="pt-4 space-y-3">
-                    <label className="block space-y-1 text-left">
+                    {/*
+                        地址固定为项目自己的公共实例，**不由用户修改**，所以这里只展示文本，
+                        不放输入框（也就没有"填错地址"这一种失败）。开关仍然保留：不想用的人
+                        可以关掉，关掉之后一个请求都不会发出去。
+                    */}
+                    <div className="block space-y-1 text-left">
                         <span className="text-xs opacity-60" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.cloudCacheBaseUrl')}
                         </span>
-                        <TextField
-                            type="text"
-                            autoComplete="off"
-                            spellCheck={false}
-                            value={cloudCache.baseUrl}
-                            onChange={(event) => updateFoliaCloudSettings({ baseUrl: event.target.value })}
-                            placeholder="https://apif.tangbot.xyz"
-                            className={fieldClass}
-                            style={{ color: 'var(--text-primary)' }}
-                        />
+                        <div
+                            className="rounded-xl border px-3 py-2 text-xs font-mono break-all"
+                            style={{
+                                borderColor: 'var(--border-subtle, color-mix(in srgb, currentColor 18%, transparent))',
+                                color: 'var(--text-primary)',
+                            }}
+                        >
+                            {cloudCache.baseUrl}
+                        </div>
                         <span className="block text-[10px] opacity-45" style={{ color: 'var(--text-secondary)' }}>
                             {t('options.cloudCacheBaseUrlDesc')}
                         </span>
-                    </label>
+                    </div>
 
                     <div className="flex flex-wrap items-center gap-3 text-left">
                         <Button
                             onClick={() => void runCacheProbe()}
-                            disabled={cacheProbe.state === 'running'}
+                            disabled={cacheProbe.state === 'running' || !cloudCache.enabled}
                             className={ghostButtonClass}
                             style={{ color: 'var(--text-primary)' }}
                         >

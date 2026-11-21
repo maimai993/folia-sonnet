@@ -20,6 +20,21 @@ const ref = (kind: 'album' | 'artist', id: unknown) => (
     id ? { providerId: 'qishui', kind, id: text(id) } : undefined
 );
 
+/**
+ * 一张图片地址：把封面 / 头像字段（字符串，或带 `urls` / `uri` / `template_prefix` 的对象）解成 https 地址。
+ */
+export const qishuiApiImage = (raw: unknown): string => {
+    if (typeof raw === 'string') return raw.startsWith('https://') ? raw : '';
+    const value = qishuiRecord(raw);
+    const url = Array.isArray(value.urls)
+        ? value.urls.find((item: unknown) => typeof item === 'string' && item.startsWith('https://'))
+        : '';
+    if (!url) return '';
+    return value.uri && url.endsWith('/')
+        ? `${url}${value.uri}${value.template_prefix ? `~${value.template_prefix}-image.image` : ''}`
+        : url;
+};
+
 // 汽水的 `artist` 操作必须同时给出 artistId 与 artistName（只给 id 会回 MISSING_ARTIST_NAME），
 // 所以归一化时见过的歌手都记下来，供之后按 id 打开歌手页时复用。
 const artistNames = new Map<string, string>();

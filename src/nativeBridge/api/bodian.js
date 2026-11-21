@@ -1,5 +1,12 @@
 import CryptoJS from '../vendor/crypto-es.mjs';
 import { noteLibraryStep } from './libraryTrace.js';
+import {
+  clearSecureValue,
+  isSecureStoreAvailable,
+  isSecureStoreError,
+  readSecureValue,
+  writeSecureValue,
+} from './secureStore.js';
 
 // Browser/Android adaptation of bodian-music-api@0.1.2. The desktop package uses node:https,
 // node:crypto and node:zlib; this implementation uses WebView fetch, crypto-es and browser
@@ -7,7 +14,13 @@ import { noteLibraryStep } from './libraryTrace.js';
 
 const API_ORIGIN = 'https://bd-api.kuwo.cn';
 const LYRIC_ORIGIN = 'https://mlyric.kuwo.cn';
+/**
+ * 旧的明文键。**不再往里写**（H30），但升级后第一次启动要读出来搬进加密槽位再删掉，
+ * 所以名字保留（已发布的存储键不改名）。
+ */
 const STORAGE_KEY = 'bodianSessionV1';
+/** 加密槽位：token 在这个位置由原生 Keystore 加密后落盘。 */
+const SECURE_SLOT = 'bodian-session';
 const QR_TTL_MS = 5 * 60 * 1000;
 
 const md5 = value => CryptoJS.MD5(String(value || '')).toString();
@@ -30,46 +43,129 @@ const base64ToUtf8 = (value) => {
   return new TextDecoder().decode(bytes);
 };
 
+/**
+ * 波点的登录会话（uid + token）。
+ *
+ * token 是长期的账号凭据，原来明文躺在 localStorage 的 `bodianSessionV1` 里 —— 一行
+ * `localStorage.getItem('bodianSessionV1')` 就能拿走（H30）。现在它在原生加密存储里
+ * （secureStore.js → FoliaSecureStore，Android Keystore 的 AES-GCM），页面这边只在内存里留着。
+ *
+ * 没有原生存储的环境（桌面主进程、单测）照旧用 localStorage：那边本来就拿不到 Keystore，
+ * 硬失败只会让波点在桌面版直接用不了。
+ */
 const sessionState = {
-  loaded: false,
-  revision: 0,
-  session: null,
+    loaded: false,
+    /** 正在读盘的 Promise：并发调用共用一次，别把同一份数据读两遍。 */
+    loading: null,
+    revision: 0,
+    session: null,
 };
 
-const loadSession = () => {
-  if (sessionState.loaded) return;
-  sessionState.loaded = true;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && parsed.uid && parsed.token) {
-      sessionState.session = {
-        uid: String(parsed.uid),
-        token: String(parsed.token),
-        user: parsed.user && typeof parsed.user === 'object' ? parsed.user : null,
-      };
+/** 从一段 JSON 里解出会话；形状不对答 null（当没登录，不要拿半截 uid/token 去请求）。 */
+const parseStoredSession = (raw) => {
+    if (!raw) return null;
+    try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object' || !parsed.uid || !parsed.token) return null;
+        return {
+            uid: String(parsed.uid),
+            token: String(parsed.token),
+            user: parsed.user && typeof parsed.user === 'object' ? parsed.user : null,
+        };
+    } catch (_) {
+        return null;
     }
-  } catch (_) {}
 };
 
-const getSession = () => {
-  loadSession();
-  return sessionState.session;
+/**
+ * 把旧版本明文写在 localStorage 里的会话搬进加密槽位，然后删掉明文。
+ *
+ * 顺序是「先加密写成功，再删明文」：写不进去就留着明文、下次启动再试 —— 绝不在写不进去的时候先删。
+ * 读不出来（解不开）时也不动明文，免得把一份可能还能救的数据埋掉。
+ */
+const migrateLegacySession = async () => {
+    let legacy = '';
+    try { legacy = localStorage.getItem(STORAGE_KEY) || ''; } catch (_) { return; }
+    if (!legacy) return;
+    if (!parseStoredSession(legacy)) {
+        // 损坏的旧值：不是凭据，直接清掉。
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+        return;
+    }
+    let existing = null;
+    try {
+        existing = await readSecureValue(SECURE_SLOT);
+    } catch (error) {
+        // 槽位读不出来（解不开 / 桥故障）：不动明文，下次启动再试 —— 现在删就可能把还能救的数据埋掉。
+        if (!isSecureStoreError(error)) console.warn('[Bodian] 加密槽位读不出来，旧会话先留在原处', error);
+        return;
+    }
+    if (existing.found) {
+        // 加密那份才是真相，明文只是残留。
+        try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+        return;
+    }
+    if (!await writeSecureValue(SECURE_SLOT, legacy)) {
+        console.warn('[Bodian] 旧会话暂时搬不进加密存储，明文先留着');
+        return;
+    }
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
 };
 
-const setSession = (session) => {
-  loadSession();
-  sessionState.session = session;
-  sessionState.revision += 1;
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(session)); } catch (_) {}
+/** 读盘（只做一次）。读不出来不抛：波点的功能都会自己再报"要登录"，不该卡在初始化上。 */
+const ensureSessionLoaded = () => {
+    if (sessionState.loaded) return Promise.resolve();
+    if (sessionState.loading) return sessionState.loading;
+    sessionState.loading = (async () => {
+        try {
+            if (isSecureStoreAvailable()) {
+                await migrateLegacySession();
+                const stored = await readSecureValue(SECURE_SLOT);
+                if (stored.found) sessionState.session = parseStoredSession(stored.text);
+            } else {
+                let raw = '';
+                try { raw = localStorage.getItem(STORAGE_KEY) || ''; } catch (_) {}
+                sessionState.session = parseStoredSession(raw);
+            }
+        } catch (error) {
+            // 解不开（换机、Keystore 被重置）：当没登录，让用户重新扫一次码。
+            if (!isSecureStoreError(error)) console.warn('[Bodian] 会话读取失败', error);
+        } finally {
+            sessionState.loaded = true;
+            sessionState.loading = null;
+        }
+    })();
+    return sessionState.loading;
 };
 
-const clearSession = () => {
-  loadSession();
-  sessionState.session = null;
-  sessionState.revision += 1;
-  try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+const getSession = () => sessionState.session;
+
+/** 写下去。返回 Promise，调用方要能知道这次登录有没有真的存住。 */
+const setSession = async (session) => {
+    await ensureSessionLoaded();
+    sessionState.session = session;
+    sessionState.revision += 1;
+    const text = JSON.stringify(session);
+    if (!isSecureStoreAvailable()) {
+        try { localStorage.setItem(STORAGE_KEY, text); } catch (_) {}
+        return true;
+    }
+    const written = await writeSecureValue(SECURE_SLOT, text);
+    if (!written) {
+        // 没存住：这次运行里照样用，重启之后要重新登录。**不回退成明文**。
+        console.warn('[Bodian] 会话没能写进加密存储，这次登录只在本次运行里有效');
+    }
+    // 写成功顺手清掉旧明文（升级后第一次登录可能没走迁移那条路）。
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    return written;
+};
+
+const clearSession = async () => {
+    await ensureSessionLoaded();
+    sessionState.session = null;
+    sessionState.revision += 1;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    if (isSecureStoreAvailable()) await clearSecureValue(SECURE_SLOT);
 };
 
 class BodianError extends Error {
@@ -102,6 +198,10 @@ const desktopHeaders = deviceId => ({
   'Content-Type': 'application/json',
 });
 
+/**
+ * 把响应体读成 JSON。读不出来回 null —— 调用方各自决定「没有响应体」意味着什么，
+ * **不能**让它把状态码的分类吃掉（M28）。
+ */
 const readResponsePayload = async (response) => {
   const fallback = response.clone();
   try {
@@ -114,12 +214,73 @@ const readResponsePayload = async (response) => {
         return await new Response(stream).json();
       } catch (_) {}
     }
-    const contentType = response.headers.get('content-type') || 'unknown';
-    throw new BodianError(
-      'invalid-response',
-      `Bodian returned an unreadable response (HTTP ${response.status}, content-type ${contentType})`,
-    );
+    return null;
   }
+};
+
+/** 给日志用的那一句：只说「没读出来」，不带地址（query 里可能有 uid 与签名）。 */
+const unreadableBodyNote = response => {
+  const contentType = String(response.headers.get('content-type') || 'unknown').slice(0, 64);
+  return `HTTP ${response.status}, content-type ${contentType}`;
+};
+
+/**
+ * 3xx 的目标主机。日志只用它，不记完整地址 —— 跳转目标上可能带着上游塞进去的参数。
+ */
+const redirectHostOf = (response) => {
+  const location = response.headers.get('location');
+  if (!location) return null;
+  try {
+    return new URL(location, response.url || API_ORIGIN).host || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 发一次请求，把「fetch 本身 reject」收进同一族错误（M28）。
+ *
+ * `redirect: 'error'` 撞上重定向时 fetch 交回来的是一个 TypeError —— 不上这一层，
+ * 它会被兜底分支当成 invalid-response，又一次把「上游要求换地址」错报成「协议格式错误」。
+ * 这里按错误名区分两句文案，都归成 network（可以退避重试的那一类），
+ * 并带上被拒的主机名 —— 不带完整地址。
+ */
+const fetchForCall = async (url, init) => {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    const target = (() => {
+      try {
+        return new URL(url).host;
+      } catch {
+        return 'unknown host';
+      }
+    })();
+    // 规格里 redirect: 'error' 抛 TypeError；真正的网络故障（断网、DNS）也是 TypeError，
+    // 所以两只手都留着：名字对不上就按网络失败说。
+    if (error instanceof TypeError && /redirect/i.test(String(error.message || ''))) {
+      console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { host: target });
+      throw new BodianError('network', `upstream asked to redirect to ${target}; redirects are not followed`);
+    }
+    console.warn('[Bodian] 请求没发出去', { host: target, error });
+    throw new BodianError('network', `request to ${target} failed`);
+  }
+};
+
+/**
+ * 上游的重定向一律不跟随（M28）：token 在**请求头**里，而重定向是自动重发的，
+ * 跟过去就等于把它交给跳转目标主机。这里一律当失败处理，并说出跳到了哪台主机
+ * —— 出问题时能定位，又不把 token 送出去。真要换地址，让上游把地址重新配一遍
+ * （那时会再走一遍主机判定）。
+ */
+const redirectFailure = (response) => {
+  const host = redirectHostOf(response);
+  console.warn('[Bodian] 上游要求重定向，未跟随（凭据不外带）', { status: response.status, host });
+  return new BodianError(
+    'network',
+    `upstream redirected to ${host || 'another location'} (HTTP ${response.status}); redirects are not followed`,
+    response.status,
+  );
 };
 
 const createClient = (deviceId) => ({
@@ -135,8 +296,21 @@ const createClient = (deviceId) => ({
     if (!String(path).startsWith('/') || String(path).includes('..')) {
       throw new BodianError('unsupported', 'Invalid Bodian path');
     }
+    await ensureSessionLoaded();
     const session = anonymous ? null : getSession();
-    const query = { ...params, uid: String(session?.uid || '-1'), token: session?.token || '' };
+    /*
+     * token **只走请求头**，不进查询串（H30）。
+     *
+     * 查询串会原样进服务器访问日志、代理日志、CDN 日志，以及任何一层错误上报 /
+     * 浏览器历史 / Referer —— 把长期凭据写在那里，等于每发一次请求就多几个人能看到它。
+     * 波点本来就认 `token` 请求头（下面 headers.token 一直是这么发的，服务端两边都收），
+     * 所以这里只是不再重复一遍。
+     *
+     * 签名照旧：signQuery 过去把 token 一起算进签名，现在查询串里没有它了，
+     * 就必须按**现在真正发出去的参数**重算，否则签名对不上。所以先去 token 再签名。
+     */
+    const query = { ...params, uid: String(session?.uid || '-1') };
+    delete query.token;
     const bodyText = body === undefined ? '' : JSON.stringify(body);
     if (signed) {
       query.timestamp = String(Date.now());
@@ -151,21 +325,55 @@ const createClient = (deviceId) => ({
       headers.uid = String(session.uid);
       headers.token = session.token;
     }
-    const response = await fetch(url.toString(), {
+    const response = await fetchForCall(url.toString(), {
       method,
       headers,
       ...(bodyText ? { body: bodyText } : {}),
-      redirect: 'follow',
+      /*
+       * 重定向一律不自动跟（M28）：token 在请求头里，`redirect: 'follow'` 会把带着
+       * token 的请求原样交给跳转目标主机 —— 上游被劫持或配置错误时那就是凭据外泄。
+       *
+       * 用 `error` 而不是 `manual`：`manual` 交回的是 opaque-redirect 响应，状态码和
+       * Location 都读不到，日志里就说不清「跳到了哪台主机」；`error` 让 fetch 直接
+       * reject，由 fetchForCall 归成同一类失败（没有上游状态码可报）。
+       */
+      redirect: 'error',
     });
-    let payload = null;
-    try { payload = await readResponsePayload(response); } catch (error) {
-      if (error instanceof BodianError) throw error;
+    /*
+     * 先判状态码，再解析响应体（M28）。
+     *
+     * 改前的次序是「取响应体 → 判 401 → 判 2xx」，响应体取不出来时抛的是 invalid-response，
+     * 于是 401 / 429 / 503 全被错报成「协议格式错误」，状态码丢掉，按 429 / 503 认的限流
+     * 退避永远不生效。现在状态码先说话，响应体只用来补充错误详情；解析失败不影响分类。
+     */
+    // 按规范 `manual` 才回 opaque-redirect；这里留着这一支，是为不依赖浏览器对
+    // `error` 的具体实现（两种都当「上游要求换地址」处理）。
+    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+      throw redirectFailure(response);
     }
     if (response.status === 401) {
-      throw new BodianError('auth-required', 'Bodian sign-in is required', 401);
+      throw new BodianError('auth-required', 'sign-in is required', 401);
     }
     if (!response.ok) {
-      throw new BodianError('network', `Bodian HTTP ${response.status}`, response.status);
+      // 非 2xx：分类只认状态码；响应体里的业务码 / 文案有就补上，没有也不影响分类。
+      const detail = await readResponsePayload(response);
+      const message = typeof detail?.msg === 'string'
+        ? detail.msg
+        : typeof detail?.message === 'string' ? detail.message : '';
+      throw new BodianError(
+        'network',
+        `HTTP ${response.status}${message ? `: ${message.slice(0, 200)}` : ''}`,
+        response.status,
+      );
+    }
+    const payload = await readResponsePayload(response);
+    if (payload === null) {
+      // 2xx 但读不出响应体：这才是真正的「协议格式错误」。
+      throw new BodianError(
+        'invalid-response',
+        `unreadable response (${unreadableBodyNote(response)})`,
+        response.status,
+      );
     }
     if (!payload || Number(payload.code) !== 200) {
       const code = Number(payload?.code);
@@ -181,7 +389,7 @@ const createClient = (deviceId) => ({
       }
       throw new BodianError(
         code === 11012 ? 'auth-required' : code === 20018 ? 'not-playable' : 'invalid-response',
-        `Bodian rejected the request (code ${payload?.code ?? 'missing'})`,
+        `rejected the request (code ${payload?.code ?? 'missing'})`,
         payload?.code,
       );
     }
@@ -298,7 +506,12 @@ const createCatalogOperations = client => ({
   },
 });
 
-const requireSession = () => {
+/**
+ * 要登录的操作先过这里。会话是**懒加载**（第一次读盘在 ensureSessionLoaded 里），
+ * 所以这里返回 Promise —— 不 await 的话第一次调用会拿到 null，把登录的用户当成游客。
+ */
+const requireSession = async () => {
+  await ensureSessionLoaded();
   const session = getSession();
   if (!session) throw new BodianError('auth-required', 'Bodian sign-in is required');
   return session;
@@ -321,13 +534,13 @@ const collectionPage = (data, params, albums) => {
 };
 
 const createLibraryOperations = client => {
-  const paramsForUser = () => {
-    const { uid } = requireSession();
+  const paramsForUser = async () => {
+    const { uid } = await requireSession();
     return { userId: uid, fromUid: uid };
   };
   return {
     async user_playlists(params) {
-      const user = paramsForUser();
+      const user = await paramsForUser();
       const [owned, liked, collected] = await Promise.all([
         callData(client, 'service/playlist/userCreate', user),
         callData(client, 'service/playlist/fond', user),
@@ -337,13 +550,13 @@ const createLibraryOperations = client => {
     },
     async user_albums(params) {
       return collectionPage(
-        await callData(client, 'service/collect/4/list', { ...paramsForUser(), ...pagination(params, 1) }),
+        await callData(client, 'service/collect/4/list', { ...await paramsForUser(), ...pagination(params, 1) }),
         params,
         true,
       );
     },
     async liked_songs(params) {
-      const liked = await callData(client, 'service/playlist/fond', paramsForUser());
+      const liked = await callData(client, 'service/playlist/fond', await paramsForUser());
       if (!liked?.id) return { list: [], total: 0 };
       return pageData(
         await callData(client, `service/playlist/${liked.id}/musicList`, {
@@ -377,7 +590,7 @@ const updatePlaylist = async (client, playlistId, tracks, remove, revision) => {
 
 const createMutationOperations = client => {
   const playlistTracks = async (params, remove) => {
-    const { uid } = requireSession();
+    const { uid } = await requireSession();
     const revision = sessionState.revision;
     const id = numericId(params.id);
     if (typeof params.trackIds !== 'string' || params.trackIds.length > 2200) {
@@ -402,7 +615,7 @@ const createMutationOperations = client => {
     playlist_tracks_add: params => playlistTracks(params, false),
     playlist_tracks_del: params => playlistTracks(params, true),
     async like_song(params) {
-      const { uid } = requireSession();
+      const { uid } = await requireSession();
       const revision = sessionState.revision;
       const id = numericId(params.id);
       if (typeof params.liked !== 'boolean') {
@@ -452,6 +665,7 @@ const createPlaybackOperation = (client, deviceId) => async (params) => {
       preview: { startTime: Number(preview.start), endTime: Number(preview.end) },
     };
   }
+  // client.call 内部已经 await 过 ensureSessionLoaded，这里读到的会话就是最新的。
   if (Number(right?.status) === 7) {
     throw new BodianError(getSession() ? 'not-playable' : 'auth-required', 'Bodian requires additional playback rights');
   }
@@ -562,7 +776,9 @@ const createAuthOperations = (client) => {
         avatarUrl: String(rawUser.headImg || rawUser.avatarUrl || ''),
       };
       if (typeof login?.token === 'string' && login.token.trim()) {
-        setSession({ uid: ids[0], token: login.token, user });
+        // 等它真的写进加密存储再回去报「登录成功」：写不进去的话这次登录重启即失效，
+        // 但界面仍然应该显示已登录（本次运行里确实已经登录上了），日志里会有一行说明。
+        await setSession({ uid: ids[0], token: login.token, user });
         qrSessions.clear();
         return { state: 'confirmed' };
       }
@@ -573,17 +789,18 @@ const createAuthOperations = (client) => {
       return null;
     },
     async login_status() {
+      await ensureSessionLoaded();
       const session = getSession();
       if (!session) return null;
       if (session.user?.id !== session.uid) {
-        clearSession();
+        await clearSession();
         throw new BodianError('auth-required', 'Bodian session identity is inconsistent');
       }
       return session.user;
     },
     async logout() {
       qrSessions.clear();
-      clearSession();
+      await clearSession();
       return null;
     },
   };
@@ -634,7 +851,15 @@ export async function handleBodianRequest(operation, params = {}) {
     return result;
   } catch (error) {
     if (error instanceof BodianError && error.code === 'auth-required' && sessionState.revision === revision) {
-      clearSession();
+      await clearSession();
+    }
+    /*
+     * 兜底也要把抛出来的错本身记下来（M28）：改前只回一句 `Bodian operation failed`，
+     * 非 BodianError 的岔子（fetch reject、类型错误）在诊断里连名字都没有。
+     * 只记错误对象，不记请求地址 —— 地址的 query 里有 uid 与签名。
+     */
+    if (!(error instanceof BodianError)) {
+      console.warn('[Bodian] 操作抛出未归类的错误', { operation, error });
     }
     const result = {
       ok: false,

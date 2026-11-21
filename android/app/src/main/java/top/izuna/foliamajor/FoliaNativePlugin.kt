@@ -117,6 +117,9 @@ class FoliaNativePlugin : Plugin() {
         /** 更新包下载进度事件名。 */
         const val UPDATE_PROGRESS_EVENT = "updateDownloadProgress"
 
+        /** 跳转被白名单拦下时交回 JS 的错误前缀（M16）；后面拼上目标主机。 */
+        const val REDIRECT_NOT_ALLOWED_PREFIX = "redirect not allowed: "
+
         /**
          * 安全区变化事件名。
          *
@@ -535,6 +538,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun aiCloudCacheGet(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "aiCloudCacheGet")) return
         val key = call.getString("key", "")
         val url = call.getString("url", "")
         if (key == null || key.isEmpty() || url == null || url.isEmpty()) {
@@ -607,6 +611,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun aiRequest(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "aiRequest")) return
         val url = call.getString("url", "")
         val bodyText = call.getString("body", "")
         if (url == null || url.isEmpty()) {
@@ -671,8 +676,45 @@ class FoliaNativePlugin : Plugin() {
         }
     }
 
+    /** 授权层（C1 / H2 / H3）：来源、域名白名单、自建服务登记都问它，见 FoliaNativeAccess。 */
+    @Volatile
+    private var access: FoliaNativeAccess? = null
+
+    private val gate: FoliaNativeAccess
+        get() = access ?: FoliaNativeAccess(getContext()).also { access = it }
+
+    /**
+     * 所有敏感方法的第一道闸（H3）：不是主 WebView 文档就拒绝。
+     *
+     * 返回 false 表示这次调用已经被 reject 掉了，调用方**立刻 return**。
+     *
+     * 为什么每个方法自己调而不是在反射分发处统一拦：插件方法是声明式的，没有全局钩子；
+     * 而真正要守住的入口就下面这十几个（网络出口、cookie、安装、导出、设置写入），
+     * 逐个写在入口上，评审时一眼能核对「谁守了、守的是哪一档」。
+     */
+    private fun denyIfNotMainDocument(call: PluginCall, method: String): Boolean {
+        return try {
+            gate.requireMainDocument(this, method)
+            false
+        } catch (error: FoliaNativeAccessDenied) {
+            call.reject(error.reason)
+            true
+        }
+    }
+
+    private fun rejectDenied(call: PluginCall, error: FoliaNativeAccessDenied) {
+        call.reject(error.reason)
+    }
+
     override fun load() {
         instance = this
+        /*
+         * 授权层（C1 / H2 / H3）：来源校验、域名白名单、本次填过的自建服务都收口在
+         * FoliaNativeAccess 里，见那个文件的说明。这里只把它挂上 —— 插件方法各自
+         * 在自己的入口调 denyIfNotMainDocument / gate，不走全局拦截：每个方法能做什么、
+         * 要守哪一档权限不一样，一次性列在调用点上比藏在反射拦截里更好核对。
+         */
+        access = FoliaNativeAccess(getContext())
         /*
          * 新的一份页面（冷启动 / WebView 重载）：「我在不在播放页」这件事归零。
          *
@@ -688,6 +730,14 @@ class FoliaNativePlugin : Plugin() {
 
     override fun handleOnDestroy() {
         if (instance === this) instance = null
+        /*
+         * 投送租约也要在这里收口。
+         *
+         * 过去只有 Web 层调 lanCastRelease 这一个收回点，而投送中途异常、WebView 被冻死、
+         * 页面没来得及走完收回流程时，LocalAudioServer 会一直对局域网开放 /remote-audio/。
+         * 插件销毁（Activity 重建 / 进程退出前）是最后一个能确定执行的时机，在这里补一刀。
+         */
+        localAudioServer?.releaseLanCastLeases()
         super.handleOnDestroy()
     }
 
@@ -805,20 +855,75 @@ class FoliaNativePlugin : Plugin() {
         })
     }
 
+    /**
+     * 登记一台「用户自己填的自建服务」（C1 / H2）。
+     *
+     * 由 JS 侧在用户**主动填写**服务器地址时（飞牛登录表单的第一栏、Navidrome 设置页）
+     * 调一次；原生把这台机器记进本次会话的可用目标，进程重启即失效。
+     *
+     * 为什么需要它：`httpRequest` 现在有主机白名单，而飞牛 / Navidrome 的地址是用户在
+     * 运行期才填的，出厂白名单里不可能有。原生自己会读用户设置里**已经落盘**的那一份
+     * （见 FoliaNativeAccess.readConfiguredServerHosts），首次登录时地址还只在这个表单里，
+     * 所以补一条即时通道。
+     *
+     * 边界：只登记一台机器（host + port），不解锁其它主机，不改落盘配置，
+     * 也不让调用方读到别人的 cookie —— 页面脚本就算自己调，得到的也只是「我能连我填的
+     * 那台机器」，这正是用户本来就要的操作。
+     *
+     * 洛雪自定义音源也走这条路（lxSourceStore 在启动与变更时把已装脚本里的域名报上来），
+     * 而且**能通**：这里没有「主机必须先在用户设置里出现过」这类前置检查，落盘的自建服务
+     * 只是一条捷径，不是必经之路。曾经有一份交付报告据此认为「自定义音源会被 C1 白名单挡住」，
+     * 那是误读，别照着它去放宽白名单。
+     */
+    @PluginMethod
+    fun registerSelfHostedService(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "registerSelfHostedService")) return
+        val url = call.getString("url", "")
+        if (url == null || url.isEmpty()) {
+            call.reject("Missing service url")
+            return
+        }
+        val host = gate.hostOfServerAddress(url)
+        if (host.isNullOrEmpty()) {
+            call.reject("Service url has no host")
+            return
+        }
+        val port = gate.portOfServerAddress(url)
+        gate.rememberSessionHost(host, port)
+        // 地址变了要按新地址重建一遍（用户可能刚刚换了一台 NAS）。
+        gate.rebuildAllowlist()
+        val result = JSObject()
+        result.put("ok", true)
+        result.put("host", host)
+        call.resolve(result)
+    }
+
+    /**
+     * 列出一个平台域的 cookie（H2）。
+     *
+     * **必须显式指定域名**（`url` 或 `domain`，落在白名单里）：
+     *   · 原来的无参回退是 `https://localhost/` —— 那正是页面自己的 origin（Capacitor 的
+     *     androidScheme/hostname），于是「不传参数」等于「把页面自己的凭据交出去」；
+     *   · 现在没有参数就拒绝，也不再有任何默认域。
+     *
+     * 域由 [FoliaNativeAccess.requireCookieDomain] 核过白名单，按「平台自己的那一片」
+     * 取（`*.qq.com` 取 `qq.com`），读不到隔壁平台的登录态。
+     */
     @PluginMethod
     fun cookiesGetAll(call: PluginCall) {
-        var url = call.getString("url", "")
-        val domain = call.getString("domain", "")
-        if (url == null || url.isEmpty()) {
-            url = if (domain == null || domain.isEmpty()) {
-                "https://localhost/"
-            } else {
-                if (domain.startsWith("http")) domain else "https://" + domain
-            }
+        if (denyIfNotMainDocument(call, "cookiesGetAll")) return
+        val url = call.getString("url", "") ?: ""
+        val domain = call.getString("domain", "") ?: ""
+        val targetDomain = try {
+            gate.requireCookieDomain(url, domain, "cookiesGetAll")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
         }
 
         val cookies = JSArray()
-        for (cookie in parseCookieHeader(CookieManager.getInstance().getCookie(url), domain)) {
+        val cookieUrl = gate.cookieUrlFor(targetDomain, url)
+        for (cookie in parseCookieHeader(CookieManager.getInstance().getCookie(cookieUrl), targetDomain)) {
             cookies.put(cookie)
         }
         val result = JSObject()
@@ -828,13 +933,23 @@ class FoliaNativePlugin : Plugin() {
 
     @PluginMethod
     fun cookiesGet(call: PluginCall) {
-        val url = call.getString("url", "https://localhost/")
+        if (denyIfNotMainDocument(call, "cookiesGet")) return
         val name = call.getString("name", "")
         if (name == null || name.isEmpty()) {
             call.reject("Missing cookie name")
             return
         }
-        for (cookie in parseCookieHeader(CookieManager.getInstance().getCookie(url), "")) {
+        // H2：原来不传 url 就默认 https://localhost/（页面自己的域）。现在必须显式给域名。
+        val url = call.getString("url", "") ?: ""
+        val domain = call.getString("domain", "") ?: ""
+        val targetDomain = try {
+            gate.requireCookieDomain(url, domain, "cookiesGet")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
+        }
+        val cookieUrl = gate.cookieUrlFor(targetDomain, url)
+        for (cookie in parseCookieHeader(CookieManager.getInstance().getCookie(cookieUrl), "")) {
             if (name == cookie.optString("name")) {
                 val result = JSObject()
                 result.put("cookie", cookie)
@@ -847,8 +962,17 @@ class FoliaNativePlugin : Plugin() {
         call.resolve(result)
     }
 
+    /**
+     * 写一条 cookie（H2）。
+     *
+     * 域名必须在白名单里，且**参数里给的 domain 不能覆盖到别处**：
+     *   · `domain` 参数只允许是该地址自己的域（或它的父域之内），写成 `Domain=.qq.com`
+     *     去盖别的平台会被拒；
+     *   · `path` 只允许以 `/` 开头的普通路径，不许写 Domain / Max-Age 这类指令。
+     */
     @PluginMethod
     fun cookiesSet(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "cookiesSet")) return
         val url = call.getString("url", "")
         val name = call.getString("name", "")
         val value = call.getString("value", "")
@@ -856,20 +980,41 @@ class FoliaNativePlugin : Plugin() {
             call.reject("Cookie url and name are required")
             return
         }
+        val targetDomain = try {
+            gate.requireCookieDomain(url, call.getString("domain", ""), "cookiesSet")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
+        }
+        val cookieUrl = gate.cookieUrlFor(targetDomain, url)
 
         val cookie = StringBuilder()
         cookie.append(name).append('=').append(if (value == null) "" else value)
         val domain = call.getString("domain", "")
         val path = call.getString("path", "/")
-        if (domain != null && !domain.isEmpty()) cookie.append("; domain=").append(domain)
-        if (path != null && !path.isEmpty()) cookie.append("; path=").append(path)
+        if (domain != null && !domain.isEmpty()) {
+            val normalized = domain.lowercase(Locale.ROOT).removePrefix(".")
+            // 只允许写「自己这一片」：要么就是目标域，要么是它的子域。
+            if (normalized != targetDomain && !normalized.endsWith("." + targetDomain)) {
+                call.reject("Cookie domain is outside the target platform")
+                return
+            }
+            cookie.append("; domain=").append(domain)
+        }
+        if (path != null && !path.isEmpty()) {
+            if (!path.startsWith("/") || path.contains(';') || path.contains(' ') || path.contains('\n')) {
+                call.reject("Cookie path is not a plain path")
+                return
+            }
+            cookie.append("; path=").append(path)
+        }
         if (java.lang.Boolean.TRUE.equals(call.getBoolean("secure", false))) cookie.append("; Secure")
         val expirationDate = call.getDouble("expirationDate")
         if (expirationDate != null) {
             cookie.append("; Max-Age=").append(Math.max(0.0, expirationDate - System.currentTimeMillis() / 1000.0).toInt())
         }
 
-        CookieManager.getInstance().setCookie(url, cookie.toString())
+        CookieManager.getInstance().setCookie(cookieUrl, cookie.toString())
         CookieManager.getInstance().flush()
         val result = JSObject()
         result.put("ok", true)
@@ -878,13 +1023,21 @@ class FoliaNativePlugin : Plugin() {
 
     @PluginMethod
     fun cookiesRemove(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "cookiesRemove")) return
         val url = call.getString("url", "")
         val name = call.getString("name", "")
         if (url == null || url.isEmpty() || name == null || name.isEmpty()) {
             call.reject("Cookie url and name are required")
             return
         }
-        CookieManager.getInstance().setCookie(url, name + "=; Max-Age=0; path=/")
+        val targetDomain = try {
+            gate.requireCookieDomain(url, call.getString("domain", ""), "cookiesRemove")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
+        }
+        val cookieUrl = gate.cookieUrlFor(targetDomain, url)
+        CookieManager.getInstance().setCookie(cookieUrl, name + "=; Max-Age=0; path=/")
         CookieManager.getInstance().flush()
         val result = JSObject()
         result.put("ok", true)
@@ -897,9 +1050,12 @@ class FoliaNativePlugin : Plugin() {
      * 逐条删除每条都要过一次桥并在原生侧 flush 一次，切换登录通道要清几十条，
      * 累加起来会超过调用方的截止时间，结果只清掉一半 —— 剩下一半旧凭据会把新登录
      * 拼成一个用不了的会话。所以这里在原生侧一次做完。
+     *
+     * H2：每一条都单独过一次白名单；越界的那条跳过并计数，不因为一条就越权。
      */
     @PluginMethod
     fun cookiesRemoveBatch(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "cookiesRemoveBatch")) return
         val entries = call.getArray("entries")
         if (entries == null || entries.length() == 0) {
             val empty = JSObject()
@@ -910,17 +1066,25 @@ class FoliaNativePlugin : Plugin() {
         }
         val manager = CookieManager.getInstance()
         var removed = 0
+        var denied = 0
         for (index in 0 until entries.length()) {
             val entry = entries.optJSONObject(index)
             if (entry == null) continue
             val url = entry.optString("url", "")
             val name = entry.optString("name", "")
             if (url == null || url.isEmpty() || name == null || name.isEmpty()) continue
-            manager.setCookie(url, name + "=; Max-Age=0; path=/")
+            val targetDomain = try {
+                gate.requireCookieDomain(url, entry.optString("domain", ""), "cookiesRemoveBatch")
+            } catch (error: FoliaNativeAccessDenied) {
+                denied++
+                continue
+            }
+            val cookieUrl = gate.cookieUrlFor(targetDomain, url)
+            manager.setCookie(cookieUrl, name + "=; Max-Age=0; path=/")
             // JS 登录写的是 Domain cookie；只删 host-only 会留下同名登录态（#208）。
-            val host = Uri.parse(url).host
+            val host = Uri.parse(cookieUrl).host
             if (!host.isNullOrEmpty()) {
-                manager.setCookie(url, name + "=; Max-Age=0; path=/; Domain=" + host + "; Secure; HttpOnly")
+                manager.setCookie(cookieUrl, name + "=; Max-Age=0; path=/; Domain=" + host + "; Secure; HttpOnly")
             }
             removed++
         }
@@ -928,16 +1092,34 @@ class FoliaNativePlugin : Plugin() {
         val result = JSObject()
         result.put("ok", true)
         result.put("removed", removed)
+        if (denied > 0) result.put("denied", denied)
         call.resolve(result)
     }
 
+    /**
+     * 唯一的出网通道（C1）。
+     *
+     * 原来它是个**通用出口**：host / scheme / 端口 / 内网网段一律不校验，调用方不传
+     * Cookie 头就自动把 CookieManager 里目标域的全部 cookie 挂上，重定向默认跟随。
+     * 而 `window.Capacitor.Plugins.FoliaNative` 是页面全局对象，页面里任何一段脚本
+     * 都能直接调它 —— 一次调用就能把某个平台的登录态读走，或者拿它当 SSRF 打内网。
+     *
+     * 现在四道闸（全部在原生侧，JS 封装层绕过也没用）：
+     *   1. 来源：只有主 WebView 文档能调（H3 的来源校验层，见 denyIfNotMainDocument）；
+     *   2. 目标：scheme 只认 http/https，host 必须在白名单里（平台域 + 用户配置的自建服务）；
+     *   3. 内网：10./172.16-31./192.168./127./169.254./::1 这些网段只放行用户**自己
+     *      配置过**（或本次登录时填过）的自建服务，其余一律拒 —— 这就是 SSRF 那一半；
+     *   4. 凭据与跳转：cookie 只在白名单内自动附带，且只带属主「就是这条地址自己」的那些；
+     *      跳转默认改 manual，跨主机的跳转一律不跟。
+     */
     @PluginMethod
     fun httpRequest(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "httpRequest")) return
         val url = call.getString("url", "")
         val method = call.getString("method", "GET")
         val bodyText = call.getString("bodyText", "")
         val bodyBase64 = call.getString("bodyBase64", "")
-        val redirect = call.getString("redirect", "follow")
+        val redirect = call.getString("redirect", "manual") ?: "manual"
         /*
          * 响应怎么回给 JS：
          *  · auto（默认）—— 文本类 Content-Type 且能按 UTF-8 严格解码时回 `bodyText`，
@@ -954,6 +1136,14 @@ class FoliaNativePlugin : Plugin() {
         val maxResponseBytes = requestedMaxBytes.coerceIn(64 * 1024, HARD_MAX_RESPONSE_BYTES)
         if (url == null || url.isEmpty()) {
             call.reject("Missing request url")
+            return
+        }
+
+        // C1：目标地址的白名单与内网判定。越界直接 reject，不发出任何字节。
+        val targetHost = try {
+            gate.requireAllowedTarget(Uri.parse(url), "httpRequest")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
             return
         }
 
@@ -974,14 +1164,30 @@ class FoliaNativePlugin : Plugin() {
                     }
                 }
             }
-            // OkHttp 这里没有 cookie jar，所以要把 WebView 的 cookie 库自己带上，
-            // 除非调用方已经显式塞了 Cookie 头。
+            /*
+             * cookie 自动附带（C1）：
+             *
+             * 原来只要调用方没传 Cookie 头，就把 CookieManager 里目标 URL 的**全部** cookie
+             * 挂上去 —— 配合「host 不校验」，等于「任意页面脚本 → 任意平台账号」。
+             *
+             * 现在只有落在白名单里、且**就是这家平台自己的**域才附带（C1 要求「白名单内才
+             * 附带，且只附带给该平台自己的域」）；明文 http 的链路上不带凭据，除非目标就是
+             * 用户自己配置的自建服务（局域网 NAS 只有 http）。
+             */
             if (headers == null || optHeader(headers, "cookie") == null) {
-                val storedCookies = CookieManager.getInstance().getCookie(url)
-                if (storedCookies != null && !storedCookies.isEmpty()) {
-                    // sanitize 可能整体清空（极端脏值），那就干脆不带这个头。
-                    val safeCookie = sanitizeHeaderValue(storedCookies)
-                    if (safeCookie != null) builder.header("Cookie", safeCookie)
+                val targetUri = Uri.parse(url)
+                val secureTarget = "https".equals(targetUri.scheme, ignoreCase = true)
+                    || gate.isSessionHost(targetHost, if (targetUri.port > 0) targetUri.port else 80)
+                if (gate.isAllowedHost(targetHost) && secureTarget) {
+                    // 读的是「这个域自己的那一片」：平台的子域名（`a.kugou.com`）拿到的是它
+                    // 共享域（`kugou.com`）的 cookie，不再是罐子里碰巧全带上的东西。
+                    val domain = gate.domainOfAllowedHost(targetHost) ?: targetHost
+                    val storedCookies = CookieManager.getInstance().getCookie("https://" + domain + "/")
+                    if (storedCookies != null && !storedCookies.isEmpty()) {
+                        // sanitize 可能整体清空（极端脏值），那就干脆不带这个头。
+                        val safeCookie = sanitizeHeaderValue(storedCookies)
+                        if (safeCookie != null) builder.header("Cookie", safeCookie)
+                    }
                 }
             }
 
@@ -1036,13 +1242,41 @@ class FoliaNativePlugin : Plugin() {
                 builder.method(requestMethod, body)
             }
 
+            /*
+             * 重定向（C1 / M16）：
+             *
+             * 原来默认 `follow`（OkHttp 默认跟随），上游只要回一个 302 到攻击者的域，请求
+             * 连同凭据就跟着离开设备了。现在三种取舍：
+             *   · `manual` —— 不跟随，把第一跳的响应原样交回去，由调用方自己决定；
+             *   · `follow` —— OkHttp 自己跟随，每一跳由 [AllowlistedRedirects] 复核，越界那一跳
+             *     停下、把 3xx 原样交回 JS（**不报错**）；
+             *   · `follow-strict`（默认）—— 同样逐跳复核，但越界不是「悄悄回一个没跟的 3xx」：
+             *     调用方拿到的是一条明确的 `redirect not allowed: <host>` 错误。缺省必须是这一档：
+             *     悄悄回 3xx 的话，白名单主机上一个可控的 302 就能让上游把请求带到任意主机，
+             *     而 JS 这一侧完全看不出「这次没有按白名单走」（M16 的验收标准）。
+             *
+             * 为什么默认变了：页面上的 fetch shim 与 nativeHttpRequest 过去都显式传 follow，
+             * 于是 M16 描述的那个洞一直在。现在 JS 侧不再传 follow，缺省就该是「越界即报错」。
+             */
+            val followMode = when {
+                "manual" == redirect -> "manual"
+                "follow" == redirect -> "follow"
+                else -> "follow-strict"
+            }
             var requestClient = client
-            if ("manual" == redirect) {
+            if (followMode == "manual") {
                 requestClient = requestClient.newBuilder()
                     .followRedirects(false)
                     .followSslRedirects(false)
                     .build()
-            }
+            } else {
+                // 跟随的每一跳都要重新过一遍白名单：OkHttp 的 followUpRequest 决定了下一跳去哪，
+                // 这里拒掉它（strict 时还让整条请求以明确的错误收场）。
+                requestClient = requestClient.newBuilder()
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .addInterceptor(AllowlistedRedirects(gate, followMode == "follow-strict"))
+                    .build()            }
             // AI 请求可能远超默认的 45s 读超时，调用方可以按需放宽。
             val timeoutMs = call.getInt("timeoutMs")
             if (timeoutMs != null && timeoutMs > 0) {
@@ -1151,6 +1385,100 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
+     * 跟随跳转时的逐跳白名单复核（C1 / M16）。
+     *
+     * 拦截器排在 OkHttp 自己的 RedirectInterceptor **之后**（addInterceptor 加进来的应用
+     * 拦截器在最外层），但那一层只负责跟着 3xx 建下一条请求、并不发出去 —— 真正的发送发生在
+     * 内层的 BridgeInterceptor / ConnectInterceptor。所以这里 `chain.proceed` 返回一个 3xx
+     * 时，读一下 `chain.request()`（OkHttp 已经把下一跳写进它自己的请求状态）就能知道
+     * 目标是谁；不在白名单里就在这一跳停下。
+     *
+     * 停下有两种收场（M16）：
+     *   · `strict = false`（调用方显式传了 `follow`）：把 3xx 响应原样交回去，调用方看到的是
+     *     一个没跟的跳转，而不是一个凭空出现的异常；
+     *   · `strict = true`（缺省）：整条请求以 [RedirectNotAllowed] 收场，host 放在异常的
+     *     message 里（`redirect not allowed: <host>`），于是 JS 侧读得到「白名单外的目标」，
+     *     也就不会把这次结果当成「白名单内正常拿到了数据」。
+     *
+     * 为什么不直接改 followRedirects=false 再自己循环：那要把 307/308 的 body 重放、
+     * 认证头剥离、跨域 Authorization 清理全抄一遍，抄漏一条就是新的洞。这里只做一件事：
+     * 判断「下一跳能不能去」。
+     */
+    private class AllowlistedRedirects(
+        private val access: FoliaNativeAccess,
+        private val strict: Boolean,
+    ) : okhttp3.Interceptor {
+        override fun intercept(chain: okhttp3.Interceptor.Chain): Response {
+            val response = chain.proceed(chain.request())
+            // 3xx 能不能继续跟、越界时该不该报错，全在 redirectDenial 里；它也是 JVM 单测的口子。
+            val next = chain.request().url
+            val denial = redirectDenial(response.code, next.toString(), access)
+            if (denial == null) return response
+            Log.w(TAG, "httpRequest redirect blocked: host " + next.host + " is not an allowlisted target")
+            if (!strict) {
+                // 不能跟的跳转：把这一跳的响应原样交回去（3xx + Location），由调用方决定。
+                return response
+            }
+            response.close()
+            throw RedirectNotAllowed(denial)
+        }
+    }
+
+    /**
+     * 跳转被白名单拦下时抛的异常：message 直接交回 JS，形如 `redirect not allowed: <host>`。
+     *
+     * 继承 IOException 是因为插件的 httpRequest 就 catch 这一档、把 message 原样交回 JS；
+     * 网络层自己不会产生这句话，读到它只可能是跳转复核拦下来的。
+     */
+    class RedirectNotAllowed(reason: String) : java.io.IOException(reason)
+
+    /**
+     * 读 APK 的签名证书，和当前应用比对（H3）。
+     *
+     * 不校验签名有效链，只比对**证书集合是否一致** —— 这一步要挡住的是「换了一个包来装」
+     * 与「同包名但不是我们签的包」，这两件事只看证书就够；有效性由系统安装器自己再验一遍。
+     *
+     * minSdk ≥ 28，签名信息只可能从 `PackageInfo.signingInfo` 拿
+     * （`GET_SIGNATURES` 那条路已经废弃）。`archive` 那条读的是 APK 归档里的签名，
+     * 正是「即将被安装的那一份自己带的证书」。
+     */
+    private object UpdateSignature {
+
+        fun matchesInstalledApp(context: android.content.Context, apk: File): Boolean {
+            return try {
+                val pm = context.packageManager
+                @Suppress("DEPRECATION")
+                val installed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    pm.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                        .signingInfo
+                } else {
+                    null
+                }
+                val installedCerts = certsOf(installed) ?: return false
+                val flags = android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                val archive = pm.getPackageArchiveInfo(apk.absolutePath, flags)?.signingInfo ?: return false
+                val archiveCerts = certsOf(archive) ?: return false
+                installedCerts == archiveCerts
+            } catch (error: Exception) {
+                // 读不出来（不是合法 APK、权限问题）一律当不一致。
+                Log.w(TAG, "cannot compare update signature", error)
+                false
+            }
+        }
+
+        private fun certsOf(info: android.content.pm.SigningInfo?): Set<String>? {
+            if (info == null) return null
+            val signers = info.apkContentsSigners ?: return null
+            if (signers.isEmpty()) return null
+            val certs = LinkedHashSet<String>()
+            for (signer in signers) {
+                certs.add(Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest(signer.toByteArray()), Base64.NO_WRAP))
+            }
+            return certs
+        }
+    }
+
+    /**
      * 响应超过桥上限定。
      *
      * 单独一类而不是直接抛 IOException：回调里要把「太大，别重试」和「网络坏了，可以重试」
@@ -1226,10 +1554,15 @@ class FoliaNativePlugin : Plugin() {
      *
      * 登录能不能保持住全靠这一步：登录接口下发的 MUSIC_U / qqmusic_key 之类的凭据，
      * 之后每次请求都要由 {@link #httpRequest} 从这里读出来带上。
+     *
+     * C1 / H2：只往白名单内的目标写。响应如果是被跳到白名单外的域拿到的，那里的
+     * Set-Cookie 也不该落进罐子里 —— 罐子是按域存的，写进去之后同一平台的请求就会把它带上。
      */
     private fun storeResponseCookies(requestUrl: String, response: Response) {
         val setCookies = response.headers.values("Set-Cookie")
         if (setCookies.isEmpty()) return
+        // 最终拿到响应的那条地址（跳转之后是最后一跳）也要在白名单里。
+        if (!gate.isAllowedHost(Uri.parse(response.request.url.toString()).host)) return
         val manager = CookieManager.getInstance()
         var changed = false
         for (rawCookie in setCookies) {
@@ -1284,12 +1617,23 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun downloadUpdate(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "downloadUpdate")) return
         val url = call.getString("url", "")
         val fileName = call.getString("fileName", "")
         if (url == null || url.isEmpty()) {
             call.reject("Missing update download url")
             return
         }
+        // H3：更新包只能从官方域走 https 下载。这条链路另外还有一道 —— 原生把包下回来之后
+        // 要交给系统安装器，而安装器只认签名，所以请求本身也不能被指到任意主机上。
+        if (try {
+                gate.requireUpdateUrl(url, "downloadUpdate")
+                false
+            } catch (error: FoliaNativeAccessDenied) {
+                rejectDenied(call, error)
+                true
+            }
+        ) return
         val safeName = sanitizeUpdateFileName(fileName)
 
         synchronized(updateDownloadLock) {
@@ -1313,7 +1657,12 @@ class FoliaNativePlugin : Plugin() {
             }
 
             val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
+            // 跳转也要过白名单（H3）：GitHub 的下载地址会 302 到产物 CDN，那几台主机在
+            // FoliaNativeAccess 的更新域名表里；除此之外的跳转在这一跳停下。
+            val updateClient = client.newBuilder()
+                .addInterceptor(AllowlistedRedirects(gate, strict = true))
+                .build()
+            updateClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
                     throw IOException("Update download failed with HTTP " + response.code)
                 }
@@ -1359,17 +1708,34 @@ class FoliaNativePlugin : Plugin() {
         }
     }
 
-    /** 把下载好的包交给系统安装器。 */
+    /**
+     * 把下载好的包交给系统安装器（H3）。
+     *
+     * 原来是「任意路径 → 系统安装器」：页面脚本可以拿它去装一个已经落在别处的 APK，
+     * 是完整应用接管链的一环。现在两层拦：
+     *   1. 路径必须是 [downloadUpdate] 自己写进 `cacheDir/updates` 的那个文件（canonical path
+     *      比对，`../` 与符号链接都绕不出去）；
+     *   2. 安装前核对包的签名证书与当前应用一致 —— 换过签名的包（包括被人塞进来的
+     *      同包名 APK）在这里就断掉，不用等系统安装器报 INSTALL_FAILED_UPDATE_INCOMPATIBLE。
+     */
     @PluginMethod
     fun installUpdate(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "installUpdate")) return
         val path = call.getString("path", "")
         if (path == null || path.isEmpty()) {
             call.reject("Missing update file path")
             return
         }
-        val file = File(path)
-        if (!file.exists()) {
-            call.reject("Update file is missing")
+        val file = try {
+            gate.requireDownloadedUpdateFile(path, File(getContext().cacheDir, UPDATE_DIRECTORY), "installUpdate")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
+        }
+        // H3：签名必须与当前应用一致。读不出证书（不是合法 APK）同样算不一致。
+        if (!UpdateSignature.matchesInstalledApp(getContext(), file)) {
+            Log.w(TAG, "installUpdate rejected: signed by a different certificate")
+            call.reject("Update package is not signed by this app's certificate")
             return
         }
 
@@ -1541,20 +1907,28 @@ class FoliaNativePlugin : Plugin() {
     }
 
     /**
-     * 投送前的准备：把转发服务临时对局域网开放，并把手机 IP / 端口交给 Web 层。
+     * 投送前的准备：打开一次带截止时间的局域网音频租约，并把手机 IP / 端口 / 凭证交给 Web 层。
      *
      * 安卓上歌曲地址大多是 `http://127.0.0.1:<port>/remote-audio/<token>`（CORS 转发），
      * 音响把 127.0.0.1 当成它自己，直接推过去必然无声。这里给出可替换的局域网地址，
-     * Web 层把 host 换掉即可；端口和 token 都是本次会话的，不会持久化。
+     * Web 层把 host 换掉即可；端口、令牌和租约都是本次会话的，不会持久化。
+     *
+     * 安全：租约不是「开一个全局布尔」，而是一次性凭证 —— 局域网连接必须带上本次签发的
+     * `lanToken`、来源必须是局域网、且响应不再下发 `Access-Control-Allow-Origin: *`。
+     * 幂等续期：投送期间反复调用不换凭证，只顺延截止时间。
      */
     @PluginMethod
     fun lanCastPrepare(call: PluginCall) {
         try {
             if (localAudioServer == null) localAudioServer = LocalAudioServer(getContext())
             val port = localAudioServer!!.start()
-            localAudioServer!!.setLanClientsAllowed(true)
+            val lease = localAudioServer!!.openLanCastLease()
             val result = JSObject()
             result.put("port", port)
+            // 音响必须拿这个令牌才能取流；pairCode 是给人看的配对码（日志 / 界面提示）。
+            result.put("token", lease.lanToken)
+            result.put("pairCode", lease.pairCode)
+            result.put("expiresAt", lease.expiresAtMillis)
             val lanIp = LocalAudioServer.lanIpv4()
             if (lanIp != null) result.put("lanIp", lanIp)
             call.resolve(result)
@@ -1563,10 +1937,10 @@ class FoliaNativePlugin : Plugin() {
         }
     }
 
-    /** 停止投送后收口：局域网设备重新连不进来，本机回环播放不受影响。 */
+    /** 停止投送后收口：局域网设备重新连不进来（旧 URL 一律 403），本机回环播放不受影响。 */
     @PluginMethod
     fun lanCastRelease(call: PluginCall) {
-        localAudioServer?.setLanClientsAllowed(false)
+        localAudioServer?.releaseLanCastLeases()
         call.resolve()
     }
 
@@ -2393,6 +2767,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun setGatewayCredentials(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "setGatewayCredentials")) return
         val provider = call.getString("provider", "")
         if ("feiniu" == provider) {
             val serverUrl = call.getString("serverUrl", "")
@@ -2413,6 +2788,93 @@ class FoliaNativePlugin : Plugin() {
                     call.getString("userId", ""), call.getString("token", ""), call.getString("dfid", ""))
         }
         call.resolve()
+    }
+
+    /**
+     * 读一条加密存储的凭据（[FoliaSecureStore]）。
+     *
+     * 平台 cookie 与账号 token 原来明文躺在页面 localStorage 里（`chrome.storage.local` 在安卓
+     * 就是 localStorage），任何能跑同源脚本的路径（已装模组、注入脚本、调试工具）一行就能取走长期
+     * 凭据（H5 / H30）。现在改由原生存：Web 侧只在真正要发请求的那一刻经这里取用，用完不回收。
+     *
+     * 答 `{ ok, found, decrypted, text }`：
+     *   - `found = false`：没存过（从没登录、或登出清掉了）；
+     *   - `found && decrypted`：`text` 是原文；
+     *   - `found && !decrypted`：文件在但解不开（换机、Keystore 重置），`text` 为 null。
+     *     调用方**不要**当成"没存过"，也不要据此写回明文 —— 让用户重新登录一次更干净。
+     */
+    @PluginMethod
+    fun readSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        // Keystore 解密要真正做一次运算，别压在桥线程上（登录 / 播放随时会来读它）。
+        BackgroundWork.bulk("secure-read") {
+            val result = JSObject()
+            try {
+                val stored = FoliaSecureStore.read(getContext(), slot)
+                result.put("ok", true)
+                result.put("found", stored.found)
+                result.put("decrypted", stored.decrypted)
+                if (stored.decrypted) result.put("text", stored.text) else result.put("text", JSObject.NULL)
+                call.resolve(result)
+            } catch (error: Exception) {
+                Log.w(TAG, "secure slot $slot could not be read", error)
+                call.reject("secure-read-failed", error)
+            }
+        }
+    }
+
+    /**
+     * 写一条加密存储的凭据。答 `{ ok }`。
+     *
+     * 写失败（Keystore 不可用、IO 错）答 `ok = false`，**绝不回退成明文**：调用方据此把这份数据
+     * 留在本次进程的内存里，并如实上报"这次没存上"，而不是偷偷落一份明文出去。
+     */
+    @PluginMethod
+    fun writeSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        val text = call.getString("text", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        BackgroundWork.bulk("secure-write") {
+            val result = JSObject()
+            result.put("ok", FoliaSecureStore.write(getContext(), slot, text))
+            call.resolve(result)
+        }
+    }
+
+    /** 抹掉一条加密存储的凭据（登出）。答 `{ ok }`；本来就没有也算抹掉了。 */
+    @PluginMethod
+    fun clearSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        BackgroundWork.bulk("secure-clear") {
+            val result = JSObject()
+            result.put("ok", FoliaSecureStore.clear(getContext(), slot))
+            call.resolve(result)
+        }
+    }
+
+    /** 这条凭据在不在（不解密）。答 `{ ok, exists }`。 */
+    @PluginMethod
+    fun hasSecureValue(call: PluginCall) {
+        val slot = call.getString("slot", "")
+        if (slot == null || slot.isEmpty()) {
+            call.reject("Missing secure slot")
+            return
+        }
+        val result = JSObject()
+        result.put("ok", true)
+        result.put("exists", FoliaSecureStore.exists(getContext(), slot))
+        call.resolve(result)
     }
 
     /**
@@ -2853,6 +3315,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun saveFileFromPath(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "saveFileFromPath")) return
         val fileName = call.getString("fileName", "")
         val sourcePath = call.getString("sourcePath", "")
         if (fileName == null || fileName.trim().isEmpty()) {
@@ -2861,6 +3324,13 @@ class FoliaNativePlugin : Plugin() {
         }
         if (sourcePath == null || sourcePath.trim().isEmpty()) {
             call.reject("Missing sourcePath")
+            return
+        }
+        // H3：只接受 cacheDir 里的路径。原来 `file://` 与绝对路径都照收，配合一次用户确认
+        // 就能把 App 内部任意文件导出到用户选的位置；现在相对路径与指向 cacheDir 内部的
+        // file:// URI 之外一律拒绝。
+        if (gate.resolveCacheSourceFile(sourcePath) == null) {
+            call.reject("sourcePath must point inside the app cache")
             return
         }
         val mimeType = call.getString("mimeType", "application/octet-stream")
@@ -2892,11 +3362,11 @@ class FoliaNativePlugin : Plugin() {
             return
         }
         val sourcePath = call.getString("sourcePath", "") ?: ""
-        // Capacitor 的 Cache 目录就是 context.cacheDir；Filesystem 给的 file:// URI 也能直接读。
-        val sourceFile = when {
-            sourcePath.startsWith("file://") -> File(Uri.parse(sourcePath).path ?: "")
-            sourcePath.startsWith("/") -> File(sourcePath)
-            else -> File(getContext().cacheDir, sourcePath)
+        // H3：与 saveFileFromPath 同一套判定 —— 只在 cacheDir 之内取文件。
+        val sourceFile = gate.resolveCacheSourceFile(sourcePath)
+        if (sourceFile == null) {
+            call.reject("sourcePath must point inside the app cache")
+            return
         }
         if (!sourceFile.exists()) {
             call.reject("Source file missing: " + sourceFile.absolutePath)
@@ -3050,6 +3520,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun setSettings(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "setSettings")) return
         try {
             val values = call.getObject("values")
             if (values == null) {
@@ -3104,6 +3575,7 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun setAiConfig(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "setAiConfig")) return
         try {
             val config = call.getObject("config")
             if (config == null) {
@@ -3123,6 +3595,19 @@ class FoliaNativePlugin : Plugin() {
             call.reject("写入 AI 配置失败", error)
         }
     }
+
+    /**
+     * AI 失败时回给页面的那一句：一律过脱敏（M29）。
+     *
+     * 原先只有 `AiException` 的各个抛出点自己调了 `AiEndpoints.redact`，兜底的
+     * `Exception` 分支把 `error.message` 原样拼进 reject —— 服务商在错误消息里回显
+     * 「…?key=xxx」是常见现象，那串密钥会直接进页面的错误文案。收敛到这一个入口，
+     * 以后新增失败分支也在出口被兜住，不用每个分支都记得调。
+     *
+     * 脱敏只换掉凭据值，错误类型与主机名照旧保留 —— 排查要的是那些。
+     */
+    private fun aiFailureText(error: Throwable): String =
+        top.izuna.foliamajor.ai.AiEndpoints.redact(error.message ?: "unknown")
 
     /**
      * 原生跑一次 AI 补全。请求由原生发起：WebView 冻不冻结都与它无关。
@@ -3149,15 +3634,33 @@ class FoliaNativePlugin : Plugin() {
                     baseUrl = store.getString("ai.baseUrl") ?: "",
                     temperature = store.getDouble("ai.temperature", 0.7),
                 )
+                /*
+                 * M30：AI 端点走的是原生网络栈，页面侧的主机白名单管不到它。所以发请求
+                 * 之前过 requireAllowedRequestUrl —— 与 httpRequest 同一套判定（`gate` 就是
+                 * 那一层，出处理由见 denyIfNotMainDocument）：内网 / 环回 / 链路本地一律拒，
+                 * 公网主机要在页面白名单里（用户自建的 AI 代理就登记在那里）。被拦时抛
+                 * FoliaNativeAccessDenied，AiEndpoints.guardRequestUrl 把它转成 ai-endpoint-blocked。
+                 */
                 val text = top.izuna.foliamajor.ai.AiCompletion.run(
-                        config, system, prompt, maxTokens, jsonMode)
+                        config, system, prompt, maxTokens, jsonMode,
+                ) { url -> gate.requireAllowedRequestUrl(url, "runAiCompletion") }
                 val out = JSObject()
                 out.put("text", text)
                 call.resolve(out)
             } catch (error: top.izuna.foliamajor.ai.AiCompletion.AiException) {
-                call.reject("${error.code}: ${error.message ?: ""}".trimEnd(':', ' '))
+                /*
+                 * AiException 的各个抛出点已经过了 `AiEndpoints.redact`，这里再过一遍是为了
+                 * 「所有失败路径都走同一道门」（M29）：以后新增抛出点忘了脱敏，也在出口被兜住。
+                 * redact 是幂等的，重复处理不会改坏已经是 [redacted] 的文本。
+                 */
+                call.reject("${error.code}: ${aiFailureText(error)}".trimEnd(':', ' '))
             } catch (error: Exception) {
-                call.reject("ai-request-failed: ${error.message ?: "unknown"}")
+                /*
+                 * 兜底分支原先直接把 `error.message` 拼进 reject（M29）。JSON 解析、URL 构造、
+                 * 非预期类型这些岔子的 message 常带完整 URL，而 Gemini 走代理时 key 就在
+                 * query 上 —— 不脱敏就等于把密钥原样送到页面的错误文案里，进而进日志、进截图反馈。
+                 */
+                call.reject("ai-request-failed: ${aiFailureText(error)}")
             }
         }
     }
@@ -3308,12 +3811,23 @@ class FoliaNativePlugin : Plugin() {
      */
     @PluginMethod
     fun openUrl(call: PluginCall) {
+        if (denyIfNotMainDocument(call, "openUrl")) return
         val url = call.getString("url")
         if (url.isNullOrBlank()) {
             call.reject("url is required")
             return
         }
         val fallbackUrl = call.getString("fallbackUrl")
+        // H3：scheme 白名单（http/https/tel/mailto/bilibili）。
+        // 原来任意 scheme 都直接交给系统，`settings://`、`intent://`、`file://` 这类
+        // 能拉起系统敏感页面或读本地文件；现在不在白名单里的一律拒绝，fallbackUrl 同样要过。
+        try {
+            gate.requireOpenableUrl(url, "openUrl")
+            if (!fallbackUrl.isNullOrBlank()) gate.requireOpenableUrl(fallbackUrl, "openUrl")
+        } catch (error: FoliaNativeAccessDenied) {
+            rejectDenied(call, error)
+            return
+        }
         val activity = getActivity()
         try {
             val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))

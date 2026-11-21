@@ -35,3 +35,50 @@ describe('wallpaperSurfaceBridge theme reuse', () => {
         expect(getSnapshot().theme).toEqual(next);
     });
 });
+
+/*
+ * 非法 payload 以前是直接 return —— 叠层停在上一首，日志里什么都没有（issue C4 的验收标准
+ * 「非法 payload 会记录日志而不是静默丢弃」）。这几条把四个通道的丢弃行为钉住。
+ */
+describe('wallpaperSurfaceBridge malformed payloads', () => {
+    const channels = [
+        '__foliaWallpaperPush',
+        '__foliaWallpaperPushCover',
+        '__foliaWallpaperPushCappellaImages',
+    ] as const;
+
+    it.each(channels)('%s 收到非对象时记一条 warn 并丢掉', (name) => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            for (const bad of [undefined, null, 42, 'text', true]) {
+                (window as unknown as Record<string, (payload: unknown) => void>)[name](bad);
+            }
+            expect(warn).toHaveBeenCalledTimes(5);
+            expect(String(warn.mock.calls[0]?.[0])).toContain('[wallpaper]');
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it('封面推送里既没有 url 也没有 data 时也记一条', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            (window as unknown as { __foliaWallpaperPushCover: (payload: unknown) => void })
+                .__foliaWallpaperPushCover({});
+            expect(warn).toHaveBeenCalledTimes(1);
+            expect(String(warn.mock.calls[0]?.[0])).toContain('empty cover payload');
+        } finally {
+            warn.mockRestore();
+        }
+    });
+
+    it('正常 payload 不记 warn（别把日志刷满）', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        try {
+            push({ title: 'ok', positionMs: 0, playing: true });
+            expect(warn).not.toHaveBeenCalled();
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});

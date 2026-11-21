@@ -12,7 +12,8 @@
 import { resolveProxiedUrl } from '../../proxiedUrl';
 import { hasNativeHttp, nativeHttpRequest } from '../../nativeAndroidBridge';
 import { getQishuiTransportAvailability, requestQishui } from '../qishuiTransport';
-import { qishuiImage } from '../qishui/qishuiNormalize';
+// 那边只借一样：把一份图片字段解成 https 地址，跟着注册的那份留在根目录。
+import { qishuiApiImage } from '../qishuiNormalize';
 
 export type LxPublicPlatform = 'wy' | 'kg' | 'kw' | 'tx' | 'mg' | 'qs';
 
@@ -1046,7 +1047,7 @@ const qishuiSearchSongs = async (keyword: string, limit: number, offset: number)
  * 直接给地址既保真又不占内存；取不到才是 undefined，由调用方画兜底。
  */
 const qishuiCover = async (_id: string, raw: unknown): Promise<string | undefined> => (
-    normalizeCover(qishuiImage(raw))
+    normalizeCover(qishuiApiImage(raw))
 );
 
 /** 官方场景分类树（/feed/mode/）→ 洛雪的 LxSquareTagCatalog。 */

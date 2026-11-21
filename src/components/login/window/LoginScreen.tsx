@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { LibraryLoginCompletion, LibraryLoginSessionSnapshot, LibraryProviderSetupSnapshot } from '../../../library/core/account/account.contract';
 import { resolveLoginSessionReportRoute, translateLoginSelfCheck } from '../../../library/core/account/useLibraryAccount';

@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Layers, LogIn, LogOut, UserRound } from 'lucide-react';
 import { AnimatePresence, motion, useMotionValueEvent } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { OnlineProviderId, ProviderAccountSummary } from '../../../../types/onlineMusic';
-import { getProviderAppIcon } from '../../../../assets/providers/appIcons';
+import { hasPlatformIcon } from '../../../../components/shared/platformIcons/registry';
+import { PlatformIcon } from '../../../../components/shared/platformIcons/PlatformIcon';
 import { canSwitchToProviderDirectly } from '../../../core/account/onlineProviderAccountView';
 import { canLogoutProvider } from '../../../core/account/accountRules';
 import { countMergeableProviders } from '../../../core/collection/onlineProviderScope';
@@ -30,17 +31,17 @@ type OnlineProviderSwitcherProps = {
     onBackToPlayer: () => void;
 };
 
-// 在线平台未登录时亮各家 App 本尊图标（圆形裁切）；iconUrl 只是加载前的兜底底色，
-// 没图的（Folium mod 源）才退回名称首字。
-const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; iconUrl?: string; className: string }> = {
-    netease: { label: '云', iconUrl: getProviderAppIcon('netease'), className: 'bg-red-600' },
-    kugou: { label: 'K', iconUrl: getProviderAppIcon('kugou'), className: 'bg-blue-600' },
-    qq: { label: 'Q', iconUrl: getProviderAppIcon('qq'), className: 'bg-emerald-600' },
-    bodian: { label: '波', iconUrl: getProviderAppIcon('bodian'), className: 'bg-teal-600' },
-    feiniu: { label: '飞', iconUrl: getProviderAppIcon('feiniu'), className: 'bg-zinc-600' },
-    qishui: { label: '汽', iconUrl: getProviderAppIcon('qishui'), className: 'bg-cyan-600' },
-    // 洛雪免登录，也没有账号头像：亮它自己的应用图标。
-    lxmusic: { label: '雪', iconUrl: getProviderAppIcon('lxmusic'), className: 'bg-zinc-600' },
+// 在线平台未登录时亮它自己的徽章：登记过自绘图形的画图形（圆形裁切），没登记的（Folium mod 源）
+// 退回名称首字。`label` 只用于没登记的那几家；`className` 是没图形时的圆底。
+const AVATAR_BADGE_BY_PROVIDER: Record<string, { label: string; className: string }> = {
+    netease: { label: '云', className: 'bg-red-600' },
+    kugou: { label: 'K', className: 'bg-blue-600' },
+    qq: { label: 'Q', className: 'bg-emerald-600' },
+    bodian: { label: '波', className: 'bg-teal-600' },
+    feiniu: { label: '飞', className: 'bg-zinc-600' },
+    qishui: { label: '汽', className: 'bg-cyan-600' },
+    // 洛雪免登录，也没有账号头像：亮它自己的图形。
+    lxmusic: { label: '雪', className: 'bg-zinc-600' },
 };
 
 // Providers without a builtin badge (Folium mod sources) get their name's first letter, like the
@@ -52,18 +53,24 @@ const fallbackBadge = (provider: ProviderAccountSummary) => ({
 
 const ProviderAvatar = ({ provider, className }: { provider: ProviderAccountSummary; className: string }) => {
     const badge = AVATAR_BADGE_BY_PROVIDER[provider.providerId] ?? fallbackBadge(provider);
-    return provider.user?.avatarUrl
-        ? <img src={typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />
-        : (
-            <span
-                aria-label={provider.displayName}
-                className={`${className} flex items-center justify-center overflow-hidden font-black text-white ${badge.className}`}
-            >
-                {badge.iconUrl
-                    ? <img src={badge.iconUrl} alt="" aria-hidden="true" className="h-full w-full object-cover" />
-                    : badge.label || <UserRound size={20} />}
+    if (provider.user?.avatarUrl) {
+        return <img src={typeof window !== 'undefined' && typeof window.electron?.platform === 'string' ? provider.user.avatarUrl : provider.user.avatarUrl.replace(/^http:/, 'https:')} alt={provider.user.nickname} className={`${className} object-cover`} />;
+    }
+    if (hasPlatformIcon(provider.providerId)) {
+        return (
+            <span aria-label={provider.displayName} className={`${className} flex items-center justify-center overflow-hidden`}>
+                <PlatformIcon platformId={provider.providerId} size={36} round className="h-full w-full" />
             </span>
         );
+    }
+    return (
+        <span
+            aria-label={provider.displayName}
+            className={`${className} flex items-center justify-center overflow-hidden font-black text-white ${badge.className}`}
+        >
+            {badge.label || <UserRound size={20} />}
+        </span>
+    );
 };
 
 const OnlineProviderSwitcher: React.FC<OnlineProviderSwitcherProps> = ({

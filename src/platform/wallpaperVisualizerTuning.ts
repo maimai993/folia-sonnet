@@ -127,6 +127,18 @@ export const WALLPAPER_GLOBAL_KEYS = {
     floatingFontSize: 'wp.floatingFontSize',
     /** 歌词字体是否走「单独指定」的那份（0 = 跟随播放页，不给原生两层覆盖字体）。 */
     lyricsFontCustom: 'wp.lyricsFontCustom',
+    /**
+     * 「精简」样式那颗悬浮歌词小窗的独立开关。
+     *
+     * 以前它跟着「壁纸样式 = 精简」走，没有自己的开关：选了精简就一定会挂上，
+     * 不想挂只能连精简样式一起换掉。这两件事本来不该绑在一起 ——
+     * 精简样式说的是「壁纸那层只画两行、要安静」，小窗说的是「桌面上还要一个能拖的窗口」，
+     * 有人要前者不要后者。
+     *
+     * 单独一个键，默认关：已经选着精简的老用户升级后，不该突然多出一颗窗口 ——
+     * 那颗窗口会盖在应用上面、要悬浮窗权限，多出来就属于「升级把人吓了一跳」。
+     */
+    floatingLyricsEnabled: 'wp.floatingLyricsEnabled',
     /** 叠层总开关。关掉就一层都不挂。 */
     overlayEnabled: 'wp.overlayEnabled',
     /** 音乐锁屏：锁屏之上也挂叠层。 */
@@ -209,6 +221,8 @@ export const withGlobalSettings = (
     if (typeof floatingOpacity === 'number' && Number.isFinite(floatingOpacity)) {
         out[WALLPAPER_GLOBAL_KEYS.floatingBackgroundOpacity] = floatingOpacity;
     }
+    out[WALLPAPER_GLOBAL_KEYS.floatingLyricsEnabled] =
+        settings.wallpaperFloatingLyricsEnabled ? 1 : 0;
     out[WALLPAPER_GLOBAL_KEYS.floatingOverSafeArea] =
         settings.wallpaperFloatingOverSafeArea ? 1 : 0;
     const floatingOffsetX = settings.wallpaperFloatingOffsetX;

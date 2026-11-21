@@ -138,6 +138,7 @@ export const APPEARANCE_DESTINATIONS = {
     'folia.wallpaperFloatingFillSafeArea': { config: null, why: '悬浮歌词是否填满安全区，只有安卓端有这一项（fork 独有）' },
     'folia.wallpaperFloatingFontSize': { config: null, why: '悬浮歌词的字号，只有安卓端有这一项（fork 独有）' },
     'folia.wallpaperFloatingFontSizeMode': { config: null, why: '悬浮歌词字号的取法，只有安卓端有这一项（fork 独有）' },
+    'folia.wallpaperFloatingLyricsEnabled': { config: null, why: '悬浮歌词小窗的独立开关（不再依附「精简」样式），只有安卓端有这一项（fork 独有）；不进配置导入导出：它跟着那台机器的悬浮窗权限，换一台设备带过去也没有权限' },
     'folia.wallpaperFloatingOffsetX': { config: null, why: '悬浮歌词的横向偏移，只有安卓端有这一项（fork 独有）' },
     'folia.wallpaperFloatingOpacity': { config: null, why: '悬浮歌词的不透明度，只有安卓端有这一项（fork 独有）' },
     'folia.wallpaperFloatingOverSafeArea': { config: null, why: '悬浮歌词是否画到安全区外，只有安卓端有这一项（fork 独有）' },

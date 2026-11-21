@@ -96,7 +96,17 @@ class TrackAnalyser(private val extractor: PcmWindowExtractor) {
             analysedAtMs = System.currentTimeMillis(),
         )
 
-        // 可选增强包：只在已安装且大小合规时接管，用于补 hasVocalTail / 更准的拍点。
-        return enhancer?.enhance(base)?.copy(tier = AnalysisTier.ENHANCED) ?: base
+        /*
+         * 可选增强包：只在已安装且大小合规时接管，用于补 hasVocalTail / 更准的拍点。
+         *
+         * 档位按「这一包到底算没算」来标（issue H21）：以前只要 enhance() 交回非 null 就标
+         * ENHANCED，而占位实现 PassthroughEnhancer 永远交得回东西，于是 DSP 的结果被挂上
+         * ENHANCED 的牌子。现在占位实现（producesAnalysis = false）走不到这条路，原样留在 DSP。
+         */
+        val enhanced = enhancer
+            ?.takeIf { it.producesAnalysis }
+            ?.enhance(base)
+            ?.copy(tier = AnalysisTier.ENHANCED)
+        return enhanced ?: base
     }
 }

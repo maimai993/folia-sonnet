@@ -211,4 +211,47 @@ describe('usePlayerSwipeGesture', () => {
         expect(nexts).toBe(0);
         expect(prevs).toBe(0);
     });
+
+    /*
+     * 场景（SceneHost）铺满播放页时，左右拖动是「转头看」，不能顺带切歌。
+     * 判据是场景根元素上的 data-scene-look —— 之前这个标记只有消费方、没人挂，
+     * 于是影厅里转个视角就把歌切走了。
+     */
+    it('落在 data-scene-look 上的拖动只转头，不切歌', async () => {
+        await mount(true);
+        const scene = document.createElement('div');
+        scene.setAttribute('data-scene-look', '');
+        const inner = document.createElement('span');
+        scene.appendChild(inner);
+        document.body.appendChild(scene);
+        try {
+            act(() => {
+                binding?.onPointerDown(
+                    { pointerId: 1, clientX: 300, clientY: 400, target: inner } as unknown as ReactPointerEvent<HTMLElement>,
+                );
+            });
+            swipeLeft(1, 300, 400);
+            expect(nexts).toBe(0);
+            expect(prevs).toBe(0);
+        } finally {
+            scene.remove();
+        }
+    });
+
+    it('场景之外的拖动照常切歌', async () => {
+        await mount(true);
+        const outside = document.createElement('div');
+        document.body.appendChild(outside);
+        try {
+            act(() => {
+                binding?.onPointerDown(
+                    { pointerId: 1, clientX: 300, clientY: 400, target: outside } as unknown as ReactPointerEvent<HTMLElement>,
+                );
+            });
+            swipeLeft(1, 300, 400);
+            expect(nexts).toBe(1);
+        } finally {
+            outside.remove();
+        }
+    });
 });

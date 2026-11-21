@@ -88,6 +88,7 @@ exports[`command palette registry contract > keeps the registered command order 
   "settings-options",
   "settings-appearance",
   "settings-ai-provider",
+  "settings-cloud-cache",
   "settings-theme-presets",
   "settings-lyrics-renderer",
   "settings-grid-card-style",

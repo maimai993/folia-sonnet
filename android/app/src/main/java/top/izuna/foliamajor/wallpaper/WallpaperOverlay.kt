@@ -1552,27 +1552,119 @@ class WallpaperOverlay(private val context: Context) {
         fadeToAlpha = overlayOpacity()
 
         loadPage(screenWidth, screenHeight, "挂载新窗口")
+        /*
+         * 「要么完整成功、要么完整回滚」（#M5）。
+         *
+         * 原来这一整段包在一个 try 里：addView 成功之后只要**任何一步**再抛（清音乐锁屏位的
+         * 巡查回调、schedulePush……），catch 分支就只把 webView 置 null，既不 removeView 也不
+         * destroy，而 detach() 以 `webView == null` 提前返回 —— 于是窗口与 WebView 永久留在
+         * WindowManager 上，页面继续在后台跑 rAF（正好和上面那句「留着很费电」相反），
+         * 且 `added == true && webView == null` 打破了类的内部不变量。
+         *
+         * 现在把「挂窗口」与「挂上之后的初始化」分开：前者失败只需销毁这份 WebView，
+         * 后者失败一律走 rollbackAttach()。每一步单独兜异常，一次失败不再让后面的步骤
+         * 全被跳过。
+         */
+        if (!tryAddWindow(windowManager, view, lp, hosted, screenWidth, screenHeight)) {
+            view.destroy()
+            webView = null
+            return
+        }
+        added = true
+        attachAtMs = SystemClock.elapsedRealtime()
+        noteOverlayEvent("attach（" + (if (hosted) "宿主=音乐锁屏页" else "系统悬浮窗") + "，" +
+                screenWidth + "x" + screenHeight + "）")
+        // 见 _windowAttachedListener：让锁屏面板有机会重新排到这一层之上。
+        // 这一条自带 try（回调是别人写的，失败不该连带叠层），失败只记。
         try {
-            windowManager.addView(view, lp)
-            added = true
-            attachAtMs = SystemClock.elapsedRealtime()
-            noteOverlayEvent("attach（" + (if (hosted) "宿主=音乐锁屏页" else "系统悬浮窗") + "，" +
-                    screenWidth + "x" + screenHeight + "）")
-            // 见 _windowAttachedListener：让锁屏面板有机会重新排到这一层之上。
-            val listener = _windowAttachedListener
-            if (listener != null) {
-                try {
-                    listener.run()
-                } catch (error: Throwable) {
-                    Log.w(TAG, "Window attached listener failed", error)
-                }
-            }
+            _windowAttachedListener?.run()
+        } catch (error: Throwable) {
+            Log.w(TAG, "Window attached listener failed", error)
+        }
+        try {
             schedulePush()
         } catch (error: Throwable) {
-            // 部分 ROM 即使给了权限也会拒绝 TYPE_APPLICATION_OVERLAY，静默退回原生渲染。
+            Log.w(TAG, "schedulePush failed right after attach", error)
+            rollbackAttach(view, error)
+            return
+        }
+        // 走到这里才算真的挂上：两个字段此刻必然一致（见 OverlayWindowInvariant）。
+        if (!OverlayWindowInvariant.isConsistent(added, webView != null)) {
+            // 理论上到不了这里；真到了说明某处又各自改了一半，按「没挂上」收干净。
+            rollbackAttach(view, IllegalStateException("attach finished with an inconsistent window state"))
+        }
+    }
+
+    /**
+     * 把窗口挂上去。返回 true 表示真的挂上了。
+     *
+     * 失败（部分 ROM 即使给了权限也会拒绝 TYPE_APPLICATION_OVERLAY）时**不销毁 view** ——
+     * 由调用方决定，这样「挂窗口失败」与「挂上之后初始化失败」两条路的收尾能分开。
+     */
+    private fun tryAddWindow(windowManager: WindowManager,
+                             view: WebView,
+                             lp: WindowManager.LayoutParams,
+                             hosted: Boolean,
+                             screenWidth: Int,
+                             screenHeight: Int): Boolean {
+        return try {
+            windowManager.addView(view, lp)
+            true
+        } catch (error: Throwable) {
             noteOverlayEvent("attach 失败（" + error.javaClass.simpleName +
-                    "），叠层不挂了")
+                    "），叠层不挂了（宿主=" + (if (hosted) "音乐锁屏页" else "系统悬浮窗") +
+                    "，" + screenWidth + "x" + screenHeight + "）")
+            false
+        }
+    }
+
+    /**
+     * addView 成功之后某一步抛了：整层回滚，不留孤儿（#M5）。
+     *
+     * 必须 removeView + destroy + added=false 一起做，而且 `webView` 也要置 null ——
+     * 只清其中一部分就会让 [detach] 的提前返回条件失效，那份 WebView 从此收不掉。
+     * 这里每次都从字段里重新取当前的 view，并且只对「还是同一份 view」的情况收引用，
+     * 避免把回调里新建的另一份误清。
+     */
+    private fun rollbackAttach(view: WebView, cause: Throwable) {
+        noteOverlayEvent("attach 挂上之后初始化失败（" + cause.javaClass.simpleName + "），整层回滚")
+        Log.w(TAG, "attach failed after the window was added; rolling back", cause)
+        // 不能沿用 detach()：它先做了一堆「按下一次挂载」的状态重置，而那些在失败里没有意义，
+        // 而且它以 webView == null 提前返回，正是本条 issue 的坑。
+        handler.removeCallbacks(pushTask)
+        cancelPaintPoll()
+        pushScheduled = false
+        audioTap.stop()
+        fadingIn = false
+        fadingOut = false
+        fadeInPending = false
+        fadeInDeadlineMs = 0L
+        pageReady = false
+        pushConfirmed = false
+        lastSignature = null
+        lastTuningHash = null
+        appliedOpacity = -1f
+        attachedWindowRemoved(view)
+        added = false
+        attachAtMs = 0L
+        if (webView === view) {
             webView = null
+        }
+        view.destroy()
+        /*
+         * 注意这里**不动** params：detach 也不动它（它只跟「这一层用哪套窗口参数」有关，
+         * 下一次 attach 会重新 new 一份覆盖）。在这里顺手置 null 会让 loadPage / relayout
+         * 里那些 `lp == null` 的守卫与 webView 的状态分家 —— 又一个「只改了一半」。
+         */
+    }
+
+    /** 把窗口从 WindowManager 上摘掉，失败只是记一笔（窗口可能已经被系统收走）。 */
+    private fun attachedWindowRemoved(view: WebView) {
+        val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        try {
+            manager.removeView(view)
+        } catch (error: Throwable) {
+            Log.w(TAG, "removeView during rollback failed", error)
         }
     }
 
@@ -1623,20 +1715,36 @@ class WallpaperOverlay(private val context: Context) {
          */
         val view = webView
         if (!added || view == null) {
-            return
+            /*
+             * 提前返回（#M5）。
+             *
+             * 这里原本只在「窗口没挂着」时走到，但 attach 的失败分支一度只把 webView 置空、
+             * 忘了 added，于是这个提前返回把整个 detach 变成空操作 —— 孤儿窗口和 WebView
+             * 就再也收不掉了。attach 已经改成要么完整成功、要么完整回滚，这个组合现在
+             * 不该出现；真出现了也要留痕，并且**立刻把两个字段拉回一致**，
+             * 保证 detach 下一次一定能生效。
+             */
+            if (OverlayWindowInvariant.isConsistent(added, view != null)) {
+                return
+            }
+            noteOverlayEvent("detach（" + why + "）：窗口状态自相矛盾（added=" + added +
+                    "，有视图=" + (view != null) + "），当场对齐")
+            Log.w(TAG, "detach found an inconsistent window state; realigning (added=$added, hasView=${view != null})")
+            added = false
+            attachAtMs = 0L
+            if (view == null) {
+                webView = null
+                return
+            }
         }
         val livedFor = if (attachAtMs > 0L) SystemClock.elapsedRealtime() - attachAtMs else -1L
         noteOverlayEvent("detach（" + why + "）" +
                 (if (livedFor >= 0L) "，这一份只活了 " + livedFor + "ms" else ""))
-        val manager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        try {
-            manager.removeView(view)
-        } catch (ignored: Throwable) {
-            // 已经被系统摘掉了。
-        }
+        attachedWindowRemoved(view)
         view.destroy()
         webView = null
         added = false
+        attachAtMs = 0L
     }
 
     /**

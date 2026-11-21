@@ -20,7 +20,7 @@ vi.hoisted(() => {
 import type { FoliumCallStats } from '@/mods/runtime/guard';
 import type { FoliumIssue } from '@/mods/runtime/status';
 import type { FoliumClientStart } from '@/mods/runtime/clientLoader';
-import { SLOW_MAIN_CALL_MS, SLOW_RUNNING_MS, SLOW_START_MS, describeModCost, isModSlow } from '@/mods/manager/modCost';
+import { SLOW_MAIN_CALL_MS, SLOW_RUNNING_MS, SLOW_START_MS, describeModCost, isModHung, isModSlow } from '@/mods/manager/modCost';
 
 // test/unit/mod-system/modCost.test.ts
 // The numbers on a mod's row, worked out from what the gates counted: where
@@ -76,5 +76,25 @@ describe('what a mod costs, for its row', () => {
         expect(slow).toMatchObject({ slowMain: true, main: { totalMs: SLOW_MAIN_CALL_MS + 1, longestMs: SLOW_MAIN_CALL_MS } });
         expect(isModSlow(slow)).toBe(true);
         expect(isModSlow(undefined)).toBe(false);
+    });
+
+    it('把宿主判定的无响应带到行的标记上，并说清卡在哪一句', () => {
+        // 桌面端主进程的 gate 没有这一项：hung 缺省就是没有。
+        expect(describeModCost(started(10), null, [], { calls: 1, totalMs: 1, longestMs: 1, failures: 0 }))
+            .toMatchObject({ hung: false, hungWhere: null });
+        expect(isModHung(undefined)).toBe(false);
+
+        const hung = describeModCost(started(10), null, [], {
+            calls: 3, totalMs: 90, longestMs: 80, failures: 0, hung: true, hungWhere: 'rpc loop',
+        });
+        expect(hung).toMatchObject({ hung: true, hungWhere: 'rpc loop', slowMain: false });
+        expect(isModHung(hung)).toBe(true);
+        // 无响应不是「慢」：它没有被判定成慢的地方，行上要显示的是「无响应」而不是「慢」。
+        expect(isModSlow(hung)).toBe(false);
+
+        // 没有位置（旧宿主）时也照样显示标记，只是提示里没有那一句。
+        const withoutWhere = describeModCost(undefined, null, [], { calls: 1, totalMs: 1, longestMs: 1, failures: 0, hung: true });
+        expect(withoutWhere).toMatchObject({ hung: true, hungWhere: null });
+        expect(isModHung(withoutWhere)).toBe(true);
     });
 });

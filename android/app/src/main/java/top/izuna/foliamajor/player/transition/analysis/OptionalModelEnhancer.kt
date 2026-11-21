@@ -1,7 +1,6 @@
 package top.izuna.foliamajor.player.transition.analysis
 
 import android.content.Context
-import top.izuna.foliamajor.player.transition.BeatGrid
 import top.izuna.foliamajor.player.transition.TrackProfile
 import java.io.File
 
@@ -20,6 +19,15 @@ import java.io.File
 interface EnhancerPack {
     val installed: Boolean
     val sizeBytes: Long
+    /**
+     * 这个包真的会重算分析结果吗。
+     *
+     * 存在的理由：包可以「装上但推理还没绑定」（权重下好了、真正的推理模块还没注入），
+     * 那时候跑的是 PassthroughEnhancer 这类占位实现 —— 它一个字都算不出来。没有这个
+     * 标记的话，上层只能看到 `installed = true`，于是把 DSP 结果标成 ENHANCED、
+     * 把「文件在」报成「能用」。诊断面板和档位判定都读它。
+     */
+    val producesAnalysis: Boolean get() = true
     /** 在 DSP 档案基础上补更准的拍点 / 人声尾标记；不允许返回 null 之外的降级信号。 */
     fun enhance(base: TrackProfile): TrackProfile?
 }
@@ -55,6 +63,8 @@ object OptionalModelEnhancer {
         "beatGrid" to true,
         "stems" to isInstalled(context),
         "enhancerInstalled" to isInstalled(context),
+        // 「文件在」不等于「推理能用」：占位实现占着位置时如实报 false（issue H21）。
+        "enhancerActive" to (current()?.producesAnalysis == true),
         "enhancerBytes" to installedSize(context),
         "enhancerMaxBytes" to MAX_PACK_BYTES,
     )
@@ -63,10 +73,14 @@ object OptionalModelEnhancer {
 /**
  * 占位实现：只复述 DSP 档案，用于让「增强包已安装但推理未绑定」时链路仍可跑通。
  * 真正的模型推理不在这里 —— 它属于按需下载模块，不参与主 APK 编译。
+ *
+ * 它**不能**假装自己增强过（issue H21）：
+ *   · 以前这里把拍点置信度 +0.05 再交出去，等于凭空捏造了一个「更准」的信号，
+ *     下游据此把档位标成 ENHANCED，用户看到的精度提升是假的；
+ *   · 现在原样返回，并且 `producesAnalysis = false`，让上层知道「包在、推理不在」。
  */
 class PassthroughEnhancer(override val sizeBytes: Long) : EnhancerPack {
     override val installed: Boolean get() = true
-    override fun enhance(base: TrackProfile): TrackProfile = base.copy(
-        beatGrid = base.beatGrid?.let { BeatGrid(it.bpm, it.phaseMs, it.beatsPerBar, (it.confidence + 0.05f).coerceIn(0f, 1f)) },
-    )
+    override val producesAnalysis: Boolean get() = false
+    override fun enhance(base: TrackProfile): TrackProfile = base
 }

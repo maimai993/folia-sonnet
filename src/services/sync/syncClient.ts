@@ -26,12 +26,44 @@ import { createAiFetch } from '../aiNativeFetch';
 export class SyncClientError extends Error {
     status: number;
 
-    constructor(message: string, status: number) {
+    /**
+     * 服务端给的错误码（`settings_conflict`、`invalid_revision`、`unauthorized` …），拿不到时为空串。
+     *
+     * 服务端为不同失败刻意分了码，客户端原来只留状态码，于是 409 冲突、401 鉴权、
+     * 500 故障在用户侧全是同一句「请求失败」（issue M38）。上层要能照它分流：
+     * 冲突等重试 / 合并，鉴权要重新登录，服务端故障该退避。
+     */
+    code: string;
+
+    constructor(message: string, status: number, code = '') {
         super(message);
         this.name = 'SyncClientError';
         this.status = status;
+        this.code = code;
     }
 }
+
+/**
+ * 从错误响应里取服务端的错误码。
+ *
+ * 错误体不一定是本站的 JSON —— 反代的 HTML 错误页、空的 502 都很常见，
+ * 所以任何一步失败都退成空串，绝不因为「读不出错误体」把原始状态码也丢掉。
+ */
+const readErrorCode = async (response: Response): Promise<string> => {
+    try {
+        const body = await response.json() as unknown;
+        if (body && typeof body === 'object') {
+            const record = body as Record<string, unknown>;
+            for (const key of ['error', 'code']) {
+                const value = record[key];
+                if (typeof value === 'string' && value !== '') return value;
+            }
+        }
+    } catch {
+        /* 不是 JSON（网关页面、空响应），静默退成空码。 */
+    }
+    return '';
+};
 
 export type ThemeListPage = {
     themes: SyncedThemeRecord[];
@@ -68,7 +100,10 @@ const requestJson = async <T,>(
     });
 
     if (!response.ok) {
-        throw new SyncClientError(`Sync request failed: ${response.status}`, response.status);
+        const code = await readErrorCode(response);
+        /* 消息里带上码，日志 / 报错时能直接看出是哪种失败；码为空就还是原来那句。 */
+        const detail = code === '' ? '' : ` (${code})`;
+        throw new SyncClientError(`Sync request failed: ${response.status}${detail}`, response.status, code);
     }
 
     if (response.status === 204) {

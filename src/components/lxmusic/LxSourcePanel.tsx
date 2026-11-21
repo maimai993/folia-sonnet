@@ -6,6 +6,8 @@ import { lxSourceStore } from '../../services/onlineMusic/lxmusic/lxSourceStore'
 import { importLxSourceFromFile, importLxSourceFromUrl, type ImportResult } from '../../services/onlineMusic/lxmusic/lxImportService';
 import type { LxSource } from '../../services/onlineMusic/lxmusic/lxTypes';
 import { LX_PUBLIC_PLATFORMS } from '../../services/onlineMusic/lxmusic/lxPublicApi';
+import { lxScriptApprovalFlow, type LxPendingScript } from '../../services/onlineMusic/lxmusic/lxScriptApprovalFlow';
+import { LxScriptApprovalDialog } from './LxScriptApprovalDialog';
 import {
     formatPlaybackDiagnostics,
     clearPlaybackDiagnostics,
@@ -47,6 +49,8 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
     const [sources, setSources] = useState<LxSource[]>(() => lxSourceStore.getSources());
     const [diagText, setDiagText] = useState<string | null>(null);
     const [prefs, setPrefs] = useState<LxPreferences>(getLxPreferences);
+    /** 等用户确认执行的脚本（C2：确认之前一行代码都没跑）。 */
+    const [pendingScript, setPendingScript] = useState<LxPendingScript | null>(() => lxScriptApprovalFlow.getPending());
     const [lastAttempt, setLastAttempt] = useState<LxPlaybackDiag | null>(() => {
         const list = readPlaybackDiagnostics();
         return list.length > 0 ? list[list.length - 1] : null;
@@ -63,6 +67,9 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
         return unsubscribe;
     }, [onChanged]);
 
+    // 确认流程可能在别处挂起（启动时加载已有音源），所以这里跟着它走，而不是只在自己发起导入时开框。
+    useEffect(() => lxScriptApprovalFlow.subscribe(setPendingScript), []);
+
     useEffect(() => subscribeLxPreferences(() => setPrefs(getLxPreferences())), []);
 
     const refreshLastAttempt = () => {
@@ -71,6 +78,8 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
     };
 
     const report = (result: ImportResult) => {
+        // 等用户确认：脚本还没跑，这里不该报成功也不该报失败。
+        if ('pending' in result) return;
         if (result.ok) {
             setFeedback({
                 kind: 'ok',
@@ -318,6 +327,14 @@ export const LxSourcePanel: React.FC<LxSourcePanelProps> = ({ onChanged }) => {
                     </pre>
                 )} />
             )}
+
+            {/* 执行前确认（C2）：没点「同意并运行」这份脚本一行都没跑。 */}
+            <LxScriptApprovalDialog
+                pending={pendingScript}
+                isDaylight={false}
+                onConfirm={() => { void lxScriptApprovalFlow.approve(); }}
+                onCancel={() => { lxScriptApprovalFlow.cancel(); }}
+            />
         </>
     );
 };

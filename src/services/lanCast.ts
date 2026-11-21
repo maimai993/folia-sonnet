@@ -5,6 +5,7 @@
 
 import { isCapacitorAndroid } from '../platform/runtime';
 import { useAudioSettingsStore } from '../stores/useAudioSettingsStore';
+import { describeLanCastMedia, describeLanCastTrimming } from './lanCastMetadata';
 
 export type LanSpeaker = {
     id: string;
@@ -23,17 +24,43 @@ export type LanCastTrack = {
     album?: string;
     coverUrl?: string;
     durationMs?: number;
+    /**
+     * 实际音频格式，与 `describeLanCastMedia()` 认出来的那个一致（issue M23）。
+     *
+     * 不给也不要紧：原生会按投送地址再认一次。给它的意义是地址换了 host 之后（回环 → 局域网）
+     * 仍按 Web 侧认定的格式声明，两边不会各说各的。
+     */
+    audioFormat?: string;
+};
+
+/** 投送成功时原生回报的信息。 */
+export type LanCastPlaybackInfo = {
+    /** 被裁掉的元数据字段：`cover` 表示音响侧拿不到封面。 */
+    trimmed: string[];
+    /** 实际声明的 `protocolInfo`，排查「为什么这台音响不认无损」时用。 */
+    protocolInfo: string;
 };
 
 type RelayPlugin = {
-    lanCastPrepare?: () => Promise<{ port?: number; lanIp?: string }>;
+    lanCastPrepare?: () => Promise<RelayPrepareInfo>;
     lanCastRelease?: () => Promise<unknown>;
 };
 
 type CastPlugin = {
-    discover?: (options: { timeoutMs?: number }) => Promise<{ devices?: LanSpeaker[] }>;
-    play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{ ok?: boolean }>;
-    stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean }>;
+    discover?: (options: { timeoutMs?: number }) => Promise<{
+        devices?: LanSpeaker[];
+        /** 应答了但没读成设备的数量（原生新版才给）。 */
+        skipped?: number;
+        /** 一共几台应答了。 */
+        attempted?: number;
+    }>;
+    play?: (options: LanCastTrack & { controlUrl: string }) => Promise<{
+        ok?: boolean;
+        /** 逗号分隔的被裁字段（`cover` / `title` …），旧版本插件不给。 */
+        trimmed?: string;
+        protocolInfo?: string;
+    }>;
+    stop?: (options: { controlUrl: string }) => Promise<{ ok?: boolean; reason?: string }>;
     getVolume?: (options: { volumeControlUrl: string }) => Promise<{ volume?: number }>;
     setVolume?: (options: { volumeControlUrl: string; volume: number }) => Promise<{ ok?: boolean }>;
     setMute?: (options: { volumeControlUrl: string; muted: boolean }) => Promise<{ ok?: boolean }>;
@@ -64,7 +91,11 @@ const errorText = (error: unknown): string => {
 /** 判断是不是本机回环的转发地址（音响拿到会当成它自己）。 */
 const isLoopbackUrl = (value: string): boolean => {
     try {
-        const url = new URL(value, location.href);
+        // 第二个参数在值本身是绝对地址时根本用不到，但它要求一个能解析的基准：
+        // 直接用 location.href 会在没有 location 的宿主（宁可不猜）里抛进 catch，
+        // 把回环地址误判成「不是回环」，于是一次投送跳过 prepare 直接推过去。
+        const base = typeof location !== 'undefined' && location?.href ? location.href : undefined;
+        const url = new URL(value, base);
         return ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
     } catch {
         return false;
@@ -72,11 +103,98 @@ const isLoopbackUrl = (value: string): boolean => {
 };
 
 /**
+ * 局域网主机白名单（与原生 LanCastTargetPolicy 同一套判定）。
+ *
+ * 为什么要在前端再判一次：`controlUrl` 会被持久化到 localStorage（上次那台音响），
+ * 下次启动「WiFi 自动投送」时会不经重新发现直接把它传回原生。一旦某次发现被伪造的
+ * SSDP 应答污染过，落盘的地址就可能指向任意主机 —— 存进来这条路上就先挡掉，
+ * 而不是指望原生每次都拦得住。原生侧仍然独立校验一遍，两边都不依赖对方。
+ */
+const LAN_PORTS = new Set([80, 443, 49152, 49153, 49154, 49155, 49156, 49157, 8080, 8443]);
+
+const isLanHost = (hostname: string): boolean => {
+    const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (!host) return false;
+    if (host.endsWith('.local')) return true;
+    const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (v4) {
+        const parts = v4.slice(1).map(Number);
+        if (parts.some(part => part > 255)) return false;
+        const [a, b] = parts;
+        return a === 10
+            || (a === 172 && b >= 16 && b <= 31)
+            || (a === 192 && b === 168)
+            || (a === 100 && b >= 64 && b <= 127)
+            || (a === 198 && (b === 18 || b === 19));
+    }
+    // IPv6：只认唯一本地地址 fc00::/7 与链路本地 fe80::/10。
+    if (host.includes(':')) return /^f[cd][0-9a-f]{2}:/.test(host) || /^fe[89ab][0-9a-f]:/.test(host);
+    return false;
+};
+
+/** 投送目标（音响的 controlUrl / volumeControlUrl）是否可信：局域网、常见端口、http(s)。 */
+export const isTrustedLanTarget = (value: string | null | undefined): boolean => {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    try {
+        const url = new URL(text);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+        if (url.username || url.password) return false;
+        const port = url.port ? Number(url.port) : (url.protocol === 'https:' ? 443 : 80);
+        if (!LAN_PORTS.has(port)) return false;
+        return isLanHost(url.hostname);
+    } catch {
+        return false;
+    }
+};
+
+type RelayPrepareInfo = {
+    port?: number;
+    lanIp?: string;
+    /** 本次投送签发的局域网令牌（原生 LanCastLeaseRegistry）。旧版本插件不给。 */
+    token?: string;
+    /** 给人看的配对码，日志与界面提示用。 */
+    pairCode?: string;
+    /** 租约到期时间戳（毫秒）。 */
+    expiresAt?: number;
+};
+
+/** 回环服务的局域网音频路由（与 LocalAudioServer.REMOTE_AUDIO_PATH_PREFIX 一致）。 */
+const REMOTE_AUDIO_PATH = '/remote-audio/';
+
+/**
+ * 当前这次投送在原生侧开着的租约。
+ *
+ * 为什么要单独记：过去的收回只有 `stopCastingToSpeaker()` 一个点，投送中途异常、
+ * 页面被关、网络切走、App 进后台这几种情况都不会走到那里，原生侧的开闸就一直挂着。
+ * 这里记下租约，收回路径（见 releaseCastLease / installLanCastLifecycleGuards）据此判断
+ * 还有没有开着的闸，并对「收回之后迟到的 prepare」兜底。
+ */
+type CastLease = {
+    token: string | null;
+    expiresAt: number | null;
+    pairCode: string | null;
+};
+let lease: CastLease | null = null;
+
+/** 租约的硬度：留 5 分钟余量，宁可早关也不让闸在没人用的时候一直开着。 */
+const LEASE_EXPIRY_SLACK_MS = 5 * 60 * 1000;
+
+/** 页面是否还在前台。拿不到 document 时按前台处理（桌面 / 测试环境）。 */
+const isPageActive = (): boolean => (
+    typeof document === 'undefined' || document.visibilityState !== 'hidden'
+);
+
+/**
  * 把播放地址变成音响能真正拉到的地址。
  *
  * 安卓上绝大多数在线歌曲走 `http://127.0.0.1:<port>/remote-audio/<token>`（绕 CORS 的转发），
- * 这个地址对音响毫无意义。投送前让原生把转发服务临时对局域网开放，再把 host 换成手机 IP，
- * token 与端口保持原样，音响就能连回来拿字节，连音源需要的请求头也照样由转发服务带上。
+ * 这个地址对音响毫无意义。投送前让原生开一次带截止时间的租约，再把 host 换成手机 IP，
+ * 音响就能连回来拿字节，连音源需要的请求头也照样由转发服务带上。
+ *
+ * 安全：租约不是「开一个全局布尔」。原生只认本次签发的令牌 —— 回环注册表里的 token
+ * 在局域网侧一律不认，所以这里用返回的 `token` 覆盖路径里的那一段。老版本插件不返回
+ * `token` 时保留原路径（退化为旧行为，但仍受租约 + 来源校验约束）。
  */
 const toCastableUrl = async (raw: string): Promise<string> => {
     const value = String(raw || '').trim();
@@ -93,9 +211,24 @@ const toCastableUrl = async (raw: string): Promise<string> => {
     if (!info?.lanIp || !info?.port) {
         throw new Error('没取到手机的局域网地址，请确认已连接 WiFi');
     }
+    // 记下本次租约：收回路径、后台 / 页面关闭时要用它判断有没有还开着的闸。
+    lease = {
+        token: typeof info.token === 'string' ? info.token : null,
+        expiresAt: typeof info.expiresAt === 'number' ? info.expiresAt : null,
+        pairCode: typeof info.pairCode === 'string' ? info.pairCode : null,
+    };
+    if (lease.expiresAt !== null) armLeaseExpiry(lease.expiresAt);
+    // 收回之后迟到的 prepare：prepare 发起时页面还在前台，await 回来时用户已经退到后台 /
+    // 关掉页面，收回已经跑过一遍。这里再关一次，别让一次「晚到的开闸」把闸留在原地，
+    // 同时让这次投送明确失败（宁可让用户重试，也不能让它悄悄继续）。
+    if (!isPageActive()) {
+        releaseCastLease();
+        throw new Error('页面已经退到后台，投送已取消');
+    }
     const url = new URL(value);
     url.protocol = 'http:';
     url.host = `${info.lanIp}:${info.port}`;
+    if (lease.token) url.pathname = `${REMOTE_AUDIO_PATH}${lease.token}`;
     return url.toString();
 };
 
@@ -223,12 +356,17 @@ export const getLastSpeaker = (): LanSpeaker | null => {
         const raw = localStorage.getItem(LAST_SPEAKER_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw) as LanSpeaker;
-        return parsed?.controlUrl ? parsed : null;
+        // 落盘之后可能已经被污染（见 isTrustedLanTarget）：读回来先过一遍白名单，
+        // 不合格就当没有记住过，下次让用户重新扫一遍。
+        if (!parsed?.controlUrl || !isTrustedLanTarget(parsed.controlUrl)) return null;
+        return parsed;
     } catch { return null; }
 };
 
 export const rememberSpeaker = (speaker: LanSpeaker): void => {
     if (typeof window === 'undefined') return;
+    // 只记可信的地址；不可思议就干脆不记，免得下一次自动投送打向别处。
+    if (!isTrustedLanTarget(speaker.controlUrl)) return;
     try { localStorage.setItem(LAST_SPEAKER_KEY, JSON.stringify(speaker)); } catch { /* 忽略 */ }
 };
 
@@ -243,27 +381,88 @@ export const subscribeWifiCast = (listener: (wifi: boolean) => void): (() => voi
     if (!plugin?.addListener) return () => {};
     let handle: ListenerHandle | null = null;
     try {
+        // 原生只在「连通性真的变了」时才推这条事件（见 FoliaLanCastPlugin.publishWifiState）。
+        // 开关的启停不再是网络事件：过去 unregisterNetworkCallback 合成的 onLost 会被
+        // 当成断网，用户关掉自动投送反而掐断了正在进行的投送。
         const pending = plugin.addListener('wifiCastChange', data => listener(Boolean(data?.wifi)));
         void Promise.resolve(pending).then(value => { handle = value ?? null; }).catch(() => {});
     } catch { return () => {}; }
     return () => { void Promise.resolve(handle).then(value => value?.remove?.()).catch(() => {}); };
 };
 
+/**
+ * 当前是否真的在一个局域网里（而不是只「Wi-Fi 开关开着」）。
+ *
+ * 投送选址的判据来自这里：关掉 Wi-Fi 开关但设备还有别的可用网络时，
+ * 一次投送不该被当成「断网」终止。拿不到原生能力时返回 null，调用方按原样处理。
+ */
+export const queryWifiState = async (): Promise<boolean | null> => {
+    const plugin = cast();
+    if (!plugin?.getWifiState) return null;
+    try {
+        const result = await plugin.getWifiState();
+        return typeof result?.wifi === 'boolean' ? result.wifi : null;
+    } catch {
+        return null;
+    }
+};
+
 // ------------------------------------------------------------------ 对外能力
 
-export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[]> => {
+/**
+ * 一次发现的完整结果。
+ *
+ * `skipped` 是「应答了但没读成设备」的数量：过去这些设备静默从列表里消失，用户只知道少了一台
+ * （issue M22）。旧版本原生插件不给这个字段，读成 0。
+ */
+export type LanDiscoverResult = {
+    devices: LanSpeaker[];
+    skipped: number;
+};
+
+export const discoverLanSpeakersDetailed = async (timeoutMs = 3200): Promise<LanDiscoverResult> => {
     const plugin = cast();
     if (!plugin?.discover) throw new Error('当前设备不支持局域网投送');
     const result = await plugin.discover({ timeoutMs });
-    return (result?.devices ?? []).filter(device => Boolean(device?.controlUrl && device?.name));
+    // 原生已经拦过一遍，这里再拦是防旧版本插件（升级后第一次启动仍可能路由到旧的原生实现）。
+    const devices = (result?.devices ?? []).filter(device => (
+        Boolean(device?.controlUrl && device?.name) && isTrustedLanTarget(device.controlUrl)
+    ));
+    const rawSkipped = Number(result?.skipped ?? 0);
+    const skipped = Number.isFinite(rawSkipped) && rawSkipped > 0 ? Math.floor(rawSkipped) : 0;
+    // 前端自己又滤掉的设备也算「被跳过」：它们在用户眼里同样是「少了一台」。
+    const dropped = (result?.devices?.length ?? 0) - devices.length;
+    return { devices, skipped: skipped + Math.max(0, dropped) };
 };
 
-export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrack): Promise<void> => {
+/** 只要列表的老调用方。 */
+export const discoverLanSpeakers = async (timeoutMs = 3200): Promise<LanSpeaker[]> => (
+    (await discoverLanSpeakersDetailed(timeoutMs)).devices
+);
+
+/**
+ * 把一首歌推到音响上。返回这次投送实际声明的媒体信息（格式 / protocolInfo / 被裁掉的字段）。
+ *
+ * 返回值是给界面用的：过去音响侧没有封面时前端一无所知（issue M23），现在能说了。
+ */
+export const castTrackToSpeaker = async (
+    speaker: LanSpeaker,
+    track: LanCastTrack,
+): Promise<LanCastPlaybackInfo> => {
     const plugin = cast();
     if (!plugin?.play) throw new Error('当前设备不支持局域网投送');
     const url = await toCastableUrl(track.url);
+    // 格式按**投送地址**认（本地文件与直链都带扩展名），并把结论一起交给原生：
+    // 原生换掉 host 之后仍按这里的判定声明 protocolInfo，两边不会各说各的（issue M23）。
+    const media = describeLanCastMedia(url);
+    let result: { trimmed?: string; protocolInfo?: string } | undefined;
     try {
-        await plugin.play({ ...track, url, controlUrl: speaker.controlUrl });
+        result = await plugin.play({
+            ...track,
+            url,
+            controlUrl: speaker.controlUrl,
+            ...(media.format ? { audioFormat: media.format } : {}),
+        });
     } catch (error) {
         throw new Error(errorText(error));
     }
@@ -285,6 +484,15 @@ export const castTrackToSpeaker = async (speaker: LanSpeaker, track: LanCastTrac
     notifyCasting();
     applyCastingMute();
     rememberSpeaker(speaker);
+    const trimmed = String(result?.trimmed ?? '')
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+    // 原生没回 protocolInfo（旧版本插件）时用 Web 侧算的那份，界面拿到的永远是这次实际声明的东西。
+    return {
+        trimmed: trimmed.length > 0 ? trimmed : describeLanCastTrimming(track),
+        protocolInfo: result?.protocolInfo || media.protocolInfo,
+    };
 };
 
 /** 停止音响播放、关掉对局域网开放的转发入口、把手机声音还原。 */
@@ -293,16 +501,106 @@ export const stopCastingToSpeaker = async (): Promise<void> => {
     const plugin = cast();
     let stopError: unknown = null;
     try {
-        if (session && plugin?.stop) await plugin.stop({ controlUrl: session.speaker.controlUrl });
+        if (session && plugin?.stop) {
+            const result = await plugin.stop({ controlUrl: session.speaker.controlUrl });
+            // 原生没停成时带上原因（例如音响已经离线 → 「连不上」而不是「没反应」，issue M22）。
+            // 本地状态照样收口：音响那边停没停是它的事，手机不能因此一直静音。
+            if (result?.ok === false && result.reason) stopError = new Error(result.reason);
+        }
     } catch (error) {
         // 音响可能已离线；本地状态无论如何都要收口，不能留一个「永远静音」的手机。
         stopError = error;
     }
-    try {
-        await relay()?.lanCastRelease?.();
-    } catch { /* 收口失败不影响还原。 */ }
+    releaseCastLease();
     restoreCastingMute();
     if (stopError) throw new Error(errorText(stopError));
+};
+
+/**
+ * 只收回原生侧的局域网音频租约，但不碰音响、不还原静音。
+ *
+ * 用于「手机不再提供服务、但音响还在放」的场景（页面被关、进程即将被杀、
+ * 租约到期兜底）。过去这一步只写在 stopCastingToSpeaker 里，其它出口都漏掉了。
+ * 幂等：没有开着的租约时什么都不做。
+ */
+export const releaseCastLease = (): void => {
+    // 先拆定时器：不管是用户停止、退到后台还是到点兜底，后续都不该再留着一个会再触发一次收回的计时器。
+    if (leaseExpiryTimer !== null) {
+        clearTimeout(leaseExpiryTimer);
+        leaseExpiryTimer = null;
+    }
+    if (!lease) return;
+    lease = null;
+    try {
+        void Promise.resolve(relay()?.lanCastRelease?.()).catch(() => {});
+    } catch { /* 收口失败不影响其它状态。 */ }
+};
+
+/** 当前是否有原生侧的租约开着（调试与测试用）。 */
+export const hasCastLease = (): boolean => lease !== null;
+
+/**
+ * 租约到点自动收回。
+ *
+ * 原生侧的租约自带截止时间，正常情况下会自己过期；这里额外盯一个定时器，
+ * 是因为「过期」只是拒绝新请求，已经建立的连接仍会把这首歌传完。
+ * 定时器与租约同寿命，收回或重开时会被清掉，不会累积。
+ */
+let leaseExpiryTimer: ReturnType<typeof setTimeout> | null = null;
+
+const armLeaseExpiry = (expiresAt: number) => {
+    if (leaseExpiryTimer !== null) clearTimeout(leaseExpiryTimer);
+    const delay = Math.max(1000, expiresAt - LEASE_EXPIRY_SLACK_MS - Date.now());
+    leaseExpiryTimer = setTimeout(() => {
+        leaseExpiryTimer = null;
+        releaseCastLease();
+    }, delay);
+};
+
+/** 已安装的生命周期守卫的卸载函数；null 表示当前没装。 */
+let uninstallLifecycleGuards: (() => void) | null = null;
+
+/**
+ * 安装「完整收回」的生命周期守卫：页面关闭、App 进后台/退出、网络切换都收口。
+ *
+ * 为什么不能只靠 stopCastingToSpeaker 一处：那条路径只在用户手动停止、或者
+ * Wi-Fi 真的断了时才走。投送中途异常、页面被关、进程被杀，都会让原生侧的
+ * 局域网音频通道一直开着 —— 同网段任何设备都能继续拉流。
+ *
+ * 这里挂四个点，且只做「关掉本机对局域网的开放」，不打断音响上的播放：
+ *  - `pagehide` / `beforeunload`：页面被关闭或 WebView 被回收；
+ *  - `visibilitychange`（hidden）/ `pause`：App 进后台（Android 上 WebView 随后可能被冻结，
+ *    这时再没有任何 JS 能执行，所以必须在这一刻就关）；
+ *  - `offline` / `online`：网络切换（换网之后旧地址本来就失效了，顺手关闸）；
+ *  - 租约到期：兜底，见 armLeaseExpiry。
+ *
+ * 返回卸载函数：只由应用级 wiring 调一次，调用方卸载时把监听和定时器一起撤掉。
+ */
+export const installLanCastLifecycleGuards = (): (() => void) => {
+    if (typeof window === 'undefined') return () => {};
+    // 只装一次：这个守卫挂在应用级 wiring 上，重挂（React 严格模式的双调用、页面重载）
+    // 只会让同一份收回逻辑被注册两遍，既浪费也会让「卸载后仍有人在听」变成难查的问题。
+    if (uninstallLifecycleGuards) return uninstallLifecycleGuards;
+    const release = () => releaseCastLease();
+    const onVisibility = () => {
+        if (document.visibilityState === 'hidden') release();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', release);
+    window.addEventListener('beforeunload', release);
+    window.addEventListener('offline', release);
+    uninstallLifecycleGuards = () => {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('pagehide', release);
+        window.removeEventListener('beforeunload', release);
+        window.removeEventListener('offline', release);
+        if (leaseExpiryTimer !== null) {
+            clearTimeout(leaseExpiryTimer);
+            leaseExpiryTimer = null;
+        }
+        uninstallLifecycleGuards = null;
+    };
+    return uninstallLifecycleGuards;
 };
 
 export const lanCastErrorText = errorText;

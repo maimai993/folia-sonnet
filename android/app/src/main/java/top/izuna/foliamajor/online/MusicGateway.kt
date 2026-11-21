@@ -108,13 +108,18 @@ class MusicGateway private constructor() {
          * @param mid        QQ 的 songmid（CgiGetVkey 只认它；网易不用）
          * @param hash       酷狗的文件 hash（/v5/url 只认它；其它平台不用）
          * @param albumAudioId 酷狗的 album_audio_id（与 hash 一起送）
+         * @param quality    音质档（standard / high / lossless / hires）。以前这里写死 standard，
+         *                   于是「前台走 Web 拿无损、锁屏切下一首走原生拿标准档」——同一首歌
+         *                   两种音质（issue H22）。空串按 standard 处理，老调用方行为不变。
          */
         @JvmStatic
+        @JvmOverloads
         fun resolvePlayUrl(providerId: String?, songId: String?, mid: String?,
-                           hash: String?, albumAudioId: String?): String? {
+                           hash: String?, albumAudioId: String?,
+                           quality: String? = null): String? {
             try {
                 if ("netease" == providerId) {
-                    return neteasePlayUrl(songId)
+                    return neteasePlayUrl(songId, quality)
                 }
                 if ("qq" == providerId) {
                     return qqPlayUrl(mid)
@@ -1098,7 +1103,33 @@ class MusicGateway private constructor() {
 
         // ==================== 网易云（weapi 直连） ====================
 
-        private fun neteasePlayUrl(songId: String?): String? {
+        /**
+         * 音质档 → 网易 v1 接口认的 level。
+         *
+         * 必须和 Web 侧 `neteaseProvider.ts` 的 mapQuality 一致：那边 high 送 exhigh，
+         * 其余原样透传（standard / ultra / lossless / hires）。这边如果照字面送 high，
+         * 接口会当未知档退到最低码率 —— 前后台又对不上了。
+         */
+        private fun neteaseLevelOf(quality: String?): String = when (quality) {
+            "high" -> "exhigh"
+            "ultra" -> "ultra"
+            "lossless" -> "lossless"
+            "hires" -> "hires"
+            "standard" -> "standard"
+            // 没传（老调用方）或认不出的档：标准档免费账号必得，是最安全的默认。
+            else -> "standard"
+        }
+
+        /** 老接口只认码率，按档折算；没传就还是 128k。 */
+        private fun neteaseBitrateOf(quality: String?): Int = when (quality) {
+            "hires" -> 999000
+            "lossless" -> 999000
+            "ultra" -> 320000
+            "high" -> 320000
+            else -> 128000
+        }
+
+        private fun neteasePlayUrl(songId: String?, quality: String? = null): String? {
             val id = parseSongId(songId)
             if (id <= 0) {
                 return null
@@ -1107,7 +1138,7 @@ class MusicGateway private constructor() {
             // v1 按音质档回地址；标准档免费账号必得。空了再试老接口（br 直报码率）。
             val data = JSONObject()
                     .put("ids", JSONArray().put(id))
-                    .put("level", "standard")
+                    .put("level", neteaseLevelOf(quality))
                     .put("encodeType", "flac")
                     .put("csrf_token", csrfOf(cookie))
             val url = urlOfNeteaseSongUrl(weapiPost("/api/song/enhance/player/url/v1", data, cookie))
@@ -1116,7 +1147,7 @@ class MusicGateway private constructor() {
             }
             val legacy = JSONObject()
                     .put("ids", JSONArray().put(id))
-                    .put("br", 128000)
+                    .put("br", neteaseBitrateOf(quality))
                     .put("csrf_token", csrfOf(cookie))
             return urlOfNeteaseSongUrl(weapiPost("/api/song/enhance/player/url", legacy, cookie))
         }

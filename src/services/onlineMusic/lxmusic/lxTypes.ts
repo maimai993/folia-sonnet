@@ -88,4 +88,9 @@ export interface LxLoadedSource {
     error?: string;
     /** 初始化完成（收到 inited 或超时）。很多音源是异步 send(inited) 的，必须等它。 */
     ready: Promise<void>;
+    /**
+     * 卸载这个音源：沙箱 worker 里脚本留下的定时器与监听一并清掉。
+     * 以前没有它，音源列表换过一轮之后旧脚本还在后台跑；现在有地方收尾了。
+     */
+    dispose?: () => void;
 }

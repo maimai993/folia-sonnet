@@ -113,6 +113,22 @@ export const readStoredWallpaperFloatingOverSafeArea = () => {
 };
 
 /**
+ * 「精简」那颗悬浮歌词小窗的独立开关。默认关。
+ *
+ * 以前这颗窗口跟着「壁纸样式 = 精简」走，没有自己的键；拆出来单开一关之后，
+ * **默认必须是关的**：键是新加的，已经选着精简的老用户升级后读不到它，
+ * 回落到 true 的话他们桌面上会突然多出一颗要权限、还会盖住应用的窗口。
+ */
+export const WALLPAPER_FLOATING_LYRICS_STORAGE_KEY = 'folia.wallpaperFloatingLyricsEnabled';
+
+export const readStoredWallpaperFloatingLyricsEnabled = () => {
+    if (typeof window === 'undefined') {
+        return false;
+    }
+    return localStorage.getItem(WALLPAPER_FLOATING_LYRICS_STORAGE_KEY) === 'true';
+};
+
+/**
  * 叠加安全区时小窗的左右位置（0 = 贴左，1 = 贴右）。默认 0.5 = 居中。
  *
  * 它只是**初值**：用户上手拖过之后原生那边记的是拖出来的比例，

@@ -12,6 +12,7 @@
 
 import type { PluginListenerHandle } from '@capacitor/core';
 import { isAndroidAppShell } from '../platform/runtime';
+import { getNativePlugin as getNativePluginFromBridge } from './nativePluginAccess';
 
 /** 原生设置的形状。键名与原生 `FoliaSettingsStore.DEFAULTS` 一一对应。 */
 export type NativeSettings = Record<string, unknown>;
@@ -21,20 +22,18 @@ type NativeSettingsPlugin = {
     setSettings: (options: { values: NativeSettings }) => Promise<NativeSettings>;
 };
 
-type CapacitorGlobal = {
-    Plugins?: Record<string, unknown>;
-    isNativePlatform?: () => boolean;
-};
-
-const capacitor = (): CapacitorGlobal | null =>
-    typeof window === 'undefined' ? null : ((window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor ?? null);
-
+/*
+ * 取插件用 `isAndroidAppShell` 判平台，而不是 Capacitor 那一条 —— 这是本模块与另外几个桥
+ * （`nativeHttpFetch` / `aiNativeFetch` / `aiNativeCompletion`）**唯一**的差别，也是它们
+ * 原先各自抄一份判据的原因（issue M35）。
+ *
+ * 冷启动头几秒桥还没起来，`Capacitor.isNativePlatform()` 一律 false。那几秒里把「桥还没起来」
+ * 当成「这个平台没有原生设置」，就会读回 null、写也写不进去 —— 而设置是原生播放逻辑的依据
+ * （见文件头）。所以这里只判「是不是 App 壳」（`isAndroidAppShell`，不依赖桥），
+ * 能不能真调由 `typeof getSettings === 'function'` 兜住。
+ */
 const plugin = (): NativeSettingsPlugin | null => {
-    // 用 isAndroidAppShell 而不是 isCapacitorAndroid：后者要等桥初始化完才为真，
-    // 冷启动头几秒会把「桥还没起来」当成「这个平台没有原生设置」——读回 null、
-    // 写也写不进去。这里只判「是不是 App 壳」，能不能真调由下面的 typeof 兜住。
-    if (!isAndroidAppShell()) return null;
-    const candidate = capacitor()?.Plugins?.FoliaNative as NativeSettingsPlugin | undefined;
+    const candidate = getNativePluginFromBridge<NativeSettingsPlugin>('FoliaNative', isAndroidAppShell);
     return candidate && typeof candidate.getSettings === 'function' ? candidate : null;
 };
 

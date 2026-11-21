@@ -69,4 +69,15 @@ export const CREDENTIAL_WRITERS = {
         // 退出登录：整个换成去掉了账号和设备凭据的 cookie
         dropAccountCookies: ['*'],
     },
+    'src/nativeBridge/api/cookies.js': {
+        // H5：平台会话搬进原生加密槽位（secureStore → FoliaSecureStore），不再明写 localStorage。
+        // 只在扫码确认（网易 803 / QQ 803 / 酷狗 status 4）之后由 saveProviderCookie 调，整串覆盖；
+        // 升级迁移（migrateLegacyCookieStorage）搬的是本地已经存着的那份，不引入新的账号。
+        writeStoredProviderCookie: ['*'],
+    },
+    'src/nativeBridge/api/bodian.js': {
+        // H30：波点的 uid + token 写进加密槽位。只在 login_qr_check 确认（状态 3 且带回 token）时调；
+        // 写明文的旧路（localStorage）已经不再写。
+        setSession: ['token'],
+    },
 };

@@ -2,6 +2,8 @@ import React from 'react';
 import { RotateCcw, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ReplayGainMode } from '../../types';
+import { useVisualizerSettingsStore } from '../../stores/useVisualizerSettingsStore';
+import { resolveVisualizerBackgroundMode } from '../../stores/visualizerSettingsPersistence';
 import LyricCalibrationControl from './LyricCalibrationControl';
 import LyricFileButton from './LyricFileButton';
 import LyricTimelineOffsetControl from './LyricTimelineOffsetControl';
@@ -63,10 +65,16 @@ export const SourceTab = <K extends string>({
     rawSong,
 }: SourceTabProps<K>): React.ReactElement => {
     const { t } = useTranslation();
+    // 背景不是 MV 时，MV 来源这一行摆出来也没有意义：点进去照样去搜视频平台，
+    // 选完却对当前背景没有任何影响（#444）。按当前生效的背景模式判断，
+    // 与可视化设置面板解析 backgroundEntry 用的是同一条路径。
+    const visualizerBackgroundMode = useVisualizerSettingsStore(state => state.visualizerBackgroundMode);
+    const visualizerMode = useVisualizerSettingsStore(state => state.visualizerMode);
+    const showsMvSource = resolveVisualizerBackgroundMode(visualizerBackgroundMode, visualizerMode) === 'mv';
 
     return (
         <div>
-            <MvSourceRow song={rawSong ?? null} />
+            {showsMvSource && <MvSourceRow song={rawSong ?? null} />}
             <PanelRow label={t('localMusic.lyrics')}>
                 {onClearLyrics && (
                     <PanelIconButton size="s" label={t('localMusic.delete')} onClick={onClearLyrics}>
