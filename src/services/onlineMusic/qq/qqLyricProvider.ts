@@ -19,7 +19,7 @@ import {
   ANONYMOUS_SONG_SEARCH_TYPE,
   LITE_SEARCH_MAX_KEYWORD_LENGTH,
   liteSearchParams,
-} from '../../../nativeBridge/api/qq/anonymousSearch';
+} from '../../../nativeBridge/api/qq/anonymousSearch.js';
 
 // 只认 platform（只有 Electron 的 preload 会写）：安卓端的模组 shim 也装了
 // `window.electron`，按对象存在与否判断会让安卓绕过同源代理、并且丢掉 cookie。
